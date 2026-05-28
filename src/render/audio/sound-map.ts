@@ -42,6 +42,13 @@ export const VILLAGE_MUSIC = 'village_theme';
 /** Looping track that takes over while the local player is in combat. */
 export const BATTLE_MUSIC = 'battle_theme';
 
+/** Looping ambience bed (human battle din — shouts/cries) layered UNDER the
+ *  music during combat. Era-neutral: no weapons (those are per-event SFX). */
+export const BATTLE_AMBIENCE = 'battle_ambience';
+
+/** Ambience beds loaded alongside music (same folder + loader prefix). */
+export const AMBIENCE_KEYS = [BATTLE_AMBIENCE] as const;
+
 /** In-game filler playlist: tracks played one after another (shuffled, gaps). */
 export const INGAME_TRACKS = ['ingame_1', 'ingame_2', 'ingame_3'] as const;
 

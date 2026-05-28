@@ -22,6 +22,9 @@ const MAX_CONCURRENT = 12;
 const MUSIC_BASE = 0.55;
 const DUCK_FACTOR = 0.32;
 
+/** Ambience bed (battle din) sits quietly under both music and SFX. */
+const AMBIENCE_BASE = 0.4;
+
 /** Intentional quiet stretch between in-game playlist tracks (randomized). */
 const SILENCE_GAP_MS_MIN = 6000;
 const SILENCE_GAP_MS_MAX = 18000;
@@ -84,6 +87,10 @@ export class AudioManager {
   private nextTrackTimer?: Phaser.Time.TimerEvent;
   /** Listener bound to the current track's 'complete' event, for cleanup. */
   private trackCompleteHandler?: () => void;
+  /** Independent looping ambience bed (layers over music; not ducked). */
+  private ambience?: Phaser.Sound.BaseSound;
+  private ambienceKey?: string;
+  private ambienceCurrentVol = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -121,6 +128,7 @@ export class AudioManager {
   setMasterVolume(value: number): void {
     this.settings = { ...this.settings, masterVolume: clamp(value, 0, 1) };
     this.applyMusicVolume(0);
+    this.applyAmbienceVolume();
     this.persist();
   }
 
@@ -131,6 +139,13 @@ export class AudioManager {
       else {
         this.music.resume();
         this.applyMusicVolume(0);
+      }
+    }
+    if (this.ambience) {
+      if (muted) this.ambience.pause();
+      else {
+        this.ambience.resume();
+        this.applyAmbienceVolume();
       }
     }
     this.persist();
@@ -225,6 +240,63 @@ export class AudioManager {
         current.destroy();
       },
     });
+  }
+
+  // --- Ambience bed (independent of the music context) ---
+
+  /** Start a looping ambience bed (e.g. battle din). Idempotent. No-op if the
+   *  asset is missing. Layers over whatever music is playing; never ducked. */
+  playAmbience(key: string): void {
+    const assetKey = `music-${key}`;
+    if (this.ambienceKey === assetKey && this.ambience) return;
+    if (!this.scene.cache.audio.exists(assetKey)) return;
+    this.stopAmbience(0);
+    this.ambience = this.scene.sound.add(assetKey, { loop: true });
+    this.ambienceKey = assetKey;
+    this.ambienceCurrentVol = this.ambienceVolume();
+    this.ambience.play({ volume: this.ambienceCurrentVol });
+    if (this.settings.muted) this.ambience.pause();
+  }
+
+  /** Fade out + stop the ambience bed. */
+  stopAmbience(fadeMs = 600): void {
+    const current = this.ambience;
+    this.ambience = undefined;
+    this.ambienceKey = undefined;
+    if (!current) return;
+    if (fadeMs <= 0 || this.ambienceCurrentVol <= 0) {
+      current.stop();
+      current.destroy();
+      return;
+    }
+    const snd = current as Phaser.Sound.WebAudioSound;
+    const proxy = { v: this.ambienceCurrentVol };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: 0,
+      duration: fadeMs,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+      },
+      onComplete: () => {
+        current.stop();
+        current.destroy();
+      },
+    });
+  }
+
+  private ambienceVolume(): number {
+    if (this.settings.muted) return 0;
+    return this.settings.masterVolume * AMBIENCE_BASE;
+  }
+
+  private applyAmbienceVolume(): void {
+    if (!this.ambience) return;
+    const snd = this.ambience as Phaser.Sound.WebAudioSound;
+    if (typeof snd.setVolume !== 'function') return;
+    this.ambienceCurrentVol = this.ambienceVolume();
+    snd.setVolume(this.ambienceCurrentVol);
   }
 
   /** Tracks (asset keys) whose audio actually loaded, in shuffled order. */

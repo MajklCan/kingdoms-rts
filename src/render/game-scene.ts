@@ -115,8 +115,10 @@ import { AudioManager } from './audio/audio-manager';
 import {
   SFX_KEYS,
   MUSIC_KEYS,
+  AMBIENCE_KEYS,
   VILLAGE_MUSIC,
   BATTLE_MUSIC,
+  BATTLE_AMBIENCE,
   cueSound,
   combatSound,
   isNonSpatialCue,
@@ -414,7 +416,7 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     // Queue all SFX + music so they're decoded before create(). Render-only.
     AudioManager.queueLoad(this.load, SFX_KEYS);
-    AudioManager.queueLoadMusic(this.load, MUSIC_KEYS);
+    AudioManager.queueLoadMusic(this.load, [...MUSIC_KEYS, ...AMBIENCE_KEYS]);
   }
 
   create(): void {
@@ -1043,6 +1045,8 @@ export class GameScene extends Phaser.Scene {
 
     if (danger) {
       this.villageEnteredTick = -1;
+      // Battle din layers over whatever music plays (no-op until supplied).
+      this.audio.playAmbience(BATTLE_AMBIENCE);
       if (this.audio.hasTrack(BATTLE_MUSIC)) {
         this.audio.setMusicDucked(false);
         this.audio.playLooping(BATTLE_MUSIC);
@@ -1054,8 +1058,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Safe: never ducked.
+    // Safe: never ducked, no battle ambience.
     this.audio.setMusicDucked(false);
+    this.audio.stopAmbience();
 
     const rawHome = this.cameraNearHomeBase();
     if (rawHome) this.lastHomeTick = this.world.tick;
