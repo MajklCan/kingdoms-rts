@@ -119,6 +119,7 @@ import {
   VILLAGE_MUSIC,
   BATTLE_TRACKS,
   BATTLE_AMBIENCE,
+  NATURE_AMBIENCE,
   cueSound,
   combatSound,
   isNonSpatialCue,
@@ -307,6 +308,9 @@ export class GameScene extends Phaser.Scene {
   /** Battle track chosen for the current combat episode; null when not fighting
    *  (re-picked at random each time combat begins). */
   private battleTrack: string | null = null;
+  /** Active in-game music context + the tick it was entered (dwell tracking). */
+  private musicContext: 'playlist' | 'village' | 'battle' = 'playlist';
+  private contextSinceTick = -1;
   private gridGfx!: Phaser.GameObjects.Graphics;
   private buildingsGfx!: Phaser.GameObjects.Graphics;
   private resourcesGfx!: Phaser.GameObjects.Graphics;
@@ -363,8 +367,12 @@ export class GameScene extends Phaser.Scene {
   private static readonly CANNON_UNIT_ORIGIN_Y = 0.645;
   private static readonly COMBAT_ATTACK_ANIM_TICKS = 10;
   private static readonly MINIMAP_COMBAT_ALERT_TICKS = SIM.TICK_HZ * 5;
-  /** How long after the last local-player combat event the music stays ducked. */
-  private static readonly COMBAT_MUSIC_HOLD_TICKS = SIM.TICK_HZ * 5;
+  /** How long battle music/ambience persist after the last local combat event.
+   *  Long, so the score never snaps back the instant a skirmish ends. */
+  private static readonly BATTLE_HOLD_TICKS = SIM.TICK_HZ * 15;
+  /** Minimum time in the village/playlist context before it may switch to the
+   *  other — prevents rapid flapping at the edges of triggers. */
+  private static readonly CONTEXT_MIN_DWELL_TICKS = SIM.TICK_HZ * 10;
   /** Minimum gap between "under attack" alert stingers. */
   private static readonly ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 10;
   /** How long the camera must dwell on the home base (while safe) before the
@@ -1047,48 +1055,77 @@ export class GameScene extends Phaser.Scene {
    *  at the home base (village theme) > the default filler playlist. */
   private updateMusicDirector(): void {
     if (!this.inMatch) return;
+    const tick = this.world.tick;
     const danger =
       this.lastLocalCombatTick >= 0 &&
-      this.world.tick - this.lastLocalCombatTick < GameScene.COMBAT_MUSIC_HOLD_TICKS;
+      tick - this.lastLocalCombatTick < GameScene.BATTLE_HOLD_TICKS;
 
+    // Ambience tracks danger directly (its own slow crossfade): battle din while
+    // fighting, calm nature bed otherwise — so quiet is never truly silent.
+    this.audio.playAmbience(danger ? BATTLE_AMBIENCE : NATURE_AMBIENCE);
+
+    // Decide the desired music context.
+    let desired: 'playlist' | 'village' | 'battle';
     if (danger) {
+      desired = 'battle';
       this.villageEnteredTick = -1;
-      // Battle din layers over whatever music plays (no-op until supplied).
-      this.audio.playAmbience(BATTLE_AMBIENCE);
-      // Pick one battle track for this whole combat episode (keep it stable).
+    } else {
+      const rawHome = this.cameraNearHomeBase();
+      if (rawHome) this.lastHomeTick = tick;
+      const atHome =
+        rawHome ||
+        (this.lastHomeTick >= 0 && tick - this.lastHomeTick < GameScene.HOME_LEAVE_GRACE_TICKS);
+      if (atHome) {
+        if (this.villageEnteredTick < 0) this.villageEnteredTick = tick;
+        desired =
+          tick - this.villageEnteredTick >= GameScene.VILLAGE_LINGER_TICKS ? 'village' : 'playlist';
+      } else {
+        this.villageEnteredTick = -1;
+        desired = 'playlist';
+      }
+    }
+
+    this.applyMusicContext(desired);
+  }
+
+  /** Switch to the desired context subject to dwell rules. Battle interrupts
+   *  immediately; leaving battle is already gated by BATTLE_HOLD_TICKS; the
+   *  village↔playlist swap needs a minimum dwell so it can't flap. */
+  private applyMusicContext(desired: 'playlist' | 'village' | 'battle'): void {
+    if (desired !== this.musicContext) {
+      const dwell = this.contextSinceTick < 0 ? Infinity : this.world.tick - this.contextSinceTick;
+      const canSwitch =
+        desired === 'battle' ||
+        this.musicContext === 'battle' ||
+        dwell >= GameScene.CONTEXT_MIN_DWELL_TICKS;
+      if (!canSwitch) {
+        this.playContext(this.musicContext);
+        return;
+      }
+      this.musicContext = desired;
+      this.contextSinceTick = this.world.tick;
+      if (desired !== 'battle') this.battleTrack = null;
+    }
+    this.playContext(this.musicContext);
+  }
+
+  /** Drive the audio layer for the active context (idempotent every frame). */
+  private playContext(ctx: 'playlist' | 'village' | 'battle'): void {
+    if (ctx === 'battle') {
       if (this.battleTrack === null) this.battleTrack = this.pickBattleTrack();
       if (this.battleTrack) {
         this.audio.setMusicDucked(false);
         this.audio.playLooping(this.battleTrack);
       } else {
-        // No battle track supplied yet — keep the playlist but duck it.
+        // No battle track supplied — keep the playlist but duck it.
         this.audio.playGamePlaylist();
         this.audio.setMusicDucked(true);
       }
       return;
     }
-
-    // Safe: never ducked, no battle ambience; re-pick a battle track next fight.
     this.audio.setMusicDucked(false);
-    this.audio.stopAmbience();
-    this.battleTrack = null;
-
-    const rawHome = this.cameraNearHomeBase();
-    if (rawHome) this.lastHomeTick = this.world.tick;
-    const atHome =
-      rawHome ||
-      (this.lastHomeTick >= 0 &&
-        this.world.tick - this.lastHomeTick < GameScene.HOME_LEAVE_GRACE_TICKS);
-
-    if (atHome) {
-      if (this.villageEnteredTick < 0) this.villageEnteredTick = this.world.tick;
-      const lingered =
-        this.world.tick - this.villageEnteredTick >= GameScene.VILLAGE_LINGER_TICKS;
-      if (lingered && this.audio.playLooping(VILLAGE_MUSIC)) return;
-    } else {
-      this.villageEnteredTick = -1;
-    }
-    this.audio.playGamePlaylist();
+    if (ctx === 'village') this.audio.playLooping(VILLAGE_MUSIC);
+    else this.audio.playGamePlaylist();
   }
 
   /** Random battle track whose asset exists, or null if none supplied yet. */
@@ -2484,6 +2521,9 @@ export class GameScene extends Phaser.Scene {
     this.villageEnteredTick = -1;
     this.lastHomeTick = -1;
     this.lastLocalCombatTick = -1;
+    this.musicContext = 'playlist';
+    this.contextSinceTick = -1;
+    this.battleTrack = null;
     this.audio.playGamePlaylist();
   }
 

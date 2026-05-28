@@ -28,6 +28,11 @@ const AMBIENCE_BASE = 0.4;
 /** Unit voice barks play prominently (near master), above music. */
 const VOICE_BASE = 0.95;
 
+/** Music context changes crossfade slowly so transitions never feel abrupt. */
+const MUSIC_FADE_MS = 2000;
+/** Ambience (nature ↔ battle) crossfades even more gently. */
+const AMBIENCE_FADE_MS = 2800;
+
 /** Intentional quiet stretch between in-game playlist tracks (randomized). */
 const SILENCE_GAP_MS_MIN = 6000;
 const SILENCE_GAP_MS_MAX = 18000;
@@ -189,7 +194,7 @@ export class AudioManager {
   /** Play the menu theme once (no loop). Idempotent. No-op if asset missing. */
   playMenuMusic(): void {
     if (this.musicMode === 'menu') return;
-    this.stopMusic(400);
+    this.stopMusic(MUSIC_FADE_MS);
     this.musicMode = 'menu';
     const assetKey = `music-${MENU_MUSIC}`;
     if (!this.scene.cache.audio.exists(assetKey)) return; // asset missing → silence
@@ -203,7 +208,7 @@ export class AudioManager {
     const assetKey = `music-${key}`;
     if (this.musicMode === 'single' && this.singleKey === assetKey) return true;
     if (!this.scene.cache.audio.exists(assetKey)) return false;
-    this.stopMusic(500);
+    this.stopMusic(MUSIC_FADE_MS);
     this.musicMode = 'single';
     this.singleKey = assetKey;
     this.startTrack(assetKey, true);
@@ -216,7 +221,7 @@ export class AudioManager {
    *  zero in-game tracks are present. */
   playGamePlaylist(): void {
     if (this.musicMode === 'playlist') return;
-    this.stopMusic(500);
+    this.stopMusic(MUSIC_FADE_MS);
     this.musicMode = 'playlist';
     this.playlist = this.shuffledExistingTracks();
     this.playlistIndex = 0;
@@ -265,13 +270,37 @@ export class AudioManager {
   playAmbience(key: string): void {
     const assetKey = `music-${key}`;
     if (this.ambienceKey === assetKey && this.ambience) return;
-    if (!this.scene.cache.audio.exists(assetKey)) return;
-    this.stopAmbience(0);
-    this.ambience = this.scene.sound.add(assetKey, { loop: true });
+    if (!this.scene.cache.audio.exists(assetKey)) {
+      // Requested bed isn't available — just fade out whatever's playing.
+      this.stopAmbience(AMBIENCE_FADE_MS);
+      return;
+    }
+    this.stopAmbience(AMBIENCE_FADE_MS); // crossfade: fade the old bed out
+    const track = this.scene.sound.add(assetKey, { loop: true });
+    this.ambience = track;
     this.ambienceKey = assetKey;
-    this.ambienceCurrentVol = this.ambienceVolume();
-    this.ambience.play({ volume: this.ambienceCurrentVol });
-    if (this.settings.muted) this.ambience.pause();
+    const target = this.ambienceVolume();
+    if (this.settings.muted) {
+      this.ambienceCurrentVol = target;
+      track.play({ volume: target });
+      track.pause();
+      return;
+    }
+    // Fade the new bed in.
+    this.ambienceCurrentVol = 0;
+    track.play({ volume: 0 });
+    const snd = track as Phaser.Sound.WebAudioSound;
+    const proxy = { v: 0 };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: target,
+      duration: AMBIENCE_FADE_MS,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+        this.ambienceCurrentVol = proxy.v;
+      },
+    });
   }
 
   /** Fade out + stop the ambience bed. */
@@ -364,9 +393,28 @@ export class AudioManager {
   private startTrack(assetKey: string, loop: boolean): Phaser.Sound.BaseSound {
     const track = this.scene.sound.add(assetKey, { loop });
     this.music = track;
-    this.musicCurrentVol = this.musicVolume();
-    track.play({ volume: this.musicCurrentVol });
-    if (this.settings.muted) track.pause();
+    const target = this.musicVolume();
+    if (this.settings.muted) {
+      this.musicCurrentVol = target;
+      track.play({ volume: target });
+      track.pause();
+      return track;
+    }
+    // Fade in (crossfades against the previous track's fade-out).
+    this.musicCurrentVol = 0;
+    track.play({ volume: 0 });
+    const snd = track as Phaser.Sound.WebAudioSound;
+    const proxy = { v: 0 };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: target,
+      duration: MUSIC_FADE_MS,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+        this.musicCurrentVol = proxy.v;
+      },
+    });
     return track;
   }
 
