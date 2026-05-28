@@ -129,7 +129,11 @@ import {
   ERROR as SFX_ERROR,
   PLACE_BUILDING,
   ALERT,
+  VOICE_KEYS,
+  VOICE_LINE_COUNTS,
   type SfxConfig,
+  type VoiceCategory,
+  type VoiceBarkType,
 } from './audio/sound-map';
 import { bakeVoxelTexture } from './voxel/voxel-render';
 import { bakeTerrain } from './voxel/terrain';
@@ -420,6 +424,7 @@ export class GameScene extends Phaser.Scene {
     // Queue all SFX + music so they're decoded before create(). Render-only.
     AudioManager.queueLoad(this.load, SFX_KEYS);
     AudioManager.queueLoadMusic(this.load, [...MUSIC_KEYS, ...AMBIENCE_KEYS]);
+    AudioManager.queueLoadVoices(this.load, VOICE_KEYS);
   }
 
   create(): void {
@@ -1202,6 +1207,63 @@ export class GameScene extends Phaser.Scene {
     this.audio.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
   }
 
+  /** Voice persona for a unit: villagers by gender (farm → female), soldiers by
+   *  kind across three voices. null for units with no voice (e.g. siege). */
+  private voiceCategoryForUnit(eid: number): VoiceCategory | null {
+    if (hasComponent(this.world.ecs, VillagerTag, eid)) {
+      return this.isFarmWorker(eid) ? 'villager_female' : 'villager_male';
+    }
+    if (hasComponent(this.world.ecs, SpearmanTag, eid)) return 'soldier_1';
+    if (hasComponent(this.world.ecs, ArcherTag, eid)) return 'soldier_2';
+    if (hasComponent(this.world.ecs, ScoutCavalryTag, eid)) return 'soldier_3';
+    if (hasComponent(this.world.ecs, GunmanTag, eid)) return 'soldier_1';
+    if (hasComponent(this.world.ecs, CannonTag, eid)) return 'soldier_2';
+    if (hasComponent(this.world.ecs, MachineGunTag, eid)) return 'soldier_3';
+    return null;
+  }
+
+  /** True if the villager is staffing a food (farm) worksite → female voice. */
+  private isFarmWorker(eid: number): boolean {
+    if (!hasComponent(this.world.ecs, WorksiteWorker, eid)) return false;
+    const site = WorksiteWorker.siteEid[eid];
+    return (
+      site >= 0 &&
+      hasComponent(this.world.ecs, ResourceWorksite, site) &&
+      ResourceWorksite.kind[site] === ResourceKindId.FOOD
+    );
+  }
+
+  /** First local-owned unit in the current selection (the one that "speaks"). */
+  private representativeSelectedUnit(): number | null {
+    for (const eid of selectedQuery(this.world.ecs)) {
+      if (Owner.player[eid] === LOCAL_PLAYER_ID && hasComponent(this.world.ecs, UnitKind, eid)) {
+        return eid;
+      }
+    }
+    return null;
+  }
+
+  /** Play a unit's voice bark; returns false if the unit has no clip for that
+   *  type (caller falls back to a UI blip). */
+  private playUnitBark(eid: number, type: VoiceBarkType): boolean {
+    const category = this.voiceCategoryForUnit(eid);
+    if (!category) return false;
+    return this.audio.playVoiceBark(category, type, VOICE_LINE_COUNTS[type]);
+  }
+
+  /** Voice bark (or blip fallback) for a single selected unit. */
+  private barkSelect(eid: number): void {
+    if (!this.playUnitBark(eid, 'select')) this.playUi(UNIT_SELECT);
+  }
+
+  /** Command acknowledgement: the representative selected unit speaks; blip if
+   *  it has no voice. No-op when nothing commandable is selected. */
+  private barkCommand(): void {
+    const eid = this.representativeSelectedUnit();
+    if (eid === null) return;
+    if (!this.playUnitBark(eid, 'command')) this.playUi(COMMAND_MOVE);
+  }
+
   /** Public accessors so the HUD (volume slider / mute, button clicks/hovers)
    *  can reach audio. Undefined until create() has run. */
   getAudio(): AudioManager | undefined {
@@ -1551,17 +1613,6 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
-  /** True if the local player has at least one commandable unit selected — used
-   *  to gate move/attack acknowledgement sounds. */
-  private hasCommandableSelection(): boolean {
-    const sel = selectedQuery(this.world.ecs);
-    for (const e of sel) {
-      if (Owner.player[e] === LOCAL_PLAYER_ID && !hasComponent(this.world.ecs, Building, e)) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Input
@@ -1643,7 +1694,7 @@ export class GameScene extends Phaser.Scene {
         isEnemyOf(this.world, targetEid, 1)
       ) {
         this.world.inputs.push({ type: 'attackSelected', targetEid });
-        if (this.hasCommandableSelection()) this.playUi(COMMAND_MOVE);
+        this.barkCommand();
         setLastEvent(`attack eid=${targetEid}`);
         return;
       }
@@ -1658,7 +1709,7 @@ export class GameScene extends Phaser.Scene {
         );
       } else {
         this.world.inputs.push({ type: 'moveSelected', to: { x: tx, y: ty } });
-        if (this.hasCommandableSelection()) this.playUi(COMMAND_MOVE);
+        this.barkCommand();
         setLastEvent(`move → (${tx},${ty})`);
       }
     } else if (pointer.leftButtonDown()) {
@@ -1679,7 +1730,7 @@ export class GameScene extends Phaser.Scene {
           type: 'attackMoveSelected',
           to: { x: tx, y: ty },
         });
-        if (this.hasCommandableSelection()) this.playUi(COMMAND_MOVE);
+        this.barkCommand();
         setLastEvent(`attack-move → (${tx},${ty})`);
         return;
       }
@@ -1702,7 +1753,7 @@ export class GameScene extends Phaser.Scene {
       clearSelection(this.world);
       if (eid !== null) {
         setSelected(this.world, eid, true);
-        if (this.isOwnedUnit(eid)) this.playUi(UNIT_SELECT);
+        if (this.isOwnedUnit(eid)) this.barkSelect(eid);
         setLastEvent(`selected ${this.entityKindName(eid)} eid=${eid}`);
       } else {
         setLastEvent(`cleared selection`);
@@ -1772,7 +1823,8 @@ export class GameScene extends Phaser.Scene {
         n++;
       }
     }
-    if (n > 0) this.playUi(UNIT_SELECT);
+    const rep = this.representativeSelectedUnit();
+    if (rep !== null) this.barkSelect(rep);
     setLastEvent(`box-selected ${n} unit${n === 1 ? '' : 's'}`);
   }
 

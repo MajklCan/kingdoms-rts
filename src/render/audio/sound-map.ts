@@ -47,8 +47,12 @@ export const BATTLE_TRACKS = ['battle_theme', 'battle_2'] as const;
  *  music during combat. Era-neutral: no weapons (those are per-event SFX). */
 export const BATTLE_AMBIENCE = 'battle_ambience';
 
+/** Calm outdoor bed (wind, occasional birds) that fills peacetime quiet — this
+ *  is the "silence", so dead air is never truly dead. Crossfades with battle. */
+export const NATURE_AMBIENCE = 'nature_ambience';
+
 /** Ambience beds loaded alongside music (same folder + loader prefix). */
-export const AMBIENCE_KEYS = [BATTLE_AMBIENCE] as const;
+export const AMBIENCE_KEYS = [BATTLE_AMBIENCE, NATURE_AMBIENCE] as const;
 
 /** In-game filler playlist: tracks played one after another (shuffled, gaps). */
 export const INGAME_TRACKS = ['ingame_1', 'ingame_2', 'ingame_3'] as const;
@@ -62,6 +66,30 @@ export const MUSIC_KEYS = [
   ...INGAME_TRACKS,
 ] as const;
 export type MusicKey = (typeof MUSIC_KEYS)[number];
+
+// --- Unit voice barks (public/assets/audio/voices/<category>_<type>_<n>.ogg|.mp3) ---
+
+/** Voice persona per unit class. Villagers differ by gender (farm → female);
+ *  soldiers use one of three voices keyed off unit kind. */
+export const VOICE_CATEGORIES = [
+  'villager_female',
+  'villager_male',
+  'soldier_1',
+  'soldier_2',
+  'soldier_3',
+] as const;
+export type VoiceCategory = (typeof VOICE_CATEGORIES)[number];
+
+export type VoiceBarkType = 'select' | 'command';
+
+/** How many alternate lines exist per bark type (random pick at play time). */
+export const VOICE_LINE_COUNTS: Record<VoiceBarkType, number> = { select: 3, command: 3 };
+
+/** Every voice asset key (for the loader). */
+export const VOICE_KEYS: string[] = VOICE_CATEGORIES.flatMap((c) => [
+  ...Array.from({ length: VOICE_LINE_COUNTS.select }, (_, n) => `${c}_select_${n}`),
+  ...Array.from({ length: VOICE_LINE_COUNTS.command }, (_, n) => `${c}_command_${n}`),
+]);
 
 export interface SfxConfig {
   key: SfxKey;

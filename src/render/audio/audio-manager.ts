@@ -25,6 +25,9 @@ const DUCK_FACTOR = 0.32;
 /** Ambience bed (battle din) sits quietly under both music and SFX. */
 const AMBIENCE_BASE = 0.4;
 
+/** Unit voice barks play prominently (near master), above music. */
+const VOICE_BASE = 0.95;
+
 /** Intentional quiet stretch between in-game playlist tracks (randomized). */
 const SILENCE_GAP_MS_MIN = 6000;
 const SILENCE_GAP_MS_MAX = 18000;
@@ -91,6 +94,9 @@ export class AudioManager {
   private ambience?: Phaser.Sound.BaseSound;
   private ambienceKey?: string;
   private ambienceCurrentVol = 0;
+  /** Currently-playing unit voice bark (only one at a time — a new bark cuts
+   *  the previous, AoE-style). */
+  private voiceBark?: Phaser.Sound.BaseSound;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -113,6 +119,16 @@ export class AudioManager {
       load.audio(`music-${key}`, [
         `assets/audio/music/${key}.ogg`,
         `assets/audio/music/${key}.mp3`,
+      ]);
+    }
+  }
+
+  /** Queue every unit voice-bark clip on the scene loader. */
+  static queueLoadVoices(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
+    for (const key of keys) {
+      load.audio(`voice-${key}`, [
+        `assets/audio/voices/${key}.ogg`,
+        `assets/audio/voices/${key}.mp3`,
       ]);
     }
   }
@@ -434,6 +450,33 @@ export class AudioManager {
     sound.play({ volume, pan: clamp(opts.pan ?? 0, -1, 1) });
     this.active += 1;
     this.lastPlayed.set(key, now);
+  }
+
+  /** Play a random unit voice bark for the given persona + type. Cuts any bark
+   *  already playing (only one voice at a time). Returns false if muted or no
+   *  clip exists for that persona/type (caller can fall back to a UI blip). */
+  playVoiceBark(category: string, type: string, lineCount: number): boolean {
+    if (this.settings.muted || this.settings.masterVolume <= 0) return false;
+    const candidates: string[] = [];
+    for (let n = 0; n < lineCount; n++) {
+      const assetKey = `voice-${category}_${type}_${n}`;
+      if (this.scene.cache.audio.exists(assetKey)) candidates.push(assetKey);
+    }
+    if (candidates.length === 0) return false;
+    const assetKey = candidates[Math.floor(Math.random() * candidates.length)];
+    if (this.voiceBark) {
+      this.voiceBark.stop();
+      this.voiceBark.destroy();
+      this.voiceBark = undefined;
+    }
+    const snd = this.scene.sound.add(assetKey);
+    snd.once('complete', () => {
+      if (this.voiceBark === snd) this.voiceBark = undefined;
+      snd.destroy();
+    });
+    snd.play({ volume: clamp(VOICE_BASE * this.settings.masterVolume, 0, 1) });
+    this.voiceBark = snd;
+    return true;
   }
 
   private persist(): void {
