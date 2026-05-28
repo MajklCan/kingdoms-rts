@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kingdoms — Dark to Castle Age</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #1b1b2f;
+        color: #e8b923;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        overflow: hidden;
+      }
+
+      #game-root {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Critical for sharp visuals: tells the browser to use nearest-neighbour
+         scaling instead of bilinear when the canvas is scaled to fit the
+         viewport. Without this, even with pixelArt mode inside Phaser, the
+         canvas element itself is browser-blurred on most displays. */
+      #game-root canvas {
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: crisp-edges;
+      }
+
+      /* ─── Top resource bar (compact, top-left corner) ────────────────── */
+      #resource-bar {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        display: flex;
+        gap: 14px;
+        padding: 8px 14px;
+        background: linear-gradient(180deg, #2a2418 0%, #1c1810 100%);
+        border: 1px solid #6a5b2b;
+        border-radius: 6px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 13px;
+        color: #ffffff;
+        z-index: 90;
+        pointer-events: none;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+      }
+      #resource-bar .res {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .resource-icon-slot {
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .resource-icon {
+        position: relative;
+        display: inline-block;
+        image-rendering: pixelated;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.18)),
+          #1f140a;
+        border: 1px solid rgba(8, 5, 2, 0.85);
+        border-radius: 3px;
+        box-shadow:
+          inset 0 -5px 8px rgba(0,0,0,0.28),
+          0 1px 0 rgba(255,255,255,0.12);
+        flex: 0 0 auto;
+      }
+      .resource-icon.bar {
+        width: 22px;
+        height: 22px;
+      }
+      .resource-icon.mini {
+        width: 14px;
+        height: 14px;
+        border-radius: 2px;
+      }
+      .resource-icon i {
+        position: absolute;
+        background: var(--c);
+        box-shadow:
+          1px 1px 0 rgba(0,0,0,0.32),
+          inset 1px 1px 0 rgba(255,255,255,0.2);
+      }
+      .resource-icon.bar i {
+        left: calc(var(--x) * 3px);
+        top: calc(var(--y) * 3px);
+        width: 5px;
+        height: 5px;
+      }
+      .resource-icon.mini i {
+        left: calc(var(--x) * 2px);
+        top: calc(var(--y) * 2px);
+        width: 4px;
+        height: 4px;
+      }
+      .resource-cost {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        white-space: nowrap;
+      }
+      .resource-cost-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .resource-cost-item .amount,
+      .cost-free {
+        color: #f6d58a;
+      }
+      #resource-bar .age {
+        margin-left: 6px;
+        padding-left: 12px;
+        border-left: 1px solid #6a5b2b;
+        color: #fbc36b;
+        font-style: italic;
+      }
+      #speed-toggle,
+      #pause-toggle,
+      #tech-toggle,
+      #mission-toggle {
+        pointer-events: auto;
+        margin-left: 2px;
+        padding: 1px 8px;
+        border: 1px solid #6a5b2b;
+        border-radius: 4px;
+        background: #1c1810;
+        color: #fbc36b;
+        font: inherit;
+        cursor: pointer;
+      }
+      #speed-toggle.active,
+      #pause-toggle.active,
+      #tech-toggle[aria-expanded="true"],
+      #mission-toggle[aria-expanded="true"] {
+        background: #e8b923;
+        color: #1b1b2f;
+        border-color: #fbc36b;
+      }
+      #speed-toggle:focus-visible,
+      #pause-toggle:focus-visible,
+      #tech-toggle:focus-visible,
+      #mission-toggle:focus-visible {
+        outline: 2px solid #fbc36b;
+        outline-offset: 2px;
+      }
+      #mission-toggle.hidden { display: none; }
+
+      #save-load-panel {
+        position: fixed;
+        top: 52px;
+        left: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px;
+        background: linear-gradient(180deg, #2a2418 0%, #1c1810 100%);
+        border: 1px solid #6a5b2b;
+        border-radius: 6px;
+        z-index: 320;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+      }
+      #save-load-panel select,
+      #save-load-panel button {
+        height: 24px;
+        border: 1px solid #6a5b2b;
+        border-radius: 4px;
+        background: #1c1810;
+        color: #fbc36b;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+      }
+      #save-load-panel select {
+        width: 150px;
+      }
+      #save-load-panel button {
+        padding: 0 8px;
+        cursor: pointer;
+      }
+      #save-load-panel button:hover,
+      #save-load-panel select:hover {
+        border-color: #e8b923;
+      }
+      #save-load-panel .cheat-separator {
+        width: 1px;
+        height: 18px;
+        background: #6a5b2b;
+        opacity: 0.75;
+      }
+      #save-load-panel .cheat-button {
+        color: #4ecdc4;
+        border-color: #3c7974;
+      }
+      #save-load-panel .cheat-button:hover {
+        border-color: #4ecdc4;
+        color: #b9fff8;
+      }
+      #save-load-panel button:focus-visible,
+      #save-load-panel select:focus-visible {
+        outline: 2px solid #fbc36b;
+        outline-offset: 2px;
+      }
+
+      #tech-tree-panel {
+        position: fixed;
+        left: 18px;
+        right: 214px;
+        top: 86px;
+        bottom: 176px;
+        z-index: 150;
+        display: none;
+        min-width: 760px;
+        min-height: 420px;
+        border: 2px solid #5b3a1f;
+        border-radius: 6px;
+        background:
+          linear-gradient(90deg, rgba(42, 23, 10, 0.64) 0 8px, rgba(93, 55, 24, 0.72) 8px 16px),
+          linear-gradient(180deg, #5c371b 0%, #2d1a0c 100%);
+        box-shadow:
+          inset 0 0 0 2px rgba(214, 163, 83, 0.22),
+          inset 0 14px 24px rgba(255, 228, 155, 0.08),
+          0 12px 34px rgba(0, 0, 0, 0.58);
+        color: #efe2c3;
+      }
+      #tech-tree-panel.open { display: block; }
+      #tech-tree-panel .tech-header {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px 0 14px;
+        border-bottom: 1px solid rgba(22, 12, 5, 0.8);
+        background:
+          linear-gradient(180deg, rgba(251, 195, 107, 0.13), rgba(0, 0, 0, 0.16)),
+          rgba(28, 16, 7, 0.45);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #tech-tree-panel .tech-title {
+        color: #f6d58a;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      #tech-close {
+        width: 28px;
+        height: 28px;
+        border: 1px solid #7d552c;
+        border-radius: 4px;
+        background: #241207;
+        color: #f6d58a;
+        cursor: pointer;
+        font: 700 13px ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #tech-close:hover { border-color: #e8b923; }
+      #tech-close:focus-visible {
+        outline: 2px solid #fbc36b;
+        outline-offset: 2px;
+      }
+      #tech-tree-board {
+        position: absolute;
+        inset: 42px 10px 10px 10px;
+        overflow-x: auto;
+        overflow-y: auto;
+        border: 1px solid rgba(34, 18, 7, 0.92);
+        border-radius: 4px;
+        background: #4b2a13;
+        scrollbar-color: #b78343 #2d1a0c;
+        scrollbar-width: thin;
+      }
+      #tech-tree-board::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      #tech-tree-board::-webkit-scrollbar-track {
+        background: #2d1a0c;
+      }
+      #tech-tree-board::-webkit-scrollbar-thumb {
+        background: #b78343;
+        border: 2px solid #2d1a0c;
+        border-radius: 8px;
+      }
+      .tech-tree-canvas {
+        position: relative;
+        width: 1720px;
+        height: 680px;
+        min-width: 1720px;
+        min-height: 680px;
+        background:
+          linear-gradient(90deg, rgba(0,0,0,0.12), transparent 28%, transparent 72%, rgba(0,0,0,0.18)),
+          repeating-linear-gradient(90deg, #6b4423 0 48px, #5a351a 48px 96px);
+      }
+
+      #mission-panel {
+        position: fixed;
+        top: 86px;
+        left: 18px;
+        width: 390px;
+        z-index: 170;
+        display: none;
+        border: 2px solid #5b3a1f;
+        border-radius: 6px;
+        background:
+          linear-gradient(90deg, rgba(42, 23, 10, 0.64) 0 8px, rgba(93, 55, 24, 0.72) 8px 16px),
+          linear-gradient(180deg, #5c371b 0%, #2d1a0c 100%);
+        box-shadow:
+          inset 0 0 0 2px rgba(214, 163, 83, 0.22),
+          inset 0 14px 24px rgba(255, 228, 155, 0.08),
+          0 12px 34px rgba(0, 0, 0, 0.58);
+        color: #efe2c3;
+      }
+      #mission-panel.open { display: block; }
+      #mission-panel .mission-header {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border-bottom: 1px solid rgba(214, 163, 83, 0.34);
+        background: rgba(24, 13, 6, 0.45);
+      }
+      #mission-panel .mission-title {
+        font: 700 14px ui-monospace, "SF Mono", Menlo, monospace;
+        color: #f6d58a;
+        text-transform: uppercase;
+        letter-spacing: 0;
+      }
+      #mission-close {
+        width: 26px;
+        height: 24px;
+        border: 1px solid #6a5b2b;
+        border-radius: 4px;
+        background: #1c1810;
+        color: #fbc36b;
+        cursor: pointer;
+      }
+      #mission-close:hover { border-color: #e8b923; }
+      #mission-body {
+        padding: 12px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      .mission-name {
+        margin: 0 0 6px;
+        color: #ffffff;
+        font-size: 16px;
+        font-weight: 800;
+      }
+      .mission-briefing,
+      .mission-note {
+        margin: 0 0 10px;
+        color: #d8c59c;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .mission-note {
+        padding-top: 8px;
+        border-top: 1px solid rgba(214, 163, 83, 0.28);
+        color: #f0c878;
+      }
+      .mission-objectives {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .mission-objective {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 8px;
+        align-items: start;
+        min-height: 24px;
+        padding: 7px 8px;
+        border: 1px solid rgba(106, 91, 43, 0.72);
+        border-radius: 4px;
+        background: rgba(28, 24, 16, 0.72);
+        color: #f5e7c5;
+        font-size: 12px;
+      }
+      .mission-objective input {
+        width: 14px;
+        height: 14px;
+        margin: 1px 0 0;
+        accent-color: #e8b923;
+      }
+      .mission-objective.done {
+        color: #a9d18e;
+        border-color: rgba(122, 168, 98, 0.72);
+      }
+      .mission-objective .optional {
+        display: block;
+        margin-top: 2px;
+        color: #bda871;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .tech-tree-canvas::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.08), transparent 18%, transparent 82%, rgba(0,0,0,0.24)),
+          repeating-linear-gradient(0deg, transparent 0 34px, rgba(43, 22, 9, 0.48) 34px 36px);
+        pointer-events: none;
+      }
+      .tech-links {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1;
+      }
+      .tech-links line,
+      .tech-links polyline {
+        stroke: rgba(246, 213, 138, 0.5);
+        stroke-width: 1.55;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+        vector-effect: non-scaling-stroke;
+      }
+      .tech-links line.military,
+      .tech-links polyline.military {
+        stroke: rgba(226, 174, 91, 0.68);
+      }
+      .tech-links line.housing,
+      .tech-links polyline.housing {
+        stroke: rgba(98, 185, 195, 0.68);
+      }
+      .tech-links line.economy,
+      .tech-links polyline.economy {
+        stroke: rgba(167, 205, 109, 0.62);
+      }
+      .tech-links line.food,
+      .tech-links polyline.food {
+        stroke: rgba(122, 205, 129, 0.72);
+      }
+      .tech-links line.castle,
+      .tech-links polyline.castle {
+        stroke: rgba(232, 203, 137, 0.72);
+      }
+      .tech-links line.gunpowder,
+      .tech-links polyline.gunpowder {
+        stroke: rgba(178, 201, 209, 0.74);
+      }
+      .tech-node {
+        position: absolute;
+        width: 250px;
+        height: 84px;
+        transform: translate(-50%, -50%);
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) 20px;
+        gap: 3px 8px;
+        padding: 6px 8px;
+        border: 2px solid #2a1608;
+        border-radius: 5px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18)),
+          #3c2410;
+        color: #efe2c3;
+        cursor: pointer;
+        text-align: left;
+        overflow: hidden;
+        z-index: 2;
+        box-shadow:
+          inset 0 0 0 1px rgba(250, 218, 151, 0.12),
+          0 5px 12px rgba(0,0,0,0.35);
+      }
+      .tech-node:hover:not(:disabled) {
+        border-color: #f1c84b;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.12), rgba(0,0,0,0.13)),
+          #4a2c13;
+      }
+      .tech-node:disabled {
+        cursor: default;
+      }
+      .tech-node.locked {
+        filter: grayscale(0.55);
+        opacity: 0.62;
+      }
+      .tech-node.researched {
+        border-color: #9fcb6b;
+        background:
+          linear-gradient(180deg, rgba(178, 220, 114, 0.16), rgba(0,0,0,0.12)),
+          #34401f;
+      }
+      .tech-node.available {
+        border-color: #e8b923;
+      }
+      .tech-node.unaffordable {
+        border-color: #8b4438;
+      }
+      .tech-node.researching {
+        border-color: #64b5f6;
+      }
+      .tech-copy {
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .tech-name {
+        color: #fff2bd;
+        font-weight: 700;
+        font-size: 13px;
+        line-height: 1.1;
+      }
+      .tech-desc {
+        color: #d6cab0;
+        font-size: 10px;
+        line-height: 1.12;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+      }
+      .tech-unlocks {
+        color: #9fcb6b;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 10px;
+        line-height: 1.1;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+      }
+      .tech-meta {
+        grid-column: 1 / 3;
+        grid-row: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .tech-cost {
+        color: #f6d58a;
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+      }
+      .tech-cost .resource-cost {
+        justify-content: flex-start;
+        gap: 4px;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      .tech-cost .resource-icon.mini {
+        width: 13px;
+        height: 13px;
+      }
+      .tech-cost .resource-icon.mini i {
+        left: calc(var(--x) * 1.8px);
+        top: calc(var(--y) * 1.8px);
+        width: 3.6px;
+        height: 3.6px;
+      }
+      .tech-status {
+        color: #cfd8dc;
+        flex: 0 0 auto;
+      }
+      .tech-progress {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        bottom: 5px;
+        height: 3px;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .tech-progress span {
+        display: block;
+        height: 100%;
+        background: #64b5f6;
+      }
+      .voxel-icon {
+        grid-column: 1;
+        grid-row: 1;
+        position: relative;
+        width: 34px;
+        height: 34px;
+        image-rendering: pixelated;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.16)),
+          #201006;
+        border: 1px solid rgba(10, 5, 2, 0.8);
+        border-radius: 3px;
+        box-shadow: inset 0 -8px 10px rgba(0,0,0,0.22);
+      }
+      .voxel-icon i {
+        position: absolute;
+        left: calc(var(--x) * 4.4px);
+        top: calc(var(--y) * 4.4px);
+        width: 7px;
+        height: 7px;
+        background: var(--c);
+        box-shadow:
+          2px 2px 0 rgba(0,0,0,0.25),
+          inset 1px 1px 0 rgba(255,255,255,0.2);
+      }
+
+      @media (max-width: 920px) {
+        #tech-tree-panel {
+          left: 8px;
+          right: 8px;
+          top: 88px;
+          bottom: 174px;
+          min-width: 0;
+        }
+        .tech-node {
+          width: 230px;
+          height: 80px;
+        }
+        .tech-tree-canvas {
+          width: 1720px;
+          min-width: 1720px;
+          height: 680px;
+          min-height: 680px;
+        }
+        .tech-desc {
+          display: none;
+        }
+      }
+
+      /* ─── Minimap (top-right) ────────────────────────────────────────── */
+      #minimap-panel {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        width: 184px;
+        background: linear-gradient(180deg, #2a2418 0%, #1c1810 100%);
+        border: 1px solid #6a5b2b;
+        border-radius: 6px;
+        padding: 6px;
+        z-index: 90;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+      }
+      #minimap-panel .header {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #fbc36b;
+        opacity: 0.85;
+        margin-bottom: 4px;
+        padding: 0 2px;
+        display: flex;
+        justify-content: space-between;
+      }
+      #minimap-canvas {
+        display: block;
+        background: #0a0810;
+        border: 1px solid #4a3e22;
+        cursor: crosshair;
+        image-rendering: pixelated;
+      }
+
+      /* ─── Bottom HUD bar ─────────────────────────────────────────────── */
+      #bottom-hud {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 164px;
+        display: flex;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, rgba(232, 185, 35, 0.06), transparent 28%, transparent 72%, rgba(232, 185, 35, 0.05)),
+          linear-gradient(180deg, #211b11 0%, #151008 45%, #0d0906 100%);
+        border-top: 2px solid #6a5b2b;
+        z-index: 80;
+        box-shadow:
+          inset 0 1px 0 rgba(251, 195, 107, 0.18),
+          0 -4px 20px rgba(0, 0, 0, 0.62);
+      }
+      #bottom-hud,
+      #bottom-hud * {
+        box-sizing: border-box;
+      }
+
+      /* Selection panel (left) */
+      #selection-panel {
+        width: 270px;
+        flex: 0 0 270px;
+        min-width: 0;
+        padding: 12px 16px;
+        border-right: 1px solid #4a3e22;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.05));
+      }
+      #selection-panel.empty .body { display: none; }
+      #selection-panel.empty .empty-label { display: block; }
+      #selection-panel .empty-label {
+        display: none;
+        color: #6a5b2b;
+        font-style: italic;
+        font-size: 13px;
+      }
+      #selection-portrait {
+        width: 88px;
+        height: 88px;
+        border: 2px solid #6a5b2b;
+        border-radius: 6px;
+        background:
+          radial-gradient(circle at 50% 38%, rgba(251,195,107,0.16), transparent 54%),
+          #201a10;
+        flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow:
+          inset 0 0 0 1px rgba(255,255,255,0.04),
+          inset 0 -18px 24px rgba(0,0,0,0.25);
+      }
+      #selection-portrait .glyph {
+        font-size: 36px;
+        opacity: 0.85;
+      }
+      #selection-portrait .count-badge {
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        background: #e8b923;
+        color: #1b1b2f;
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 3px;
+        display: none;
+      }
+      #selection-portrait .count-badge.show { display: block; }
+      #selection-panel .body {
+        flex: 1;
+        min-width: 0;
+        color: #cfd8dc;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      #selection-panel .name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #fbc36b;
+        margin-bottom: 2px;
+        text-shadow: 0 1px 0 rgba(0,0,0,0.7);
+      }
+      #selection-panel .hp-bar {
+        width: 100%;
+        height: 6px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid #4a3e22;
+        border-radius: 3px;
+        margin: 4px 0;
+        overflow: hidden;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.55);
+      }
+      #selection-panel .hp-fill {
+        height: 100%;
+        background: #4caf50;
+        transition: width 0.1s ease-out, background 0.2s;
+      }
+      #selection-panel .stats {
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+        color: #aab5bf;
+      }
+      #selection-panel .stats span {
+        color: #ffffff;
+      }
+
+      /* Notification ticker (center) */
+      #hud-ticker {
+        flex: 1;
+        padding: 12px 18px;
+        border-right: 1px solid #4a3e22;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        background: rgba(0,0,0,0.12);
+      }
+      #hud-ticker .header {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #6a5b2b;
+        margin-bottom: 4px;
+      }
+      #hud-ticker .line {
+        font-size: 12px;
+        color: #cfd8dc;
+        font-family: ui-monospace, monospace;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      #hud-ticker .line.event {
+        color: #fbc36b;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #hud-ticker .line.event .status-label {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      #hud-ticker .line.event .status-progress {
+        flex: 0 0 clamp(76px, 11vw, 132px);
+        height: 7px;
+        border: 1px solid #6a5b2b;
+        border-radius: 4px;
+        background: rgba(0,0,0,0.55);
+        overflow: hidden;
+        box-shadow:
+          inset 0 1px 2px rgba(0,0,0,0.65),
+          0 1px 0 rgba(255,255,255,0.05);
+      }
+      #hud-ticker .line.event .status-progress span {
+        display: block;
+        height: 100%;
+        min-width: 2px;
+        background: linear-gradient(90deg, #4ecdc4, #fbc36b);
+        box-shadow: 0 0 8px rgba(78,205,196,0.35);
+      }
+      #hud-ticker .line.kbd-tip {
+        color: #6a5b2b;
+        font-size: 11px;
+      }
+      #hud-ticker .line.kbd-tip kbd {
+        background: #2a2d3e;
+        border: 1px solid #555;
+        border-radius: 3px;
+        padding: 1px 4px;
+        font-size: 10px;
+        color: #e8b923;
+      }
+
+      /* Action grid (right) */
+      #action-grid {
+        flex: 0 0 clamp(420px, 38vw, 560px);
+        min-width: 0;
+        padding: 7px 10px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(251,195,107,0.06), rgba(0,0,0,0.06)),
+          #151008;
+      }
+      #action-grid.training-mode {
+        flex-basis: clamp(336px, 34vw, 424px);
+      }
+      #action-grid .action-header {
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: #d9b650;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        overflow: hidden;
+      }
+      #action-grid .action-header span,
+      #action-grid .action-header small {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      #action-grid .action-header small {
+        color: #8c7b46;
+        font-size: 9px;
+        font-weight: 600;
+      }
+      #action-grid .action-cells {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-auto-rows: minmax(0, 1fr);
+        gap: 5px;
+      }
+      #action-grid .action-cells.training-cells {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-rows: minmax(58px, 1fr);
+        gap: 6px;
+      }
+      #action-grid .cell {
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        min-height: 0;
+        padding: 0;
+        color: #dbe4e8;
+        font: inherit;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.12)),
+          #282113;
+        border: 1px solid #5c4b20;
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.1s, border-color 0.1s, transform 0.08s;
+        user-select: none;
+        overflow: hidden;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.08),
+          inset 0 -10px 14px rgba(0,0,0,0.18);
+      }
+      #action-grid .cell * {
+        pointer-events: none;
+      }
+      #action-grid .cell:hover:not(.disabled) {
+        background:
+          linear-gradient(180deg, rgba(251,195,107,0.16), rgba(0,0,0,0.08)),
+          #352916;
+        border-color: #e8b923;
+        transform: translateY(-1px);
+      }
+      #action-grid .cell:active:not(.disabled) {
+        transform: translateY(0);
+      }
+      #action-grid .cell.active {
+        border-color: #4ecdc4;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.1),
+          inset 0 -10px 14px rgba(0,0,0,0.18),
+          0 0 0 1px rgba(78,205,196,0.35);
+      }
+      #action-grid .cell.disabled {
+        opacity: 0.26;
+        cursor: not-allowed;
+      }
+      #action-grid .cell.empty {
+        background: rgba(0,0,0,0.14);
+        border-color: rgba(92,75,32,0.36);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+      }
+      #action-grid .cell .icon {
+        font-size: 22px;
+        line-height: 1;
+        flex: 0 0 auto;
+        max-width: 30px;
+        overflow: hidden;
+        text-align: center;
+      }
+      #action-grid .cell .icon.voxel-action-icon-wrap {
+        width: 28px;
+        height: 28px;
+        max-width: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: visible;
+      }
+      #action-grid .hud-voxel-icon {
+        position: relative;
+        width: 26px;
+        height: 26px;
+        image-rendering: pixelated;
+        overflow: hidden;
+        filter: drop-shadow(1px 2px 0 rgba(0,0,0,0.35));
+      }
+      #action-grid .hud-voxel-icon i {
+        position: absolute;
+        left: calc(var(--x) * 3.5px);
+        top: calc(var(--y) * 3.5px);
+        width: 7px;
+        height: 7px;
+        background: var(--c);
+        box-shadow:
+          1px 1px 0 rgba(0,0,0,0.28),
+          inset 1px 1px 0 rgba(255,255,255,0.22);
+      }
+      #action-grid .cell .key {
+        position: absolute;
+        top: 3px;
+        left: 5px;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        color: #e8b923;
+        opacity: 0.9;
+        text-shadow: 0 1px 0 rgba(0,0,0,0.8);
+      }
+      #action-grid .cell .action-body {
+        min-width: 0;
+        display: none;
+        flex-direction: column;
+        gap: 1px;
+        text-align: left;
+        overflow: hidden;
+      }
+      #action-grid .cell .action-label,
+      #action-grid .cell .action-meta {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      #action-grid .cell .action-label {
+        color: #f2d16f;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      #action-grid .cell .action-meta {
+        color: #9da9ad;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 9px;
+      }
+      #action-grid .cell .cost {
+        position: absolute;
+        bottom: 2px;
+        left: 2px;
+        right: 2px;
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        color: #cfd8dc;
+        opacity: 0.9;
+        text-shadow: 0 1px 0 rgba(0,0,0,0.85);
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        min-width: 0;
+      }
+      #action-grid .cell .cost .resource-cost {
+        gap: 3px;
+        transform: scale(0.92);
+        transform-origin: right bottom;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      #action-grid .cell .cost .resource-cost-item {
+        min-width: 0;
+        flex: 0 1 auto;
+      }
+      #action-grid .cell .queue-badge {
+        position: absolute;
+        top: 3px;
+        right: 4px;
+        min-width: 16px;
+        height: 15px;
+        padding: 0 4px;
+        border-radius: 8px;
+        background: #e8b923;
+        color: #17110a;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 15px;
+        text-align: center;
+        box-shadow: 0 1px 0 rgba(0,0,0,0.55);
+      }
+      #action-grid .train-card {
+        align-items: flex-start;
+        justify-content: flex-start;
+        padding: 10px 8px 20px 42px;
+        background:
+          radial-gradient(circle at 22px 28px, rgba(232,185,35,0.18), transparent 30px),
+          linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.14)),
+          #27200f;
+      }
+      #action-grid .train-card .icon {
+        position: absolute;
+        left: 9px;
+        top: 22px;
+        width: 26px;
+        font-size: 24px;
+      }
+      #action-grid .train-card .action-body {
+        display: flex;
+        max-width: 100%;
+      }
+      #action-grid .train-card .cost {
+        left: 42px;
+        justify-content: flex-start;
+      }
+      #action-grid .train-card .cost .resource-cost {
+        transform-origin: left bottom;
+      }
+      #action-grid .build-card,
+      #action-grid .tech-card,
+      #action-grid .command-card {
+        padding-top: 6px;
+      }
+      #action-grid .build-card {
+        align-items: flex-start;
+        justify-content: flex-start;
+        padding: 13px 5px 15px;
+      }
+      #action-grid .build-card .icon {
+        position: absolute;
+        right: 5px;
+        top: 4px;
+        font-size: 15px;
+        max-width: 22px;
+        opacity: 0.72;
+      }
+      #action-grid .build-card .icon.voxel-action-icon-wrap {
+        right: 3px;
+        top: 2px;
+        width: 22px;
+        height: 22px;
+        max-width: 22px;
+        transform: scale(0.64);
+      }
+      #action-grid .build-card .action-body {
+        display: flex;
+        align-items: flex-start;
+        text-align: left;
+        width: 100%;
+        padding: 0;
+      }
+      #action-grid .build-card .action-label {
+        color: #f6d58a;
+        font-size: 10px;
+        line-height: 1.08;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-overflow: clip;
+      }
+      #action-grid .build-card .cost {
+        left: 6px;
+        justify-content: flex-start;
+      }
+      #action-grid .build-card .cost .resource-cost {
+        transform-origin: left bottom;
+      }
+      #action-grid .command-card .action-body {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        width: 100%;
+        padding: 0 4px;
+      }
+      #action-grid .command-card .icon {
+        position: absolute;
+        right: 6px;
+        top: 5px;
+        width: 16px;
+        height: 16px;
+        max-width: 16px;
+        font-size: 13px;
+        line-height: 16px;
+        opacity: 0.8;
+      }
+      #action-grid .command-card .action-label {
+        font-size: 10px;
+        line-height: 1.1;
+        white-space: normal;
+      }
+      #action-grid .training-cells .command-card {
+        align-items: flex-start;
+        justify-content: flex-start;
+        padding: 10px 8px 14px 42px;
+      }
+      #action-grid .training-cells .command-card .icon {
+        position: absolute;
+        left: 9px;
+        top: 18px;
+        width: 22px;
+        height: 22px;
+        max-width: 22px;
+        font-size: 18px;
+        line-height: 22px;
+      }
+      #action-grid .training-cells .command-card .action-body {
+        display: flex;
+      }
+      #action-grid .cell .tooltip {
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1b1b2f;
+        border: 1px solid #6a5b2b;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+        color: #fbc36b;
+        margin-bottom: 4px;
+        display: none;
+        z-index: 10;
+        pointer-events: none;
+      }
+      #action-grid .cell:hover .tooltip { display: block; }
+
+      /* ─── Debug overlay (toggleable, hidden by default) ────────────── */
+      #debug-overlay {
+        position: fixed;
+        top: 92px;
+        left: 8px;
+        padding: 6px 10px;
+        background: rgba(0, 0, 0, 0.78);
+        border: 1px solid #4a3e22;
+        border-radius: 4px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 10px;
+        line-height: 1.4;
+        color: #aab5bf;
+        z-index: 100;
+        pointer-events: none;
+        min-width: 200px;
+        opacity: 0.85;
+      }
+      #debug-overlay.hidden { display: none; }
+      #debug-overlay h3 {
+        margin: 0 0 2px 0;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        opacity: 0.7;
+        color: #6a5b2b;
+      }
+      #debug-overlay .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #debug-overlay .label { opacity: 0.6; }
+      #debug-overlay .value { color: #ffffff; }
+
+      /* ─── Game over modal ─────────────────────────────────────────── */
+      #game-over {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.78);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+      }
+      #game-over.show { display: flex; }
+      #game-over .panel {
+        background: #1b1b2f;
+        border: 2px solid #e8b923;
+        border-radius: 12px;
+        padding: 40px 56px;
+        text-align: center;
+        min-width: 360px;
+        box-shadow: 0 0 60px rgba(232, 185, 35, 0.3);
+      }
+      #game-over h1 {
+        margin: 0 0 8px;
+        font-size: 36px;
+        letter-spacing: 0.08em;
+      }
+      #game-over h1.victory { color: #4caf50; }
+      #game-over h1.defeat { color: #ff4757; }
+      #game-over p {
+        margin: 0 0 24px;
+        font-size: 16px;
+        color: #cfd8dc;
+      }
+      #game-over button {
+        background: #e8b923;
+        color: #1b1b2f;
+        border: none;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 6px;
+        cursor: pointer;
+        letter-spacing: 0.05em;
+      }
+      #game-over button:hover { background: #fbc36b; }
+
+      /* ─── Title screen ────────────────────────────────────────────── */
+      #title-screen {
+        position: fixed;
+        inset: 0;
+        background:
+          radial-gradient(circle at 50% 45%, rgba(10, 11, 22, 0.18) 0%, rgba(10, 11, 22, 0.7) 62%, rgba(5, 6, 14, 0.94) 100%),
+          linear-gradient(180deg, rgba(8, 9, 19, 0.28) 0%, rgba(8, 9, 19, 0.42) 100%),
+          url('/assets/title-czechia-voxel-map.png') center center / cover no-repeat,
+          #0f1027;
+          display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        overflow: auto;
+        z-index: 300;
+      }
+      #title-screen.hidden { display: none; }
+      #title-screen .panel {
+        text-align: center;
+        width: min(1080px, calc(100vw - 56px));
+        max-width: 1080px;
+        padding: 0;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+      }
+      #title-screen .crest {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 12px;
+        background: linear-gradient(180deg, #2e86de 0% 50%, #c0392b 50% 100%);
+        border-radius: 50%;
+        border: 3px solid #e8b923;
+        box-shadow: 0 0 40px rgba(232, 185, 35, 0.4);
+      }
+      #title-screen h1 {
+        font-size: 48px;
+        margin: 0 0 8px;
+        color: #e8b923;
+        letter-spacing: 0.06em;
+      }
+      #title-screen h2 {
+        font-size: 16px;
+        margin: 0 0 18px;
+        color: #cfd8dc;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+      }
+      #title-screen .lore {
+        color: #aab5bf;
+        line-height: 1.6;
+        margin: 0 auto 22px;
+        font-size: 14px;
+        max-width: 680px;
+      }
+      #title-screen button {
+        background: #e8b923;
+        color: #1b1b2f;
+        border: none;
+        padding: 14px 32px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 6px;
+        cursor: pointer;
+        letter-spacing: 0.06em;
+        box-shadow: 0 4px 24px rgba(232, 185, 35, 0.3);
+      }
+      #title-screen button:hover { background: #fbc36b; }
+      #title-screen .mode-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(380px, 1.1fr);
+        gap: 16px;
+        align-items: stretch;
+        text-align: left;
+      }
+      #title-screen .start-section {
+        background: linear-gradient(180deg, rgba(42, 36, 24, 0.9), rgba(18, 15, 10, 0.92));
+        border: 1px solid rgba(106, 91, 43, 0.95);
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 14px 44px rgba(0, 0, 0, 0.38);
+      }
+      #title-screen .section-label {
+        margin-bottom: 12px;
+        color: #fbc36b;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      #title-screen .section-copy {
+        min-height: 42px;
+        margin: 0 0 14px;
+        color: #aab5bf;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      #title-screen .start-options {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 0 10px;
+        color: #cfd8dc;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+      #title-screen .start-options select {
+        appearance: none;
+        min-width: 230px;
+        padding: 9px 34px 9px 12px;
+        color: #f6d58a;
+        background:
+          linear-gradient(45deg, transparent 50%, #e8b923 50%) right 14px center / 7px 7px no-repeat,
+          linear-gradient(135deg, #2a2418 0%, #171620 100%);
+        border: 1px solid #6a5b2b;
+        border-radius: 6px;
+        font: inherit;
+        cursor: pointer;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      #title-screen .skirmish-start {
+        width: 100%;
+        margin-top: 6px;
+      }
+      #title-screen .mission-list {
+        display: grid;
+        gap: 10px;
+      }
+      #title-screen .mission-card {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px 14px;
+        align-items: center;
+        padding: 13px 14px;
+        background: linear-gradient(180deg, rgba(28, 24, 16, 0.98), rgba(15, 13, 9, 0.98));
+        color: #d9e2ec;
+        border: 1px solid #6a5b2b;
+        border-radius: 7px;
+        text-align: left;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.34);
+        font-size: 13px;
+        letter-spacing: 0;
+      }
+      #title-screen .mission-card:hover {
+        background: linear-gradient(180deg, rgba(42, 36, 24, 0.98), rgba(22, 18, 12, 0.98));
+        border-color: #e8b923;
+      }
+      #title-screen .mission-card strong {
+        display: block;
+        margin-bottom: 3px;
+        color: #f6d58a;
+        font-size: 16px;
+        letter-spacing: 0.02em;
+      }
+      #title-screen .mission-card .mission-desc {
+        display: block;
+        color: #aab5bf;
+        line-height: 1.35;
+      }
+      #title-screen .mission-card .mission-meta {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        color: #9fd36c;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+      }
+      #title-screen .mission-card .mission-cta {
+        color: #e8b923;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      #title-screen .controls {
+        margin-top: 28px;
+        font-size: 12px;
+        color: #777;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        line-height: 1.8;
+      }
+      #title-screen .controls kbd {
+        background: #2a2d3e;
+        border: 1px solid #555;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-size: 11px;
+        color: #e8b923;
+      }
+      @media (max-width: 840px) {
+        #title-screen {
+          align-items: flex-start;
+          padding: 20px;
+        }
+        #title-screen .panel {
+          width: min(100%, calc(100vw - 40px));
+        }
+        #title-screen .mode-grid {
+          grid-template-columns: 1fr;
+        }
+        #title-screen .start-options {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        #title-screen .start-options select {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="title-screen">
+      <div class="panel">
+        <div class="crest"></div>
+        <h1>KINGDOMS</h1>
+        <h2>Bohemian RTS Prototype</h2>
+        <p class="lore">
+          Build an economy in skirmish or play authored Bohemian missions with fixed
+          objectives, terrain, and starting forces.
+        </p>
+        <div class="mode-grid">
+          <section class="start-section" aria-label="Skirmish setup">
+            <div class="section-label">Skirmish</div>
+            <p class="section-copy">Open economy match with selectable age, map, and AI difficulty.</p>
+            <label class="start-options" for="starting-age-select">
+              <span>Starting Age</span>
+              <select id="starting-age-select" name="starting-age">
+                <option value="0" selected>Dark Age</option>
+                <option value="1">Castle Age</option>
+                <option value="2">Gunpowder Age</option>
+                <option value="3">Total War Age</option>
+              </select>
+            </label>
+            <label class="start-options" for="ai-difficulty-select">
+              <span>AI Difficulty</span>
+              <select id="ai-difficulty-select" name="ai-difficulty">
+                <option value="easy">Easy</option>
+                <option value="medium" selected>Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <label class="start-options" for="starting-map-select">
+              <span>Map</span>
+              <select id="starting-map-select" name="starting-map">
+                <option value="riverlands" selected>Bohemian Riverlands</option>
+                <option value="bohemian_border_forest">Bohemian Border Forest</option>
+                <option value="ore_mountain_pass">Ore Mountain Pass</option>
+                <option value="machovo_jezero">Machovo Jezero</option>
+                <option value="silesian_marsh">Silesian Marsh</option>
+              </select>
+            </label>
+            <button id="start-button" class="skirmish-start" type="button">Begin Skirmish</button>
+          </section>
+          <section class="start-section" aria-label="Campaign missions">
+            <div class="section-label">Campaign</div>
+            <p class="section-copy">Authored starts with objectives and tuned enemy setups.</p>
+            <div class="mission-list">
+              <button class="mission-card" type="button" data-campaign-mission="siege_of_brno">
+                <span>
+                  <strong>Siege of Brno</strong>
+                  <span class="mission-desc">Dark Age foothold against a built Castle Age city.</span>
+                </span>
+                <span class="mission-cta">Start</span>
+                <span class="mission-meta"><span>Economy</span><span>Siege</span><span>Gunpowder locked</span></span>
+              </button>
+              <button class="mission-card" type="button" data-campaign-mission="battle_of_bila_hora">
+                <span>
+                  <strong>Battle of Bílá Hora</strong>
+                  <span class="mission-desc">Town-center-less Gunpowder field battle on the mountain pass.</span>
+                </span>
+                <span class="mission-cta">Start</span>
+                <span class="mission-meta"><span>No economy</span><span>Cavalry heavy</span><span>Kill all enemies</span></span>
+              </button>
+            </div>
+          </section>
+        </div>
+        <div class="controls">
+          <div><kbd>L-click</kbd> select  ·  <kbd>R-click</kbd> move / attack  ·  <kbd>A</kbd>+click attack-move</div>
+          <div><kbd>B</kbd> then <kbd>M</kbd>/<kbd>I</kbd>/<kbd>L</kbd>/<kbd>G</kbd>/<kbd>C</kbd> farm/mill/worksites  ·  <kbd>H</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>Y</kbd> build  ·  <kbd>Q</kbd>/<kbd>E</kbd> train / advance</div>
+          <div><kbd>F1</kbd> workers  ·  <kbd>F2</kbd> military  ·  <kbd>P</kbd> pause  ·  <kbd>X</kbd> 1x/2x speed  ·  <kbd>Wheel</kbd> zoom  ·  <kbd>WASD</kbd> pan</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="game-root"></div>
+
+    <!-- ─── Top-left resource bar ─── -->
+    <div id="resource-bar" aria-live="polite">
+      <div class="res"><span class="resource-icon-slot" data-resource-icon="food"></span> <span id="res-food">0</span></div>
+      <div class="res"><span class="resource-icon-slot" data-resource-icon="wood"></span> <span id="res-wood">0</span></div>
+      <div class="res"><span class="resource-icon-slot" data-resource-icon="gold"></span> <span id="res-gold">0</span></div>
+      <div class="res"><span class="resource-icon-slot" data-resource-icon="stone"></span> <span id="res-stone">0</span></div>
+      <div class="res">Pop <span id="res-pop">0/0</span></div>
+      <div class="age" id="res-age">Dark Age</div>
+      <button id="pause-toggle" type="button" aria-label="Pause game" aria-pressed="false">Pause</button>
+      <button id="speed-toggle" type="button" aria-label="Toggle game speed" aria-pressed="false">1x</button>
+      <button id="tech-toggle" type="button" aria-controls="tech-tree-panel" aria-expanded="false">Tech</button>
+      <button id="mission-toggle" class="hidden" type="button" aria-controls="mission-panel" aria-expanded="false">Mission</button>
+    </div>
+
+    <div id="save-load-panel" aria-label="Save and load game">
+      <button id="save-game-button" type="button">Save</button>
+      <select id="save-slot-select" aria-label="Save slot">
+        <option value="manual">Manual Save (empty)</option>
+        <option value="late-game-test">Late Game Test</option>
+      </select>
+      <button id="load-game-button" type="button">Load</button>
+      <span class="cheat-separator" aria-hidden="true"></span>
+      <button id="cheat-reveal-map" class="cheat-button" type="button">Reveal</button>
+      <button id="cheat-add-resources" class="cheat-button" type="button">+500</button>
+      <button id="cheat-spawn-cavalry" class="cheat-button" type="button">Cav</button>
+      <button id="cheat-spawn-machine-gun" class="cheat-button" type="button">MG</button>
+      <button id="cheat-dump-state" class="cheat-button" type="button">Dump</button>
+    </div>
+
+    <div id="tech-tree-panel" aria-label="Technology tree">
+      <div class="tech-header">
+        <div class="tech-title">Technology</div>
+        <button id="tech-close" type="button" aria-label="Close technology tree">X</button>
+      </div>
+      <div id="tech-tree-board"></div>
+    </div>
+
+    <div id="mission-panel" aria-label="Mission objectives">
+      <div class="mission-header">
+        <div class="mission-title">Mission</div>
+        <button id="mission-close" type="button" aria-label="Close mission objectives">X</button>
+      </div>
+      <div id="mission-body"></div>
+    </div>
+
+    <!-- ─── Top-right minimap ─── -->
+    <div id="minimap-panel">
+      <div class="header">
+        <span>Map</span>
+        <span id="mm-tick">tick 0</span>
+      </div>
+      <canvas id="minimap-canvas" width="170" height="170"></canvas>
+    </div>
+
+    <!-- ─── Debug overlay (small, hidden by default) ─── -->
+    <div id="debug-overlay" class="hidden" aria-live="polite">
+      <h3>Debug · ` to toggle</h3>
+      <div class="row"><span class="label">FPS</span><span class="value" id="dbg-fps">0</span></div>
+      <div class="row"><span class="label">Tick</span><span class="value" id="dbg-tick">0</span></div>
+      <div class="row"><span class="label">Entities</span><span class="value" id="dbg-entities">0</span></div>
+      <div class="row"><span class="label">Zoom</span><span class="value" id="dbg-zoom">1.00x</span></div>
+      <div class="row"><span class="label">Speed</span><span class="value" id="dbg-speed">1x</span></div>
+      <div class="row"><span class="label">Selected</span><span class="value" id="dbg-selected">none</span></div>
+      <div class="row"><span class="label">Status</span><span class="value" id="dbg-gather">-</span></div>
+      <div class="row"><span class="label">Build mode</span><span class="value" id="dbg-build">-</span></div>
+      <div class="row"><span class="label">Last event</span><span class="value" id="dbg-event">-</span></div>
+    </div>
+
+    <!-- ─── Bottom HUD bar ─── -->
+    <div id="bottom-hud">
+      <!-- Selection portrait + stats -->
+      <div id="selection-panel" class="empty">
+        <div id="selection-portrait">
+          <span class="glyph" id="sel-glyph">·</span>
+          <span class="count-badge" id="sel-count">1</span>
+        </div>
+        <div class="body">
+          <div class="name" id="sel-name">—</div>
+          <div class="hp-bar"><div class="hp-fill" id="sel-hp-fill"></div></div>
+          <div class="stats" id="sel-stats">—</div>
+        </div>
+        <div class="empty-label">Nothing selected</div>
+      </div>
+
+      <!-- Center notification ticker -->
+      <div id="hud-ticker">
+        <div class="header">Events</div>
+        <div class="line event" id="ticker-event">Phase 6 booted</div>
+        <div class="line" id="ticker-build">Build mode: —</div>
+        <div class="line kbd-tip">
+          <kbd>L-click</kbd> select &nbsp; <kbd>R-click</kbd> move / attack &nbsp; <kbd>B</kbd>+<kbd>M</kbd>/<kbd>I</kbd>/<kbd>L</kbd>/<kbd>G</kbd>/<kbd>C</kbd> farm/mill/worksites &nbsp; <kbd>H</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>F</kbd>/<kbd>Y</kbd> build
+        </div>
+        <div class="line kbd-tip">
+          <kbd>A</kbd>+click attack-move &nbsp; <kbd>F1</kbd>/<kbd>F2</kbd> select &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>X</kbd> 1x/2x speed &nbsp; <kbd>WASD</kbd> pan &nbsp; <kbd>Wheel</kbd> zoom &nbsp; <kbd>`</kbd> debug
+        </div>
+      </div>
+
+      <!-- Action grid -->
+      <div id="action-grid">
+        <!-- Cells injected by main.ts -->
+      </div>
+    </div>
+
+    <div id="game-over">
+      <div class="panel">
+        <h1 id="game-over-title" class="victory">VICTORY</h1>
+        <p id="game-over-subtitle">Bohemia stands triumphant.</p>
+        <button onclick="location.reload()">Play Again</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
