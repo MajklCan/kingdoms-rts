@@ -65,7 +65,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  rmSync(TMP_DIR, { recursive: true, force: true });
-  console.error(err.message ?? err);
+  // main()'s own finally already cleared TMP_DIR; just surface the full error.
+  console.error(err);
   process.exit(1);
 });

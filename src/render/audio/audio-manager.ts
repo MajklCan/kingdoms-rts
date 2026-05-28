@@ -362,12 +362,12 @@ export class AudioManager {
       return;
     }
     this.stopAmbience(AMBIENCE_FADE_MS); // crossfade: fade the old bed out
-    let track: Phaser.Sound.BaseSound;
+    const target = this.ambienceVolume();
+    let track: Phaser.Sound.BaseSound | undefined;
     try {
       track = this.scene.sound.add(assetKey, { loop: true });
       this.ambience = track;
       this.ambienceKey = assetKey;
-      const target = this.ambienceVolume();
       if (this.settings.muted) {
         this.ambienceCurrentVol = target;
         track.play({ volume: target });
@@ -378,15 +378,21 @@ export class AudioManager {
       this.ambienceCurrentVol = 0;
       track.play({ volume: 0 });
     } catch (err) {
-      // Reset so a later call can retry rather than the idempotent guard blocking
-      // ambience for the rest of the session.
+      // Destroy the half-started sound so it can't keep playing untracked, then
+      // reset state so a later call can retry rather than the idempotent guard
+      // blocking ambience for the rest of the session.
+      try {
+        track?.stop();
+        track?.destroy();
+      } catch {
+        /* already in a bad state — nothing more to do */
+      }
       this.ambience = undefined;
       this.ambienceKey = undefined;
       this.ambienceCurrentVol = 0;
       console.warn(`[AudioManager] failed to play ambience "${assetKey}":`, err);
       return;
     }
-    const target = this.ambienceVolume();
     const snd = track as Phaser.Sound.WebAudioSound;
     const proxy = { v: 0 };
     this.scene.tweens.add({

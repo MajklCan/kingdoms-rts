@@ -194,7 +194,7 @@ function main() {
         console.log(`✓ ${id}  ${r.dur}s  → ${id}.ogg + ${id}.mp3`);
       } catch (err) {
         // One bad encode shouldn't abort the rest of the batch.
-        console.error(`✗ ${id}: ${err.message}`);
+        console.error(`✗ ${id}: ${err.stderr?.toString().trim() || err.message}`);
       }
     }
   } finally {

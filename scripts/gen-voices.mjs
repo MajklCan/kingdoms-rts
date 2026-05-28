@@ -151,7 +151,7 @@ async function main() {
       ok++;
       console.log(`✓ ${c.id}  "${c.text}"`);
     } catch (err) {
-      console.error(`✗ ${c.id}: ${err.message}`);
+      console.error(`✗ ${c.id}: ${err.stderr?.toString().trim() || err.message}`);
     }
   }
   rmSync(TMP_DIR, { recursive: true, force: true });

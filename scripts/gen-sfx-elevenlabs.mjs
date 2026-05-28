@@ -144,7 +144,7 @@ async function main() {
       ok++;
       console.log(`✓ ${s.id}  (${s.dur}s)  → ${s.id}.ogg + ${s.id}.mp3`);
     } catch (err) {
-      console.error(`✗ ${s.id}: ${err.message}`);
+      console.error(`✗ ${s.id}: ${err.stderr?.toString().trim() || err.message}`);
     }
   }
   rmSync(TMP_DIR, { recursive: true, force: true });
