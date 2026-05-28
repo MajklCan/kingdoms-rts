@@ -114,6 +114,7 @@ import { installWindowApi } from '../debug/window-api';
 import { AudioManager } from './audio/audio-manager';
 import {
   SFX_KEYS,
+  MUSIC_KEYS,
   cueSound,
   combatSound,
   isNonSpatialCue,
@@ -123,6 +124,7 @@ import {
   COMMAND_MOVE,
   ERROR as SFX_ERROR,
   PLACE_BUILDING,
+  ALERT,
   type SfxConfig,
 } from './audio/sound-map';
 import { bakeVoxelTexture } from './voxel/voxel-render';
@@ -283,6 +285,11 @@ interface ActionGridAction {
 export class GameScene extends Phaser.Scene {
   private world!: SimWorld;
   private audio!: AudioManager;
+  /** Sim tick of the most recent combat event involving the local player —
+   *  drives music ducking. -1 = never. */
+  private lastLocalCombatTick = -1;
+  /** Sim tick the last "under attack" alert fired — throttles the stinger. */
+  private lastAlertTick = -1;
   private gridGfx!: Phaser.GameObjects.Graphics;
   private buildingsGfx!: Phaser.GameObjects.Graphics;
   private resourcesGfx!: Phaser.GameObjects.Graphics;
@@ -339,6 +346,10 @@ export class GameScene extends Phaser.Scene {
   private static readonly CANNON_UNIT_ORIGIN_Y = 0.645;
   private static readonly COMBAT_ATTACK_ANIM_TICKS = 10;
   private static readonly MINIMAP_COMBAT_ALERT_TICKS = SIM.TICK_HZ * 5;
+  /** How long after the last local-player combat event the music stays ducked. */
+  private static readonly COMBAT_MUSIC_HOLD_TICKS = SIM.TICK_HZ * 5;
+  /** Minimum gap between "under attack" alert stingers. */
+  private static readonly ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 10;
   // Texture keys.
   private static readonly DARK_TC_KEY_PREFIX = 'voxel-dark-tc-p';
   private static readonly CASTLE_TC_KEY_PREFIX = 'voxel-castle-tc-p';
@@ -385,13 +396,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Queue all SFX so they're decoded before create(). Audio is render-only.
+    // Queue all SFX + music so they're decoded before create(). Render-only.
     AudioManager.queueLoad(this.load, SFX_KEYS);
+    AudioManager.queueLoadMusic(this.load, MUSIC_KEYS);
   }
 
   create(): void {
     this.world = createSimWorld(Date.now() & 0xffff);
     this.audio = new AudioManager(this);
+    this.audio.startMusic('theme');
 
     // Bake all voxel textures once at scene boot.
     this.bakeAllTextures();
@@ -599,6 +612,7 @@ export class GameScene extends Phaser.Scene {
     this.consumeCombatEvents();
     this.consumeAiEvents();
     this.consumeSoundCues();
+    this.updateAdaptiveMusic();
     this.drawProjectiles(delta * this.gameSpeed);
     this.drawGhost();
     this.drawAttackCursorIndicator();
@@ -941,6 +955,7 @@ export class GameScene extends Phaser.Scene {
     for (const event of events) {
       this.recordMinimapCombatAlert(event);
       this.playCombatSound(event);
+      this.noteCombatForAdaptiveAudio(event);
       if (
         event.attackerKind === UnitDefId.SCOUT_CAVALRY ||
         event.attackerKind === UnitDefId.ARCHER ||
@@ -1001,6 +1016,14 @@ export class GameScene extends Phaser.Scene {
     if (latest) setLastEvent(latest.message);
   }
 
+  /** Duck the music while recent local-player combat is active, restore after. */
+  private updateAdaptiveMusic(): void {
+    const inCombat =
+      this.lastLocalCombatTick >= 0 &&
+      this.world.tick - this.lastLocalCombatTick < GameScene.COMBAT_MUSIC_HOLD_TICKS;
+    this.audio.setMusicDucked(inCombat);
+  }
+
   /** Play the fire-sound for a combat event, gated by fog (only audible if the
    *  attacker or target tile is visible to the local player). */
   private playCombatSound(event: CombatEvent): void {
@@ -1014,6 +1037,29 @@ export class GameScene extends Phaser.Scene {
     const x = event.range <= 1 ? event.toX : event.fromX;
     const y = event.range <= 1 ? event.toY : event.fromY;
     this.playSpatial(cfg, x, y);
+  }
+
+  /** Feed adaptive audio: duck music while the local player is fighting and
+   *  fire an "under attack" stinger (throttled) when local assets take hits. */
+  private noteCombatForAdaptiveAudio(event: CombatEvent): void {
+    if (event.phase === 'windup') return;
+    const attackerPlayer = hasComponent(this.world.ecs, Owner, event.attackerEid)
+      ? Owner.player[event.attackerEid]
+      : 0;
+    const targetPlayer = hasComponent(this.world.ecs, Owner, event.targetEid)
+      ? Owner.player[event.targetEid]
+      : 0;
+    if (attackerPlayer === LOCAL_PLAYER_ID || targetPlayer === LOCAL_PLAYER_ID) {
+      this.lastLocalCombatTick = this.world.tick;
+    }
+    // We're being hit → warn the player, but not more than once per cooldown.
+    if (targetPlayer === LOCAL_PLAYER_ID) {
+      const elapsed = this.world.tick - this.lastAlertTick;
+      if (this.lastAlertTick < 0 || elapsed >= GameScene.ALERT_COOLDOWN_TICKS) {
+        this.lastAlertTick = this.world.tick;
+        this.audio.play(ALERT.key, { volume: ALERT.volume, minIntervalMs: ALERT.minIntervalMs });
+      }
+    }
   }
 
   /** Drain sim sound cues (non-combat state transitions). Fog-gated; non-spatial

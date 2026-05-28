@@ -26,9 +26,14 @@ export const SFX_KEYS = [
   'unit_select',
   'command_move',
   'error',
+  'alert',
 ] as const;
 
 export type SfxKey = (typeof SFX_KEYS)[number];
+
+/** Looping background music tracks (public/assets/audio/music/<key>.ogg|.mp3). */
+export const MUSIC_KEYS = ['theme'] as const;
+export type MusicKey = (typeof MUSIC_KEYS)[number];
 
 export interface SfxConfig {
   key: SfxKey;
@@ -104,3 +109,5 @@ export const UNIT_SELECT: SfxConfig = { key: 'unit_select', minIntervalMs: 60, v
 export const COMMAND_MOVE: SfxConfig = { key: 'command_move', minIntervalMs: 60, volume: 0.5 };
 export const ERROR: SfxConfig = { key: 'error', minIntervalMs: 120, volume: 0.6 };
 export const PLACE_BUILDING: SfxConfig = { key: 'place_building', minIntervalMs: 60, volume: 0.6 };
+/** "Base under attack" warning — throttled hard by the caller, plays loud. */
+export const ALERT: SfxConfig = { key: 'alert', minIntervalMs: 0, volume: 0.9 };

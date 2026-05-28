@@ -494,10 +494,15 @@ function bindAudioControls(): void {
     audio.setMasterVolume(Number(slider.value) / 100);
   });
 
-  // Delegated UI feedback: click + hover on any HUD button/cell.
-  const interactiveSel = 'button, [role="button"], .action-grid-cell, [data-tech-id]';
+  // Delegated UI feedback: click + hover on any HUD button/cell/dropdown.
+  const interactiveSel = 'button, [role="button"], .action-grid-cell, [data-tech-id], select';
   document.addEventListener('click', (ev) => {
     const el = (ev.target as HTMLElement | null)?.closest(interactiveSel);
+    if (el) getGameScene()?.playUiClick();
+  });
+  // Choosing an option from a <select> doesn't always fire click — cover change.
+  document.addEventListener('change', (ev) => {
+    const el = (ev.target as HTMLElement | null)?.closest('select');
     if (el) getGameScene()?.playUiClick();
   });
   let lastHover: Element | null = null;

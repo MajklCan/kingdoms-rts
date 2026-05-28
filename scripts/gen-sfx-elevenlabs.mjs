@@ -54,6 +54,9 @@ const SOUNDS = [
   { id: 'unit_select',    text: 'Short crisp selection blip for selecting a unit, soft metallic tick, clean, no music', dur: 0.5, infl: 0.5 },
   { id: 'command_move',   text: 'Short confident command acknowledgement tone, soft positive blip, clean UI, no music', dur: 0.5, infl: 0.5 },
   { id: 'error',          text: 'Short low negative error buzz, invalid action denied, soft dull thud, clean UI, no music', dur: 0.5, infl: 0.5 },
+
+  // --- Alert (under attack) ---
+  { id: 'alert',          text: 'Urgent medieval alarm horn, short rising warning call, your base is under attack, no music bed', dur: 1.4, infl: 0.35 },
 ];
 
 function ensureDirs() {
