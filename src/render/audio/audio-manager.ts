@@ -37,9 +37,17 @@ const AMBIENCE_FADE_MS = 2800;
 const SILENCE_GAP_MS_MIN = 6000;
 const SILENCE_GAP_MS_MAX = 18000;
 
+/** Per-channel volume multiplier (0..1) applied on top of master volume. */
+export type AudioChannel = 'music' | 'sfx' | 'voices' | 'ambience';
+
 interface AudioSettings {
   masterVolume: number; // 0..1
   muted: boolean;
+  /** Per-channel multipliers, each 0..1. Default 1 (full). */
+  music: number;
+  sfx: number;
+  voices: number;
+  ambience: number;
 }
 
 interface PlayOptions {
@@ -56,17 +64,31 @@ function clamp(value: number, lo: number, hi: number): number {
 }
 
 function loadSettings(): AudioSettings {
-  const fallback: AudioSettings = { masterVolume: 0.7, muted: false };
+  const fallback: AudioSettings = {
+    masterVolume: 0.7,
+    muted: false,
+    music: 1,
+    sfx: 1,
+    voices: 1,
+    ambience: 1,
+  };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<AudioSettings>;
+    // Channel fields default to 1 (full) when absent — back-compat with the old
+    // {masterVolume, muted}-only persisted shape.
+    const channel = (v: unknown): number => (typeof v === 'number' ? clamp(v, 0, 1) : 1);
     return {
       masterVolume:
         typeof parsed.masterVolume === 'number'
           ? clamp(parsed.masterVolume, 0, 1)
           : fallback.masterVolume,
       muted: typeof parsed.muted === 'boolean' ? parsed.muted : fallback.muted,
+      music: channel(parsed.music),
+      sfx: channel(parsed.sfx),
+      voices: channel(parsed.voices),
+      ambience: channel(parsed.ambience),
     };
   } catch {
     return fallback;
@@ -153,6 +175,20 @@ export class AudioManager {
     this.settings = { ...this.settings, masterVolume: clamp(value, 0, 1) };
     this.applyMusicVolume(0);
     this.applyAmbienceVolume();
+    this.persist();
+  }
+
+  /** Current 0..1 multiplier for one channel. */
+  getChannelVolume(channel: AudioChannel): number {
+    return this.settings[channel];
+  }
+
+  /** Set a per-channel volume multiplier (0..1). Music + ambience re-apply live;
+   *  SFX + voices are computed per-play so only persist is needed. */
+  setChannelVolume(channel: AudioChannel, value: number): void {
+    this.settings = { ...this.settings, [channel]: clamp(value, 0, 1) };
+    if (channel === 'music') this.applyMusicVolume(0);
+    if (channel === 'ambience') this.applyAmbienceVolume();
     this.persist();
   }
 
@@ -372,7 +408,7 @@ export class AudioManager {
 
   private ambienceVolume(): number {
     if (this.settings.muted) return 0;
-    return this.settings.masterVolume * AMBIENCE_BASE;
+    return this.settings.masterVolume * this.settings.ambience * AMBIENCE_BASE;
   }
 
   private applyAmbienceVolume(): void {
@@ -521,7 +557,12 @@ export class AudioManager {
 
   private musicVolume(): number {
     if (this.settings.muted) return 0;
-    return this.settings.masterVolume * MUSIC_BASE * (this.musicDucked ? DUCK_FACTOR : 1);
+    return (
+      this.settings.masterVolume *
+      this.settings.music *
+      MUSIC_BASE *
+      (this.musicDucked ? DUCK_FACTOR : 1)
+    );
   }
 
   private applyMusicVolume(fadeMs: number): void {
@@ -563,7 +604,11 @@ export class AudioManager {
     if (!this.scene.cache.audio.exists(assetKey)) return; // asset missing / not loaded
     if (this.active >= MAX_CONCURRENT) return;
 
-    const volume = clamp((opts.volume ?? 1) * this.settings.masterVolume, 0, 1);
+    const volume = clamp(
+      (opts.volume ?? 1) * this.settings.masterVolume * this.settings.sfx,
+      0,
+      1
+    );
     if (volume <= 0) return;
 
     const sound = this.scene.sound.add(assetKey);
@@ -601,7 +646,9 @@ export class AudioManager {
       if (this.voiceBark === snd) this.voiceBark = undefined;
       snd.destroy();
     });
-    snd.play({ volume: clamp(VOICE_BASE * this.settings.masterVolume, 0, 1) });
+    snd.play({
+      volume: clamp(VOICE_BASE * this.settings.masterVolume * this.settings.voices, 0, 1),
+    });
     this.voiceBark = snd;
     return true;
   }

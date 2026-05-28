@@ -131,7 +131,8 @@
       #speed-toggle,
       #pause-toggle,
       #tech-toggle,
-      #mission-toggle {
+      #mission-toggle,
+      #settings-toggle {
         pointer-events: auto;
         margin-left: 2px;
         padding: 1px 8px;
@@ -145,7 +146,8 @@
       #speed-toggle.active,
       #pause-toggle.active,
       #tech-toggle[aria-expanded="true"],
-      #mission-toggle[aria-expanded="true"] {
+      #mission-toggle[aria-expanded="true"],
+      #settings-toggle[aria-expanded="true"] {
         background: #e8b923;
         color: #1b1b2f;
         border-color: #fbc36b;
@@ -153,7 +155,8 @@
       #speed-toggle:focus-visible,
       #pause-toggle:focus-visible,
       #tech-toggle:focus-visible,
-      #mission-toggle:focus-visible {
+      #mission-toggle:focus-visible,
+      #settings-toggle:focus-visible {
         outline: 2px solid #fbc36b;
         outline-offset: 2px;
       }
@@ -347,6 +350,89 @@
         cursor: pointer;
       }
       #mission-close:hover { border-color: #e8b923; }
+      #settings-panel {
+        position: fixed;
+        top: 86px;
+        left: 18px;
+        width: 300px;
+        z-index: 180;
+        display: none;
+        border: 2px solid #5b3a1f;
+        border-radius: 6px;
+        background:
+          linear-gradient(90deg, rgba(42, 23, 10, 0.64) 0 8px, rgba(93, 55, 24, 0.72) 8px 16px),
+          linear-gradient(180deg, #5c371b 0%, #2d1a0c 100%);
+        box-shadow:
+          inset 0 0 0 2px rgba(214, 163, 83, 0.22),
+          inset 0 14px 24px rgba(255, 228, 155, 0.08),
+          0 12px 34px rgba(0, 0, 0, 0.58);
+        color: #efe2c3;
+      }
+      #settings-panel.open { display: block; }
+      #settings-panel .settings-header {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border-bottom: 1px solid rgba(214, 163, 83, 0.34);
+        background: rgba(24, 13, 6, 0.45);
+      }
+      #settings-panel .settings-title {
+        font: 700 14px ui-monospace, "SF Mono", Menlo, monospace;
+        color: #f6d58a;
+        text-transform: uppercase;
+      }
+      #settings-close {
+        width: 26px;
+        height: 24px;
+        border: 1px solid #6a5b2b;
+        border-radius: 4px;
+        background: #1c1810;
+        color: #fbc36b;
+        cursor: pointer;
+      }
+      #settings-close:hover { border-color: #e8b923; }
+      #settings-body {
+        padding: 12px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 10px;
+      }
+      .settings-row label {
+        flex: 0 0 84px;
+        font-size: 12px;
+        color: #d8c59c;
+      }
+      .settings-row input[type="range"] {
+        flex: 1 1 auto;
+        cursor: pointer;
+        accent-color: #e8b923;
+      }
+      .settings-row .vol-pct {
+        flex: 0 0 36px;
+        text-align: right;
+        font-size: 11px;
+        color: #f0c878;
+      }
+      .settings-mute-row {
+        margin-top: 4px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(214, 163, 83, 0.28);
+      }
+      .settings-mute-row label {
+        flex: 1 1 auto;
+        color: #f0c878;
+        cursor: pointer;
+      }
+      .settings-mute-row input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: #e8b923;
+      }
       #mission-body {
         padding: 12px;
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -1608,7 +1694,7 @@
       <button id="tech-toggle" type="button" aria-controls="tech-tree-panel" aria-expanded="false">Tech</button>
       <button id="mission-toggle" class="hidden" type="button" aria-controls="mission-panel" aria-expanded="false">Mission</button>
       <button id="sound-toggle" type="button" aria-label="Mute sound" aria-pressed="false">Sound</button>
-      <input id="volume-slider" type="range" min="0" max="100" step="5" value="70" aria-label="Sound volume" style="width: 80px; vertical-align: middle; cursor: pointer;" />
+      <button id="settings-toggle" type="button" aria-controls="settings-panel" aria-expanded="false" aria-label="Audio settings">⚙ Audio</button>
     </div>
 
     <div id="save-load-panel" aria-label="Save and load game">
@@ -1640,6 +1726,44 @@
         <button id="mission-close" type="button" aria-label="Close mission objectives">X</button>
       </div>
       <div id="mission-body"></div>
+    </div>
+
+    <div id="settings-panel" aria-label="Audio settings">
+      <div class="settings-header">
+        <div class="settings-title">Audio Settings</div>
+        <button id="settings-close" type="button" aria-label="Close audio settings">X</button>
+      </div>
+      <div id="settings-body">
+        <div class="settings-row">
+          <label for="vol-master">Master</label>
+          <input id="vol-master" type="range" min="0" max="100" step="5" value="70" aria-label="Master volume" />
+          <span class="vol-pct" id="pct-master">70%</span>
+        </div>
+        <div class="settings-row">
+          <label for="vol-music">Music</label>
+          <input id="vol-music" type="range" min="0" max="100" step="5" value="100" aria-label="Music volume" />
+          <span class="vol-pct" id="pct-music">100%</span>
+        </div>
+        <div class="settings-row">
+          <label for="vol-sfx">SFX</label>
+          <input id="vol-sfx" type="range" min="0" max="100" step="5" value="100" aria-label="Sound effects volume" />
+          <span class="vol-pct" id="pct-sfx">100%</span>
+        </div>
+        <div class="settings-row">
+          <label for="vol-voices">Voices</label>
+          <input id="vol-voices" type="range" min="0" max="100" step="5" value="100" aria-label="Unit voices volume" />
+          <span class="vol-pct" id="pct-voices">100%</span>
+        </div>
+        <div class="settings-row">
+          <label for="vol-ambience">Ambience</label>
+          <input id="vol-ambience" type="range" min="0" max="100" step="5" value="100" aria-label="Ambience volume" />
+          <span class="vol-pct" id="pct-ambience">100%</span>
+        </div>
+        <div class="settings-row settings-mute-row">
+          <label for="settings-mute">Mute all</label>
+          <input id="settings-mute" type="checkbox" aria-label="Mute all audio" />
+        </div>
+      </div>
     </div>
 
     <!-- ─── Top-right minimap ─── -->

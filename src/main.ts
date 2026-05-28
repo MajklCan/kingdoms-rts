@@ -7,6 +7,7 @@
 import Phaser from 'phaser';
 import { RENDER } from './config';
 import { GameScene } from './render/game-scene';
+import type { AudioChannel } from './render/audio/audio-manager';
 import { setLastEvent, updateDebugOverlay, updateResourceBar } from './debug/overlay';
 import { AgeId, type AgeIdValue } from './sim/defs';
 import { normalizeCampaignMissionId, type CampaignMissionIdValue } from './sim/campaign';
@@ -458,41 +459,103 @@ function getGameScene(): GameScene | null {
   return game.scene.getScene('GameScene') as GameScene | null;
 }
 
-function bindAudioControls(): void {
-  const soundBtn = document.getElementById('sound-toggle') as HTMLButtonElement | null;
-  const slider = document.getElementById('volume-slider') as HTMLInputElement | null;
+// Per-channel volume sliders in the settings panel (slider id → channel + % span).
+const CHANNEL_SLIDERS: ReadonlyArray<{ id: string; channel: AudioChannel; pct: string }> = [
+  { id: 'vol-music', channel: 'music', pct: 'pct-music' },
+  { id: 'vol-sfx', channel: 'sfx', pct: 'pct-sfx' },
+  { id: 'vol-voices', channel: 'voices', pct: 'pct-voices' },
+  { id: 'vol-ambience', channel: 'ambience', pct: 'pct-ambience' },
+];
 
-  const refreshUi = (): boolean => {
+function el<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
+function setPct(spanId: string, fraction: number): void {
+  const span = document.getElementById(spanId);
+  if (span) span.textContent = `${Math.round(fraction * 100)}%`;
+}
+
+function bindAudioControls(): void {
+  const soundBtn = el<HTMLButtonElement>('sound-toggle');
+  const masterSlider = el<HTMLInputElement>('vol-master');
+  const muteCheck = el<HTMLInputElement>('settings-mute');
+
+  // Sync every audio control (bar button + panel sliders + mute) to the manager.
+  const refreshAudioUi = (): boolean => {
     const audio = getGameScene()?.getAudio();
     if (!audio) return false;
-    if (slider) slider.value = String(Math.round(audio.masterVolume * 100));
     if (soundBtn) {
       soundBtn.textContent = audio.muted ? 'Muted' : 'Sound';
       soundBtn.setAttribute('aria-pressed', String(audio.muted));
+    }
+    if (muteCheck) muteCheck.checked = audio.muted;
+    if (masterSlider) masterSlider.value = String(Math.round(audio.masterVolume * 100));
+    setPct('pct-master', audio.masterVolume);
+    for (const { id, channel, pct } of CHANNEL_SLIDERS) {
+      const v = audio.getChannelVolume(channel);
+      const input = el<HTMLInputElement>(id);
+      if (input) input.value = String(Math.round(v * 100));
+      setPct(pct, v);
     }
     return true;
   };
 
   // The scene boots asynchronously; poll briefly until its AudioManager exists,
-  // then sync the controls to the persisted volume/mute.
+  // then sync the controls to the persisted volume/mute/channels.
   let tries = 0;
   const sync = window.setInterval(() => {
-    if (refreshUi() || tries++ > 50) window.clearInterval(sync);
+    if (refreshAudioUi() || tries++ > 50) window.clearInterval(sync);
   }, 100);
+
+  const applyMute = (muted: boolean): void => {
+    const audio = getGameScene()?.getAudio();
+    if (!audio) return;
+    audio.setMuted(muted);
+    refreshAudioUi();
+  };
 
   soundBtn?.addEventListener('click', () => {
     const audio = getGameScene()?.getAudio();
+    if (audio) applyMute(!audio.muted);
+  });
+  muteCheck?.addEventListener('change', () => applyMute(!!muteCheck.checked));
+
+  masterSlider?.addEventListener('input', () => {
+    const audio = getGameScene()?.getAudio();
     if (!audio) return;
-    const muted = audio.toggleMuted();
-    soundBtn.textContent = muted ? 'Muted' : 'Sound';
-    soundBtn.setAttribute('aria-pressed', String(muted));
+    const v = Number(masterSlider.value) / 100;
+    audio.setMasterVolume(v);
+    setPct('pct-master', v);
   });
 
-  slider?.addEventListener('input', () => {
-    const audio = getGameScene()?.getAudio();
-    if (!audio || !slider) return;
-    audio.setMasterVolume(Number(slider.value) / 100);
-  });
+  for (const { id, channel, pct } of CHANNEL_SLIDERS) {
+    const input = el<HTMLInputElement>(id);
+    input?.addEventListener('input', () => {
+      const audio = getGameScene()?.getAudio();
+      if (!audio) return;
+      const v = Number(input.value) / 100;
+      audio.setChannelVolume(channel, v);
+      setPct(pct, v);
+    });
+  }
+
+  // Settings panel open/close (mirrors the tech/mission toggle pattern).
+  const panel = document.getElementById('settings-panel');
+  const settingsToggle = el<HTMLButtonElement>('settings-toggle');
+  const settingsClose = el<HTMLButtonElement>('settings-close');
+  if (panel && settingsToggle && settingsClose) {
+    const setOpen = (open: boolean) => {
+      panel.classList.toggle('open', open);
+      settingsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) refreshAudioUi();
+    };
+    settingsToggle.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
+    settingsClose.addEventListener('click', () => setOpen(false));
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && panel.classList.contains('open')) setOpen(false);
+    });
+  }
 
   // Delegated UI feedback: click + hover on any HUD button/cell/dropdown.
   const interactiveSel = 'button, [role="button"], .action-grid-cell, [data-tech-id], select';
