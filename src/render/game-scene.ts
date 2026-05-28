@@ -404,7 +404,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.world = createSimWorld(Date.now() & 0xffff);
     this.audio = new AudioManager(this);
-    this.audio.startMusic('theme');
+    this.audio.playMenuMusic();
 
     // Bake all voxel textures once at scene boot.
     this.bakeAllTextures();
@@ -2326,11 +2326,13 @@ export class GameScene extends Phaser.Scene {
     const age = getAgeDef(startingAge) ?? getAgeDef(AgeId.DARK);
     this.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty });
     this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI`);
+    this.audio.playGamePlaylist();
   }
 
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
     this.world = createSimWorld(Date.now() & 0xffff, { campaignMissionId: missionId });
     this.afterWorldLoaded(this.world.campaign?.name ?? 'campaign started');
+    this.audio.playGamePlaylist();
   }
 
   private installDebugWindowApi(): void {

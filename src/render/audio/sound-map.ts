@@ -31,8 +31,16 @@ export const SFX_KEYS = [
 
 export type SfxKey = (typeof SFX_KEYS)[number];
 
-/** Looping background music tracks (public/assets/audio/music/<key>.ogg|.mp3). */
-export const MUSIC_KEYS = ['theme'] as const;
+// --- Music (public/assets/audio/music/<key>.ogg|.mp3) ---
+
+/** Single looping theme played on the title/menu screen. */
+export const MENU_MUSIC = 'menu_theme';
+
+/** In-game playlist: tracks played one after another (shuffled, gaps between). */
+export const INGAME_TRACKS = ['ingame_1', 'ingame_2', 'ingame_3'] as const;
+
+/** Every music asset key the game can load (menu theme + playlist tracks). */
+export const MUSIC_KEYS = [MENU_MUSIC, ...INGAME_TRACKS] as const;
 export type MusicKey = (typeof MUSIC_KEYS)[number];
 
 export interface SfxConfig {
