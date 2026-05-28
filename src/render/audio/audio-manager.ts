@@ -145,13 +145,13 @@ export class AudioManager {
   // missing — the cache.audio.exists() guard means zero music files === silence,
   // no errors.
 
-  /** Play the looping menu theme. Stops any current music first. No-op if the
-   *  asset is missing. */
+  /** Play the menu theme once (no loop). Stops any current music first. No-op if
+   *  the asset is missing. */
   playMenuMusic(): void {
     this.stopMusic(0);
     const assetKey = `music-${MENU_MUSIC}`;
     if (!this.scene.cache.audio.exists(assetKey)) return; // asset missing → silence
-    this.startTrack(assetKey, true);
+    this.startTrack(assetKey, false);
   }
 
   /** Begin the endless in-game playlist: shuffle the tracks whose assets exist,
