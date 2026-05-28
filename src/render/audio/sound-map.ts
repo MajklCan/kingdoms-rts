@@ -39,8 +39,9 @@ export const MENU_MUSIC = 'menu_theme';
 /** Looping track while the player lingers peacefully at their base (no danger). */
 export const VILLAGE_MUSIC = 'village_theme';
 
-/** Looping track that takes over while the local player is in combat. */
-export const BATTLE_MUSIC = 'battle_theme';
+/** Looping tracks that take over while the local player is in combat. One is
+ *  picked at random per combat episode. */
+export const BATTLE_TRACKS = ['battle_theme', 'battle_2'] as const;
 
 /** Looping ambience bed (human battle din — shouts/cries) layered UNDER the
  *  music during combat. Era-neutral: no weapons (those are per-event SFX). */
@@ -57,7 +58,7 @@ export const INGAME_TRACKS = ['ingame_1', 'ingame_2', 'ingame_3'] as const;
 export const MUSIC_KEYS = [
   MENU_MUSIC,
   VILLAGE_MUSIC,
-  BATTLE_MUSIC,
+  ...BATTLE_TRACKS,
   ...INGAME_TRACKS,
 ] as const;
 export type MusicKey = (typeof MUSIC_KEYS)[number];

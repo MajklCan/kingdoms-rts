@@ -117,7 +117,7 @@ import {
   MUSIC_KEYS,
   AMBIENCE_KEYS,
   VILLAGE_MUSIC,
-  BATTLE_MUSIC,
+  BATTLE_TRACKS,
   BATTLE_AMBIENCE,
   cueSound,
   combatSound,
@@ -300,6 +300,9 @@ export class GameScene extends Phaser.Scene {
   private villageEnteredTick = -1;
   /** Most recent tick the camera was at the home base (for leave-grace). */
   private lastHomeTick = -1;
+  /** Battle track chosen for the current combat episode; null when not fighting
+   *  (re-picked at random each time combat begins). */
+  private battleTrack: string | null = null;
   private gridGfx!: Phaser.GameObjects.Graphics;
   private buildingsGfx!: Phaser.GameObjects.Graphics;
   private resourcesGfx!: Phaser.GameObjects.Graphics;
@@ -1047,9 +1050,11 @@ export class GameScene extends Phaser.Scene {
       this.villageEnteredTick = -1;
       // Battle din layers over whatever music plays (no-op until supplied).
       this.audio.playAmbience(BATTLE_AMBIENCE);
-      if (this.audio.hasTrack(BATTLE_MUSIC)) {
+      // Pick one battle track for this whole combat episode (keep it stable).
+      if (this.battleTrack === null) this.battleTrack = this.pickBattleTrack();
+      if (this.battleTrack) {
         this.audio.setMusicDucked(false);
-        this.audio.playLooping(BATTLE_MUSIC);
+        this.audio.playLooping(this.battleTrack);
       } else {
         // No battle track supplied yet — keep the playlist but duck it.
         this.audio.playGamePlaylist();
@@ -1058,9 +1063,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Safe: never ducked, no battle ambience.
+    // Safe: never ducked, no battle ambience; re-pick a battle track next fight.
     this.audio.setMusicDucked(false);
     this.audio.stopAmbience();
+    this.battleTrack = null;
 
     const rawHome = this.cameraNearHomeBase();
     if (rawHome) this.lastHomeTick = this.world.tick;
@@ -1078,6 +1084,13 @@ export class GameScene extends Phaser.Scene {
       this.villageEnteredTick = -1;
     }
     this.audio.playGamePlaylist();
+  }
+
+  /** Random battle track whose asset exists, or null if none supplied yet. */
+  private pickBattleTrack(): string | null {
+    const present = BATTLE_TRACKS.filter((k) => this.audio.hasTrack(k));
+    if (present.length === 0) return null;
+    return present[Math.floor(Math.random() * present.length)];
   }
 
   /** True when the camera is centred close to the local player's town centre. */
