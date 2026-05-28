@@ -27,19 +27,44 @@ const VOICES = {
   soldier_3: 'nPczCjzI2devNBz1zQrb', // Brian - deep, resonant
 };
 
-// Lines per role. Villagers share lines (male/female differ by voice); soldiers
-// share lines across the three voices (variety comes from the voice).
-const VILLAGER_LINES = {
-  select: ['Yes, my lord?', 'At your service.', 'What do you need?'],
-  command: ['Right away.', 'As you wish.', 'On my way.'],
-};
-const SOLDIER_LINES = {
-  select: ['Yes, sire?', 'Awaiting your orders.', 'My lord?'],
-  command: ['Attack!', 'For the kingdom!', 'Aye, sire!'],
+// Lines per category. Three bark types:
+//   select — clicked on
+//   move   — ordered to move/gather (calm acknowledgement)
+//   attack — ordered to attack / attack-move (battle cry)
+// Splitting move/attack stops move orders from shouting "Attack!". Each soldier
+// voice gets its OWN line set so the three soldiers feel distinct (variety).
+const LINES = {
+  villager_female: {
+    select: ['Yes, my lord?', 'At your service.', 'What do you need?', 'My lord?'],
+    move: ['Right away.', 'As you wish.', 'On my way.', 'Of course.'],
+    attack: ['I will defend us!', 'For my family!', 'Stay back!', 'To arms!'],
+  },
+  villager_male: {
+    select: ['Yes, my lord?', 'At your service.', 'You called?', 'What is it?'],
+    move: ['Right away.', 'As you wish.', "I'm on it.", 'Heading there.'],
+    attack: ['I will fight!', 'For our homes!', 'Defend the village!', 'To arms!'],
+  },
+  soldier_1: {
+    select: ['Yes, sire?', 'Orders?', 'At the ready.', 'Awaiting command.'],
+    move: ['Marching!', 'Moving out!', 'On our way.', 'Aye, sire!'],
+    attack: ['Attack!', 'For the kingdom!', 'Charge!', 'Cut them down!'],
+  },
+  soldier_2: {
+    select: ['Sire.', 'Your command?', 'Ready, my lord.', 'Standing by.'],
+    move: ['Advancing.', 'We move.', 'As ordered.', 'Right away.'],
+    attack: ['For glory!', 'Engage them!', 'Forward!', 'Show no mercy!'],
+  },
+  soldier_3: {
+    select: ['My lord?', 'What is it?', 'Reporting in.', 'Awaiting orders.'],
+    move: ['Moving.', 'On the march.', 'Understood.', 'Heading out.'],
+    attack: ['For Bohemia!', 'Strike them down!', 'To battle!', 'Attack now!'],
+  },
 };
 
+const BARK_TYPES = ['select', 'move', 'attack'];
+
 function linesFor(category) {
-  return category.startsWith('villager') ? VILLAGER_LINES : SOLDIER_LINES;
+  return LINES[category];
 }
 
 // Build the full clip list: { id, category, text }.
@@ -47,7 +72,7 @@ function allClips() {
   const clips = [];
   for (const category of Object.keys(VOICES)) {
     const lines = linesFor(category);
-    for (const type of ['select', 'command']) {
+    for (const type of BARK_TYPES) {
       lines[type].forEach((text, n) => {
         clips.push({ id: `${category}_${type}_${n}`, category, text });
       });

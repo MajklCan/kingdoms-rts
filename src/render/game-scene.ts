@@ -1056,9 +1056,17 @@ export class GameScene extends Phaser.Scene {
   private updateMusicDirector(): void {
     if (!this.inMatch) return;
     const tick = this.world.tick;
-    const danger =
+    const recentCombat =
       this.lastLocalCombatTick >= 0 &&
       tick - this.lastLocalCombatTick < GameScene.BATTLE_HOLD_TICKS;
+    const recentlyAttacked =
+      this.lastAlertTick >= 0 && tick - this.lastAlertTick < GameScene.BATTLE_HOLD_TICKS;
+    // Stay in "battle" only while there's a live reason: a surviving army still
+    // in the field, or the base under recent attack. If the local army is wiped
+    // and nothing's hitting home, the fight is over → let the score wind down
+    // (still a slow crossfade, not a snap) instead of holding empty battle music.
+    const danger =
+      recentCombat && (recentlyAttacked || this.localHasLivingMilitary());
 
     // Ambience tracks danger directly (its own slow crossfade): battle din while
     // fighting, calm nature bed otherwise — so quiet is never truly silent.
@@ -1155,6 +1163,18 @@ export class GameScene extends Phaser.Scene {
       return { x: Position.x[eid], y: Position.y[eid] };
     }
     return null;
+  }
+
+  /** True if the local player still has at least one living military unit
+   *  (villagers excluded). Drives battle-music wind-down when an army is wiped. */
+  private localHasLivingMilitary(): boolean {
+    for (const eid of unitQuery(this.world.ecs)) {
+      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (hasComponent(this.world.ecs, VillagerTag, eid)) continue;
+      if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
+      return true;
+    }
+    return false;
   }
 
   /** Play the fire-sound for a combat event, gated by fog (only audible if the
@@ -1293,12 +1313,20 @@ export class GameScene extends Phaser.Scene {
     if (!this.playUnitBark(eid, 'select')) this.playUi(UNIT_SELECT);
   }
 
-  /** Command acknowledgement: the representative selected unit speaks; blip if
-   *  it has no voice. No-op when nothing commandable is selected. */
-  private barkCommand(): void {
+  /** Move/gather acknowledgement: representative selected unit speaks a calm
+   *  "on our way" line; blip fallback. No-op when nothing commandable selected. */
+  private barkMove(): void {
     const eid = this.representativeSelectedUnit();
     if (eid === null) return;
-    if (!this.playUnitBark(eid, 'command')) this.playUi(COMMAND_MOVE);
+    if (!this.playUnitBark(eid, 'move')) this.playUi(COMMAND_MOVE);
+  }
+
+  /** Attack / attack-move acknowledgement: aggressive battle-cry line; blip
+   *  fallback. No-op when nothing commandable selected. */
+  private barkAttack(): void {
+    const eid = this.representativeSelectedUnit();
+    if (eid === null) return;
+    if (!this.playUnitBark(eid, 'attack')) this.playUi(COMMAND_MOVE);
   }
 
   /** Public accessors so the HUD (volume slider / mute, button clicks/hovers)
@@ -1731,7 +1759,7 @@ export class GameScene extends Phaser.Scene {
         isEnemyOf(this.world, targetEid, 1)
       ) {
         this.world.inputs.push({ type: 'attackSelected', targetEid });
-        this.barkCommand();
+        this.barkAttack();
         setLastEvent(`attack eid=${targetEid}`);
         return;
       }
@@ -1746,7 +1774,7 @@ export class GameScene extends Phaser.Scene {
         );
       } else {
         this.world.inputs.push({ type: 'moveSelected', to: { x: tx, y: ty } });
-        this.barkCommand();
+        this.barkMove();
         setLastEvent(`move → (${tx},${ty})`);
       }
     } else if (pointer.leftButtonDown()) {
@@ -1767,7 +1795,7 @@ export class GameScene extends Phaser.Scene {
           type: 'attackMoveSelected',
           to: { x: tx, y: ty },
         });
-        this.barkCommand();
+        this.barkAttack();
         setLastEvent(`attack-move → (${tx},${ty})`);
         return;
       }

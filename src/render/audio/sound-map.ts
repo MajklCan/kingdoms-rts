@@ -80,16 +80,20 @@ export const VOICE_CATEGORIES = [
 ] as const;
 export type VoiceCategory = (typeof VOICE_CATEGORIES)[number];
 
-export type VoiceBarkType = 'select' | 'command';
+// Commands are split so the bark fits the order: a plain move/gather order gets
+// a calm "moving out" line, an attack/attack-move order gets an aggressive one.
+// (Previously a single 'command' type meant move orders could shout "Attack!".)
+export type VoiceBarkType = 'select' | 'move' | 'attack';
 
 /** How many alternate lines exist per bark type (random pick at play time). */
-export const VOICE_LINE_COUNTS: Record<VoiceBarkType, number> = { select: 3, command: 3 };
+export const VOICE_LINE_COUNTS: Record<VoiceBarkType, number> = { select: 4, move: 4, attack: 4 };
 
 /** Every voice asset key (for the loader). */
-export const VOICE_KEYS: string[] = VOICE_CATEGORIES.flatMap((c) => [
-  ...Array.from({ length: VOICE_LINE_COUNTS.select }, (_, n) => `${c}_select_${n}`),
-  ...Array.from({ length: VOICE_LINE_COUNTS.command }, (_, n) => `${c}_command_${n}`),
-]);
+export const VOICE_KEYS: string[] = VOICE_CATEGORIES.flatMap((c) =>
+  (Object.keys(VOICE_LINE_COUNTS) as VoiceBarkType[]).flatMap((type) =>
+    Array.from({ length: VOICE_LINE_COUNTS[type] }, (_, n) => `${c}_${type}_${n}`)
+  )
+);
 
 export interface SfxConfig {
   key: SfxKey;
