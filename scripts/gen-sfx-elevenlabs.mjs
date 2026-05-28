@@ -30,14 +30,14 @@ const API_URL = 'https://api.elevenlabs.io/v1/sound-generation';
 const SOUNDS = [
   // --- Combat (fire events come from world.combatEvents) ---
   { id: 'sword_clash',    text: 'Two medieval swords clashing, single sharp metallic clang with a short ring, close-up, dry, no music', dur: 0.8, infl: 0.4 },
-  { id: 'bow_shot',       text: 'Wooden bow firing a single arrow, taut string release and fast whoosh, close-up, no music', dur: 0.7, infl: 0.4 },
+  { id: 'bow_shot',       text: 'Single arrow shot from a bow, sharp high-pitched string twang and quick airy whoosh, crisp and dry, light and snappy, NO bass, no rumble, no boom, no music', dur: 0.6, infl: 0.6 },
   { id: 'gun_shot',       text: 'Single black-powder musket gunshot, sharp crack with smoke puff, 18th century firearm, no music', dur: 0.9, infl: 0.4 },
   { id: 'cannon_fire',    text: 'Heavy iron cannon firing, deep booming blast with low rumble, black powder artillery, no music', dur: 1.4, infl: 0.4 },
   { id: 'explosion',      text: 'Cannonball impact explosion, deep boom with debris and rubble, building hit, no music', dur: 1.5, infl: 0.4 },
   { id: 'unit_death',     text: 'Short male soldier death grunt, pained fall, medieval battlefield, dry, no music', dur: 0.7, infl: 0.3 },
 
   // --- Economy (gather cues from sim) ---
-  { id: 'chop_wood',      text: 'Single axe chop hitting a tree trunk, sharp dry wooden thwack, close-up, no music', dur: 0.6, infl: 0.4 },
+  { id: 'chop_wood',      text: 'Single axe blade biting into wood, sharp crisp high-pitched chop, dry crack and splinter of timber, light hatchet thwack, NO bass, no deep thud, no rumble, no boom, no music', dur: 0.5, infl: 0.6 },
   { id: 'mine_stone',     text: 'Pickaxe striking stone and ore, sharp rocky clink with small debris, close-up, no music', dur: 0.6, infl: 0.4 },
 
   // --- Building / production lifecycle (cues from sim) ---
