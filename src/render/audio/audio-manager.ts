@@ -72,6 +72,11 @@ export class AudioManager {
   private music?: Phaser.Sound.BaseSound;
   private musicDucked = false;
   private musicCurrentVol = 0;
+  /** Which music context is active. Lets context requests be idempotent so the
+   *  per-frame music director can call them every frame without restarting. */
+  private musicMode: 'none' | 'menu' | 'playlist' | 'single' = 'none';
+  /** Asset key of the current single-loop track (village/battle context). */
+  private singleKey?: string;
   /** Playlist state — only populated while the in-game playlist is active. */
   private playlist: string[] = [];
   private playlistIndex = 0;
@@ -145,20 +150,43 @@ export class AudioManager {
   // missing — the cache.audio.exists() guard means zero music files === silence,
   // no errors.
 
-  /** Play the menu theme once (no loop). Stops any current music first. No-op if
-   *  the asset is missing. */
+  /** True if a music track's audio actually loaded. */
+  hasTrack(key: string): boolean {
+    return this.scene.cache.audio.exists(`music-${key}`);
+  }
+
+  /** Play the menu theme once (no loop). Idempotent. No-op if asset missing. */
   playMenuMusic(): void {
-    this.stopMusic(0);
+    if (this.musicMode === 'menu') return;
+    this.stopMusic(400);
+    this.musicMode = 'menu';
     const assetKey = `music-${MENU_MUSIC}`;
     if (!this.scene.cache.audio.exists(assetKey)) return; // asset missing → silence
     this.startTrack(assetKey, false);
   }
 
+  /** Crossfade to a single looping track (village / battle context). Idempotent
+   *  when already playing that track. No-op (returns false) if asset missing, so
+   *  the caller can fall back. */
+  playLooping(key: string): boolean {
+    const assetKey = `music-${key}`;
+    if (this.musicMode === 'single' && this.singleKey === assetKey) return true;
+    if (!this.scene.cache.audio.exists(assetKey)) return false;
+    this.stopMusic(500);
+    this.musicMode = 'single';
+    this.singleKey = assetKey;
+    this.startTrack(assetKey, true);
+    return true;
+  }
+
   /** Begin the endless in-game playlist: shuffle the tracks whose assets exist,
    *  play each once (non-looping) with a randomized silence gap between, then
-   *  reshuffle and repeat. No-op if zero in-game tracks are present. */
+   *  reshuffle and repeat. Idempotent while already in playlist mode. No-op if
+   *  zero in-game tracks are present. */
   playGamePlaylist(): void {
-    this.stopMusic(0);
+    if (this.musicMode === 'playlist') return;
+    this.stopMusic(500);
+    this.musicMode = 'playlist';
     this.playlist = this.shuffledExistingTracks();
     this.playlistIndex = 0;
     if (this.playlist.length === 0) return; // no in-game assets → silence
@@ -171,6 +199,8 @@ export class AudioManager {
     this.cancelNextTrackTimer();
     this.playlist = [];
     this.playlistIndex = 0;
+    this.musicMode = 'none';
+    this.singleKey = undefined;
     const current = this.music;
     if (!current) return;
     this.detachTrackCompleteHandler(current);

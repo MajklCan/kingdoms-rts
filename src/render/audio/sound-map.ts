@@ -33,14 +33,26 @@ export type SfxKey = (typeof SFX_KEYS)[number];
 
 // --- Music (public/assets/audio/music/<key>.ogg|.mp3) ---
 
-/** Single looping theme played on the title/menu screen. */
+/** Single non-looping theme played on the title/menu screen. */
 export const MENU_MUSIC = 'menu_theme';
 
-/** In-game playlist: tracks played one after another (shuffled, gaps between). */
+/** Looping track while the player lingers peacefully at their base (no danger). */
+export const VILLAGE_MUSIC = 'village_theme';
+
+/** Looping track that takes over while the local player is in combat. */
+export const BATTLE_MUSIC = 'battle_theme';
+
+/** In-game filler playlist: tracks played one after another (shuffled, gaps). */
 export const INGAME_TRACKS = ['ingame_1', 'ingame_2', 'ingame_3'] as const;
 
-/** Every music asset key the game can load (menu theme + playlist tracks). */
-export const MUSIC_KEYS = [MENU_MUSIC, ...INGAME_TRACKS] as const;
+/** Every music asset key the game can load. Missing files load to nothing and
+ *  every playback path no-ops on them — so partial sets are fine. */
+export const MUSIC_KEYS = [
+  MENU_MUSIC,
+  VILLAGE_MUSIC,
+  BATTLE_MUSIC,
+  ...INGAME_TRACKS,
+] as const;
 export type MusicKey = (typeof MUSIC_KEYS)[number];
 
 export interface SfxConfig {

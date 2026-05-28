@@ -115,6 +115,8 @@ import { AudioManager } from './audio/audio-manager';
 import {
   SFX_KEYS,
   MUSIC_KEYS,
+  VILLAGE_MUSIC,
+  BATTLE_MUSIC,
   cueSound,
   combatSound,
   isNonSpatialCue,
@@ -290,6 +292,12 @@ export class GameScene extends Phaser.Scene {
   private lastLocalCombatTick = -1;
   /** Sim tick the last "under attack" alert fired — throttles the stinger. */
   private lastAlertTick = -1;
+  /** True once a match is running (drives the in-game music director). */
+  private inMatch = false;
+  /** Tick the camera began dwelling on the home base; -1 when away. */
+  private villageEnteredTick = -1;
+  /** Most recent tick the camera was at the home base (for leave-grace). */
+  private lastHomeTick = -1;
   private gridGfx!: Phaser.GameObjects.Graphics;
   private buildingsGfx!: Phaser.GameObjects.Graphics;
   private resourcesGfx!: Phaser.GameObjects.Graphics;
@@ -350,6 +358,14 @@ export class GameScene extends Phaser.Scene {
   private static readonly COMBAT_MUSIC_HOLD_TICKS = SIM.TICK_HZ * 5;
   /** Minimum gap between "under attack" alert stingers. */
   private static readonly ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 10;
+  /** How long the camera must dwell on the home base (while safe) before the
+   *  peaceful village theme takes over. */
+  private static readonly VILLAGE_LINGER_TICKS = SIM.TICK_HZ * 6;
+  /** Grace window where the base still counts as "home" after panning away,
+   *  so small camera nudges don't flap the village/playlist switch. */
+  private static readonly HOME_LEAVE_GRACE_TICKS = SIM.TICK_HZ * 2;
+  /** Camera-to-town-centre distance (world px) that counts as "at home". */
+  private static readonly HOME_RADIUS_PX = 260;
   // Texture keys.
   private static readonly DARK_TC_KEY_PREFIX = 'voxel-dark-tc-p';
   private static readonly CASTLE_TC_KEY_PREFIX = 'voxel-castle-tc-p';
@@ -612,7 +628,7 @@ export class GameScene extends Phaser.Scene {
     this.consumeCombatEvents();
     this.consumeAiEvents();
     this.consumeSoundCues();
-    this.updateAdaptiveMusic();
+    this.updateMusicDirector();
     this.drawProjectiles(delta * this.gameSpeed);
     this.drawGhost();
     this.drawAttackCursorIndicator();
@@ -1016,12 +1032,69 @@ export class GameScene extends Phaser.Scene {
     if (latest) setLastEvent(latest.message);
   }
 
-  /** Duck the music while recent local-player combat is active, restore after. */
-  private updateAdaptiveMusic(): void {
-    const inCombat =
+  /** Per-frame music director. Chooses the in-game music context by priority:
+   *  combat (battle theme, or duck the playlist as fallback) > lingering safely
+   *  at the home base (village theme) > the default filler playlist. */
+  private updateMusicDirector(): void {
+    if (!this.inMatch) return;
+    const danger =
       this.lastLocalCombatTick >= 0 &&
       this.world.tick - this.lastLocalCombatTick < GameScene.COMBAT_MUSIC_HOLD_TICKS;
-    this.audio.setMusicDucked(inCombat);
+
+    if (danger) {
+      this.villageEnteredTick = -1;
+      if (this.audio.hasTrack(BATTLE_MUSIC)) {
+        this.audio.setMusicDucked(false);
+        this.audio.playLooping(BATTLE_MUSIC);
+      } else {
+        // No battle track supplied yet — keep the playlist but duck it.
+        this.audio.playGamePlaylist();
+        this.audio.setMusicDucked(true);
+      }
+      return;
+    }
+
+    // Safe: never ducked.
+    this.audio.setMusicDucked(false);
+
+    const rawHome = this.cameraNearHomeBase();
+    if (rawHome) this.lastHomeTick = this.world.tick;
+    const atHome =
+      rawHome ||
+      (this.lastHomeTick >= 0 &&
+        this.world.tick - this.lastHomeTick < GameScene.HOME_LEAVE_GRACE_TICKS);
+
+    if (atHome) {
+      if (this.villageEnteredTick < 0) this.villageEnteredTick = this.world.tick;
+      const lingered =
+        this.world.tick - this.villageEnteredTick >= GameScene.VILLAGE_LINGER_TICKS;
+      if (lingered && this.audio.playLooping(VILLAGE_MUSIC)) return;
+    } else {
+      this.villageEnteredTick = -1;
+    }
+    this.audio.playGamePlaylist();
+  }
+
+  /** True when the camera is centred close to the local player's town centre. */
+  private cameraNearHomeBase(): boolean {
+    const tc = this.localTownCenterPos();
+    if (!tc) return false;
+    const local = tileToScreen(tc.x, tc.y);
+    const absX = this.worldContainer.x + local.x;
+    const absY = this.worldContainer.y + local.y;
+    const view = this.cameras.main.worldView;
+    return Math.hypot(absX - view.centerX, absY - view.centerY) <= GameScene.HOME_RADIUS_PX;
+  }
+
+  /** Position of the local player's (living) town centre, or null if none. */
+  private localTownCenterPos(): { x: number; y: number } | null {
+    for (const eid of buildingQuery(this.world.ecs)) {
+      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (!hasComponent(this.world.ecs, TownCenterTag, eid)) continue;
+      if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
+      return { x: Position.x[eid], y: Position.y[eid] };
+    }
+    return null;
   }
 
   /** Play the fire-sound for a combat event, gated by fog (only audible if the
@@ -2326,12 +2399,21 @@ export class GameScene extends Phaser.Scene {
     const age = getAgeDef(startingAge) ?? getAgeDef(AgeId.DARK);
     this.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty });
     this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI`);
-    this.audio.playGamePlaylist();
+    this.enterMatchMusic();
   }
 
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
     this.world = createSimWorld(Date.now() & 0xffff, { campaignMissionId: missionId });
     this.afterWorldLoaded(this.world.campaign?.name ?? 'campaign started');
+    this.enterMatchMusic();
+  }
+
+  /** Hand music off from the menu to the in-game director on match start. */
+  private enterMatchMusic(): void {
+    this.inMatch = true;
+    this.villageEnteredTick = -1;
+    this.lastHomeTick = -1;
+    this.lastLocalCombatTick = -1;
     this.audio.playGamePlaylist();
   }
 
