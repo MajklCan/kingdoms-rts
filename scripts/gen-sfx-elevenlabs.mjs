@@ -30,7 +30,7 @@ const API_URL = 'https://api.elevenlabs.io/v1/sound-generation';
 const SOUNDS = [
   // --- Combat (fire events come from world.combatEvents) ---
   { id: 'sword_clash',    text: 'Two medieval swords clashing, single sharp metallic clang with a short ring, close-up, dry, no music', dur: 0.8, infl: 0.4 },
-  { id: 'bow_shot',       text: 'Single arrow shot from a bow, sharp high-pitched string twang and quick airy whoosh, crisp and dry, light and snappy, NO bass, no rumble, no boom, no music', dur: 0.6, infl: 0.6 },
+  { id: 'bow_shot',       text: 'Single arrow flying fast through the air, sharp whistling whoosh as it cuts past, light feathered fletching swish, quick and high-pitched, ends with faint thud, NO bass, no rumble, no boom, no music', dur: 0.7, infl: 0.6 },
   { id: 'gun_shot',       text: 'Single black-powder musket gunshot, sharp crack with smoke puff, 18th century firearm, no music', dur: 0.9, infl: 0.4 },
   { id: 'cannon_fire',    text: 'Heavy iron cannon firing, deep booming blast with low rumble, black powder artillery, no music', dur: 1.4, infl: 0.4 },
   { id: 'explosion',      text: 'Cannonball impact explosion, deep boom with debris and rubble, building hit, no music', dur: 1.5, infl: 0.4 },
