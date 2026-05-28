@@ -85,14 +85,17 @@ export class AudioManager {
   private musicCurrentVol = 0;
   /** Which music context is active. Lets context requests be idempotent so the
    *  per-frame music director can call them every frame without restarting. */
-  private musicMode: 'none' | 'menu' | 'playlist' | 'single' = 'none';
-  /** Asset key of the current single-loop track (village/battle context). */
+  private musicMode: 'none' | 'menu' | 'playlist' | 'single' | 'gapped-single' = 'none';
+  /** Asset key of the current single-track context (village loop, battle loop,
+   *  or village gapped-single). */
   private singleKey?: string;
   /** Playlist state — only populated while the in-game playlist is active. */
   private playlist: string[] = [];
   private playlistIndex = 0;
-  /** Pending delayedCall for the next playlist track (cancelled on stop). */
+  /** Pending delayedCall for the next playlist/gapped track (cancelled on stop). */
   private nextTrackTimer?: Phaser.Time.TimerEvent;
+  /** Pending delayedCall that begins a track's end fade-out (cancelled on stop). */
+  private fadeOutTimer?: Phaser.Time.TimerEvent;
   /** Listener bound to the current track's 'complete' event, for cleanup. */
   private trackCompleteHandler?: () => void;
   /** Independent looping ambience bed (layers over music; not ducked). */
@@ -229,10 +232,46 @@ export class AudioManager {
     this.playCurrentPlaylistTrack();
   }
 
+  /** Play a single track on a gentle gapped loop: fade in, play, fade out, then a
+   *  randomized silence gap (ambience-only) before replaying. Used for the
+   *  village theme so peaceful music breathes — song, quiet, song — instead of
+   *  looping endlessly. Idempotent. Returns false (no-op) if asset missing. */
+  playGappedSingle(key: string): boolean {
+    const assetKey = `music-${key}`;
+    if (this.musicMode === 'gapped-single' && this.singleKey === assetKey) return true;
+    if (!this.scene.cache.audio.exists(assetKey)) return false;
+    this.stopMusic(MUSIC_FADE_MS);
+    this.musicMode = 'gapped-single';
+    this.singleKey = assetKey;
+    this.playGappedTrack();
+    return true;
+  }
+
+  /** Play the gapped-single track once, scheduling a replay (after a gap) on end. */
+  private playGappedTrack(): void {
+    const assetKey = this.singleKey;
+    if (!assetKey) return;
+    const track = this.startTrack(assetKey, false, true);
+    const onComplete = (): void => {
+      this.detachTrackCompleteHandler(track);
+      if (this.music === track) this.music = undefined;
+      track.destroy();
+      const gap =
+        SILENCE_GAP_MS_MIN + Math.random() * (SILENCE_GAP_MS_MAX - SILENCE_GAP_MS_MIN);
+      this.nextTrackTimer = this.scene.time.delayedCall(gap, () => {
+        this.nextTrackTimer = undefined;
+        if (this.musicMode === 'gapped-single') this.playGappedTrack();
+      });
+    };
+    this.trackCompleteHandler = onComplete;
+    track.once('complete', onComplete);
+  }
+
   /** Stop the current track (fading out) and cancel any pending next-track timer.
    *  Leaves the music subsystem idle — safe to switch contexts afterwards. */
   stopMusic(fadeMs = 600): void {
     this.cancelNextTrackTimer();
+    this.cancelFadeOutTimer();
     this.playlist = [];
     this.playlistIndex = 0;
     this.musicMode = 'none';
@@ -361,7 +400,7 @@ export class AudioManager {
   private playCurrentPlaylistTrack(): void {
     const assetKey = this.playlist[this.playlistIndex];
     if (!assetKey) return;
-    const track = this.startTrack(assetKey, false);
+    const track = this.startTrack(assetKey, false, true);
     const onComplete = (): void => {
       this.detachTrackCompleteHandler(track);
       if (this.music === track) this.music = undefined;
@@ -389,8 +428,15 @@ export class AudioManager {
   }
 
   /** Add + start a track at the current music volume; store it as the current
-   *  track so ducking/mute/volume keep working. */
-  private startTrack(assetKey: string, loop: boolean): Phaser.Sound.BaseSound {
+   *  track so ducking/mute/volume keep working. When `fadeOutAtEnd` is set (for
+   *  non-looping tracks), the track's volume is faded down over the last
+   *  MUSIC_FADE_MS so the song ends gently instead of cutting off. */
+  private startTrack(
+    assetKey: string,
+    loop: boolean,
+    fadeOutAtEnd = false
+  ): Phaser.Sound.BaseSound {
+    this.cancelFadeOutTimer();
     const track = this.scene.sound.add(assetKey, { loop });
     this.music = track;
     const target = this.musicVolume();
@@ -415,13 +461,46 @@ export class AudioManager {
         this.musicCurrentVol = proxy.v;
       },
     });
+    if (fadeOutAtEnd && !loop) this.scheduleEndFade(track);
     return track;
+  }
+
+  /** Schedule a gentle volume fade-out timed to land on the track's natural end,
+   *  so non-looping songs taper out before the silence gap. */
+  private scheduleEndFade(track: Phaser.Sound.BaseSound): void {
+    const durSec = (track as Phaser.Sound.WebAudioSound).duration;
+    const durMs = typeof durSec === 'number' && durSec > 0 ? durSec * 1000 : 0;
+    if (durMs <= MUSIC_FADE_MS) return; // too short to fade meaningfully
+    const at = durMs - MUSIC_FADE_MS;
+    this.fadeOutTimer = this.scene.time.delayedCall(at, () => {
+      this.fadeOutTimer = undefined;
+      if (this.music !== track || this.settings.muted) return;
+      const snd = track as Phaser.Sound.WebAudioSound;
+      const proxy = { v: this.musicCurrentVol };
+      this.scene.tweens.add({
+        targets: proxy,
+        v: 0,
+        duration: MUSIC_FADE_MS,
+        ease: 'Sine.InOut',
+        onUpdate: () => {
+          if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+          this.musicCurrentVol = proxy.v;
+        },
+      });
+    });
   }
 
   private cancelNextTrackTimer(): void {
     if (this.nextTrackTimer) {
       this.nextTrackTimer.remove(false);
       this.nextTrackTimer = undefined;
+    }
+  }
+
+  private cancelFadeOutTimer(): void {
+    if (this.fadeOutTimer) {
+      this.fadeOutTimer.remove(false);
+      this.fadeOutTimer = undefined;
     }
   }
 

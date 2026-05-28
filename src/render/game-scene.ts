@@ -375,6 +375,9 @@ export class GameScene extends Phaser.Scene {
   private static readonly CONTEXT_MIN_DWELL_TICKS = SIM.TICK_HZ * 10;
   /** Minimum gap between "under attack" alert stingers. */
   private static readonly ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 10;
+  /** Max stereo pan for world-positioned SFX — keeps off-screen sounds audible
+   *  in both ears instead of hard-panning fully left/right. */
+  private static readonly MAX_SPATIAL_PAN = 0.6;
   /** How long the camera must dwell on the home base (while safe) before the
    *  peaceful village theme takes over. */
   private static readonly VILLAGE_LINGER_TICKS = SIM.TICK_HZ * 6;
@@ -1132,7 +1135,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.audio.setMusicDucked(false);
-    if (ctx === 'village') this.audio.playLooping(VILLAGE_MUSIC);
+    // Village + playlist both breathe (song → ambience-only gap → song); only
+    // battle stays a continuous loop. So peaceful music never plays endlessly.
+    if (ctx === 'village') this.audio.playGappedSingle(VILLAGE_MUSIC);
     else this.audio.playGamePlaylist();
   }
 
@@ -1247,7 +1252,13 @@ export class GameScene extends Phaser.Scene {
     const view = this.cameras.main.worldView;
     const halfW = Math.max(1, view.width / 2);
     const halfH = Math.max(1, view.height / 2);
-    const pan = Phaser.Math.Clamp((absX - view.centerX) / halfW, -1, 1);
+    // Soften stereo pan: never hard-pan fully to one ear (felt like the sound
+    // "only plays on the left"). Scale to ±MAX_SPATIAL_PAN.
+    const pan = Phaser.Math.Clamp(
+      ((absX - view.centerX) / halfW) * GameScene.MAX_SPATIAL_PAN,
+      -GameScene.MAX_SPATIAL_PAN,
+      GameScene.MAX_SPATIAL_PAN
+    );
     const overshootX = Math.max(0, Math.abs(absX - view.centerX) - halfW);
     const overshootY = Math.max(0, Math.abs(absY - view.centerY) - halfH);
     const overshoot = Math.hypot(overshootX, overshootY);
