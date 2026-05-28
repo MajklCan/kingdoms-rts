@@ -90,9 +90,12 @@ const TRIM_FILTER =
   'silenceremove=start_periods=1:start_threshold=-60dB:start_silence=0.03,areverse,silenceremove=start_periods=1:start_threshold=-60dB:start_silence=0.08,areverse,loudnorm=I=-16:TP=-1.5:LRA=11';
 const NORM_ONLY = 'loudnorm=I=-16:TP=-1.5:LRA=11';
 
+// Encode to MONO (-ac 1): the API sometimes returns asymmetric stereo (content
+// weighted to one channel), which made spatial-panned SFX play in only one ear.
+// Mono + the render layer's pan = correct spatialization.
 function ffmpegEncode(srcMp3, outMp3, outOgg, filter) {
-  execFileSync('ffmpeg', ['-y', '-i', srcMp3, '-af', filter, '-c:a', 'libmp3lame', '-q:a', '4', outMp3], { stdio: 'pipe' });
-  execFileSync('ffmpeg', ['-y', '-i', srcMp3, '-af', filter, '-c:a', 'libopus', '-b:a', '96k', outOgg], { stdio: 'pipe' });
+  execFileSync('ffmpeg', ['-y', '-i', srcMp3, '-af', filter, '-ac', '1', '-c:a', 'libmp3lame', '-q:a', '4', outMp3], { stdio: 'pipe' });
+  execFileSync('ffmpeg', ['-y', '-i', srcMp3, '-af', filter, '-ac', '1', '-c:a', 'libopus', '-b:a', '96k', outOgg], { stdio: 'pipe' });
 }
 
 function encode(id, mp3Buf) {
