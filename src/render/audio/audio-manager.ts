@@ -133,12 +133,18 @@ export class AudioManager {
     this.settings = loadSettings();
   }
 
+  // NOTE: mp3 is listed FIRST. Phaser selects the first URL whose extension the
+  // browser claims to support — and while browsers report Ogg support, several
+  // (Safari, some Chrome builds) fail to `decodeAudioData` our Opus-in-Ogg clips,
+  // which silenced ALL audio. mp3 (libmp3lame) decodes everywhere, so prefer it;
+  // ogg stays as a fallback for browsers without mp3.
+
   /** Queue every SFX file on the scene loader. Call from scene preload(). */
   static queueLoad(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
     for (const key of keys) {
       load.audio(`sfx-${key}`, [
-        `assets/audio/sfx/${key}.ogg`,
         `assets/audio/sfx/${key}.mp3`,
+        `assets/audio/sfx/${key}.ogg`,
       ]);
     }
   }
@@ -147,8 +153,8 @@ export class AudioManager {
   static queueLoadMusic(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
     for (const key of keys) {
       load.audio(`music-${key}`, [
-        `assets/audio/music/${key}.ogg`,
         `assets/audio/music/${key}.mp3`,
+        `assets/audio/music/${key}.ogg`,
       ]);
     }
   }
@@ -157,8 +163,8 @@ export class AudioManager {
   static queueLoadVoices(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
     for (const key of keys) {
       load.audio(`voice-${key}`, [
-        `assets/audio/voices/${key}.ogg`,
         `assets/audio/voices/${key}.mp3`,
+        `assets/audio/voices/${key}.ogg`,
       ]);
     }
   }

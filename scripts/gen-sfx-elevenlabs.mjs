@@ -56,7 +56,7 @@ const SOUNDS = [
   { id: 'error',          text: 'Short low negative error buzz, invalid action denied, soft dull thud, clean UI, no music', dur: 0.5, infl: 0.5 },
 
   // --- Alert (under attack) ---
-  { id: 'alert',          text: 'Urgent medieval alarm horn, short rising warning call, your base is under attack, no music bed', dur: 1.4, infl: 0.35 },
+  { id: 'alert',          text: 'Urgent medieval town alarm bell ringing fast, a large bronze church bell clanging repeatedly as a warning, danger is near, clear metallic tolls, no music', dur: 1.6, infl: 0.45 },
 ];
 
 function ensureDirs() {
