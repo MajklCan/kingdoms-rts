@@ -111,6 +111,20 @@ import {
 import { screenToTile, tileToScreen } from './iso';
 import { setLastEvent } from '../debug/overlay';
 import { installWindowApi } from '../debug/window-api';
+import { AudioManager } from './audio/audio-manager';
+import {
+  SFX_KEYS,
+  cueSound,
+  combatSound,
+  isNonSpatialCue,
+  UI_CLICK,
+  UI_HOVER,
+  UNIT_SELECT,
+  COMMAND_MOVE,
+  ERROR as SFX_ERROR,
+  PLACE_BUILDING,
+  type SfxConfig,
+} from './audio/sound-map';
 import { bakeVoxelTexture } from './voxel/voxel-render';
 import { bakeTerrain } from './voxel/terrain';
 import { buildDarkTcVoxels } from './voxel/models/dark-tc';
@@ -268,6 +282,7 @@ interface ActionGridAction {
 
 export class GameScene extends Phaser.Scene {
   private world!: SimWorld;
+  private audio!: AudioManager;
   private gridGfx!: Phaser.GameObjects.Graphics;
   private buildingsGfx!: Phaser.GameObjects.Graphics;
   private resourcesGfx!: Phaser.GameObjects.Graphics;
@@ -369,8 +384,14 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
+  preload(): void {
+    // Queue all SFX so they're decoded before create(). Audio is render-only.
+    AudioManager.queueLoad(this.load, SFX_KEYS);
+  }
+
   create(): void {
     this.world = createSimWorld(Date.now() & 0xffff);
+    this.audio = new AudioManager(this);
 
     // Bake all voxel textures once at scene boot.
     this.bakeAllTextures();
@@ -577,6 +598,7 @@ export class GameScene extends Phaser.Scene {
     this.drawLastSeenBuildings();
     this.consumeCombatEvents();
     this.consumeAiEvents();
+    this.consumeSoundCues();
     this.drawProjectiles(delta * this.gameSpeed);
     this.drawGhost();
     this.drawAttackCursorIndicator();
@@ -918,6 +940,7 @@ export class GameScene extends Phaser.Scene {
     const events = this.world.combatEvents.splice(0);
     for (const event of events) {
       this.recordMinimapCombatAlert(event);
+      this.playCombatSound(event);
       if (
         event.attackerKind === UnitDefId.SCOUT_CAVALRY ||
         event.attackerKind === UnitDefId.ARCHER ||
@@ -976,6 +999,86 @@ export class GameScene extends Phaser.Scene {
     const events = this.world.aiEvents.splice(0);
     const latest = events[events.length - 1];
     if (latest) setLastEvent(latest.message);
+  }
+
+  /** Play the fire-sound for a combat event, gated by fog (only audible if the
+   *  attacker or target tile is visible to the local player). */
+  private playCombatSound(event: CombatEvent): void {
+    const isBuildingAttacker = hasComponent(this.world.ecs, Building, event.attackerEid);
+    const cfg = combatSound(event.attackerKind, event.range, event.phase, isBuildingAttacker);
+    if (!cfg) return;
+    const fromVisible = isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.fromX, event.fromY);
+    const toVisible = isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.toX, event.toY);
+    if (!fromVisible && !toVisible) return;
+    // Pan/attenuate around the attacker for fire, the target for melee impact.
+    const x = event.range <= 1 ? event.toX : event.fromX;
+    const y = event.range <= 1 ? event.toY : event.fromY;
+    this.playSpatial(cfg, x, y);
+  }
+
+  /** Drain sim sound cues (non-combat state transitions). Fog-gated; non-spatial
+   *  cues (age-up fanfare) only play for the local player. */
+  private consumeSoundCues(): void {
+    if (this.world.soundCues.length === 0) return;
+    const cues = this.world.soundCues.splice(0);
+    for (const cue of cues) {
+      const cfg = cueSound(cue.kind);
+      if (isNonSpatialCue(cue.kind)) {
+        if (cue.player === LOCAL_PLAYER_ID) {
+          this.audio.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
+        }
+        continue;
+      }
+      if (
+        cue.player !== LOCAL_PLAYER_ID &&
+        !isTileVisibleTo(this.world, LOCAL_PLAYER_ID, cue.x, cue.y)
+      ) {
+        continue;
+      }
+      this.playSpatial(cfg, cue.x, cue.y);
+    }
+  }
+
+  /** Play a sound positioned in the world: stereo pan + volume falloff relative
+   *  to the camera's visible region. */
+  private playSpatial(cfg: SfxConfig, tileX: number, tileY: number): void {
+    const local = tileToScreen(tileX, tileY);
+    const absX = this.worldContainer.x + local.x;
+    const absY = this.worldContainer.y + local.y;
+    const view = this.cameras.main.worldView;
+    const halfW = Math.max(1, view.width / 2);
+    const halfH = Math.max(1, view.height / 2);
+    const pan = Phaser.Math.Clamp((absX - view.centerX) / halfW, -1, 1);
+    const overshootX = Math.max(0, Math.abs(absX - view.centerX) - halfW);
+    const overshootY = Math.max(0, Math.abs(absY - view.centerY) - halfH);
+    const overshoot = Math.hypot(overshootX, overshootY);
+    const falloff = Phaser.Math.Clamp(1 - overshoot / halfW, 0.2, 1);
+    this.audio.play(cfg.key, {
+      pan,
+      volume: cfg.volume * falloff,
+      minIntervalMs: cfg.minIntervalMs,
+    });
+  }
+
+  /** Play a non-spatial UI/command sound (centre pan, fixed volume). */
+  private playUi(cfg: SfxConfig): void {
+    this.audio.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
+  }
+
+  /** Public accessors so the HUD (volume slider / mute, button clicks/hovers)
+   *  can reach audio. Undefined until create() has run. */
+  getAudio(): AudioManager | undefined {
+    return this.audio;
+  }
+
+  playUiClick(): void {
+    if (!this.audio) return;
+    this.playUi(UI_CLICK);
+  }
+
+  playUiHover(): void {
+    if (!this.audio) return;
+    this.playUi(UI_HOVER);
   }
 
   private spawnAttackProjectile(event: CombatEvent, kind: ProjectileKind): void {
@@ -1311,6 +1414,18 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
+  /** True if the local player has at least one commandable unit selected — used
+   *  to gate move/attack acknowledgement sounds. */
+  private hasCommandableSelection(): boolean {
+    const sel = selectedQuery(this.world.ecs);
+    for (const e of sel) {
+      if (Owner.player[e] === LOCAL_PLAYER_ID && !hasComponent(this.world.ecs, Building, e)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // Input
   // ──────────────────────────────────────────────────────────────────────────
@@ -1358,6 +1473,7 @@ export class GameScene extends Phaser.Scene {
         const defId = BUILD_MODE_TO_DEF[this.buildMode];
         if (!isBuildingUnlocked(this.world, 1, defId)) {
           setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.buildMode} is locked`);
+          this.playUi(SFX_ERROR);
           this.buildMode = 'none';
           this.ghostGfx.clear();
           return;
@@ -1369,6 +1485,7 @@ export class GameScene extends Phaser.Scene {
           y: ty,
           playerId: 1,
         });
+        this.playUi(PLACE_BUILDING);
         setLastEvent(`place ${this.buildMode} → (${tx},${ty})`);
         this.buildMode = 'none';
         this.ghostGfx.clear();
@@ -1389,12 +1506,14 @@ export class GameScene extends Phaser.Scene {
         isEnemyOf(this.world, targetEid, 1)
       ) {
         this.world.inputs.push({ type: 'attackSelected', targetEid });
+        if (this.hasCommandableSelection()) this.playUi(COMMAND_MOVE);
         setLastEvent(`attack eid=${targetEid}`);
         return;
       }
       const resourceEid = findResourceAt(this.world, tile.x, tile.y, 0.7);
       if (resourceEid !== null && this.isResourceExploredByLocal(resourceEid)) {
         const kind = Resource.kind[resourceEid];
+        this.playUi(SFX_ERROR);
         setLastEvent(
           kind === ResourceKindId.FOOD
             ? 'food comes from farms'
@@ -1402,6 +1521,7 @@ export class GameScene extends Phaser.Scene {
         );
       } else {
         this.world.inputs.push({ type: 'moveSelected', to: { x: tx, y: ty } });
+        if (this.hasCommandableSelection()) this.playUi(COMMAND_MOVE);
         setLastEvent(`move → (${tx},${ty})`);
       }
     } else if (pointer.leftButtonDown()) {
@@ -1422,6 +1542,7 @@ export class GameScene extends Phaser.Scene {
           type: 'attackMoveSelected',
           to: { x: tx, y: ty },
         });
+        if (this.hasCommandableSelection()) this.playUi(COMMAND_MOVE);
         setLastEvent(`attack-move → (${tx},${ty})`);
         return;
       }
@@ -1444,6 +1565,7 @@ export class GameScene extends Phaser.Scene {
       clearSelection(this.world);
       if (eid !== null) {
         setSelected(this.world, eid, true);
+        if (this.isOwnedUnit(eid)) this.playUi(UNIT_SELECT);
         setLastEvent(`selected ${this.entityKindName(eid)} eid=${eid}`);
       } else {
         setLastEvent(`cleared selection`);
@@ -1513,6 +1635,7 @@ export class GameScene extends Phaser.Scene {
         n++;
       }
     }
+    if (n > 0) this.playUi(UNIT_SELECT);
     setLastEvent(`box-selected ${n} unit${n === 1 ? '' : 's'}`);
   }
 
@@ -1933,14 +2056,17 @@ export class GameScene extends Phaser.Scene {
       }
       if (!buildingDef?.trains.includes(unitDef.id)) continue;
       if (!isUnitUnlocked(this.world, Owner.player[eid], unitDefId)) {
+        this.playUi(SFX_ERROR);
         setLastEvent(`${unitDef.name} is locked`);
         return;
       }
       if (!this.canAffordCost(Owner.player[eid], unitDef.cost)) {
+        this.playUi(SFX_ERROR);
         setLastEvent(`${unitDef.name} needs ${this.formatCost(unitDef.cost)}`);
         return;
       }
       if (!this.hasPopulationRoomForUnit(Owner.player[eid], unitDefId)) {
+        this.playUi(SFX_ERROR);
         const pop = this.world.population[Owner.player[eid]];
         setLastEvent(`${unitDef.name} needs pop space (${pop?.current ?? 0}/${pop?.cap ?? 0})`);
         return;

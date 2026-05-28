@@ -453,6 +453,68 @@ function bindSaveLoadControls(): void {
 }
 bindSaveLoadControls();
 
+// ── Audio controls ────────────────────────────────────────────────────────
+function getGameScene(): GameScene | null {
+  return game.scene.getScene('GameScene') as GameScene | null;
+}
+
+function bindAudioControls(): void {
+  const soundBtn = document.getElementById('sound-toggle') as HTMLButtonElement | null;
+  const slider = document.getElementById('volume-slider') as HTMLInputElement | null;
+
+  const refreshUi = (): boolean => {
+    const audio = getGameScene()?.getAudio();
+    if (!audio) return false;
+    if (slider) slider.value = String(Math.round(audio.masterVolume * 100));
+    if (soundBtn) {
+      soundBtn.textContent = audio.muted ? 'Muted' : 'Sound';
+      soundBtn.setAttribute('aria-pressed', String(audio.muted));
+    }
+    return true;
+  };
+
+  // The scene boots asynchronously; poll briefly until its AudioManager exists,
+  // then sync the controls to the persisted volume/mute.
+  let tries = 0;
+  const sync = window.setInterval(() => {
+    if (refreshUi() || tries++ > 50) window.clearInterval(sync);
+  }, 100);
+
+  soundBtn?.addEventListener('click', () => {
+    const audio = getGameScene()?.getAudio();
+    if (!audio) return;
+    const muted = audio.toggleMuted();
+    soundBtn.textContent = muted ? 'Muted' : 'Sound';
+    soundBtn.setAttribute('aria-pressed', String(muted));
+  });
+
+  slider?.addEventListener('input', () => {
+    const audio = getGameScene()?.getAudio();
+    if (!audio || !slider) return;
+    audio.setMasterVolume(Number(slider.value) / 100);
+  });
+
+  // Delegated UI feedback: click + hover on any HUD button/cell.
+  const interactiveSel = 'button, [role="button"], .action-grid-cell, [data-tech-id]';
+  document.addEventListener('click', (ev) => {
+    const el = (ev.target as HTMLElement | null)?.closest(interactiveSel);
+    if (el) getGameScene()?.playUiClick();
+  });
+  let lastHover: Element | null = null;
+  document.addEventListener('pointerover', (ev) => {
+    const el = (ev.target as HTMLElement | null)?.closest(interactiveSel);
+    if (el && el !== lastHover) {
+      lastHover = el;
+      getGameScene()?.playUiHover();
+    }
+  });
+  document.addEventListener('pointerout', (ev) => {
+    const el = (ev.target as HTMLElement | null)?.closest(interactiveSel);
+    if (el === lastHover) lastHover = null;
+  });
+}
+bindAudioControls();
+
 // ── Cheat controls ────────────────────────────────────────────────────────
 function bindCheatControls(): void {
   const revealBtn = document.getElementById('cheat-reveal-map') as HTMLButtonElement | null;
