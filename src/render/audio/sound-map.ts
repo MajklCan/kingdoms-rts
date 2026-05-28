@@ -36,7 +36,8 @@ export type SfxKey = (typeof SFX_KEYS)[number];
 /** Single non-looping theme played on the title/menu screen. */
 export const MENU_MUSIC = 'menu_theme';
 
-/** Looping track while the player lingers peacefully at their base (no danger). */
+/** Played (non-looping, with silence gaps via playGappedSingle) while the player
+ *  lingers peacefully at their base — peaceful music breathes, song → quiet → song. */
 export const VILLAGE_MUSIC = 'village_theme';
 
 /** Looping tracks that take over while the local player is in combat. One is
@@ -60,8 +61,9 @@ export const AMBIENCE_KEYS = [BATTLE_AMBIENCE, NATURE_AMBIENCE] as const;
  *  the console. Add 'ingame_2' / 'ingame_3' back here once those files land. */
 export const INGAME_TRACKS = ['ingame_1'] as const;
 
-/** Every music asset key the game can load. Missing files load to nothing and
- *  every playback path no-ops on them — so partial sets are fine. */
+/** Every music *track* key the game can load (ambience beds load separately via
+ *  AMBIENCE_KEYS). Missing files load to nothing and every playback path no-ops
+ *  on them — so partial sets are fine. */
 export const MUSIC_KEYS = [
   MENU_MUSIC,
   VILLAGE_MUSIC,
@@ -113,6 +115,8 @@ const CUE_MAP: Record<SoundCueKind, SfxConfig> = {
   gather_wood: { key: 'chop_wood', minIntervalMs: 220, volume: 0.45 },
   gather_stone: { key: 'mine_stone', minIntervalMs: 220, volume: 0.45 },
   gather_gold: { key: 'mine_stone', minIntervalMs: 220, volume: 0.45 },
+  // TODO: berry/farm foraging reuses the axe-chop sound as a stand-in — generate a
+  // dedicated 'forage' SFX (soft rustle/pick) and swap the key here when available.
   gather_food: { key: 'chop_wood', minIntervalMs: 260, volume: 0.35 },
   // Death — throttled so a wiped squad doesn't machine-gun the grunt.
   unit_death: { key: 'unit_death', minIntervalMs: 140, volume: 0.55 },

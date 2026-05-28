@@ -132,6 +132,7 @@
       #pause-toggle,
       #tech-toggle,
       #mission-toggle,
+      #sound-toggle,
       #settings-toggle {
         pointer-events: auto;
         margin-left: 2px;
@@ -147,6 +148,7 @@
       #pause-toggle.active,
       #tech-toggle[aria-expanded="true"],
       #mission-toggle[aria-expanded="true"],
+      #sound-toggle[aria-pressed="true"],
       #settings-toggle[aria-expanded="true"] {
         background: #e8b923;
         color: #1b1b2f;
@@ -156,6 +158,7 @@
       #pause-toggle:focus-visible,
       #tech-toggle:focus-visible,
       #mission-toggle:focus-visible,
+      #sound-toggle:focus-visible,
       #settings-toggle:focus-visible {
         outline: 2px solid #fbc36b;
         outline-offset: 2px;

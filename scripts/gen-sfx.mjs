@@ -1,6 +1,6 @@
 // Procedural SFX generator for Kingdoms RTS.
 // Synthesizes game sound effects via DSP, writes WAV, then shells out to
-// ffmpeg to produce OGG (libvorbis) + MP3 (libmp3lame) pairs.
+// ffmpeg to produce OGG (libopus) + MP3 (libmp3lame) pairs.
 //
 // Run: node scripts/gen-sfx.mjs           (generate all)
 //      node scripts/gen-sfx.mjs cannon    (generate one by id)
@@ -184,12 +184,24 @@ function main() {
     console.error(`No voice matches "${only}". Available: ${Object.keys(VOICES).join(', ')}`);
     process.exit(1);
   }
-  for (const id of ids) {
-    const samples = VOICES[id]();
-    const r = encode(id, samples);
-    console.log(`✓ ${id}  ${r.dur}s  → ${id}.ogg + ${id}.mp3`);
+  let ok = 0;
+  try {
+    for (const id of ids) {
+      try {
+        const samples = VOICES[id]();
+        const r = encode(id, samples);
+        ok++;
+        console.log(`✓ ${id}  ${r.dur}s  → ${id}.ogg + ${id}.mp3`);
+      } catch (err) {
+        // One bad encode shouldn't abort the rest of the batch.
+        console.error(`✗ ${id}: ${err.message}`);
+      }
+    }
+  } finally {
+    rmSync(TMP_DIR, { recursive: true, force: true });
   }
-  rmSync(TMP_DIR, { recursive: true, force: true });
+  console.log(`Done: ${ok}/${ids.length} generated.`);
+  if (ok < ids.length) process.exit(1);
 }
 
 main();

@@ -2545,21 +2545,22 @@ export class GameScene extends Phaser.Scene {
     const age = getAgeDef(startingAge) ?? getAgeDef(AgeId.DARK);
     this.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty });
     this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI`);
-    this.enterMatchMusic();
   }
 
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
     this.world = createSimWorld(Date.now() & 0xffff, { campaignMissionId: missionId });
     this.afterWorldLoaded(this.world.campaign?.name ?? 'campaign started');
-    this.enterMatchMusic();
   }
 
-  /** Hand music off from the menu to the in-game director on match start. */
+  /** Hand music off from the menu to the in-game director on match start. Also
+   *  resets every adaptive-audio timer so a new/loaded match never inherits stale
+   *  combat/alert/village state from the previous one. */
   private enterMatchMusic(): void {
     this.inMatch = true;
     this.villageEnteredTick = -1;
     this.lastHomeTick = -1;
     this.lastLocalCombatTick = -1;
+    this.lastAlertTick = -1;
     this.musicContext = 'playlist';
     this.contextSinceTick = -1;
     this.battleTrack = null;
@@ -2590,6 +2591,7 @@ export class GameScene extends Phaser.Scene {
     this.refreshTerrainBake();
     this.installDebugWindowApi();
     this.panToLocalTownCenter();
+    this.enterMatchMusic();
     setLastEvent(message);
   }
 

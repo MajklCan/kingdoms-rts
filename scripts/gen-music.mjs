@@ -55,10 +55,17 @@ async function main() {
   writeFileSync(src, buf);
   // Normalize to a quiet bed level; music plays under SFX.
   const filter = 'loudnorm=I=-20:TP=-2:LRA=11';
-  execFileSync('ffmpeg', ['-y', '-i', src, '-af', filter, '-c:a', 'libmp3lame', '-q:a', '4', outMp3], { stdio: 'pipe' });
-  execFileSync('ffmpeg', ['-y', '-i', src, '-af', filter, '-c:a', 'libopus', '-b:a', '96k', outOgg], { stdio: 'pipe' });
-  rmSync(TMP_DIR, { recursive: true, force: true });
+  try {
+    execFileSync('ffmpeg', ['-y', '-i', src, '-af', filter, '-c:a', 'libmp3lame', '-q:a', '4', outMp3], { stdio: 'pipe' });
+    execFileSync('ffmpeg', ['-y', '-i', src, '-af', filter, '-c:a', 'libopus', '-b:a', '96k', outOgg], { stdio: 'pipe' });
+  } finally {
+    rmSync(TMP_DIR, { recursive: true, force: true });
+  }
   console.log(`✓ ${id}  → music/${id}.ogg + music/${id}.mp3`);
 }
 
-main();
+main().catch((err) => {
+  rmSync(TMP_DIR, { recursive: true, force: true });
+  console.error(err.message ?? err);
+  process.exit(1);
+});

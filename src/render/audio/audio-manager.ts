@@ -1,14 +1,16 @@
 // AudioManager — thin wrapper over Phaser's sound system for game SFX.
 //
 // Render-layer only. Owns loading, per-key throttling, a global concurrency
-// cap, spatial panning, and a persisted master volume / mute. The sim never
-// touches this; game-scene drains sim events/cues and calls play().
+// cap, spatial panning, the music director playback, ambience beds, voice barks,
+// and persisted settings (master volume, mute, and per-channel volumes for
+// music/sfx/voices/ambience). The sim never touches this; game-scene drains sim
+// events/cues and calls play().
 //
 // Throttling is the answer to "many units act at once": the same sound key is
 // rate-limited (minIntervalMs), so 30 villagers chopping collapse into a
 // pleasant trickle rather than a wall of noise.
 
-import type { SfxKey } from './sound-map';
+import type { SfxKey, VoiceCategory, VoiceBarkType } from './sound-map';
 import { MENU_MUSIC, INGAME_TRACKS } from './sound-map';
 
 const STORAGE_KEY = 'kingdoms.audio';
@@ -90,7 +92,10 @@ function loadSettings(): AudioSettings {
       voices: channel(parsed.voices),
       ambience: channel(parsed.ambience),
     };
-  } catch {
+  } catch (err) {
+    // Corrupt JSON or localStorage blocked (private mode, SecurityError) — fall
+    // back to defaults, but surface why so a "my volume reset" report has a clue.
+    console.warn('[AudioManager] loadSettings failed, using defaults:', err);
     return fallback;
   }
 }
@@ -357,19 +362,31 @@ export class AudioManager {
       return;
     }
     this.stopAmbience(AMBIENCE_FADE_MS); // crossfade: fade the old bed out
-    const track = this.scene.sound.add(assetKey, { loop: true });
-    this.ambience = track;
-    this.ambienceKey = assetKey;
-    const target = this.ambienceVolume();
-    if (this.settings.muted) {
-      this.ambienceCurrentVol = target;
-      track.play({ volume: target });
-      track.pause();
+    let track: Phaser.Sound.BaseSound;
+    try {
+      track = this.scene.sound.add(assetKey, { loop: true });
+      this.ambience = track;
+      this.ambienceKey = assetKey;
+      const target = this.ambienceVolume();
+      if (this.settings.muted) {
+        this.ambienceCurrentVol = target;
+        track.play({ volume: target });
+        track.pause();
+        return;
+      }
+      // Fade the new bed in.
+      this.ambienceCurrentVol = 0;
+      track.play({ volume: 0 });
+    } catch (err) {
+      // Reset so a later call can retry rather than the idempotent guard blocking
+      // ambience for the rest of the session.
+      this.ambience = undefined;
+      this.ambienceKey = undefined;
+      this.ambienceCurrentVol = 0;
+      console.warn(`[AudioManager] failed to play ambience "${assetKey}":`, err);
       return;
     }
-    // Fade the new bed in.
-    this.ambienceCurrentVol = 0;
-    track.play({ volume: 0 });
+    const target = this.ambienceVolume();
     const snd = track as Phaser.Sound.WebAudioSound;
     const proxy = { v: 0 };
     this.scene.tweens.add({
@@ -617,23 +634,30 @@ export class AudioManager {
     );
     if (volume <= 0) return;
 
-    const sound = this.scene.sound.add(assetKey);
-    const release = (): void => {
-      this.active = Math.max(0, this.active - 1);
-      sound.destroy();
-    };
-    sound.once('complete', release);
-    sound.once('stop', release);
-    // Phaser WebAudio honours `pan` in the play config.
-    sound.play({ volume, pan: clamp(opts.pan ?? 0, -1, 1) });
-    this.active += 1;
-    this.lastPlayed.set(key, now);
+    try {
+      const sound = this.scene.sound.add(assetKey);
+      const release = (): void => {
+        this.active = Math.max(0, this.active - 1);
+        sound.destroy();
+      };
+      sound.once('complete', release);
+      sound.once('stop', release);
+      // Phaser WebAudio honours `pan` in the play config.
+      sound.play({ volume, pan: clamp(opts.pan ?? 0, -1, 1) });
+      this.active += 1;
+      this.lastPlayed.set(key, now);
+    } catch (err) {
+      // A decoded-but-invalid buffer makes Phaser throw on add/play. Don't let it
+      // crash the render frame; throttle the retry and move on.
+      this.lastPlayed.set(key, now);
+      console.warn(`[AudioManager] failed to play sfx "${key}":`, err);
+    }
   }
 
   /** Play a random unit voice bark for the given persona + type. Cuts any bark
    *  already playing (only one voice at a time). Returns false if muted or no
    *  clip exists for that persona/type (caller can fall back to a UI blip). */
-  playVoiceBark(category: string, type: string, lineCount: number): boolean {
+  playVoiceBark(category: VoiceCategory, type: VoiceBarkType, lineCount: number): boolean {
     if (this.settings.muted || this.settings.masterVolume <= 0) return false;
     const candidates: string[] = [];
     for (let n = 0; n < lineCount; n++) {
@@ -647,23 +671,30 @@ export class AudioManager {
       this.voiceBark.destroy();
       this.voiceBark = undefined;
     }
-    const snd = this.scene.sound.add(assetKey);
-    snd.once('complete', () => {
-      if (this.voiceBark === snd) this.voiceBark = undefined;
-      snd.destroy();
-    });
-    snd.play({
-      volume: clamp(VOICE_BASE * this.settings.masterVolume * this.settings.voices, 0, 1),
-    });
-    this.voiceBark = snd;
-    return true;
+    try {
+      const snd = this.scene.sound.add(assetKey);
+      snd.once('complete', () => {
+        if (this.voiceBark === snd) this.voiceBark = undefined;
+        snd.destroy();
+      });
+      snd.play({
+        volume: clamp(VOICE_BASE * this.settings.masterVolume * this.settings.voices, 0, 1),
+      });
+      this.voiceBark = snd;
+      return true;
+    } catch (err) {
+      console.warn(`[AudioManager] failed to play voice "${assetKey}":`, err);
+      return false;
+    }
   }
 
   private persist(): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-    } catch {
-      // localStorage unavailable (private mode etc.) — settings stay in-memory.
+    } catch (err) {
+      // localStorage unavailable or full (private mode, quota) — settings stay
+      // in-memory for this session and are lost on reload. Warn so it's visible.
+      console.warn('[AudioManager] persist failed, settings not saved:', err);
     }
   }
 }

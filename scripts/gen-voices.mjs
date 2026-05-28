@@ -113,7 +113,12 @@ function encode(id, mp3Buf) {
     execFileSync('ffmpeg', ['-y', '-i', src, '-af', filter, '-c:a', 'libopus', '-b:a', '96k', outOgg], { stdio: 'pipe' });
   };
   run(trim);
-  if (statSync(outMp3).size < 1500) run('loudnorm=I=-16:TP=-1.5:LRA=11');
+  if (statSync(outMp3).size < 1500) {
+    run('loudnorm=I=-16:TP=-1.5:LRA=11');
+    if (statSync(outMp3).size < 1500) {
+      throw new Error(`encoded "${id}" is still near-empty after fallback — bad source audio`);
+    }
+  }
 }
 
 async function main() {

@@ -28,4 +28,19 @@ describe('sound cues', () => {
     step(world);
     expect(world.soundCues.some((c) => c.kind === 'building_destroyed')).toBe(true);
   });
+
+  it('caps the cue buffer (oldest dropped) when many cues fire before a drain', () => {
+    const world = createSimWorld(7);
+    world.paused = false;
+    // Kill far more units in a single tick than the ring-buffer cap so the
+    // overflow trim runs. The array must never exceed MAX_SOUND_CUES (256).
+    const COUNT = 400;
+    for (let i = 0; i < COUNT; i++) {
+      const eid = spawnSpearman(world, 2 + (i % 40), 2 + Math.floor(i / 40), 1);
+      Health.hp[eid] = 0;
+    }
+    step(world);
+    expect(world.soundCues.length).toBeLessThanOrEqual(256);
+    expect(world.soundCues.length).toBeGreaterThan(0);
+  });
 });

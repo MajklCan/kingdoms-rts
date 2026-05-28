@@ -108,6 +108,11 @@ function encode(id, mp3Buf) {
   // as silence), re-encode with loudness normalization only.
   if (statSync(outMp3).size < 1500) {
     ffmpegEncode(srcMp3, outMp3, outOgg, NORM_ONLY);
+    // If it's STILL tiny, the source was bad — fail loudly rather than shipping
+    // a silent clip the game will "play" to no effect.
+    if (statSync(outMp3).size < 1500) {
+      throw new Error(`encoded "${id}" is still near-empty after fallback — bad source audio`);
+    }
   }
 }
 

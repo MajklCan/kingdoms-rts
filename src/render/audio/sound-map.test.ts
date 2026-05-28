@@ -72,6 +72,37 @@ describe('sound-map', () => {
 
   it('returns null for attackers with no mapped sound', () => {
     expect(combatSound(UnitDefId.VILLAGER, 1, undefined, false)).toBeNull();
+    // MILITIA is legacy (loadable from old saves) and has no mapped fire sound.
+    expect(combatSound(UnitDefId.MILITIA, 1, undefined, false)).toBeNull();
+  });
+
+  it('gates the melee clash on range <= 1 (no clash for out-of-range melee)', () => {
+    // Melee units only clash adjacent; at range 2 nothing matches → null.
+    expect(combatSound(UnitDefId.SPEARMAN, 2, undefined, false)).toBeNull();
+    expect(combatSound(UnitDefId.SCOUT_CAVALRY, 2, undefined, false)).toBeNull();
+  });
+
+  it('only ever returns SFX keys that exist in SFX_KEYS', () => {
+    const cases: Array<[number, number, 'windup' | 'fire' | undefined, boolean]> = [
+      [UnitDefId.SPEARMAN, 1, undefined, false],
+      [UnitDefId.SCOUT_CAVALRY, 1, undefined, false],
+      [UnitDefId.ARCHER, 5, undefined, false],
+      [UnitDefId.GUNMAN, 5, undefined, false],
+      [UnitDefId.MACHINE_GUN, 5, undefined, false],
+      [UnitDefId.CANNON, 6, 'fire', false],
+      [-1, 5, undefined, true],
+    ];
+    for (const [kind, range, phase, isBuilding] of cases) {
+      const cfg = combatSound(kind, range, phase, isBuilding);
+      expect(cfg, `${kind}/${range}`).not.toBeNull();
+      expect(KEY_SET.has(cfg!.key), cfg!.key).toBe(true);
+    }
+  });
+
+  it('classifies every cue kind as spatial except age_up', () => {
+    for (const kind of ALL_CUE_KINDS) {
+      expect(isNonSpatialCue(kind), kind).toBe(kind === 'age_up');
+    }
   });
 
   it('every UI sound uses a real SFX key', () => {
