@@ -179,6 +179,8 @@ export interface SavedCampaignV1 {
   trackedObjectiveEids: Record<string, number[]>;
   enemyAiMode: CampaignState['enemyAiMode'];
   nextReinforcementTick: number;
+  scriptedWaveIndex?: number;
+  scriptedWaveCount?: number;
 }
 
 export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): SavedGameV1 {
@@ -363,6 +365,8 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       ),
       enemyAiMode: world.campaign.enemyAiMode,
       nextReinforcementTick: world.campaign.nextReinforcementTick,
+      scriptedWaveIndex: world.campaign.scriptedWaveIndex,
+      scriptedWaveCount: world.campaign.scriptedWaveCount,
     } : null,
   };
 }
@@ -480,6 +484,8 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
       ),
       enemyAiMode: snapshot.campaign.enemyAiMode,
       nextReinforcementTick: snapshot.campaign.nextReinforcementTick,
+      scriptedWaveIndex: snapshot.campaign.scriptedWaveIndex,
+      scriptedWaveCount: snapshot.campaign.scriptedWaveCount,
     };
   }
 

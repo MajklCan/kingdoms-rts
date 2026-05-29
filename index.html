@@ -1374,12 +1374,77 @@
         box-shadow: 0 4px 24px rgba(232, 185, 35, 0.3);
       }
       #title-screen button:hover { background: #fbc36b; }
-      #title-screen .mode-grid {
-        display: grid;
-        grid-template-columns: minmax(280px, 0.9fr) minmax(380px, 1.1fr);
-        gap: 16px;
-        align-items: stretch;
+      #title-screen .mode-menu {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        width: 100%;
+        margin: 0 auto;
+        text-align: center;
+      }
+      #title-screen .mode-menu.hidden,
+      #title-screen .mode-panel.hidden {
+        display: none;
+      }
+      #title-screen .mode-choice {
+        width: 220px;
+        height: 49px;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      #title-screen .mode-choice:disabled {
+        cursor: default;
+        opacity: 0.58;
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.24);
+      }
+      #title-screen .mode-choice:disabled:hover {
+        background: #e8b923;
+      }
+      #title-screen .mode-soon {
+        display: block;
+        margin-top: 1px;
+        color: #1b1b2f;
+        font-size: 10px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        opacity: 0.72;
+      }
+      #title-screen .mode-panel {
+        width: min(760px, 100%);
+        margin: 0 auto;
         text-align: left;
+      }
+      #title-screen #skirmish-panel {
+        width: min(520px, 100%);
+      }
+      #title-screen .panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 10px;
+      }
+      #title-screen .panel-heading .section-label {
+        margin-bottom: 0;
+      }
+      #title-screen .mode-back {
+        padding: 8px 14px;
+        background: #1c1810;
+        color: #fbc36b;
+        border: 1px solid #6a5b2b;
+        font-size: 12px;
+        box-shadow: none;
+      }
+      #title-screen .mode-back:hover {
+        background: #2a2418;
+        border-color: #e8b923;
       }
       #title-screen .start-section {
         background: linear-gradient(180deg, rgba(42, 36, 24, 0.9), rgba(18, 15, 10, 0.92));
@@ -1490,6 +1555,9 @@
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
         line-height: 1.8;
       }
+      #title-screen .controls.hidden {
+        display: none;
+      }
       #title-screen .controls kbd {
         background: #2a2d3e;
         border: 1px solid #555;
@@ -1506,9 +1574,7 @@
         #title-screen .panel {
           width: min(100%, calc(100vw - 40px));
         }
-        #title-screen .mode-grid {
-          grid-template-columns: 1fr;
-        }
+        #title-screen .mode-choice { width: min(280px, 100%); }
         #title-screen .start-options {
           align-items: stretch;
           flex-direction: column;
@@ -1529,9 +1595,20 @@
           Build an economy in skirmish or play authored Bohemian missions with fixed
           objectives, terrain, and starting forces.
         </p>
-        <div class="mode-grid">
+        <div id="mode-menu" class="mode-menu" aria-label="Choose game mode">
+          <button class="mode-choice" type="button" data-title-mode="campaign">Campaign</button>
+          <button class="mode-choice" type="button" data-title-mode="skirmish">Skirmish</button>
+          <button class="mode-choice" type="button" disabled>
+            Multiplayer
+            <span class="mode-soon">Soon</span>
+          </button>
+        </div>
+        <div id="skirmish-panel" class="mode-panel hidden">
           <section class="start-section" aria-label="Skirmish setup">
-            <div class="section-label">Skirmish</div>
+            <div class="panel-heading">
+              <div class="section-label">Skirmish</div>
+              <button class="mode-back" type="button" data-title-back>Back</button>
+            </div>
             <p class="section-copy">Open economy match with selectable age, map, and AI difficulty.</p>
             <label class="start-options" for="starting-age-select">
               <span>Starting Age</span>
@@ -1562,8 +1639,13 @@
             </label>
             <button id="start-button" class="skirmish-start" type="button">Begin Skirmish</button>
           </section>
+        </div>
+        <div id="campaign-panel" class="mode-panel hidden">
           <section class="start-section" aria-label="Campaign missions">
-            <div class="section-label">Campaign</div>
+            <div class="panel-heading">
+              <div class="section-label">Campaign</div>
+              <button class="mode-back" type="button" data-title-back>Back</button>
+            </div>
             <p class="section-copy">Authored starts with objectives and tuned enemy setups.</p>
             <div class="mission-list">
               <button class="mission-card" type="button" data-campaign-mission="siege_of_brno">
@@ -1577,15 +1659,23 @@
               <button class="mission-card" type="button" data-campaign-mission="battle_of_bila_hora">
                 <span>
                   <strong>Battle of Bílá Hora</strong>
-                  <span class="mission-desc">Town-center-less Gunpowder field battle on the mountain pass.</span>
+                  <span class="mission-desc">Defend the pass against a Gunpowder army advancing from the far edge.</span>
                 </span>
                 <span class="mission-cta">Start</span>
-                <span class="mission-meta"><span>No economy</span><span>Cavalry heavy</span><span>Kill all enemies</span></span>
+                <span class="mission-meta"><span>No economy</span><span>Cavalry and gunmen</span><span>Kill all enemies</span></span>
+              </button>
+              <button class="mission-card" type="button" data-campaign-mission="battle_of_kutna_hora">
+                <span>
+                  <strong>Battle of Kutná Hora</strong>
+                  <span class="mission-desc">Command a fortified Hussite city through repeated crusader assaults.</span>
+                </span>
+                <span class="mission-cta">Start</span>
+                <span class="mission-meta"><span>City defense</span><span>Train reinforcements</span><span>Assault waves</span></span>
               </button>
             </div>
           </section>
         </div>
-        <div class="controls">
+        <div id="title-controls" class="controls hidden">
           <div><kbd>L-click</kbd> select  ·  <kbd>R-click</kbd> move / attack  ·  <kbd>A</kbd>+click attack-move</div>
           <div><kbd>B</kbd> then <kbd>M</kbd>/<kbd>I</kbd>/<kbd>L</kbd>/<kbd>G</kbd>/<kbd>C</kbd> farm/mill/worksites  ·  <kbd>H</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>Y</kbd> build  ·  <kbd>Q</kbd>/<kbd>E</kbd> train / advance</div>
           <div><kbd>F1</kbd> workers  ·  <kbd>F2</kbd> military  ·  <kbd>P</kbd> pause  ·  <kbd>X</kbd> 1x/2x speed  ·  <kbd>Wheel</kbd> zoom  ·  <kbd>WASD</kbd> pan</div>

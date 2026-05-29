@@ -9,7 +9,7 @@ import { RENDER } from './config';
 import { GameScene } from './render/game-scene';
 import { setLastEvent, updateDebugOverlay, updateResourceBar } from './debug/overlay';
 import { AgeId, type AgeIdValue } from './sim/defs';
-import { normalizeCampaignMissionId, type CampaignMissionIdValue } from './sim/campaign';
+import { CampaignMissionId, normalizeCampaignMissionId, type CampaignMissionIdValue } from './sim/campaign';
 import { TileType, normalizeMapId, type MapIdValue } from './sim/map-gen';
 import { LATE_GAME_TEST_SAVE_ID, parseSavedGame } from './sim/save-load';
 import { TechId, type TechIdValue } from './sim/tech-tree';
@@ -67,6 +67,20 @@ function parseCampaignMission(value: string | undefined): CampaignMissionIdValue
   return normalizeCampaignMissionId(value);
 }
 
+type TitleMode = 'root' | 'skirmish' | 'campaign';
+
+function setTitleMode(mode: TitleMode): void {
+  const modeMenu = document.getElementById('mode-menu');
+  const skirmishPanel = document.getElementById('skirmish-panel');
+  const campaignPanel = document.getElementById('campaign-panel');
+  const controls = document.getElementById('title-controls');
+
+  modeMenu?.classList.toggle('hidden', mode !== 'root');
+  skirmishPanel?.classList.toggle('hidden', mode !== 'skirmish');
+  campaignPanel?.classList.toggle('hidden', mode !== 'campaign');
+  controls?.classList.toggle('hidden', mode === 'root');
+}
+
 function bindTitleScreen(): void {
   const titleEl = document.getElementById('title-screen');
   const startBtn = document.getElementById('start-button');
@@ -74,6 +88,16 @@ function bindTitleScreen(): void {
   const mapSelect = document.getElementById('starting-map-select') as HTMLSelectElement | null;
   const difficultySelect = document.getElementById('ai-difficulty-select') as HTMLSelectElement | null;
   if (!titleEl || !startBtn) return;
+  setTitleMode('root');
+  for (const modeBtn of document.querySelectorAll<HTMLButtonElement>('[data-title-mode]')) {
+    modeBtn.addEventListener('click', () => {
+      const mode = modeBtn.dataset.titleMode === 'campaign' ? 'campaign' : 'skirmish';
+      setTitleMode(mode);
+    });
+  }
+  for (const backBtn of document.querySelectorAll<HTMLButtonElement>('[data-title-back]')) {
+    backBtn.addEventListener('click', () => setTitleMode('root'));
+  }
   startBtn.addEventListener('click', () => {
     const startingAge = parseStartingAge(ageSelect?.value);
     const startingMap = parseStartingMap(mapSelect?.value);
@@ -948,6 +972,13 @@ function renderMissionCard(scene: GameScene): void {
   ].join('|');
   if (sig === lastMissionSig) return;
   lastMissionSig = sig;
+  const missionNote = mission.lockedTechs.includes(TechId.GUNPOWDER_AGE)
+    ? 'Gunpowder Age is locked in this mission.'
+    : mission.id === CampaignMissionId.BATTLE_OF_BILA_HORA
+      ? 'No town center. No economy. Victory requires destroying every enemy unit.'
+      : mission.id === CampaignMissionId.BATTLE_OF_KUTNA_HORA
+        ? 'City defense. Train reinforcements and keep the Town Center standing until every assault wave is destroyed.'
+        : '';
 
   missionBodyEl.innerHTML = `
     <h3 class="mission-name">${escapeHtml(mission.name)}</h3>
@@ -963,9 +994,7 @@ function renderMissionCard(scene: GameScene): void {
         </li>
       `).join('')}
     </ul>
-    ${mission.lockedTechs.includes(TechId.GUNPOWDER_AGE)
-      ? '<p class="mission-note">Gunpowder Age is locked in this mission.</p>'
-      : '<p class="mission-note">No town center. No economy. Victory requires destroying every enemy unit.</p>'}
+    ${missionNote ? `<p class="mission-note">${escapeHtml(missionNote)}</p>` : ''}
   `;
 }
 

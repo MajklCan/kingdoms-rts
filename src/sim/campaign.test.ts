@@ -1,6 +1,9 @@
 import { hasComponent } from 'bitecs';
 import { describe, expect, it } from 'vitest';
+import { MAP, SIM } from '../config';
 import {
+  ArcherTag,
+  AttackMoveGoal,
   Building,
   CannonTag,
   GunmanTag,
@@ -10,6 +13,7 @@ import {
   Resource,
   ResourceKindId,
   ScoutCavalryTag,
+  SpearmanTag,
 } from './components';
 import { AgeId, BuildingDefId } from './defs';
 import { CampaignMissionId } from './campaign';
@@ -23,6 +27,9 @@ import {
   step,
   unitQuery,
 } from './world';
+
+const BILA_HORA_WAIT_TEST_TICKS = SIM.TICK_HZ * 15;
+const KUTNA_HORA_FIRST_WAVE_TEST_TICKS = SIM.TICK_HZ * 30;
 
 describe('campaign missions', () => {
   it('sets up Siege of Brno as a Dark Age assault against a built Castle Age city', () => {
@@ -166,14 +173,26 @@ describe('campaign missions', () => {
       .filter((eid) => Owner.player[eid] === LOCAL_PLAYER_ID && Health.hp[eid] > 0);
     const enemyUnits = unitQuery(world.ecs)
       .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
-    expect(playerUnits.length).toBeGreaterThanOrEqual(50);
-    expect(enemyUnits.length).toBeGreaterThanOrEqual(60);
+    expect(playerUnits.length).toBe(50);
+    expect(enemyUnits.length).toBe(60);
+    expect([...playerUnits, ...enemyUnits].some((eid) => hasComponent(world.ecs, ArcherTag, eid)))
+      .toBe(false);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, SpearmanTag, eid)).length)
+      .toBe(16);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, GunmanTag, eid)).length)
+      .toBe(24);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, ScoutCavalryTag, eid)).length)
+      .toBe(8);
     expect(enemyUnits.filter((eid) => hasComponent(world.ecs, ScoutCavalryTag, eid)).length)
-      .toBeGreaterThanOrEqual(24);
+      .toBe(24);
     expect(enemyUnits.filter((eid) => hasComponent(world.ecs, GunmanTag, eid)).length)
-      .toBeGreaterThanOrEqual(16);
+      .toBe(26);
+    expect(enemyUnits.filter((eid) => hasComponent(world.ecs, SpearmanTag, eid)).length)
+      .toBe(8);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, CannonTag, eid)).length)
+      .toBe(2);
     expect(enemyUnits.filter((eid) => hasComponent(world.ecs, CannonTag, eid)).length)
-      .toBeGreaterThanOrEqual(5);
+      .toBe(2);
 
     const trees = resourceQuery(world.ecs)
       .filter((eid) => Resource.kind[eid] === ResourceKindId.WOOD && Resource.amount[eid] > 0);
@@ -182,6 +201,27 @@ describe('campaign missions', () => {
     const playerAvgY = playerUnits.reduce((sum, eid) => sum + Position.y[eid], 0) / playerUnits.length;
     const enemyAvgY = enemyUnits.reduce((sum, eid) => sum + Position.y[eid], 0) / enemyUnits.length;
     expect(playerAvgY).toBeGreaterThan(enemyAvgY);
+
+    const playerCenter = {
+      x: playerUnits.reduce((sum, eid) => sum + Position.x[eid], 0) / playerUnits.length,
+      y: playerAvgY,
+    };
+    const enemyCenter = {
+      x: enemyUnits.reduce((sum, eid) => sum + Position.x[eid], 0) / enemyUnits.length,
+      y: enemyAvgY,
+    };
+    expect(Math.hypot(enemyCenter.x - playerCenter.x, enemyCenter.y - playerCenter.y))
+      .toBeGreaterThan(24);
+    expect(enemyUnits.filter((eid) => AttackMoveGoal.active[eid] === 1 || world.paths.has(eid)).length)
+      .toBe(0);
+
+    world.paused = false;
+    for (let i = 0; i < BILA_HORA_WAIT_TEST_TICKS; i++) step(world);
+    expect(enemyUnits.filter((eid) => AttackMoveGoal.active[eid] === 1 || world.paths.has(eid)).length)
+      .toBe(0);
+    step(world);
+    expect(enemyUnits.filter((eid) => AttackMoveGoal.active[eid] === 1 && world.paths.has(eid)).length)
+      .toBeGreaterThanOrEqual(enemyUnits.length - 2);
 
     const tracked = world.campaign?.trackedObjectiveEids.destroy_imperial_field_army ?? [];
     expect(tracked.length).toBe(enemyUnits.length);
@@ -203,6 +243,154 @@ describe('campaign missions', () => {
     expect(world.outcome).toEqual({
       state: 'victory',
       winnerPlayerId: LOCAL_PLAYER_ID,
+      mode: 'conquest',
+    });
+  });
+
+  it('sets up Battle of Kutná Hora as a prebuilt city defense mission', () => {
+    const world = createCampaignWorld(707, CampaignMissionId.BATTLE_OF_KUTNA_HORA);
+
+    expect(world.campaign?.missionId).toBe(CampaignMissionId.BATTLE_OF_KUTNA_HORA);
+    expect(world.ages[LOCAL_PLAYER_ID].current).toBe(AgeId.GUNPOWDER);
+    expect(world.ages[AI_PLAYER_ID].current).toBe(AgeId.GUNPOWDER);
+    expect(world.campaign?.lockedTechs).toHaveLength(0);
+    expect(world.campaign?.scriptedWaveIndex).toBe(0);
+    expect(world.campaign?.scriptedWaveCount).toBe(5);
+    expect(world.campaign?.nextReinforcementTick).toBe(KUTNA_HORA_FIRST_WAVE_TEST_TICKS);
+    expect(world.revealedMapPlayers[LOCAL_PLAYER_ID]).toBe(false);
+
+    const playerBuildings = buildingQuery(world.ecs)
+      .filter((eid) => Owner.player[eid] === LOCAL_PLAYER_ID && Health.hp[eid] > 0);
+    const enemyBuildings = buildingQuery(world.ecs)
+      .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+    const countPlayerBuilding = (defId: number) =>
+      playerBuildings.filter((eid) => Building.defId[eid] === defId).length;
+
+    expect(countPlayerBuilding(BuildingDefId.TOWN_CENTER)).toBe(1);
+    const townCenter = playerBuildings.find((eid) => Building.defId[eid] === BuildingDefId.TOWN_CENTER);
+    expect(Math.hypot(Position.x[townCenter!] - MAP.WIDTH / 2, Position.y[townCenter!] - MAP.HEIGHT / 2))
+      .toBeLessThanOrEqual(1);
+    expect(countPlayerBuilding(BuildingDefId.BARRACKS)).toBeGreaterThanOrEqual(2);
+    expect(countPlayerBuilding(BuildingDefId.STABLE)).toBeGreaterThanOrEqual(1);
+    expect(countPlayerBuilding(BuildingDefId.FOUNDRY)).toBeGreaterThanOrEqual(1);
+    expect(countPlayerBuilding(BuildingDefId.FARM)).toBeGreaterThanOrEqual(4);
+    expect(countPlayerBuilding(BuildingDefId.MILL)).toBeGreaterThanOrEqual(1);
+    expect(countPlayerBuilding(BuildingDefId.DEFENSIVE_TOWER)).toBeGreaterThanOrEqual(10);
+    expect(countPlayerBuilding(BuildingDefId.WALL)).toBeGreaterThanOrEqual(140);
+    expect(enemyBuildings).toHaveLength(0);
+    const centerBuildings = playerBuildings.filter((eid) =>
+      Math.hypot(Position.x[eid] - Position.x[townCenter!], Position.y[eid] - Position.y[townCenter!]) <= 10
+    );
+    expect(centerBuildings.length).toBeGreaterThanOrEqual(20);
+    const nearbyWoods = resourceQuery(world.ecs).filter((eid) =>
+      Resource.kind[eid] === ResourceKindId.WOOD &&
+      Resource.amount[eid] > 0 &&
+      Math.hypot(Position.x[eid] - Position.x[townCenter!], Position.y[eid] - Position.y[townCenter!]) <= 24
+    );
+    expect(nearbyWoods.length).toBeGreaterThanOrEqual(20);
+    const visibleTiles = world.visibility[LOCAL_PLAYER_ID].visible.reduce((sum, value) => sum + value, 0);
+    expect(visibleTiles).toBeLessThan(MAP.WIDTH * MAP.HEIGHT);
+
+    const playerUnits = unitQuery(world.ecs)
+      .filter((eid) => Owner.player[eid] === LOCAL_PLAYER_ID && Health.hp[eid] > 0);
+    const enemyUnits = unitQuery(world.ecs)
+      .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, SpearmanTag, eid)).length)
+      .toBe(8);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, GunmanTag, eid)).length)
+      .toBe(8);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, ScoutCavalryTag, eid)).length)
+      .toBe(4);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, ArcherTag, eid)).length)
+      .toBe(2);
+    expect(playerUnits.filter((eid) => hasComponent(world.ecs, CannonTag, eid)).length)
+      .toBe(1);
+    expect(enemyUnits).toHaveLength(0);
+    expect(world.population[LOCAL_PLAYER_ID].cap).toBeGreaterThanOrEqual(70);
+    expect(Array.from(world.resources[LOCAL_PLAYER_ID])).toEqual([300, 300, 300, 300]);
+  });
+
+  it('starts Kutná Hora assault waves after the opening defense window', () => {
+    const world = createCampaignWorld(708, CampaignMissionId.BATTLE_OF_KUTNA_HORA);
+    world.paused = false;
+
+    for (let i = 0; i < KUTNA_HORA_FIRST_WAVE_TEST_TICKS; i++) step(world);
+    expect(unitQuery(world.ecs).filter((eid) =>
+      Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0
+    )).toHaveLength(0);
+
+    step(world);
+    const enemyUnits = unitQuery(world.ecs)
+      .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+    expect(enemyUnits).toHaveLength(18);
+    expect(world.campaign?.scriptedWaveIndex).toBe(1);
+    expect(world.campaign?.trackedObjectiveEids.kutna_hora_attackers).toHaveLength(18);
+    expect(enemyUnits.filter((eid) => AttackMoveGoal.active[eid] === 1 && world.paths.has(eid)).length)
+      .toBeGreaterThanOrEqual(14);
+
+    const firstWaveCenter = {
+      x: enemyUnits.reduce((sum, eid) => sum + Position.x[eid], 0) / enemyUnits.length,
+      y: enemyUnits.reduce((sum, eid) => sum + Position.y[eid], 0) / enemyUnits.length,
+    };
+    for (const eid of enemyUnits) Health.hp[eid] = 0;
+    step(world);
+    world.campaign!.nextReinforcementTick = world.tick;
+    step(world);
+    const secondWaveUnits = unitQuery(world.ecs)
+      .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+    expect(secondWaveUnits.length).toBeGreaterThan(0);
+    const secondWaveCenter = {
+      x: secondWaveUnits.reduce((sum, eid) => sum + Position.x[eid], 0) / secondWaveUnits.length,
+      y: secondWaveUnits.reduce((sum, eid) => sum + Position.y[eid], 0) / secondWaveUnits.length,
+    };
+    expect(
+      Math.abs(secondWaveCenter.x - firstWaveCenter.x) +
+      Math.abs(secondWaveCenter.y - firstWaveCenter.y)
+    ).toBeGreaterThan(20);
+  });
+
+  it('wins Kutná Hora after all assault waves are destroyed', () => {
+    const world = createCampaignWorld(709, CampaignMissionId.BATTLE_OF_KUTNA_HORA);
+    world.paused = false;
+
+    for (let wave = 0; wave < 5; wave++) {
+      world.campaign!.nextReinforcementTick = world.tick;
+      step(world);
+      const enemies = unitQuery(world.ecs)
+        .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+      expect(enemies.length).toBeGreaterThan(0);
+      for (const eid of enemies) Health.hp[eid] = 0;
+      step(world);
+    }
+
+    expect(world.campaign?.objectives.find((objective) =>
+      objective.id === 'survive_kutna_hora'
+    )?.completed).toBe(true);
+    expect(world.campaign?.objectives.find((objective) =>
+      objective.id === 'hold_kutna_hora_tc'
+    )?.completed).toBe(true);
+    expect(world.outcome).toEqual({
+      state: 'victory',
+      winnerPlayerId: LOCAL_PLAYER_ID,
+      mode: 'conquest',
+    });
+  });
+
+  it('loses Kutná Hora if the town center falls', () => {
+    const world = createCampaignWorld(710, CampaignMissionId.BATTLE_OF_KUTNA_HORA);
+    world.paused = false;
+    const townCenter = buildingQuery(world.ecs).find((eid) =>
+      Owner.player[eid] === LOCAL_PLAYER_ID &&
+      Building.defId[eid] === BuildingDefId.TOWN_CENTER
+    );
+    expect(townCenter).toBeDefined();
+
+    Health.hp[townCenter!] = 0;
+    step(world);
+
+    expect(world.outcome).toEqual({
+      state: 'victory',
+      winnerPlayerId: AI_PLAYER_ID,
       mode: 'conquest',
     });
   });
