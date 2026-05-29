@@ -387,6 +387,7 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.pendingProjectileImpacts.length = 0;
   world.pendingCannonImpacts.length = 0;
   world.aiEvents.length = 0;
+  world.soundCues.length = 0;
   world.paused = snapshot.paused;
   world.aiDifficulty = normalizeAiDifficulty(snapshot.aiDifficulty);
   world.outcome = { ...snapshot.outcome };

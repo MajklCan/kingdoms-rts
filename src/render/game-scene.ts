@@ -111,6 +111,31 @@ import {
 import { screenToTile, tileToScreen } from './iso';
 import { setLastEvent } from '../debug/overlay';
 import { installWindowApi } from '../debug/window-api';
+import { AudioManager } from './audio/audio-manager';
+import {
+  SFX_KEYS,
+  MUSIC_KEYS,
+  AMBIENCE_KEYS,
+  VILLAGE_MUSIC,
+  BATTLE_TRACKS,
+  BATTLE_AMBIENCE,
+  NATURE_AMBIENCE,
+  cueSound,
+  combatSound,
+  isNonSpatialCue,
+  UI_CLICK,
+  UI_HOVER,
+  UNIT_SELECT,
+  COMMAND_MOVE,
+  ERROR as SFX_ERROR,
+  PLACE_BUILDING,
+  ALERT,
+  VOICE_KEYS,
+  VOICE_LINE_COUNTS,
+  type SfxConfig,
+  type VoiceCategory,
+  type VoiceBarkType,
+} from './audio/sound-map';
 import { bakeVoxelTexture } from './voxel/voxel-render';
 import { bakeTerrain } from './voxel/terrain';
 import { buildDarkTcVoxels } from './voxel/models/dark-tc';
@@ -268,6 +293,24 @@ interface ActionGridAction {
 
 export class GameScene extends Phaser.Scene {
   private world!: SimWorld;
+  private audio!: AudioManager;
+  /** Sim tick of the most recent combat event involving the local player —
+   *  drives music ducking. -1 = never. */
+  private lastLocalCombatTick = -1;
+  /** Sim tick the last "under attack" alert fired — throttles the stinger. */
+  private lastAlertTick = -1;
+  /** True once a match is running (drives the in-game music director). */
+  private inMatch = false;
+  /** Tick the camera began dwelling on the home base; -1 when away. */
+  private villageEnteredTick = -1;
+  /** Most recent tick the camera was at the home base (for leave-grace). */
+  private lastHomeTick = -1;
+  /** Battle track chosen for the current combat episode; null when not fighting
+   *  (re-picked at random each time combat begins). */
+  private battleTrack: string | null = null;
+  /** Active in-game music context + the tick it was entered (dwell tracking). */
+  private musicContext: 'playlist' | 'village' | 'battle' = 'playlist';
+  private contextSinceTick = -1;
   private gridGfx!: Phaser.GameObjects.Graphics;
   private buildingsGfx!: Phaser.GameObjects.Graphics;
   private resourcesGfx!: Phaser.GameObjects.Graphics;
@@ -324,6 +367,25 @@ export class GameScene extends Phaser.Scene {
   private static readonly CANNON_UNIT_ORIGIN_Y = 0.645;
   private static readonly COMBAT_ATTACK_ANIM_TICKS = 10;
   private static readonly MINIMAP_COMBAT_ALERT_TICKS = SIM.TICK_HZ * 5;
+  /** How long battle music/ambience persist after the last local combat event.
+   *  Long, so the score never snaps back the instant a skirmish ends. */
+  private static readonly BATTLE_HOLD_TICKS = SIM.TICK_HZ * 15;
+  /** Minimum time in the village/playlist context before it may switch to the
+   *  other — prevents rapid flapping at the edges of triggers. */
+  private static readonly CONTEXT_MIN_DWELL_TICKS = SIM.TICK_HZ * 10;
+  /** Minimum gap between "under attack" alert stingers. */
+  private static readonly ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 10;
+  /** Max stereo pan for world-positioned SFX — keeps off-screen sounds audible
+   *  in both ears instead of hard-panning fully left/right. */
+  private static readonly MAX_SPATIAL_PAN = 0.6;
+  /** How long the camera must dwell on the home base (while safe) before the
+   *  peaceful village theme takes over. */
+  private static readonly VILLAGE_LINGER_TICKS = SIM.TICK_HZ * 6;
+  /** Grace window where the base still counts as "home" after panning away,
+   *  so small camera nudges don't flap the village/playlist switch. */
+  private static readonly HOME_LEAVE_GRACE_TICKS = SIM.TICK_HZ * 2;
+  /** Camera-to-town-centre distance (world px) that counts as "at home". */
+  private static readonly HOME_RADIUS_PX = 260;
   // Texture keys.
   private static readonly DARK_TC_KEY_PREFIX = 'voxel-dark-tc-p';
   private static readonly CASTLE_TC_KEY_PREFIX = 'voxel-castle-tc-p';
@@ -369,8 +431,17 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
+  preload(): void {
+    // Queue all SFX + music so they're decoded before create(). Render-only.
+    AudioManager.queueLoad(this.load, SFX_KEYS);
+    AudioManager.queueLoadMusic(this.load, [...MUSIC_KEYS, ...AMBIENCE_KEYS]);
+    AudioManager.queueLoadVoices(this.load, VOICE_KEYS);
+  }
+
   create(): void {
     this.world = createSimWorld(Date.now() & 0xffff);
+    this.audio = new AudioManager(this);
+    this.audio.playMenuMusic();
 
     // Bake all voxel textures once at scene boot.
     this.bakeAllTextures();
@@ -577,6 +648,8 @@ export class GameScene extends Phaser.Scene {
     this.drawLastSeenBuildings();
     this.consumeCombatEvents();
     this.consumeAiEvents();
+    this.consumeSoundCues();
+    this.updateMusicDirector();
     this.drawProjectiles(delta * this.gameSpeed);
     this.drawGhost();
     this.drawAttackCursorIndicator();
@@ -918,6 +991,8 @@ export class GameScene extends Phaser.Scene {
     const events = this.world.combatEvents.splice(0);
     for (const event of events) {
       this.recordMinimapCombatAlert(event);
+      this.playCombatSound(event);
+      this.noteCombatForAdaptiveAudio(event);
       if (
         event.attackerKind === UnitDefId.SCOUT_CAVALRY ||
         event.attackerKind === UnitDefId.ARCHER ||
@@ -976,6 +1051,309 @@ export class GameScene extends Phaser.Scene {
     const events = this.world.aiEvents.splice(0);
     const latest = events[events.length - 1];
     if (latest) setLastEvent(latest.message);
+  }
+
+  /** Per-frame music director. Chooses the in-game music context by priority:
+   *  combat (battle theme, or duck the playlist as fallback) > lingering safely
+   *  at the home base (village theme) > the default filler playlist. */
+  private updateMusicDirector(): void {
+    if (!this.inMatch) return;
+    const tick = this.world.tick;
+    const recentCombat =
+      this.lastLocalCombatTick >= 0 &&
+      tick - this.lastLocalCombatTick < GameScene.BATTLE_HOLD_TICKS;
+    const recentlyAttacked =
+      this.lastAlertTick >= 0 && tick - this.lastAlertTick < GameScene.BATTLE_HOLD_TICKS;
+    // Stay in "battle" only while there's a live reason: a surviving army still
+    // in the field, or the base under recent attack. If the local army is wiped
+    // and nothing's hitting home, the fight is over → let the score wind down
+    // (still a slow crossfade, not a snap) instead of holding empty battle music.
+    const danger =
+      recentCombat && (recentlyAttacked || this.localHasLivingMilitary());
+
+    // Ambience tracks danger directly (its own slow crossfade): battle din while
+    // fighting, calm nature bed otherwise — so quiet is never truly silent.
+    this.audio.playAmbience(danger ? BATTLE_AMBIENCE : NATURE_AMBIENCE);
+
+    // Decide the desired music context.
+    let desired: 'playlist' | 'village' | 'battle';
+    if (danger) {
+      desired = 'battle';
+      this.villageEnteredTick = -1;
+    } else {
+      const rawHome = this.cameraNearHomeBase();
+      if (rawHome) this.lastHomeTick = tick;
+      const atHome =
+        rawHome ||
+        (this.lastHomeTick >= 0 && tick - this.lastHomeTick < GameScene.HOME_LEAVE_GRACE_TICKS);
+      if (atHome) {
+        if (this.villageEnteredTick < 0) this.villageEnteredTick = tick;
+        desired =
+          tick - this.villageEnteredTick >= GameScene.VILLAGE_LINGER_TICKS ? 'village' : 'playlist';
+      } else {
+        this.villageEnteredTick = -1;
+        desired = 'playlist';
+      }
+    }
+
+    this.applyMusicContext(desired);
+  }
+
+  /** Switch to the desired context subject to dwell rules. Battle interrupts
+   *  immediately; leaving battle is already gated by BATTLE_HOLD_TICKS; the
+   *  village↔playlist swap needs a minimum dwell so it can't flap. */
+  private applyMusicContext(desired: 'playlist' | 'village' | 'battle'): void {
+    if (desired !== this.musicContext) {
+      const dwell = this.contextSinceTick < 0 ? Infinity : this.world.tick - this.contextSinceTick;
+      const canSwitch =
+        desired === 'battle' ||
+        this.musicContext === 'battle' ||
+        dwell >= GameScene.CONTEXT_MIN_DWELL_TICKS;
+      if (!canSwitch) {
+        this.playContext(this.musicContext);
+        return;
+      }
+      this.musicContext = desired;
+      this.contextSinceTick = this.world.tick;
+      if (desired !== 'battle') this.battleTrack = null;
+    }
+    this.playContext(this.musicContext);
+  }
+
+  /** Drive the audio layer for the active context (idempotent every frame). */
+  private playContext(ctx: 'playlist' | 'village' | 'battle'): void {
+    if (ctx === 'battle') {
+      if (this.battleTrack === null) this.battleTrack = this.pickBattleTrack();
+      if (this.battleTrack) {
+        this.audio.setMusicDucked(false);
+        this.audio.playLooping(this.battleTrack);
+      } else {
+        // No battle track supplied — keep the playlist but duck it.
+        this.audio.playGamePlaylist();
+        this.audio.setMusicDucked(true);
+      }
+      return;
+    }
+    this.audio.setMusicDucked(false);
+    // Village + playlist both breathe (song → ambience-only gap → song); only
+    // battle stays a continuous loop. So peaceful music never plays endlessly.
+    if (ctx === 'village') this.audio.playGappedSingle(VILLAGE_MUSIC);
+    else this.audio.playGamePlaylist();
+  }
+
+  /** Random battle track whose asset exists, or null if none supplied yet. */
+  private pickBattleTrack(): string | null {
+    const present = BATTLE_TRACKS.filter((k) => this.audio.hasTrack(k));
+    if (present.length === 0) return null;
+    return present[Math.floor(Math.random() * present.length)];
+  }
+
+  /** True when the camera is centred close to the local player's town centre. */
+  private cameraNearHomeBase(): boolean {
+    const tc = this.localTownCenterPos();
+    if (!tc) return false;
+    const local = tileToScreen(tc.x, tc.y);
+    const absX = this.worldContainer.x + local.x;
+    const absY = this.worldContainer.y + local.y;
+    const view = this.cameras.main.worldView;
+    return Math.hypot(absX - view.centerX, absY - view.centerY) <= GameScene.HOME_RADIUS_PX;
+  }
+
+  /** Position of the local player's (living) town centre, or null if none. */
+  private localTownCenterPos(): { x: number; y: number } | null {
+    for (const eid of buildingQuery(this.world.ecs)) {
+      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (!hasComponent(this.world.ecs, TownCenterTag, eid)) continue;
+      if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
+      return { x: Position.x[eid], y: Position.y[eid] };
+    }
+    return null;
+  }
+
+  /** True if the local player still has at least one living military unit
+   *  (villagers excluded). Drives battle-music wind-down when an army is wiped. */
+  private localHasLivingMilitary(): boolean {
+    for (const eid of unitQuery(this.world.ecs)) {
+      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (hasComponent(this.world.ecs, VillagerTag, eid)) continue;
+      if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /** Play the fire-sound for a combat event, gated by fog (only audible if the
+   *  attacker or target tile is visible to the local player). */
+  private playCombatSound(event: CombatEvent): void {
+    const isBuildingAttacker = hasComponent(this.world.ecs, Building, event.attackerEid);
+    const cfg = combatSound(event.attackerKind, event.range, event.phase, isBuildingAttacker);
+    if (!cfg) return;
+    const fromVisible = isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.fromX, event.fromY);
+    const toVisible = isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.toX, event.toY);
+    if (!fromVisible && !toVisible) return;
+    // Pan/attenuate around the attacker for fire, the target for melee impact.
+    const x = event.range <= 1 ? event.toX : event.fromX;
+    const y = event.range <= 1 ? event.toY : event.fromY;
+    this.playSpatial(cfg, x, y);
+  }
+
+  /** Feed adaptive audio: duck music while the local player is fighting and
+   *  fire an "under attack" stinger (throttled) when local assets take hits. */
+  private noteCombatForAdaptiveAudio(event: CombatEvent): void {
+    if (event.phase === 'windup') return;
+    const attackerPlayer = hasComponent(this.world.ecs, Owner, event.attackerEid)
+      ? Owner.player[event.attackerEid]
+      : 0;
+    const targetPlayer = hasComponent(this.world.ecs, Owner, event.targetEid)
+      ? Owner.player[event.targetEid]
+      : 0;
+    if (attackerPlayer === LOCAL_PLAYER_ID || targetPlayer === LOCAL_PLAYER_ID) {
+      this.lastLocalCombatTick = this.world.tick;
+    }
+    // We're being hit → warn the player, but not more than once per cooldown.
+    if (targetPlayer === LOCAL_PLAYER_ID) {
+      const elapsed = this.world.tick - this.lastAlertTick;
+      if (this.lastAlertTick < 0 || elapsed >= GameScene.ALERT_COOLDOWN_TICKS) {
+        this.lastAlertTick = this.world.tick;
+        this.audio.play(ALERT.key, { volume: ALERT.volume, minIntervalMs: ALERT.minIntervalMs });
+      }
+    }
+  }
+
+  /** Drain sim sound cues (non-combat state transitions). Fog-gated; non-spatial
+   *  cues (age-up fanfare) only play for the local player. */
+  private consumeSoundCues(): void {
+    if (this.world.soundCues.length === 0) return;
+    const cues = this.world.soundCues.splice(0);
+    for (const cue of cues) {
+      const cfg = cueSound(cue.kind);
+      if (isNonSpatialCue(cue.kind)) {
+        if (cue.player === LOCAL_PLAYER_ID) {
+          this.audio.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
+        }
+        continue;
+      }
+      if (
+        cue.player !== LOCAL_PLAYER_ID &&
+        !isTileVisibleTo(this.world, LOCAL_PLAYER_ID, cue.x, cue.y)
+      ) {
+        continue;
+      }
+      this.playSpatial(cfg, cue.x, cue.y);
+    }
+  }
+
+  /** Play a sound positioned in the world: stereo pan + volume falloff relative
+   *  to the camera's visible region. */
+  private playSpatial(cfg: SfxConfig, tileX: number, tileY: number): void {
+    const local = tileToScreen(tileX, tileY);
+    const absX = this.worldContainer.x + local.x;
+    const absY = this.worldContainer.y + local.y;
+    const view = this.cameras.main.worldView;
+    const halfW = Math.max(1, view.width / 2);
+    const halfH = Math.max(1, view.height / 2);
+    // Soften stereo pan: never hard-pan fully to one ear (felt like the sound
+    // "only plays on the left"). Scale to ±MAX_SPATIAL_PAN.
+    const pan = Phaser.Math.Clamp(
+      ((absX - view.centerX) / halfW) * GameScene.MAX_SPATIAL_PAN,
+      -GameScene.MAX_SPATIAL_PAN,
+      GameScene.MAX_SPATIAL_PAN
+    );
+    const overshootX = Math.max(0, Math.abs(absX - view.centerX) - halfW);
+    const overshootY = Math.max(0, Math.abs(absY - view.centerY) - halfH);
+    const overshoot = Math.hypot(overshootX, overshootY);
+    const falloff = Phaser.Math.Clamp(1 - overshoot / halfW, 0.2, 1);
+    this.audio.play(cfg.key, {
+      pan,
+      volume: cfg.volume * falloff,
+      minIntervalMs: cfg.minIntervalMs,
+    });
+  }
+
+  /** Play a non-spatial UI/command sound (centre pan, fixed volume). */
+  private playUi(cfg: SfxConfig): void {
+    this.audio.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
+  }
+
+  /** Voice persona for a unit: villagers by gender (farm → female), soldiers by
+   *  kind across three voices. null for units with no voice (e.g. siege). */
+  private voiceCategoryForUnit(eid: number): VoiceCategory | null {
+    if (hasComponent(this.world.ecs, VillagerTag, eid)) {
+      return this.isFarmWorker(eid) ? 'villager_female' : 'villager_male';
+    }
+    if (hasComponent(this.world.ecs, SpearmanTag, eid)) return 'soldier_1';
+    if (hasComponent(this.world.ecs, ArcherTag, eid)) return 'soldier_2';
+    if (hasComponent(this.world.ecs, ScoutCavalryTag, eid)) return 'soldier_3';
+    if (hasComponent(this.world.ecs, GunmanTag, eid)) return 'soldier_1';
+    if (hasComponent(this.world.ecs, CannonTag, eid)) return 'soldier_2';
+    if (hasComponent(this.world.ecs, MachineGunTag, eid)) return 'soldier_3';
+    return null;
+  }
+
+  /** True if the villager is staffing a food (farm) worksite → female voice. */
+  private isFarmWorker(eid: number): boolean {
+    if (!hasComponent(this.world.ecs, WorksiteWorker, eid)) return false;
+    const site = WorksiteWorker.siteEid[eid];
+    return (
+      site >= 0 &&
+      hasComponent(this.world.ecs, ResourceWorksite, site) &&
+      ResourceWorksite.kind[site] === ResourceKindId.FOOD
+    );
+  }
+
+  /** First local-owned unit in the current selection (the one that "speaks"). */
+  private representativeSelectedUnit(): number | null {
+    for (const eid of selectedQuery(this.world.ecs)) {
+      if (Owner.player[eid] === LOCAL_PLAYER_ID && hasComponent(this.world.ecs, UnitKind, eid)) {
+        return eid;
+      }
+    }
+    return null;
+  }
+
+  /** Play a unit's voice bark; returns false if the unit has no clip for that
+   *  type (caller falls back to a UI blip). */
+  private playUnitBark(eid: number, type: VoiceBarkType): boolean {
+    const category = this.voiceCategoryForUnit(eid);
+    if (!category) return false;
+    return this.audio.playVoiceBark(category, type, VOICE_LINE_COUNTS[type]);
+  }
+
+  /** Voice bark (or blip fallback) for a single selected unit. */
+  private barkSelect(eid: number): void {
+    if (!this.playUnitBark(eid, 'select')) this.playUi(UNIT_SELECT);
+  }
+
+  /** Move/gather acknowledgement: representative selected unit speaks a calm
+   *  "on our way" line; blip fallback. No-op when nothing commandable selected. */
+  private barkMove(): void {
+    const eid = this.representativeSelectedUnit();
+    if (eid === null) return;
+    if (!this.playUnitBark(eid, 'move')) this.playUi(COMMAND_MOVE);
+  }
+
+  /** Attack / attack-move acknowledgement: aggressive battle-cry line; blip
+   *  fallback. No-op when nothing commandable selected. */
+  private barkAttack(): void {
+    const eid = this.representativeSelectedUnit();
+    if (eid === null) return;
+    if (!this.playUnitBark(eid, 'attack')) this.playUi(COMMAND_MOVE);
+  }
+
+  /** Public accessors so the HUD (volume slider / mute, button clicks/hovers)
+   *  can reach audio. Undefined until create() has run. */
+  getAudio(): AudioManager | undefined {
+    return this.audio;
+  }
+
+  playUiClick(): void {
+    if (!this.audio) return;
+    this.playUi(UI_CLICK);
+  }
+
+  playUiHover(): void {
+    if (!this.audio) return;
+    this.playUi(UI_HOVER);
   }
 
   private spawnAttackProjectile(event: CombatEvent, kind: ProjectileKind): void {
@@ -1311,6 +1689,7 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
+
   // ──────────────────────────────────────────────────────────────────────────
   // Input
   // ──────────────────────────────────────────────────────────────────────────
@@ -1358,6 +1737,7 @@ export class GameScene extends Phaser.Scene {
         const defId = BUILD_MODE_TO_DEF[this.buildMode];
         if (!isBuildingUnlocked(this.world, 1, defId)) {
           setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.buildMode} is locked`);
+          this.playUi(SFX_ERROR);
           this.buildMode = 'none';
           this.ghostGfx.clear();
           return;
@@ -1369,6 +1749,7 @@ export class GameScene extends Phaser.Scene {
           y: ty,
           playerId: 1,
         });
+        this.playUi(PLACE_BUILDING);
         setLastEvent(`place ${this.buildMode} → (${tx},${ty})`);
         this.buildMode = 'none';
         this.ghostGfx.clear();
@@ -1389,12 +1770,14 @@ export class GameScene extends Phaser.Scene {
         isEnemyOf(this.world, targetEid, 1)
       ) {
         this.world.inputs.push({ type: 'attackSelected', targetEid });
+        this.barkAttack();
         setLastEvent(`attack eid=${targetEid}`);
         return;
       }
       const resourceEid = findResourceAt(this.world, tile.x, tile.y, 0.7);
       if (resourceEid !== null && this.isResourceExploredByLocal(resourceEid)) {
         const kind = Resource.kind[resourceEid];
+        this.playUi(SFX_ERROR);
         setLastEvent(
           kind === ResourceKindId.FOOD
             ? 'food comes from farms'
@@ -1402,6 +1785,7 @@ export class GameScene extends Phaser.Scene {
         );
       } else {
         this.world.inputs.push({ type: 'moveSelected', to: { x: tx, y: ty } });
+        this.barkMove();
         setLastEvent(`move → (${tx},${ty})`);
       }
     } else if (pointer.leftButtonDown()) {
@@ -1422,6 +1806,7 @@ export class GameScene extends Phaser.Scene {
           type: 'attackMoveSelected',
           to: { x: tx, y: ty },
         });
+        this.barkAttack();
         setLastEvent(`attack-move → (${tx},${ty})`);
         return;
       }
@@ -1444,6 +1829,7 @@ export class GameScene extends Phaser.Scene {
       clearSelection(this.world);
       if (eid !== null) {
         setSelected(this.world, eid, true);
+        if (this.isOwnedUnit(eid)) this.barkSelect(eid);
         setLastEvent(`selected ${this.entityKindName(eid)} eid=${eid}`);
       } else {
         setLastEvent(`cleared selection`);
@@ -1513,6 +1899,8 @@ export class GameScene extends Phaser.Scene {
         n++;
       }
     }
+    const rep = this.representativeSelectedUnit();
+    if (rep !== null) this.barkSelect(rep);
     setLastEvent(`box-selected ${n} unit${n === 1 ? '' : 's'}`);
   }
 
@@ -1933,14 +2321,17 @@ export class GameScene extends Phaser.Scene {
       }
       if (!buildingDef?.trains.includes(unitDef.id)) continue;
       if (!isUnitUnlocked(this.world, Owner.player[eid], unitDefId)) {
+        this.playUi(SFX_ERROR);
         setLastEvent(`${unitDef.name} is locked`);
         return;
       }
       if (!this.canAffordCost(Owner.player[eid], unitDef.cost)) {
+        this.playUi(SFX_ERROR);
         setLastEvent(`${unitDef.name} needs ${this.formatCost(unitDef.cost)}`);
         return;
       }
       if (!this.hasPopulationRoomForUnit(Owner.player[eid], unitDefId)) {
+        this.playUi(SFX_ERROR);
         const pop = this.world.population[Owner.player[eid]];
         setLastEvent(`${unitDef.name} needs pop space (${pop?.current ?? 0}/${pop?.cap ?? 0})`);
         return;
@@ -2161,6 +2552,21 @@ export class GameScene extends Phaser.Scene {
     this.afterWorldLoaded(this.world.campaign?.name ?? 'campaign started');
   }
 
+  /** Hand music off from the menu to the in-game director on match start. Also
+   *  resets every adaptive-audio timer so a new/loaded match never inherits stale
+   *  combat/alert/village state from the previous one. */
+  private enterMatchMusic(): void {
+    this.inMatch = true;
+    this.villageEnteredTick = -1;
+    this.lastHomeTick = -1;
+    this.lastLocalCombatTick = -1;
+    this.lastAlertTick = -1;
+    this.musicContext = 'playlist';
+    this.contextSinceTick = -1;
+    this.battleTrack = null;
+    this.audio.playGamePlaylist();
+  }
+
   private installDebugWindowApi(): void {
     installWindowApi(
       this.world,
@@ -2185,6 +2591,7 @@ export class GameScene extends Phaser.Scene {
     this.refreshTerrainBake();
     this.installDebugWindowApi();
     this.panToLocalTownCenter();
+    this.enterMatchMusic();
     setLastEvent(message);
   }
 

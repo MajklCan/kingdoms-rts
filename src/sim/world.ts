@@ -305,6 +305,31 @@ export interface CombatEvent {
   projectileTicks?: number;
 }
 
+/** Non-combat sound triggers the render layer plays. Sim appends; render
+ *  drains. Output-only (sim never reads it back), so determinism is unaffected
+ *  — same contract as combatEvents. Combat fire SFX come from combatEvents;
+ *  these cover state transitions that emit no combat event. */
+export type SoundCueKind =
+  | 'gather_wood'
+  | 'gather_stone'
+  | 'gather_gold'
+  | 'gather_food'
+  | 'unit_death'
+  | 'building_destroyed'
+  | 'cannon_impact'
+  | 'build_complete'
+  | 'unit_ready'
+  | 'age_up';
+
+export interface SoundCue {
+  kind: SoundCueKind;
+  /** World tile coords for spatial panning. Ignored for non-spatial cues. */
+  x: number;
+  y: number;
+  /** Owning player — render uses this for fog/local-player filtering. */
+  player: number;
+}
+
 interface CannonWindup {
   targetEid: number;
   ticksRemaining: number;
@@ -579,6 +604,8 @@ export interface SimWorld {
   aiDifficulty: AiDifficulty;
   /** Render-consumed AI event messages. */
   aiEvents: AiEvent[];
+  /** Render-consumed non-combat sound cues. Sim appends; render drains. */
+  soundCues: SoundCue[];
   /** When true, step() is a no-op (title screen, pause menu). */
   paused: boolean;
   /** Procedurally generated map (terrain tiles + heightmap + bridges + spawns). */
@@ -739,6 +766,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     aiPlayers: createAiPlayers(aiDifficulty),
     aiDifficulty,
     aiEvents: [],
+    soundCues: [],
     paused: true,
     map: mapData,
   };
@@ -3254,6 +3282,8 @@ function ageProgressionSystem(world: SimWorld): void {
       age.current += 1;
       age.progress = -1;
       age.totalTicks = 0;
+      // Non-spatial fanfare; render plays it only for the local player.
+      pushSoundCue(world, 'age_up', 0, 0, p);
     }
   }
 }
@@ -3775,6 +3805,7 @@ function finaliseBuilding(world: SimWorld, siteEid: number): void {
   const def = getBuildingDef(defId);
   if (!def) return;
   const playerId = Owner.player[siteEid];
+  pushSoundCue(world, 'build_complete', Position.x[siteEid], Position.y[siteEid], playerId);
 
   removeComponent(world.ecs, ConstructionSite, siteEid);
   removeComponent(world.ecs, FoundationTag, siteEid);
@@ -4277,6 +4308,7 @@ function productionSystem(world: SimWorld): void {
         }
       }
       if (spawnedEid !== null) {
+        pushSoundCue(world, 'unit_ready', Position.x[eid], Position.y[eid], Owner.player[eid]);
         issueProductionRallyOrder(world, eid, spawnedEid);
         queue.shift();
         Producer.currentProgress[eid] = 0;
@@ -4860,6 +4892,7 @@ function cannonImpactSystem(world: SimWorld): void {
 }
 
 function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): void {
+  pushSoundCue(world, 'cannon_impact', impact.impactX, impact.impactY, impact.attackerOwner);
   for (const building of buildingQuery(world.ecs)) {
     if (!isValidCannonBuildingVictim(world, impact.attackerOwner, building)) continue;
     if (distToBuildingEdge(world, impact.impactX, impact.impactY, building) > CANNON_BUILDING_DIRECT_HIT_RADIUS) {
@@ -4995,6 +5028,14 @@ function deathSystem(world: SimWorld): void {
   for (const eid of ents) {
     if (Health.hp[eid] <= 0 && !hasComponent(world.ecs, DeadTag, eid)) {
       addComponent(world.ecs, DeadTag, eid);
+      const isBuilding = hasComponent(world.ecs, Building, eid);
+      pushSoundCue(
+        world,
+        isBuilding ? 'building_destroyed' : 'unit_death',
+        Position.x[eid],
+        Position.y[eid],
+        Owner.player[eid]
+      );
     }
   }
 }
@@ -6647,6 +6688,37 @@ function pushAiEvent(world: SimWorld, playerId: number, message: string): void {
   if (world.aiEvents.length > 12) world.aiEvents.splice(0, world.aiEvents.length - 12);
 }
 
+function gatherCueForKind(kind: ResourceKind): SoundCueKind {
+  switch (kind) {
+    case ResourceKindId.WOOD:
+      return 'gather_wood';
+    case ResourceKindId.STONE:
+      return 'gather_stone';
+    case ResourceKindId.GOLD:
+      return 'gather_gold';
+    default:
+      return 'gather_food';
+  }
+}
+
+/** Maximum buffered sound cues. The render layer drains every frame; this cap
+ *  only matters in headless runs (tests) where nothing drains — it bounds
+ *  memory by dropping the oldest cues. Output-only, so determinism-safe. */
+const MAX_SOUND_CUES = 256;
+
+function pushSoundCue(
+  world: SimWorld,
+  kind: SoundCueKind,
+  x: number,
+  y: number,
+  player: number
+): void {
+  world.soundCues.push({ kind, x, y, player });
+  if (world.soundCues.length > MAX_SOUND_CUES) {
+    world.soundCues.splice(0, world.soundCues.length - MAX_SOUND_CUES);
+  }
+}
+
 function aiQueueUnit(world: SimWorld, atEid: number, defId: number): boolean {
   const unitDef = getUnitDef(defId);
   if (!unitDef) return false;
@@ -6969,6 +7041,7 @@ function gatheringActive(world: SimWorld, eid: number): void {
   ResourceCarry.amount[eid] += 1;
   Resource.amount[target] -= 1;
   Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
+  pushSoundCue(world, gatherCueForKind(kind), Position.x[eid], Position.y[eid], Owner.player[eid]);
 
   // If resource is now empty, retarget on next tick via WALKING_TO branch.
   if (Resource.amount[target] <= 0) {

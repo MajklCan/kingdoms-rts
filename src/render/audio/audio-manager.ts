@@ -1,0 +1,706 @@
+// AudioManager — thin wrapper over Phaser's sound system for game SFX.
+//
+// Render-layer only. Owns loading, per-key throttling, a global concurrency
+// cap, spatial panning, the music director playback, ambience beds, voice barks,
+// and persisted settings (master volume, mute, and per-channel volumes for
+// music/sfx/voices/ambience). The sim never touches this; game-scene drains sim
+// events/cues and calls play().
+//
+// Throttling is the answer to "many units act at once": the same sound key is
+// rate-limited (minIntervalMs), so 30 villagers chopping collapse into a
+// pleasant trickle rather than a wall of noise.
+
+import type { SfxKey, VoiceCategory, VoiceBarkType } from './sound-map';
+import { MENU_MUSIC, INGAME_TRACKS } from './sound-map';
+
+const STORAGE_KEY = 'kingdoms.audio';
+
+/** Hard ceiling on simultaneously-playing sounds — safety net against audio
+ *  storms. Per-key throttling does most of the work; this bounds the rest. */
+const MAX_CONCURRENT = 12;
+
+/** Music plays as a bed under SFX. Base fraction of master volume, and how far
+ *  it ducks while the local player is in combat. */
+const MUSIC_BASE = 0.55;
+const DUCK_FACTOR = 0.32;
+
+/** Ambience bed (battle din) sits quietly under both music and SFX. */
+const AMBIENCE_BASE = 0.4;
+
+/** Unit voice barks play prominently (near master), above music. */
+const VOICE_BASE = 0.95;
+
+/** Music context changes crossfade slowly so transitions never feel abrupt. */
+const MUSIC_FADE_MS = 2000;
+/** Ambience (nature ↔ battle) crossfades even more gently. */
+const AMBIENCE_FADE_MS = 2800;
+
+/** Intentional quiet stretch between in-game playlist tracks (randomized). */
+const SILENCE_GAP_MS_MIN = 6000;
+const SILENCE_GAP_MS_MAX = 18000;
+
+/** Per-channel volume multiplier (0..1) applied on top of master volume. */
+export type AudioChannel = 'music' | 'sfx' | 'voices' | 'ambience';
+
+interface AudioSettings {
+  masterVolume: number; // 0..1
+  muted: boolean;
+  /** Per-channel multipliers, each 0..1. Default 1 (full). */
+  music: number;
+  sfx: number;
+  voices: number;
+  ambience: number;
+}
+
+interface PlayOptions {
+  /** Stereo pan, -1 (left) .. 1 (right). Default 0 (centre). */
+  pan?: number;
+  /** Linear volume multiplier on top of master volume, 0..1. Default 1. */
+  volume?: number;
+  /** Minimum ms between plays of this same key. Default 0 (no throttle). */
+  minIntervalMs?: number;
+}
+
+function clamp(value: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, value));
+}
+
+function loadSettings(): AudioSettings {
+  const fallback: AudioSettings = {
+    masterVolume: 0.7,
+    muted: false,
+    music: 1,
+    sfx: 1,
+    voices: 1,
+    ambience: 1,
+  };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<AudioSettings>;
+    // Channel fields default to 1 (full) when absent — back-compat with the old
+    // {masterVolume, muted}-only persisted shape.
+    const channel = (v: unknown): number => (typeof v === 'number' ? clamp(v, 0, 1) : 1);
+    return {
+      masterVolume:
+        typeof parsed.masterVolume === 'number'
+          ? clamp(parsed.masterVolume, 0, 1)
+          : fallback.masterVolume,
+      muted: typeof parsed.muted === 'boolean' ? parsed.muted : fallback.muted,
+      music: channel(parsed.music),
+      sfx: channel(parsed.sfx),
+      voices: channel(parsed.voices),
+      ambience: channel(parsed.ambience),
+    };
+  } catch (err) {
+    // Corrupt JSON or localStorage blocked (private mode, SecurityError) — fall
+    // back to defaults, but surface why so a "my volume reset" report has a clue.
+    console.warn('[AudioManager] loadSettings failed, using defaults:', err);
+    return fallback;
+  }
+}
+
+export class AudioManager {
+  private readonly scene: Phaser.Scene;
+  private readonly lastPlayed = new Map<string, number>();
+  private settings: AudioSettings;
+  private active = 0;
+  /** The single track currently playing (menu theme or one playlist track).
+   *  Ducking / mute / volume all operate on this reference. */
+  private music?: Phaser.Sound.BaseSound;
+  private musicDucked = false;
+  private musicCurrentVol = 0;
+  /** Which music context is active. Lets context requests be idempotent so the
+   *  per-frame music director can call them every frame without restarting. */
+  private musicMode: 'none' | 'menu' | 'playlist' | 'single' | 'gapped-single' = 'none';
+  /** Asset key of the current single-track context (village loop, battle loop,
+   *  or village gapped-single). */
+  private singleKey?: string;
+  /** Playlist state — only populated while the in-game playlist is active. */
+  private playlist: string[] = [];
+  private playlistIndex = 0;
+  /** Pending delayedCall for the next playlist/gapped track (cancelled on stop). */
+  private nextTrackTimer?: Phaser.Time.TimerEvent;
+  /** Pending delayedCall that begins a track's end fade-out (cancelled on stop). */
+  private fadeOutTimer?: Phaser.Time.TimerEvent;
+  /** Listener bound to the current track's 'complete' event, for cleanup. */
+  private trackCompleteHandler?: () => void;
+  /** Independent looping ambience bed (layers over music; not ducked). */
+  private ambience?: Phaser.Sound.BaseSound;
+  private ambienceKey?: string;
+  private ambienceCurrentVol = 0;
+  /** Currently-playing unit voice bark (only one at a time — a new bark cuts
+   *  the previous, AoE-style). */
+  private voiceBark?: Phaser.Sound.BaseSound;
+
+  constructor(scene: Phaser.Scene) {
+    this.scene = scene;
+    this.settings = loadSettings();
+  }
+
+  // NOTE: mp3 is listed FIRST. Phaser selects the first URL whose extension the
+  // browser claims to support — and while browsers report Ogg support, several
+  // (Safari, some Chrome builds) fail to `decodeAudioData` our Opus-in-Ogg clips,
+  // which silenced ALL audio. mp3 (libmp3lame) decodes everywhere, so prefer it;
+  // ogg stays as a fallback for browsers without mp3.
+
+  /** Queue every SFX file on the scene loader. Call from scene preload(). */
+  static queueLoad(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
+    for (const key of keys) {
+      load.audio(`sfx-${key}`, [
+        `assets/audio/sfx/${key}.mp3`,
+        `assets/audio/sfx/${key}.ogg`,
+      ]);
+    }
+  }
+
+  /** Queue every music track on the scene loader. Call from scene preload(). */
+  static queueLoadMusic(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
+    for (const key of keys) {
+      load.audio(`music-${key}`, [
+        `assets/audio/music/${key}.mp3`,
+        `assets/audio/music/${key}.ogg`,
+      ]);
+    }
+  }
+
+  /** Queue every unit voice-bark clip on the scene loader. */
+  static queueLoadVoices(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
+    for (const key of keys) {
+      load.audio(`voice-${key}`, [
+        `assets/audio/voices/${key}.mp3`,
+        `assets/audio/voices/${key}.ogg`,
+      ]);
+    }
+  }
+
+  get masterVolume(): number {
+    return this.settings.masterVolume;
+  }
+
+  get muted(): boolean {
+    return this.settings.muted;
+  }
+
+  setMasterVolume(value: number): void {
+    this.settings = { ...this.settings, masterVolume: clamp(value, 0, 1) };
+    this.applyMusicVolume(0);
+    this.applyAmbienceVolume();
+    this.persist();
+  }
+
+  /** Current 0..1 multiplier for one channel. */
+  getChannelVolume(channel: AudioChannel): number {
+    return this.settings[channel];
+  }
+
+  /** Set a per-channel volume multiplier (0..1). Music + ambience re-apply live;
+   *  SFX + voices are computed per-play so only persist is needed. */
+  setChannelVolume(channel: AudioChannel, value: number): void {
+    this.settings = { ...this.settings, [channel]: clamp(value, 0, 1) };
+    if (channel === 'music') this.applyMusicVolume(0);
+    if (channel === 'ambience') this.applyAmbienceVolume();
+    this.persist();
+  }
+
+  setMuted(muted: boolean): void {
+    this.settings = { ...this.settings, muted };
+    if (this.music) {
+      if (muted) this.music.pause();
+      else {
+        this.music.resume();
+        this.applyMusicVolume(0);
+      }
+    }
+    if (this.ambience) {
+      if (muted) this.ambience.pause();
+      else {
+        this.ambience.resume();
+        this.applyAmbienceVolume();
+      }
+    }
+    this.persist();
+  }
+
+  toggleMuted(): boolean {
+    this.setMuted(!this.settings.muted);
+    return this.settings.muted;
+  }
+
+  // --- Background music ---
+  //
+  // Two contexts: a single looping MENU theme, and an IN-GAME playlist of tracks
+  // played sequentially (shuffled) with a randomized silence gap between each,
+  // looping endlessly. Only one "current track" plays at a time; ducking, mute,
+  // and volume all act on it. Everything no-ops gracefully when assets are
+  // missing — the cache.audio.exists() guard means zero music files === silence,
+  // no errors.
+
+  /** True if a music track's audio actually loaded. */
+  hasTrack(key: string): boolean {
+    return this.scene.cache.audio.exists(`music-${key}`);
+  }
+
+  /** Play the menu theme once (no loop). Idempotent. No-op if asset missing. */
+  playMenuMusic(): void {
+    if (this.musicMode === 'menu') return;
+    this.stopMusic(MUSIC_FADE_MS);
+    this.musicMode = 'menu';
+    const assetKey = `music-${MENU_MUSIC}`;
+    if (!this.scene.cache.audio.exists(assetKey)) return; // asset missing → silence
+    this.startTrack(assetKey, false);
+  }
+
+  /** Crossfade to a single looping track (village / battle context). Idempotent
+   *  when already playing that track. No-op (returns false) if asset missing, so
+   *  the caller can fall back. */
+  playLooping(key: string): boolean {
+    const assetKey = `music-${key}`;
+    if (this.musicMode === 'single' && this.singleKey === assetKey) return true;
+    if (!this.scene.cache.audio.exists(assetKey)) return false;
+    this.stopMusic(MUSIC_FADE_MS);
+    this.musicMode = 'single';
+    this.singleKey = assetKey;
+    this.startTrack(assetKey, true);
+    return true;
+  }
+
+  /** Begin the endless in-game playlist: shuffle the tracks whose assets exist,
+   *  play each once (non-looping) with a randomized silence gap between, then
+   *  reshuffle and repeat. Idempotent while already in playlist mode. No-op if
+   *  zero in-game tracks are present. */
+  playGamePlaylist(): void {
+    if (this.musicMode === 'playlist') return;
+    this.stopMusic(MUSIC_FADE_MS);
+    this.musicMode = 'playlist';
+    this.playlist = this.shuffledExistingTracks();
+    this.playlistIndex = 0;
+    if (this.playlist.length === 0) return; // no in-game assets → silence
+    this.playCurrentPlaylistTrack();
+  }
+
+  /** Play a single track on a gentle gapped loop: fade in, play, fade out, then a
+   *  randomized silence gap (ambience-only) before replaying. Used for the
+   *  village theme so peaceful music breathes — song, quiet, song — instead of
+   *  looping endlessly. Idempotent. Returns false (no-op) if asset missing. */
+  playGappedSingle(key: string): boolean {
+    const assetKey = `music-${key}`;
+    if (this.musicMode === 'gapped-single' && this.singleKey === assetKey) return true;
+    if (!this.scene.cache.audio.exists(assetKey)) return false;
+    this.stopMusic(MUSIC_FADE_MS);
+    this.musicMode = 'gapped-single';
+    this.singleKey = assetKey;
+    this.playGappedTrack();
+    return true;
+  }
+
+  /** Play the gapped-single track once, scheduling a replay (after a gap) on end. */
+  private playGappedTrack(): void {
+    const assetKey = this.singleKey;
+    if (!assetKey) return;
+    const track = this.startTrack(assetKey, false, true);
+    const onComplete = (): void => {
+      this.detachTrackCompleteHandler(track);
+      if (this.music === track) this.music = undefined;
+      track.destroy();
+      const gap =
+        SILENCE_GAP_MS_MIN + Math.random() * (SILENCE_GAP_MS_MAX - SILENCE_GAP_MS_MIN);
+      this.nextTrackTimer = this.scene.time.delayedCall(gap, () => {
+        this.nextTrackTimer = undefined;
+        if (this.musicMode === 'gapped-single') this.playGappedTrack();
+      });
+    };
+    this.trackCompleteHandler = onComplete;
+    track.once('complete', onComplete);
+  }
+
+  /** Stop the current track (fading out) and cancel any pending next-track timer.
+   *  Leaves the music subsystem idle — safe to switch contexts afterwards. */
+  stopMusic(fadeMs = 600): void {
+    this.cancelNextTrackTimer();
+    this.cancelFadeOutTimer();
+    this.playlist = [];
+    this.playlistIndex = 0;
+    this.musicMode = 'none';
+    this.singleKey = undefined;
+    const current = this.music;
+    if (!current) return;
+    this.detachTrackCompleteHandler(current);
+    this.music = undefined;
+    if (fadeMs <= 0 || this.musicCurrentVol <= 0) {
+      current.stop();
+      current.destroy();
+      return;
+    }
+    const snd = current as Phaser.Sound.WebAudioSound;
+    const proxy = { v: this.musicCurrentVol };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: 0,
+      duration: fadeMs,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+      },
+      onComplete: () => {
+        current.stop();
+        current.destroy();
+      },
+    });
+  }
+
+  // --- Ambience bed (independent of the music context) ---
+
+  /** Start a looping ambience bed (e.g. battle din). Idempotent. No-op if the
+   *  asset is missing. Layers over whatever music is playing; never ducked. */
+  playAmbience(key: string): void {
+    const assetKey = `music-${key}`;
+    if (this.ambienceKey === assetKey && this.ambience) return;
+    if (!this.scene.cache.audio.exists(assetKey)) {
+      // Requested bed isn't available — just fade out whatever's playing.
+      this.stopAmbience(AMBIENCE_FADE_MS);
+      return;
+    }
+    this.stopAmbience(AMBIENCE_FADE_MS); // crossfade: fade the old bed out
+    const target = this.ambienceVolume();
+    let track: Phaser.Sound.BaseSound | undefined;
+    try {
+      track = this.scene.sound.add(assetKey, { loop: true });
+      this.ambience = track;
+      this.ambienceKey = assetKey;
+      if (this.settings.muted) {
+        this.ambienceCurrentVol = target;
+        track.play({ volume: target });
+        track.pause();
+        return;
+      }
+      // Fade the new bed in.
+      this.ambienceCurrentVol = 0;
+      track.play({ volume: 0 });
+    } catch (err) {
+      // Destroy the half-started sound so it can't keep playing untracked, then
+      // reset state so a later call can retry rather than the idempotent guard
+      // blocking ambience for the rest of the session.
+      try {
+        track?.stop();
+        track?.destroy();
+      } catch {
+        /* already in a bad state — nothing more to do */
+      }
+      this.ambience = undefined;
+      this.ambienceKey = undefined;
+      this.ambienceCurrentVol = 0;
+      console.warn(`[AudioManager] failed to play ambience "${assetKey}":`, err);
+      return;
+    }
+    const snd = track as Phaser.Sound.WebAudioSound;
+    const proxy = { v: 0 };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: target,
+      duration: AMBIENCE_FADE_MS,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+        this.ambienceCurrentVol = proxy.v;
+      },
+    });
+  }
+
+  /** Fade out + stop the ambience bed. */
+  stopAmbience(fadeMs = 600): void {
+    const current = this.ambience;
+    this.ambience = undefined;
+    this.ambienceKey = undefined;
+    if (!current) return;
+    if (fadeMs <= 0 || this.ambienceCurrentVol <= 0) {
+      current.stop();
+      current.destroy();
+      return;
+    }
+    const snd = current as Phaser.Sound.WebAudioSound;
+    const proxy = { v: this.ambienceCurrentVol };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: 0,
+      duration: fadeMs,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+      },
+      onComplete: () => {
+        current.stop();
+        current.destroy();
+      },
+    });
+  }
+
+  private ambienceVolume(): number {
+    if (this.settings.muted) return 0;
+    return this.settings.masterVolume * this.settings.ambience * AMBIENCE_BASE;
+  }
+
+  private applyAmbienceVolume(): void {
+    if (!this.ambience) return;
+    const snd = this.ambience as Phaser.Sound.WebAudioSound;
+    if (typeof snd.setVolume !== 'function') return;
+    this.ambienceCurrentVol = this.ambienceVolume();
+    snd.setVolume(this.ambienceCurrentVol);
+  }
+
+  /** Tracks (asset keys) whose audio actually loaded, in shuffled order. */
+  private shuffledExistingTracks(): string[] {
+    const present = INGAME_TRACKS.map((k) => `music-${k}`).filter((assetKey) =>
+      this.scene.cache.audio.exists(assetKey)
+    );
+    // Fisher–Yates. Math.random is allowed in the render layer (not sim).
+    for (let i = present.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [present[i], present[j]] = [present[j], present[i]];
+    }
+    return present;
+  }
+
+  /** Play the track at playlistIndex (non-looping); chain the next on complete. */
+  private playCurrentPlaylistTrack(): void {
+    const assetKey = this.playlist[this.playlistIndex];
+    if (!assetKey) return;
+    const track = this.startTrack(assetKey, false, true);
+    const onComplete = (): void => {
+      this.detachTrackCompleteHandler(track);
+      if (this.music === track) this.music = undefined;
+      track.destroy();
+      this.scheduleNextPlaylistTrack();
+    };
+    this.trackCompleteHandler = onComplete;
+    track.once('complete', onComplete);
+  }
+
+  /** Advance the playlist (reshuffling after the last track) after a silence gap. */
+  private scheduleNextPlaylistTrack(): void {
+    this.playlistIndex += 1;
+    if (this.playlistIndex >= this.playlist.length) {
+      this.playlist = this.shuffledExistingTracks();
+      this.playlistIndex = 0;
+      if (this.playlist.length === 0) return;
+    }
+    const gap =
+      SILENCE_GAP_MS_MIN + Math.random() * (SILENCE_GAP_MS_MAX - SILENCE_GAP_MS_MIN);
+    this.nextTrackTimer = this.scene.time.delayedCall(gap, () => {
+      this.nextTrackTimer = undefined;
+      this.playCurrentPlaylistTrack();
+    });
+  }
+
+  /** Add + start a track at the current music volume; store it as the current
+   *  track so ducking/mute/volume keep working. When `fadeOutAtEnd` is set (for
+   *  non-looping tracks), the track's volume is faded down over the last
+   *  MUSIC_FADE_MS so the song ends gently instead of cutting off. */
+  private startTrack(
+    assetKey: string,
+    loop: boolean,
+    fadeOutAtEnd = false
+  ): Phaser.Sound.BaseSound {
+    this.cancelFadeOutTimer();
+    const track = this.scene.sound.add(assetKey, { loop });
+    this.music = track;
+    const target = this.musicVolume();
+    if (this.settings.muted) {
+      this.musicCurrentVol = target;
+      track.play({ volume: target });
+      track.pause();
+      return track;
+    }
+    // Fade in (crossfades against the previous track's fade-out).
+    this.musicCurrentVol = 0;
+    track.play({ volume: 0 });
+    const snd = track as Phaser.Sound.WebAudioSound;
+    const proxy = { v: 0 };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: target,
+      duration: MUSIC_FADE_MS,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+        this.musicCurrentVol = proxy.v;
+      },
+    });
+    if (fadeOutAtEnd && !loop) this.scheduleEndFade(track);
+    return track;
+  }
+
+  /** Schedule a gentle volume fade-out timed to land on the track's natural end,
+   *  so non-looping songs taper out before the silence gap. */
+  private scheduleEndFade(track: Phaser.Sound.BaseSound): void {
+    const durSec = (track as Phaser.Sound.WebAudioSound).duration;
+    const durMs = typeof durSec === 'number' && durSec > 0 ? durSec * 1000 : 0;
+    if (durMs <= MUSIC_FADE_MS) return; // too short to fade meaningfully
+    const at = durMs - MUSIC_FADE_MS;
+    this.fadeOutTimer = this.scene.time.delayedCall(at, () => {
+      this.fadeOutTimer = undefined;
+      if (this.music !== track || this.settings.muted) return;
+      const snd = track as Phaser.Sound.WebAudioSound;
+      const proxy = { v: this.musicCurrentVol };
+      this.scene.tweens.add({
+        targets: proxy,
+        v: 0,
+        duration: MUSIC_FADE_MS,
+        ease: 'Sine.InOut',
+        onUpdate: () => {
+          if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+          this.musicCurrentVol = proxy.v;
+        },
+      });
+    });
+  }
+
+  private cancelNextTrackTimer(): void {
+    if (this.nextTrackTimer) {
+      this.nextTrackTimer.remove(false);
+      this.nextTrackTimer = undefined;
+    }
+  }
+
+  private cancelFadeOutTimer(): void {
+    if (this.fadeOutTimer) {
+      this.fadeOutTimer.remove(false);
+      this.fadeOutTimer = undefined;
+    }
+  }
+
+  private detachTrackCompleteHandler(track: Phaser.Sound.BaseSound): void {
+    if (this.trackCompleteHandler) {
+      track.off('complete', this.trackCompleteHandler);
+      this.trackCompleteHandler = undefined;
+    }
+  }
+
+  /** Lower the music bed while the local player is in combat; restore after. */
+  setMusicDucked(ducked: boolean): void {
+    if (ducked === this.musicDucked) return;
+    this.musicDucked = ducked;
+    // Duck quickly when fighting starts, recover slowly when it ends.
+    this.applyMusicVolume(ducked ? 250 : 900);
+  }
+
+  private musicVolume(): number {
+    if (this.settings.muted) return 0;
+    return (
+      this.settings.masterVolume *
+      this.settings.music *
+      MUSIC_BASE *
+      (this.musicDucked ? DUCK_FACTOR : 1)
+    );
+  }
+
+  private applyMusicVolume(fadeMs: number): void {
+    if (!this.music) return;
+    const snd = this.music as Phaser.Sound.WebAudioSound;
+    if (typeof snd.setVolume !== 'function') return;
+    const target = this.musicVolume();
+    if (fadeMs <= 0) {
+      snd.setVolume(target);
+      this.musicCurrentVol = target;
+      return;
+    }
+    const proxy = { v: this.musicCurrentVol };
+    this.scene.tweens.add({
+      targets: proxy,
+      v: target,
+      duration: fadeMs,
+      ease: 'Sine.InOut',
+      onUpdate: () => {
+        snd.setVolume(proxy.v);
+        this.musicCurrentVol = proxy.v;
+      },
+    });
+  }
+
+  /** Play a sound effect by key. No-ops cleanly when muted, throttled, over the
+   *  concurrency cap, or when the asset failed to load. */
+  play(key: SfxKey, opts: PlayOptions = {}): void {
+    if (this.settings.muted || this.settings.masterVolume <= 0) return;
+
+    const now = this.scene.time.now;
+    const minInterval = opts.minIntervalMs ?? 0;
+    if (minInterval > 0) {
+      const last = this.lastPlayed.get(key);
+      if (last !== undefined && now - last < minInterval) return;
+    }
+
+    const assetKey = `sfx-${key}`;
+    if (!this.scene.cache.audio.exists(assetKey)) return; // asset missing / not loaded
+    if (this.active >= MAX_CONCURRENT) return;
+
+    const volume = clamp(
+      (opts.volume ?? 1) * this.settings.masterVolume * this.settings.sfx,
+      0,
+      1
+    );
+    if (volume <= 0) return;
+
+    try {
+      const sound = this.scene.sound.add(assetKey);
+      const release = (): void => {
+        this.active = Math.max(0, this.active - 1);
+        sound.destroy();
+      };
+      sound.once('complete', release);
+      sound.once('stop', release);
+      // Phaser WebAudio honours `pan` in the play config.
+      sound.play({ volume, pan: clamp(opts.pan ?? 0, -1, 1) });
+      this.active += 1;
+      this.lastPlayed.set(key, now);
+    } catch (err) {
+      // A decoded-but-invalid buffer makes Phaser throw on add/play. Don't let it
+      // crash the render frame; throttle the retry and move on.
+      this.lastPlayed.set(key, now);
+      console.warn(`[AudioManager] failed to play sfx "${key}":`, err);
+    }
+  }
+
+  /** Play a random unit voice bark for the given persona + type. Cuts any bark
+   *  already playing (only one voice at a time). Returns false if muted or no
+   *  clip exists for that persona/type (caller can fall back to a UI blip). */
+  playVoiceBark(category: VoiceCategory, type: VoiceBarkType, lineCount: number): boolean {
+    if (this.settings.muted || this.settings.masterVolume <= 0) return false;
+    const candidates: string[] = [];
+    for (let n = 0; n < lineCount; n++) {
+      const assetKey = `voice-${category}_${type}_${n}`;
+      if (this.scene.cache.audio.exists(assetKey)) candidates.push(assetKey);
+    }
+    if (candidates.length === 0) return false;
+    const assetKey = candidates[Math.floor(Math.random() * candidates.length)];
+    if (this.voiceBark) {
+      this.voiceBark.stop();
+      this.voiceBark.destroy();
+      this.voiceBark = undefined;
+    }
+    try {
+      const snd = this.scene.sound.add(assetKey);
+      snd.once('complete', () => {
+        if (this.voiceBark === snd) this.voiceBark = undefined;
+        snd.destroy();
+      });
+      snd.play({
+        volume: clamp(VOICE_BASE * this.settings.masterVolume * this.settings.voices, 0, 1),
+      });
+      this.voiceBark = snd;
+      return true;
+    } catch (err) {
+      console.warn(`[AudioManager] failed to play voice "${assetKey}":`, err);
+      return false;
+    }
+  }
+
+  private persist(): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+    } catch (err) {
+      // localStorage unavailable or full (private mode, quota) — settings stay
+      // in-memory for this session and are lost on reload. Warn so it's visible.
+      console.warn('[AudioManager] persist failed, settings not saved:', err);
+    }
+  }
+}
