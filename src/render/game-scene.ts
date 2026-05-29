@@ -86,6 +86,7 @@ import {
   type CombatEvent,
   type MatchOutcome,
   type SimWorld,
+  type SimInput,
 } from '../sim/world';
 import {
   MapFeatureKind,
@@ -111,6 +112,7 @@ import {
 import { screenToTile, tileToScreen } from './iso';
 import { setLastEvent } from '../debug/overlay';
 import { installWindowApi } from '../debug/window-api';
+import { MultiplayerSession } from '../net/session';
 import { AudioManager } from './audio/audio-manager';
 import {
   SFX_KEYS,
@@ -327,6 +329,21 @@ export class GameScene extends Phaser.Scene {
   private worldContainer!: Phaser.GameObjects.Container;
   private terrainSprite?: Phaser.GameObjects.Sprite;
   private accumulatorMs = 0;
+  /** The player this client renders, selects, and issues commands AS. Always
+   *  LOCAL_PLAYER_ID (1) in single-player; set to the assigned slot (1 host,
+   *  2 guest) when a multiplayer match begins. */
+  private perspectivePlayerId = LOCAL_PLAYER_ID;
+  /** Active multiplayer session. Null in single-player. When set + playing, the
+   *  session — not the local accumulator — drives sim tick advancement. */
+  private multiplayer: MultiplayerSession | null = null;
+  /** True once create() has finished (graphics + textures exist). */
+  private created = false;
+  /** A multiplayer match that arrived before create() finished; flushed in create(). */
+  private pendingMpMatch: {
+    session: MultiplayerSession;
+    world: SimWorld;
+    localPlayerId: number;
+  } | null = null;
   private buildMode: BuildMode = 'none';
   private armyRallyMode = false;
   /** Awaiting a building hotkey after B keypress. */
@@ -617,16 +634,34 @@ export class GameScene extends Phaser.Scene {
     this.installDebugWindowApi();
 
     setLastEvent('Economy pivot — place farms, mills, and worksites with B+M/I/L/G/C');
+
+    // Scene is fully built (graphics + textures). If a multiplayer match start
+    // arrived before create() finished (fast relay vs. slow texture bake), flush
+    // it now.
+    this.created = true;
+    if (this.pendingMpMatch) {
+      const m = this.pendingMpMatch;
+      this.pendingMpMatch = null;
+      this.beginMultiplayerMatch(m.session, m.world, m.localPlayerId);
+    }
   }
 
   update(_time: number, delta: number): void {
     if (this.scoutInspectionMode) return;
 
-    this.accumulatorMs += delta * this.gameSpeed;
-    let safety = 0;
-    while (this.accumulatorMs >= SIM.TICK_MS && safety++ < 8) {
-      step(this.world);
-      this.accumulatorMs -= SIM.TICK_MS;
+    if (this.multiplayer) {
+      // Lockstep owns tick advancement and is pumped independently (main.ts rAF)
+      // so it runs even before this scene finished baking. The scene must NOT
+      // step here (that would double-step / desync); it only renders the shared
+      // world and advances the accumulator for interpolation alpha.
+      this.accumulatorMs = (this.accumulatorMs + delta) % SIM.TICK_MS;
+    } else {
+      this.accumulatorMs += delta * this.gameSpeed;
+      let safety = 0;
+      while (this.accumulatorMs >= SIM.TICK_MS && safety++ < 8) {
+        step(this.world);
+        this.accumulatorMs -= SIM.TICK_MS;
+      }
     }
 
     const cam = this.cameras.main;
@@ -822,7 +857,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawLastSeenBuildings(): void {
-    const vis = getPlayerVisibility(this.world, LOCAL_PLAYER_ID);
+    const vis = getPlayerVisibility(this.world, this.perspectivePlayerId);
     const seen = new Set<number>();
     if (!vis) {
       this.clearLastSeenBuildingSprites(seen);
@@ -830,11 +865,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     for (const snap of vis.lastSeenBuildings.values()) {
-      if (!isTileExploredBy(this.world, LOCAL_PLAYER_ID, snap.x, snap.y)) continue;
+      if (!isTileExploredBy(this.world, this.perspectivePlayerId, snap.x, snap.y)) continue;
       if (
         isBuildingFootprintVisibleTo(
           this.world,
-          LOCAL_PLAYER_ID,
+          this.perspectivePlayerId,
           snap.defId,
           snap.x,
           snap.y
@@ -1013,8 +1048,8 @@ export class GameScene extends Phaser.Scene {
       if (event.attackerKind === UnitDefId.CANNON && event.phase === 'windup') continue;
       if (
         event.range > 1 &&
-        (isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.fromX, event.fromY) ||
-          isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.toX, event.toY))
+        (isTileVisibleTo(this.world, this.perspectivePlayerId, event.fromX, event.fromY) ||
+          isTileVisibleTo(this.world, this.perspectivePlayerId, event.toX, event.toY))
       ) {
         if (event.attackerKind === UnitDefId.GUNMAN || event.attackerKind === UnitDefId.MACHINE_GUN) {
           this.spawnAttackProjectile(event, 'bullet');
@@ -1038,9 +1073,9 @@ export class GameScene extends Phaser.Scene {
     const targetPlayer = hasComponent(this.world.ecs, Owner, event.targetEid)
       ? Owner.player[event.targetEid]
       : 0;
-    if (attackerPlayer !== LOCAL_PLAYER_ID && targetPlayer !== LOCAL_PLAYER_ID) return;
-    const x = targetPlayer === LOCAL_PLAYER_ID ? event.toX : event.fromX;
-    const y = targetPlayer === LOCAL_PLAYER_ID ? event.toY : event.fromY;
+    if (attackerPlayer !== this.perspectivePlayerId && targetPlayer !== this.perspectivePlayerId) return;
+    const x = targetPlayer === this.perspectivePlayerId ? event.toX : event.fromX;
+    const y = targetPlayer === this.perspectivePlayerId ? event.toY : event.fromY;
     this.minimapCombatAlerts.push({ x, y, tick: this.world.tick });
     const cutoff = this.world.tick - GameScene.MINIMAP_COMBAT_ALERT_TICKS;
     this.minimapCombatAlerts = this.minimapCombatAlerts.filter((alert) => alert.tick >= cutoff);
@@ -1162,7 +1197,7 @@ export class GameScene extends Phaser.Scene {
   /** Position of the local player's (living) town centre, or null if none. */
   private localTownCenterPos(): { x: number; y: number } | null {
     for (const eid of buildingQuery(this.world.ecs)) {
-      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (!hasComponent(this.world.ecs, TownCenterTag, eid)) continue;
       if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
       return { x: Position.x[eid], y: Position.y[eid] };
@@ -1174,7 +1209,7 @@ export class GameScene extends Phaser.Scene {
    *  (villagers excluded). Drives battle-music wind-down when an army is wiped. */
   private localHasLivingMilitary(): boolean {
     for (const eid of unitQuery(this.world.ecs)) {
-      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (hasComponent(this.world.ecs, VillagerTag, eid)) continue;
       if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
       return true;
@@ -1188,8 +1223,8 @@ export class GameScene extends Phaser.Scene {
     const isBuildingAttacker = hasComponent(this.world.ecs, Building, event.attackerEid);
     const cfg = combatSound(event.attackerKind, event.range, event.phase, isBuildingAttacker);
     if (!cfg) return;
-    const fromVisible = isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.fromX, event.fromY);
-    const toVisible = isTileVisibleTo(this.world, LOCAL_PLAYER_ID, event.toX, event.toY);
+    const fromVisible = isTileVisibleTo(this.world, this.perspectivePlayerId, event.fromX, event.fromY);
+    const toVisible = isTileVisibleTo(this.world, this.perspectivePlayerId, event.toX, event.toY);
     if (!fromVisible && !toVisible) return;
     // Pan/attenuate around the attacker for fire, the target for melee impact.
     const x = event.range <= 1 ? event.toX : event.fromX;
@@ -1207,11 +1242,11 @@ export class GameScene extends Phaser.Scene {
     const targetPlayer = hasComponent(this.world.ecs, Owner, event.targetEid)
       ? Owner.player[event.targetEid]
       : 0;
-    if (attackerPlayer === LOCAL_PLAYER_ID || targetPlayer === LOCAL_PLAYER_ID) {
+    if (attackerPlayer === this.perspectivePlayerId || targetPlayer === this.perspectivePlayerId) {
       this.lastLocalCombatTick = this.world.tick;
     }
     // We're being hit → warn the player, but not more than once per cooldown.
-    if (targetPlayer === LOCAL_PLAYER_ID) {
+    if (targetPlayer === this.perspectivePlayerId) {
       const elapsed = this.world.tick - this.lastAlertTick;
       if (this.lastAlertTick < 0 || elapsed >= GameScene.ALERT_COOLDOWN_TICKS) {
         this.lastAlertTick = this.world.tick;
@@ -1228,14 +1263,14 @@ export class GameScene extends Phaser.Scene {
     for (const cue of cues) {
       const cfg = cueSound(cue.kind);
       if (isNonSpatialCue(cue.kind)) {
-        if (cue.player === LOCAL_PLAYER_ID) {
+        if (cue.player === this.perspectivePlayerId) {
           this.audio.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
         }
         continue;
       }
       if (
-        cue.player !== LOCAL_PLAYER_ID &&
-        !isTileVisibleTo(this.world, LOCAL_PLAYER_ID, cue.x, cue.y)
+        cue.player !== this.perspectivePlayerId &&
+        !isTileVisibleTo(this.world, this.perspectivePlayerId, cue.x, cue.y)
       ) {
         continue;
       }
@@ -1304,7 +1339,7 @@ export class GameScene extends Phaser.Scene {
   /** First local-owned unit in the current selection (the one that "speaks"). */
   private representativeSelectedUnit(): number | null {
     for (const eid of selectedQuery(this.world.ecs)) {
-      if (Owner.player[eid] === LOCAL_PLAYER_ID && hasComponent(this.world.ecs, UnitKind, eid)) {
+      if (Owner.player[eid] === this.perspectivePlayerId && hasComponent(this.world.ecs, UnitKind, eid)) {
         return eid;
       }
     }
@@ -1505,7 +1540,7 @@ export class GameScene extends Phaser.Scene {
 
   private drawFogOfWar(): void {
     this.fogGfx.clear();
-    const vis = getPlayerVisibility(this.world, LOCAL_PLAYER_ID);
+    const vis = getPlayerVisibility(this.world, this.perspectivePlayerId);
     if (!vis) return;
     if (!this.fogExploredTexture || !this.fogUnexploredTexture || !this.terrainSprite) {
       this.createFogTextures();
@@ -1574,13 +1609,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isEntityVisibleToLocal(eid: number): boolean {
-    return isEntityVisibleTo(this.world, LOCAL_PLAYER_ID, eid);
+    return isEntityVisibleTo(this.world, this.perspectivePlayerId, eid);
   }
 
   private isResourceExploredByLocal(eid: number): boolean {
     return isTileExploredBy(
       this.world,
-      LOCAL_PLAYER_ID,
+      this.perspectivePlayerId,
       Position.x[eid],
       Position.y[eid]
     );
@@ -1603,7 +1638,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isAttackableEnemy(eid: number): boolean {
-    return isEnemyOf(this.world, eid, 1) &&
+    return isEnemyOf(this.world, eid, this.perspectivePlayerId) &&
       this.isEntityVisibleToLocal(eid) &&
       hasComponent(this.world.ecs, Health, eid) &&
       Health.hp[eid] > 0 &&
@@ -1649,13 +1684,13 @@ export class GameScene extends Phaser.Scene {
       def.harvestKind === undefined ||
       def.requiresNearbyResource === false ||
       this.hasNearbyResource(tx, ty, def.harvestKind, def.harvestRadius ?? 6);
-    const bank = this.world.resources[1];
+    const bank = this.world.resources[this.perspectivePlayerId];
     const canAffordBuild =
       bank[0] >= def.cost.food &&
       bank[1] >= def.cost.wood &&
       bank[2] >= def.cost.gold &&
       bank[3] >= def.cost.stone;
-    const unlocked = isBuildingUnlocked(this.world, 1, defId);
+    const unlocked = isBuildingUnlocked(this.world, this.perspectivePlayerId, defId);
     const valid = unlocked && !tileBlocked && canAffordBuild && hasNearbyResource;
 
     const ghostColor = valid ? def.color : 0xff4757;
@@ -1694,6 +1729,59 @@ export class GameScene extends Phaser.Scene {
   // Input
   // ──────────────────────────────────────────────────────────────────────────
 
+  /** Selected entities this client may command — owned by the perspective
+   *  player, excluding worksite workers. Mirror of the sim's commandableSelection
+   *  but resolved against the perspective player (host=1, guest=2). */
+  private selectedCommandableEids(): number[] {
+    const out: number[] = [];
+    for (const eid of selectedQuery(this.world.ecs)) {
+      if (hasComponent(this.world.ecs, WorksiteWorker, eid)) continue;
+      if (Owner.player[eid] === this.perspectivePlayerId) out.push(eid);
+    }
+    return out;
+  }
+
+  /**
+   * Route a command. In single-player it goes straight into the sim input queue.
+   * In a live multiplayer match it is translated into a self-describing,
+   * network-safe form (selection-relative → cmd* carrying playerId + eids) and
+   * handed to the lockstep session, which schedules it for a common future tick
+   * on every client. Already self-describing commands pass through unchanged.
+   */
+  private dispatch(input: SimInput): void {
+    const mp = this.multiplayer;
+    if (mp && mp.state === 'playing') {
+      const pid = this.perspectivePlayerId;
+      const eids = this.selectedCommandableEids();
+      let net: SimInput;
+      switch (input.type) {
+        case 'moveSelected':
+          net = { type: 'cmdMove', playerId: pid, eids, to: input.to };
+          break;
+        case 'attackSelected':
+          net = { type: 'cmdAttack', playerId: pid, eids, targetEid: input.targetEid };
+          break;
+        case 'gatherSelected':
+          net = { type: 'cmdGather', playerId: pid, eids, targetEid: input.targetEid };
+          break;
+        case 'stopSelected':
+          net = { type: 'cmdStop', playerId: pid, eids };
+          break;
+        case 'attackMoveSelected':
+          net = { type: 'cmdAttackMove', playerId: pid, eids, to: input.to };
+          break;
+        case 'toggleSelectedUnitStance':
+          net = { type: 'cmdToggleStance', playerId: pid, eids };
+          break;
+        default:
+          net = input; // placeBuilding/trainUnit/researchTech/etc. already carry playerId
+      }
+      mp.sendCommand(net);
+      return;
+    }
+    this.dispatch(input);
+  }
+
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     const { tx, ty, tileX, tileY } = this.pointerToTile(pointer);
     // Fractional coords for sub-tile picking (e.g. unit selection precision).
@@ -1712,9 +1800,9 @@ export class GameScene extends Phaser.Scene {
           setLastEvent(`rally outside map (${tx},${ty})`);
           return;
         }
-        this.world.inputs.push({
+        this.dispatch({
           type: 'setArmyRallyPoint',
-          playerId: 1,
+          playerId: this.perspectivePlayerId,
           x: tx,
           y: ty,
         });
@@ -1735,19 +1823,19 @@ export class GameScene extends Phaser.Scene {
       }
       if (pointer.leftButtonDown()) {
         const defId = BUILD_MODE_TO_DEF[this.buildMode];
-        if (!isBuildingUnlocked(this.world, 1, defId)) {
+        if (!isBuildingUnlocked(this.world, this.perspectivePlayerId, defId)) {
           setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.buildMode} is locked`);
           this.playUi(SFX_ERROR);
           this.buildMode = 'none';
           this.ghostGfx.clear();
           return;
         }
-        this.world.inputs.push({
+        this.dispatch({
           type: 'placeBuilding',
           defId,
           x: tx,
           y: ty,
-          playerId: 1,
+          playerId: this.perspectivePlayerId,
         });
         this.playUi(PLACE_BUILDING);
         setLastEvent(`place ${this.buildMode} → (${tx},${ty})`);
@@ -1767,9 +1855,9 @@ export class GameScene extends Phaser.Scene {
       if (
         targetEid !== null &&
         this.isEntityVisibleToLocal(targetEid) &&
-        isEnemyOf(this.world, targetEid, 1)
+        isEnemyOf(this.world, targetEid, this.perspectivePlayerId)
       ) {
-        this.world.inputs.push({ type: 'attackSelected', targetEid });
+        this.dispatch({ type: 'attackSelected', targetEid });
         this.barkAttack();
         setLastEvent(`attack eid=${targetEid}`);
         return;
@@ -1784,7 +1872,7 @@ export class GameScene extends Phaser.Scene {
             : `${this.resourceKindName(kind)} is harvested by nearby worksite buildings`
         );
       } else {
-        this.world.inputs.push({ type: 'moveSelected', to: { x: tx, y: ty } });
+        this.dispatch({ type: 'moveSelected', to: { x: tx, y: ty } });
         this.barkMove();
         setLastEvent(`move → (${tx},${ty})`);
       }
@@ -1802,7 +1890,7 @@ export class GameScene extends Phaser.Scene {
       if (aKey?.isDown) {
         this.lastLeftUnitClick = null;
         if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return;
-        this.world.inputs.push({
+        this.dispatch({
           type: 'attackMoveSelected',
           to: { x: tx, y: ty },
         });
@@ -1817,7 +1905,7 @@ export class GameScene extends Phaser.Scene {
           this.world,
           eid,
           GameScene.SAME_TYPE_SELECT_RADIUS_TILES,
-          1
+          this.perspectivePlayerId
         );
         setLastEvent(
           `double-click: selected ${n} nearby ${this.entityKindName(eid)} unit${n === 1 ? '' : 's'}`
@@ -1905,7 +1993,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isOwnedUnit(eid: number): boolean {
-    return hasComponent(this.world.ecs, UnitKind, eid) && Owner.player[eid] === 1;
+    return hasComponent(this.world.ecs, UnitKind, eid) && Owner.player[eid] === this.perspectivePlayerId;
   }
 
   private isDoubleClickOnSameUnit(eid: number): boolean {
@@ -2111,7 +2199,7 @@ export class GameScene extends Phaser.Scene {
     const def = BUILDING_TABLE[defId];
     this.awaitingBuildKind = false;
     this.armyRallyMode = false;
-    if (!isBuildingUnlocked(this.world, 1, defId)) {
+    if (!isBuildingUnlocked(this.world, this.perspectivePlayerId, defId)) {
       this.buildMode = 'none';
       setLastEvent(`${def?.name ?? mode} is locked`);
       return;
@@ -2204,7 +2292,7 @@ export class GameScene extends Phaser.Scene {
       setLastEvent('maximum age reached');
       return;
     }
-    this.researchTech(techId, 1);
+    this.researchTech(techId, this.perspectivePlayerId);
   }
 
   private nextAgeTechId(playerId: number): TechIdValue | null {
@@ -2267,10 +2355,10 @@ export class GameScene extends Phaser.Scene {
   private toggleSelectedUnitStance(): void {
     const military = selectedQuery(this.world.ecs).filter((eid) =>
       hasComponent(this.world.ecs, UnitStance, eid) &&
-      Owner.player[eid] === 1
+      Owner.player[eid] === this.perspectivePlayerId
     );
     if (military.length === 0) return;
-    this.world.inputs.push({ type: 'toggleSelectedUnitStance' });
+    this.dispatch({ type: 'toggleSelectedUnitStance' });
     const allHolding = military.every((eid) =>
       UnitStance.stance[eid] === UnitStanceId.HOLD_POSITION
     );
@@ -2280,14 +2368,14 @@ export class GameScene extends Phaser.Scene {
   private removeSelectedBuildings(): void {
     const selectedBuildings = selectedQuery(this.world.ecs).filter((eid) =>
       hasComponent(this.world.ecs, Building, eid) &&
-      Owner.player[eid] === 1 &&
+      Owner.player[eid] === this.perspectivePlayerId &&
       Building.defId[eid] !== BuildingDefId.TOWN_CENTER
     );
     if (selectedBuildings.length === 0) {
       setLastEvent('no removable building selected');
       return;
     }
-    this.world.inputs.push({ type: 'removeSelectedBuildings', playerId: 1 });
+    this.dispatch({ type: 'removeSelectedBuildings', playerId: 1 });
     setLastEvent(
       selectedBuildings.length === 1
         ? 'removing selected building'
@@ -2315,7 +2403,7 @@ export class GameScene extends Phaser.Scene {
           setLastEvent(`workers full (${slots}/${slots})`);
           return;
         }
-        this.world.inputs.push({ type: 'trainUnit', atEid: eid, defId: unitDefId });
+        this.dispatch({ type: 'trainUnit', atEid: eid, defId: unitDefId, playerId: this.perspectivePlayerId });
         setLastEvent(`queued worker at eid=${eid}`);
         return;
       }
@@ -2336,7 +2424,7 @@ export class GameScene extends Phaser.Scene {
         setLastEvent(`${unitDef.name} needs pop space (${pop?.current ?? 0}/${pop?.cap ?? 0})`);
         return;
       }
-      this.world.inputs.push({ type: 'trainUnit', atEid: eid, defId: unitDefId });
+      this.dispatch({ type: 'trainUnit', atEid: eid, defId: unitDefId, playerId: this.perspectivePlayerId });
       setLastEvent(`queued ${unitDef.name} at eid=${eid}`);
       return;
     }
@@ -2405,7 +2493,7 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  getTechTree(playerId = 1): Array<{
+  getTechTree(playerId = this.perspectivePlayerId): Array<{
     id: TechIdValue;
     name: string;
     description: string;
@@ -2446,7 +2534,7 @@ export class GameScene extends Phaser.Scene {
     }));
   }
 
-  researchTech(techId: TechIdValue, playerId = 1): void {
+  researchTech(techId: TechIdValue, playerId = this.perspectivePlayerId): void {
     const tech = techDef(techId);
     if (!tech) return;
     const status = techStatus(this.world, playerId, techId);
@@ -2470,7 +2558,7 @@ export class GameScene extends Phaser.Scene {
       setLastEvent(`${tech.name} needs ${this.formatCost(tech.cost) || 'no resources'}`);
       return;
     }
-    this.world.inputs.push({ type: 'researchTech', playerId, techId });
+    this.dispatch({ type: 'researchTech', playerId, techId });
     setLastEvent(`research ${tech.name}`);
   }
 
@@ -2550,6 +2638,39 @@ export class GameScene extends Phaser.Scene {
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
     this.world = createSimWorld(Date.now() & 0xffff, { campaignMissionId: missionId });
     this.afterWorldLoaded(this.world.campaign?.name ?? 'campaign started');
+  }
+
+  /** The player id this client controls (host=1, guest=2 in multiplayer). */
+  getPerspectivePlayerId(): number {
+    return this.perspectivePlayerId;
+  }
+
+  /** True while a networked match is live (used by the HUD pump). */
+  isMultiplayer(): boolean {
+    return this.multiplayer !== null;
+  }
+
+  /**
+   * Enter a lockstep multiplayer match. The session has already built the
+   * deterministic world (identical on every client) and tells us which player
+   * we control. From here the session — not the local accumulator — drives the
+   * sim, and local commands are routed through {@link dispatch} as network
+   * frames.
+   */
+  beginMultiplayerMatch(
+    session: MultiplayerSession,
+    world: SimWorld,
+    localPlayerId: number
+  ): void {
+    if (!this.created) {
+      // Scene still baking — defer until create() finishes.
+      this.pendingMpMatch = { session, world, localPlayerId };
+      return;
+    }
+    this.multiplayer = session;
+    this.world = world;
+    this.perspectivePlayerId = localPlayerId;
+    this.afterWorldLoaded(`Multiplayer match — you are Player ${localPlayerId}`);
   }
 
   /** Hand music off from the menu to the in-game director on match start. Also
@@ -2792,7 +2913,7 @@ export class GameScene extends Phaser.Scene {
 
   private panToLocalTownCenter(): void {
     for (const eid of buildingQuery(this.world.ecs)) {
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (!hasComponent(this.world.ecs, TownCenterTag, eid)) continue;
       this.panToTile(Position.x[eid], Position.y[eid]);
       return;
@@ -2801,7 +2922,7 @@ export class GameScene extends Phaser.Scene {
     let sumX = 0;
     let sumY = 0;
     for (const eid of unitQuery(this.world.ecs)) {
-      if (Owner.player[eid] !== LOCAL_PLAYER_ID) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (hasComponent(this.world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
       sumX += Position.x[eid];
       sumY += Position.y[eid];
@@ -3183,7 +3304,7 @@ export class GameScene extends Phaser.Scene {
       y: alert.y,
       age: Math.min(1, (this.world.tick - alert.tick) / GameScene.MINIMAP_COMBAT_ALERT_TICKS),
     }));
-    const vis = getPlayerVisibility(this.world, LOCAL_PLAYER_ID);
+    const vis = getPlayerVisibility(this.world, this.perspectivePlayerId);
     const tiles = new Uint8Array(this.world.map.tiles.length);
     for (let i = 0; i < tiles.length; i++) {
       tiles[i] = vis?.explored[i] === 1 ? this.world.map.tiles[i] : 255;
@@ -3212,11 +3333,11 @@ export class GameScene extends Phaser.Scene {
       });
     }
     for (const snap of vis?.lastSeenBuildings.values() ?? []) {
-      if (!isTileExploredBy(this.world, LOCAL_PLAYER_ID, snap.x, snap.y)) continue;
+      if (!isTileExploredBy(this.world, this.perspectivePlayerId, snap.x, snap.y)) continue;
       if (
         isBuildingFootprintVisibleTo(
           this.world,
-          LOCAL_PLAYER_ID,
+          this.perspectivePlayerId,
           snap.defId,
           snap.x,
           snap.y
@@ -3483,14 +3604,14 @@ export class GameScene extends Phaser.Scene {
         hasComponent(this.world.ecs, MachineGunTag, eid)
       ) {
         hasMilitary = true;
-        if (Owner.player[eid] === 1 && hasComponent(this.world.ecs, UnitStance, eid)) {
+        if (Owner.player[eid] === this.perspectivePlayerId && hasComponent(this.world.ecs, UnitStance, eid)) {
           selectedMilitaryEids.push(eid);
         }
       }
       if (hasComponent(this.world.ecs, TownCenterTag, eid)) hasTc = true;
       if (
         hasComponent(this.world.ecs, Building, eid) &&
-        Owner.player[eid] === 1 &&
+        Owner.player[eid] === this.perspectivePlayerId &&
         Building.defId[eid] !== BuildingDefId.TOWN_CENTER
       ) {
         removableBuildingCount++;
@@ -3498,7 +3619,7 @@ export class GameScene extends Phaser.Scene {
       if (
         hasComponent(this.world.ecs, Producer, eid) &&
         hasComponent(this.world.ecs, Building, eid) &&
-        Owner.player[eid] === 1
+        Owner.player[eid] === this.perspectivePlayerId
       ) {
         selectedProducerDefs.add(Building.defId[eid]);
         selectedProducerEids.push(eid);
@@ -3520,7 +3641,7 @@ export class GameScene extends Phaser.Scene {
       }, 0);
     const addBuildActions = () => {
       const addBuild = (defId: number, id: string, key: string, glyph: string, hudIcon: string) => {
-        if (!isBuildingUnlocked(this.world, 1, defId)) return;
+        if (!isBuildingUnlocked(this.world, this.perspectivePlayerId, defId)) return;
         const def = BUILDING_TABLE[defId];
         if (!def) return;
         const affordable = canAfford(def.cost);
@@ -3601,7 +3722,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (hasTc) {
       const nextAgeTechId = this.nextAgeTechId(1);
-      const nextAgeDef = getAgeDef((this.world.ages[1]?.current ?? AgeId.DARK) + 1);
+      const nextAgeDef = getAgeDef((this.world.ages[this.perspectivePlayerId]?.current ?? AgeId.DARK) + 1);
       const nextAgeTech = nextAgeTechId ? techDef(nextAgeTechId) : null;
       const status = nextAgeTechId ? techStatus(this.world, 1, nextAgeTechId) : 'locked';
       if (nextAgeTech && nextAgeDef) {
@@ -3700,7 +3821,7 @@ export class GameScene extends Phaser.Scene {
       case 'set-army-rally': this.startArmyRallyMode(); return;
       case 'remove-building': this.removeSelectedBuildings(); return;
       case 'toggle-unit-stance': this.toggleSelectedUnitStance(); return;
-      case 'stop': this.world.inputs.push({ type: 'stopSelected' }); return;
+      case 'stop': this.dispatch({ type: 'stopSelected' }); return;
       case 'advance-age': this.onAdvanceAgeHotkey(); return;
     }
   }
@@ -4340,12 +4461,12 @@ export class GameScene extends Phaser.Scene {
 
   private isMapFeatureExploredByLocal(feature: MapFeature): boolean {
     if (feature.kind !== MapFeatureKind.ROCK_SPIRE) {
-      return isTileExploredBy(this.world, LOCAL_PLAYER_ID, feature.x, feature.y);
+      return isTileExploredBy(this.world, this.perspectivePlayerId, feature.x, feature.y);
     }
     const size = this.mapFeatureSize(feature);
     for (let dy = 0; dy < size; dy++) {
       for (let dx = 0; dx < size; dx++) {
-        if (isTileExploredBy(this.world, LOCAL_PLAYER_ID, feature.x + dx, feature.y + dy)) {
+        if (isTileExploredBy(this.world, this.perspectivePlayerId, feature.x + dx, feature.y + dy)) {
           return true;
         }
       }

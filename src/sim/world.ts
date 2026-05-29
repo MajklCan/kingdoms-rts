@@ -2917,7 +2917,11 @@ export function revealMapForPlayer(world: SimWorld, playerId = LOCAL_PLAYER_ID):
 }
 
 function visibilitySystem(world: SimWorld): void {
-  updatePlayerVisibility(world, LOCAL_PLAYER_ID);
+  // Compute fog for every human player so each client can render its own
+  // perspective. In single-player this is just LOCAL_PLAYER_ID.
+  for (const playerId of world.humanPlayers) {
+    updatePlayerVisibility(world, playerId);
+  }
 }
 
 function isTileInMap(x: number, y: number): boolean {

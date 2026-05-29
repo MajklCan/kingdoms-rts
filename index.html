@@ -1687,10 +1687,7 @@
         <div id="mode-menu" class="mode-menu" aria-label="Choose game mode">
           <button class="mode-choice" type="button" data-title-mode="campaign">Campaign</button>
           <button class="mode-choice" type="button" data-title-mode="skirmish">Skirmish</button>
-          <button class="mode-choice" type="button" disabled>
-            Multiplayer
-            <span class="mode-soon">Soon</span>
-          </button>
+          <button class="mode-choice" type="button" data-title-mode="multiplayer">Multiplayer</button>
         </div>
         <div id="skirmish-panel" class="mode-panel hidden">
           <section class="start-section" aria-label="Skirmish setup">
@@ -1761,6 +1758,36 @@
                 <span class="mission-cta">Start</span>
                 <span class="mission-meta"><span>City defense</span><span>Train reinforcements</span><span>Assault waves</span></span>
               </button>
+            </div>
+          </section>
+        </div>
+        <div id="multiplayer-panel" class="mode-panel hidden">
+          <section class="start-section" aria-label="Multiplayer setup">
+            <div class="panel-heading">
+              <div class="section-label">Multiplayer</div>
+              <button class="mode-back" type="button" data-title-back>Back</button>
+            </div>
+            <p class="section-copy">
+              Lockstep 1v1 over a relay. Share the same room code with a friend.
+              Both players should use Chrome for best determinism.
+            </p>
+            <label class="start-options" for="mp-name">
+              <span>Your Name</span>
+              <input id="mp-name" type="text" maxlength="20" value="Player" autocomplete="off" />
+            </label>
+            <label class="start-options" for="mp-room">
+              <span>Room Code</span>
+              <input id="mp-room" type="text" maxlength="24" value="bohemia" autocomplete="off" />
+            </label>
+            <label class="start-options" for="mp-relay">
+              <span>Relay URL</span>
+              <input id="mp-relay" type="text" value="" autocomplete="off" />
+            </label>
+            <button id="mp-connect" class="skirmish-start" type="button">Connect</button>
+            <div id="mp-lobby" class="hidden">
+              <div id="mp-status" class="section-copy">Connecting…</div>
+              <ul id="mp-roster" class="mission-list" aria-label="Players in room"></ul>
+              <button id="mp-start" class="skirmish-start hidden" type="button">Start Match</button>
             </div>
           </section>
         </div>

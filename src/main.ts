@@ -15,8 +15,19 @@ import { TileType, normalizeMapId, type MapIdValue } from './sim/map-gen';
 import { LATE_GAME_TEST_SAVE_ID, parseSavedGame } from './sim/save-load';
 import { TechId, type TechIdValue } from './sim/tech-tree';
 import { normalizeAiDifficulty, type AiDifficulty } from './sim/world';
+import { WebSocketTransport } from './net/transport';
+import { MultiplayerSession, type SessionState } from './net/session';
+import type { PlayerSlot } from './net/protocol';
 
 const LOCAL_SAVE_KEY = 'kingdoms.manualSave.v1';
+
+/** Default relay URL: localhost in dev, the deployed Coolify relay otherwise.
+ *  Players can override it in the lobby. */
+function defaultRelayUrl(): string {
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'ws://localhost:8080';
+  return 'ws://e2kua8dx9vjhxlwpnbc7qtix.46.224.96.239.sslip.io';
+}
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -68,17 +79,19 @@ function parseCampaignMission(value: string | undefined): CampaignMissionIdValue
   return normalizeCampaignMissionId(value);
 }
 
-type TitleMode = 'root' | 'skirmish' | 'campaign';
+type TitleMode = 'root' | 'skirmish' | 'campaign' | 'multiplayer';
 
 function setTitleMode(mode: TitleMode): void {
   const modeMenu = document.getElementById('mode-menu');
   const skirmishPanel = document.getElementById('skirmish-panel');
   const campaignPanel = document.getElementById('campaign-panel');
+  const multiplayerPanel = document.getElementById('multiplayer-panel');
   const controls = document.getElementById('title-controls');
 
   modeMenu?.classList.toggle('hidden', mode !== 'root');
   skirmishPanel?.classList.toggle('hidden', mode !== 'skirmish');
   campaignPanel?.classList.toggle('hidden', mode !== 'campaign');
+  multiplayerPanel?.classList.toggle('hidden', mode !== 'multiplayer');
   controls?.classList.toggle('hidden', mode === 'root');
 }
 
@@ -92,7 +105,9 @@ function bindTitleScreen(): void {
   setTitleMode('root');
   for (const modeBtn of document.querySelectorAll<HTMLButtonElement>('[data-title-mode]')) {
     modeBtn.addEventListener('click', () => {
-      const mode = modeBtn.dataset.titleMode === 'campaign' ? 'campaign' : 'skirmish';
+      const raw = modeBtn.dataset.titleMode;
+      const mode: TitleMode =
+        raw === 'campaign' ? 'campaign' : raw === 'multiplayer' ? 'multiplayer' : 'skirmish';
       setTitleMode(mode);
     });
   }
@@ -117,6 +132,103 @@ function bindTitleScreen(): void {
   }
 }
 bindTitleScreen();
+
+// ── Multiplayer lobby ───────────────────────────────────────────────────────
+let mpSession: MultiplayerSession | null = null;
+
+function bindMultiplayer(): void {
+  const relayInput = document.getElementById('mp-relay') as HTMLInputElement | null;
+  const nameInput = document.getElementById('mp-name') as HTMLInputElement | null;
+  const roomInput = document.getElementById('mp-room') as HTMLInputElement | null;
+  const connectBtn = document.getElementById('mp-connect') as HTMLButtonElement | null;
+  const lobby = document.getElementById('mp-lobby');
+  const statusEl = document.getElementById('mp-status');
+  const rosterEl = document.getElementById('mp-roster');
+  const startBtn = document.getElementById('mp-start') as HTMLButtonElement | null;
+  if (!relayInput || !connectBtn || !lobby || !statusEl || !rosterEl || !startBtn) return;
+
+  if (!relayInput.value) relayInput.value = defaultRelayUrl();
+
+  const setStatus = (text: string) => {
+    statusEl.textContent = text;
+  };
+
+  const renderRoster = (players: PlayerSlot[], localId: number) => {
+    rosterEl.innerHTML = players
+      .map(
+        (p) =>
+          `<li class="mission-card" style="cursor:default">
+             <span><strong>${escapeHtml(p.name)}</strong>
+             <span class="mission-desc">Player ${p.playerId}${p.playerId === localId ? ' (you)' : ''}</span></span>
+           </li>`
+      )
+      .join('');
+  };
+
+  const onState = (state: SessionState) => {
+    if (state === 'lobby') setStatus('In lobby — waiting for players.');
+    else if (state === 'playing') setStatus('Match started.');
+    else if (state === 'peer-left') setStatus('A player left the match.');
+    else if (state === 'desync') setStatus('Desync detected — the match state diverged.');
+    else if (state === 'disconnected') setStatus('Disconnected from relay.');
+  };
+
+  connectBtn.addEventListener('click', () => {
+    const url = relayInput.value.trim();
+    const room = (roomInput?.value.trim() || 'bohemia').slice(0, 24);
+    const name = (nameInput?.value.trim() || 'Player').slice(0, 20);
+    if (!url) {
+      setStatus('Enter a relay URL.');
+      return;
+    }
+    connectBtn.disabled = true;
+    lobby.classList.remove('hidden');
+    setStatus('Connecting…');
+
+    const transport = new WebSocketTransport(url);
+    mpSession = new MultiplayerSession(transport, room, name, {
+      onStateChange: onState,
+      onRoster: (players, localId, isHost) => {
+        renderRoster(players, localId);
+        startBtn.classList.toggle('hidden', !isHost);
+        startBtn.disabled = players.length < 2;
+        startBtn.textContent = players.length < 2 ? 'Waiting for opponent…' : 'Start Match';
+      },
+      onMatchStart: (world, localPlayerId) => {
+        const scene = game.scene.getScene('GameScene') as GameScene | null;
+        if (scene) scene.beginMultiplayerMatch(mpSession!, world, localPlayerId);
+        hideTitleScreen();
+      },
+      onDesync: (tick, local, peer, peerId) => {
+        setLastEvent(`DESYNC at tick ${tick}: local ${local.toString(16)} vs P${peerId} ${peer.toString(16)}`);
+      },
+    });
+  });
+
+  startBtn.addEventListener('click', () => {
+    if (!mpSession) return;
+    // Seed agreement: host picks a seed; Date.now is fine here (host-only, not
+    // inside the sim) and is broadcast to every client.
+    mpSession.start((Date.now() & 0xffff) ^ ((Math.random() * 0x10000) | 0));
+    startBtn.disabled = true;
+    startBtn.textContent = 'Starting…';
+  });
+}
+bindMultiplayer();
+
+// Drive the lockstep session on its own rAF, independent of the GameScene. The
+// session steps the deterministic world (which exists from match start) and
+// sends/receives turns; it must run even while the scene is still baking
+// textures, otherwise early turn frames would be missed and the peers deadlock.
+// The scene only renders that shared world once it is ready.
+let mpLastTime = performance.now();
+function pumpMultiplayer(now: number): void {
+  const dt = now - mpLastTime;
+  mpLastTime = now;
+  mpSession?.update(dt);
+  requestAnimationFrame(pumpMultiplayer);
+}
+requestAnimationFrame(pumpMultiplayer);
 
 // ── Game speed toggle ─────────────────────────────────────────────────────
 function bindSpeedToggle(): void {
@@ -1132,14 +1244,15 @@ function renderMissionCard(scene: GameScene): void {
 function tickOverlay(): void {
   const scene = game.scene.getScene('GameScene') as GameScene | null;
   if (scene && scene.scene.isActive()) {
-    const pop = scene.getPop(1);
-    const age = scene.getAge(1);
+    const me = scene.getPerspectivePlayerId();
+    const pop = scene.getPop(me);
+    const age = scene.getAge(me);
     let ageLabel = age.name;
     if (age.advancing && age.nextName) {
       ageLabel = `${age.name} → ${age.nextName} ${Math.floor(age.progressFrac * 100)}%`;
     }
     updateResourceBar({
-      ...scene.getResources(1),
+      ...scene.getResources(me),
       popCurrent: pop.current,
       popCap: pop.cap,
       age: ageLabel,
