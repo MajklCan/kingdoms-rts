@@ -235,17 +235,32 @@ const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
 const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
 
 export type SimInput =
+  // ── Selection-relative commands (local single-player UX). These read the
+  //    local Selected component + LOCAL_PLAYER_ID, so they are NOT safe to send
+  //    over the wire — a peer has no idea what the sender had selected. The
+  //    network layer must translate these into their self-describing `cmd*`
+  //    equivalents (which carry an explicit playerId + eid list) before sending.
   | { type: 'moveSelected'; to: GridPos }
   | { type: 'gatherSelected'; targetEid: number }
   | { type: 'stopSelected' }
   | { type: 'toggleSelectedUnitStance' }
   | { type: 'attackSelected'; targetEid: number }
   | { type: 'attackMoveSelected'; to: GridPos }
+  // ── Self-describing commands (network-safe). Every field needed to apply the
+  //    command on any client is present: the commanding playerId and the exact
+  //    actor eids. eids are resolved on the sender; receivers validate ownership.
+  | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
+  | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
+  | { type: 'cmdStop'; playerId: number; eids: number[] }
+  | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
+  | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
+  | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos }
+  // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
   | { type: 'removeSelectedBuildings'; playerId: number }
-  | { type: 'trainUnit'; atEid: number; defId: number }
-  | { type: 'cancelProduction'; atEid: number }
+  | { type: 'trainUnit'; atEid: number; defId: number; playerId?: number }
+  | { type: 'cancelProduction'; atEid: number; playerId?: number }
   | { type: 'advanceAge'; playerId: number }
   | { type: 'researchTech'; playerId: number; techId: TechIdValue };
 
@@ -3165,6 +3180,24 @@ function applyInput(world: SimWorld, input: SimInput): void {
     case 'attackMoveSelected':
       applyAttackMoveSelected(world, input.to);
       return;
+    case 'cmdMove':
+      applyMoveCommand(world, input.playerId, input.eids, input.to);
+      return;
+    case 'cmdGather':
+      applyGatherCommand(world, input.playerId, input.eids, input.targetEid);
+      return;
+    case 'cmdStop':
+      applyStopCommand(world, input.playerId, input.eids);
+      return;
+    case 'cmdToggleStance':
+      applyToggleStanceCommand(world, input.playerId, input.eids);
+      return;
+    case 'cmdAttack':
+      applyAttackCommand(world, input.playerId, input.eids, input.targetEid);
+      return;
+    case 'cmdAttackMove':
+      applyAttackMoveCommand(world, input.playerId, input.eids, input.to);
+      return;
     case 'setArmyRallyPoint':
       applySetArmyRallyPoint(world, input.playerId, input.x, input.y);
       return;
@@ -3175,9 +3208,11 @@ function applyInput(world: SimWorld, input: SimInput): void {
       applyRemoveSelectedBuildings(world, input.playerId);
       return;
     case 'trainUnit':
+      if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
       applyTrainUnit(world, input.atEid, input.defId);
       return;
     case 'cancelProduction':
+      if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
       applyCancelProduction(world, input.atEid);
       return;
     case 'advanceAge':
@@ -3299,6 +3334,33 @@ function commandableSelection(world: SimWorld): number[] {
   return out;
 }
 
+/** Validate a network/explicit eid list: keep only live entities the
+ *  commanding player owns and that are commandable (not worksite workers, not
+ *  dead). This is the trust boundary for commands arriving over the wire — a
+ *  peer must not be able to move another player's units. Iteration order
+ *  follows the supplied list, then is unused for ordering-sensitive mutations
+ *  because callers that care re-sort (e.g. formationDestinations). */
+function ownedCommandableEids(world: SimWorld, playerId: number, eids: number[]): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const eid of eids) {
+    if (seen.has(eid)) continue;
+    seen.add(eid);
+    if (!hasComponent(world.ecs, Owner, eid)) continue;
+    if (Owner.player[eid] !== playerId) continue;
+    if (hasComponent(world.ecs, WorksiteWorker, eid)) continue;
+    if (hasComponent(world.ecs, DeadTag, eid)) continue;
+    out.push(eid);
+  }
+  return out;
+}
+
+/** Does `playerId` own building/unit `eid`? Trust boundary for commands that
+ *  target a single global eid (trainUnit, cancelProduction). */
+function ownsCommandTarget(world: SimWorld, playerId: number, eid: number): boolean {
+  return hasComponent(world.ecs, Owner, eid) && Owner.player[eid] === playerId;
+}
+
 /** Cancel the combat side of a unit's current orders. Used whenever a
  *  non-attack command is issued so units don't keep chasing whatever they
  *  were last fighting. */
@@ -3357,10 +3419,19 @@ function applyFormationSpeedCap(world: SimWorld, eids: number[]): void {
 }
 
 function applyAttackSelected(world: SimWorld, targetEid: number): void {
+  applyAttackCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
+}
+
+function applyAttackCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  targetEid: number
+): void {
   if (!hasComponent(world.ecs, Health, targetEid)) return;
   if (Health.hp[targetEid] <= 0) return;
-  if (!isEntityVisibleTo(world, LOCAL_PLAYER_ID, targetEid)) return;
-  for (const eid of commandableSelection(world)) {
+  if (!isEntityVisibleTo(world, playerId, targetEid)) return;
+  for (const eid of ownedCommandableEids(world, playerId, eids)) {
     if (!hasComponent(world.ecs, Combat, eid)) continue;
     if (!hasComponent(world.ecs, AttackTarget, eid)) continue;
     if (Owner.player[eid] === Owner.player[targetEid]) continue; // no friendly fire
@@ -3388,7 +3459,18 @@ function applyAttackSelected(world: SimWorld, targetEid: number): void {
 }
 
 function applyAttackMoveSelected(world: SimWorld, to: GridPos): void {
-  const units = commandableMovableSelection(world);
+  applyAttackMoveCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
+}
+
+function applyAttackMoveCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  to: GridPos
+): void {
+  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
+    isMovableEntity(world, eid)
+  );
   const destinations = formationDestinations(world, units, to);
   const ordered: number[] = [];
   for (const { eid, dest } of destinations) {
@@ -3412,7 +3494,18 @@ function applyAttackMoveSelected(world: SimWorld, to: GridPos): void {
 }
 
 function applyMoveSelected(world: SimWorld, to: GridPos): void {
-  const units = commandableMovableSelection(world);
+  applyMoveCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
+}
+
+function applyMoveCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  to: GridPos
+): void {
+  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
+    isMovableEntity(world, eid)
+  );
   const ordered: number[] = [];
   for (const { eid, dest } of formationDestinations(world, units, to)) {
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
@@ -3435,12 +3528,6 @@ function applySetArmyRallyPoint(
   const spot = findSpawnSpot(world, x, y, 4);
   if (!spot) return;
   world.armyRallyPoints[playerId] = spot;
-}
-
-function commandableMovableSelection(world: SimWorld): number[] {
-  return commandableSelection(world).filter(
-    (eid) => isMovableEntity(world, eid)
-  );
 }
 
 function isMovableEntity(world: SimWorld, eid: number): boolean {
@@ -3548,11 +3635,20 @@ function findFormationDestination(
 }
 
 function applyGatherSelected(world: SimWorld, targetEid: number): void {
+  applyGatherCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
+}
+
+function applyGatherCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  targetEid: number
+): void {
   if (!hasComponent(world.ecs, Resource, targetEid)) return;
   if (Resource.amount[targetEid] <= 0) return;
 
   const kind = Resource.kind[targetEid] as ResourceKind;
-  for (const eid of commandableSelection(world)) {
+  for (const eid of ownedCommandableEids(world, playerId, eids)) {
     if (!hasComponent(world.ecs, Gatherer, eid)) continue;
     clearCombatOrders(world, eid);
     if (
@@ -3571,7 +3667,11 @@ function applyGatherSelected(world: SimWorld, targetEid: number): void {
 }
 
 function applyStopSelected(world: SimWorld): void {
-  for (const eid of commandableSelection(world)) {
+  applyStopCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
+}
+
+function applyStopCommand(world: SimWorld, playerId: number, eids: number[]): void {
+  for (const eid of ownedCommandableEids(world, playerId, eids)) {
     world.paths.delete(eid);
     clearFormationSpeedCap(world, eid);
     clearCombatOrders(world, eid);
@@ -3581,7 +3681,11 @@ function applyStopSelected(world: SimWorld): void {
 }
 
 function applyToggleSelectedUnitStance(world: SimWorld): void {
-  const units = commandableSelection(world).filter((eid) =>
+  applyToggleStanceCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
+}
+
+function applyToggleStanceCommand(world: SimWorld, playerId: number, eids: number[]): void {
+  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
     hasComponent(world.ecs, UnitStance, eid)
   );
   if (units.length === 0) return;

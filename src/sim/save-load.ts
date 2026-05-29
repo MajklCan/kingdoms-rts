@@ -136,6 +136,11 @@ export interface SavedGameV1 {
   label: string;
   savedAt: string;
   tick: number;
+  /** Mulberry32 RNG state at save time. Required so a loaded/joined world
+   *  reproduces the SAME future RNG draws (forest regrowth, AI tie-breaks,
+   *  map gen). Lockstep join-snapshots and replays diverge without it.
+   *  Optional for back-compat with v1 saves written before this field existed. */
+  rngState?: number;
   paused: boolean;
   aiDifficulty?: AiDifficulty;
   map: SavedMapV1;
@@ -311,6 +316,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     label,
     savedAt: new Date().toISOString(),
     tick: world.tick,
+    rngState: world.rng.getState(),
     paused: world.paused,
     aiDifficulty: world.aiDifficulty,
     map: {
@@ -381,6 +387,9 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   }
 
   world.tick = snapshot.tick;
+  if (snapshot.rngState !== undefined) {
+    world.rng.setState(snapshot.rngState);
+  }
   world.inputs.length = 0;
   world.combatEvents.length = 0;
   world.cannonWindups.clear();
