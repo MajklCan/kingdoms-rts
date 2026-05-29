@@ -613,6 +613,10 @@ export interface SimWorld {
   cannonWindups: Map<number, CannonWindup>;
   pendingProjectileImpacts: PendingProjectileImpact[];
   pendingCannonImpacts: PendingCannonImpact[];
+  /** Players controlled by a human. Always includes LOCAL_PLAYER_ID. In a
+   *  multiplayer match the remote player(s) are added here so the AI controller
+   *  is suppressed for them — they're driven by relayed commands instead. */
+  humanPlayers: Set<number>;
   /** Per-player AI controller state. Null for human/gaia players. */
   aiPlayers: Array<AiPlayerState | null>;
   /** Controls AI build cadence, economy scale, and attack wave discipline. */
@@ -778,6 +782,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     cannonWindups: new Map(),
     pendingProjectileImpacts: [],
     pendingCannonImpacts: [],
+    humanPlayers: new Set([LOCAL_PLAYER_ID]),
     aiPlayers: createAiPlayers(aiDifficulty),
     aiDifficulty,
     aiEvents: [],
@@ -5473,6 +5478,9 @@ function completeCampaignObjective(campaign: CampaignState, id: string): void {
 // ────────────────────────────────────────────────────────────────────────────
 
 function aiSystem(world: SimWorld): void {
+  // In multiplayer the second player is human; their commands arrive over the
+  // wire, so the AI controller must stay silent for them.
+  if (world.humanPlayers.has(AI_PLAYER_ID)) return;
   const settings = aiSettings(world);
   if (world.tick % settings.thinkIntervalTicks !== 0) return;
   // Player 2 is the only AI for now.

@@ -1,0 +1,14 @@
+{
+  "name": "kingdoms-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lockstep input relay for Kingdoms RTS multiplayer",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

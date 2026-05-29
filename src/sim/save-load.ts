@@ -398,6 +398,7 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.aiEvents.length = 0;
   world.soundCues.length = 0;
   world.paused = snapshot.paused;
+  world.humanPlayers = new Set([LOCAL_PLAYER_ID]);
   world.aiDifficulty = normalizeAiDifficulty(snapshot.aiDifficulty);
   world.outcome = { ...snapshot.outcome };
   world.campaign = null;
