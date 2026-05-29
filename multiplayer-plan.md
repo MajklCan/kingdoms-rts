@@ -1,6 +1,6 @@
 # Kingdoms — Multiplayer Plan & Readiness Audit
 
-> **Status:** Audit (2026-05-28) — ground-truthed against the shipped code, not just `docs/ARCHITECTURE.md`.
+> **Status:** Audit (2026-05-28, line refs re-verified 2026-05-29) — ground-truthed against the shipped code, not just `docs/ARCHITECTURE.md`. All blockers still open; nothing multiplayer landed. Line numbers shifted after the audio merge grew `world.ts` 7,594→8,147.
 > **Model:** Lockstep (clients run their own sim; server relays only input/commands).
 > **Bottom line:** The hard-to-retrofit foundations (pure reducer, serializable command queue, fixed-timestep driver, seeded RNG, sim/render split) are already in place. The blocker is **cross-machine determinism**, which the prototype traded away (floats + `Math.hypot`/`sin`/`cos` instead of the planned Q16.16 integer math — see `ARCHITECTURE.md:643`). This is a "convert the math + add a thin netcode layer" project, not an engine rewrite.
 
@@ -21,10 +21,10 @@ Every client runs the **full simulation locally**; only **player commands** cros
 
 | Capability | Status | Evidence |
 |---|---|---|
-| Pure reducer `step(world)` — "same world + same inputs → same next state" | ✅ | `world.ts:2708-2713` |
-| **Serializable command queue** — scene pushes discriminated-union commands; `step()` drains them; scene never mutates world directly | ✅ | `world.inputs: SimInput[]` (`world.ts:527`); drain loop `world.ts:2727-2731`; pushes at `game-scene.ts:1336-2082` |
-| Fixed-timestep accumulator driver, decoupled from render | ✅ | `game-scene.ts:551-559`; 20 Hz (`config.ts: TICK_HZ:20, TICK_MS:50`) |
-| Render interpolation (alpha lerp) separate from sim | ✅ | `game-scene.ts:844-846`; `PrevPosition` component |
+| Pure reducer `step(world)` — "same world + same inputs → same next state" | ✅ | `world.ts:3071-3073` |
+| **Serializable command queue** — scene pushes discriminated-union commands; `step()` drains them; scene never mutates world directly | ✅ | `world.inputs: SimInput[]` (`world.ts:558`); drain loop `world.ts:3088-3091`; pushes at `game-scene.ts:1715-3703` |
+| Fixed-timestep accumulator driver, decoupled from render | ✅ | `game-scene.ts:625-629`; 20 Hz (`config.ts: TICK_HZ:20, TICK_MS:50`) |
+| Render interpolation (alpha lerp) separate from sim | ✅ | `game-scene.ts:919-924`; `PrevPosition` component |
 | Seeded deterministic RNG (Mulberry32, integer ops, get/setState) | ✅ | `rng.ts` |
 | No `Math.random` / `Date.now` / `performance.now` in sim | ✅ | grep: 0 hits in `src/sim` (excl. tests) |
 | sim/render separation (zero Phaser imports in `/sim`) | ✅ | confirmed |
@@ -38,11 +38,11 @@ The command-queue + pure-reducer + fixed-timestep trio is ~70% of a lockstep ske
 
 ### 1. Cross-machine determinism — the big one
 - Positions/velocities are `Types.f32` floats, not the planned Q16.16 fixed-point (`components.ts:10-29`).
-- Spatial math leans on **`Math.hypot` (60+ calls)**, plus `Math.sin`/`cos` (`world.ts:6918,7097`), `Math.pow` (`world.ts:4573`), and `hypot`/`sin`/`cos` throughout `map-gen.ts`.
+- Spatial math leans on **`Math.hypot` (58 calls)**, plus `Math.sin`/`cos` (`world.ts:7471-7472,7650-7651`), `Math.pow` (`world.ts:4938`), and `hypot`/`sin`/`cos` throughout `map-gen.ts`.
 - **Precise problem:** IEEE-754 `+ - * /` and even `Math.sqrt` *are* correctly-rounded and identical across V8/SpiderMonkey/JSC. The offenders are the **transcendental/compound functions** — `hypot`, `sin`, `cos`, `pow`, `atan2` — which are **not** bit-identical across engines or platform libms. Two players on Chrome vs Firefox will desync. Determinism *within one engine* holds (so single-machine replays would work).
 
 ### 2. Commands are selection-relative, not self-describing
-Half the `SimInput` union (`world.ts:233-246`) — `moveSelected`, `attackSelected`, `gatherSelected`, `stopSelected`, `attackMoveSelected` — carries no `playerId` and no actor IDs; it acts on `commandableSelection(world)` (local selection + `LOCAL_PLAYER_ID`). Selection lives on the client, so over the wire `moveSelected {to}` is meaningless to a peer. Each command must become `{playerId, eids:[…], …}`. (~7 command types; 74 selection/`LOCAL_PLAYER_ID` couplings in `world.ts` to unwind.)
+Half the `SimInput` union (`world.ts:237-250`) — `moveSelected`, `attackSelected`, `gatherSelected`, `stopSelected`, `attackMoveSelected` — carries no `playerId` and no actor IDs; it acts on `commandableSelection(world)` (local selection + `LOCAL_PLAYER_ID`). Selection lives on the client, so over the wire `moveSelected {to}` is meaningless to a peer. Each command must become `{playerId, eids:[…], …}`. (~7 command types; 79 selection/`LOCAL_PLAYER_ID` couplings in `world.ts` to unwind.)
 
 ### 3. RNG state isn't in the snapshot
 `save-load.ts` serializes tick/entities/resources but **not** `rng.getState()`. Replays and join-snapshots will diverge without it. Small fix, real correctness hole.
@@ -77,17 +77,17 @@ Build the checksum + **cross-engine** test first (cheap), then:
 
 ## Hosting options
 
-The game bundle stays where it is (static host / publish-site). The only new infra lockstep needs is a low-bandwidth **input relay + a bit of session coordination**.
+The game bundle stays where it is (static host / publish-site). The only new infra lockstep needs is a low-bandwidth **input relay + a bit of session coordination**. We self-host on **Coolify** — a relay is a long-lived container, exactly what Coolify manages.
 
 | Option | What it is | Fit / pros | Cons |
 |---|---|---|---|
-| **A. WebSocket relay on pfc-1** (fastest start) | Tiny Node/Python `ws` process behind Apache at `wss://reporting.palefire.com/kingdoms-mp/`, proxied like the MCP SSE endpoint | Infra we own; full control; ~zero marginal cost; known proxy pattern | Long-lived process to monitor; single region; needs TLS proxy + supervision (a `systemd`/`pm2` service, not a wrapper cron) |
-| **B. Cloudflare Workers + Durable Objects** (best long-term; GDD's pick) | One Durable Object = one authoritative match room holding the tick/turn buffer; WebSocket hibernation API | Serverless, global edge latency, scales to zero, ~free at hobby scale, no box to babysit | New platform/account; vendor-specific code; DO billing if it grows |
-| **C. WebRTC DataChannel P2P** (best for 1v1) | Clients connect directly; only a tiny signaling endpoint hosted (pfc-1 or a Worker) | Lowest latency; near-zero hosting cost | NAT traversal needs STUN, sometimes TURN (costs money/server); mesh awkward past 2 players |
-| **D. Supabase Realtime** (least new infra) | Relay input packets over a Realtime broadcast channel — we already run Supabase | Almost no new infra; reuses project + auth | Built for presence/broadcast, not low-latency turns — extra latency + ordering caveats; needs a spike to prove it's good enough at 20 Hz |
-| **E. Managed game host** (Colyseus; or WS on Fly.io/Render) | Purpose-built room server, multi-region | Colyseus is RTS-shaped; multi-region | Another managed service + bill |
+| **A. Self-hosted WS relay on Coolify** (recommended) | ~100-line Node `ws` server + Dockerfile, deployed as a Coolify app | Self-hosted, zero vendor lock, ~zero marginal cost; Coolify handles TLS (auto Let's Encrypt), domain, restart-on-crash, logs, GitHub redeploy — no manual `systemd`/`pm2`; **collapses old "private host" + "global host" steps into one box we own**; same container loopback-dev → prod, just swap URL | Single region (one box) → not ideal for global low-latency; WebSocket needs enabling in Coolify (Traefik labels; sticky sessions if multi-instance) |
+| **B. Colyseus on Coolify** | Purpose-built RTS room server, self-hosted as a Coolify container | Rooms / matchmaking / presence out-of-box; RTS-shaped | Overkill for a dumb lockstep relay (relay = "broadcast input to room"); more framework than needed |
+| **C. WebRTC DataChannel P2P** (best for 1v1) | Clients connect directly; only a tiny signaling endpoint on Coolify | Lowest latency; near-zero hosting cost; STUN free (Google public) | TURN fallback for bad NAT needs a `coturn` container (also Coolify-able, but more setup); mesh awkward past 2 players |
+| **D. Cloudflare Workers + Durable Objects** (global, not self-hosted) | One Durable Object = one match room; WebSocket hibernation API | Serverless, global edge latency, scales to zero, ~free at hobby scale | Vendor-specific code + account; only worth it if global low-latency becomes a hard requirement |
+| **E. Supabase Realtime** | Relay input over a Realtime broadcast channel | Almost no new infra if Supabase already running | Built for presence/broadcast, not low-latency turns — extra latency + ordering caveats at 20 Hz |
 
-**Recommendation:** prototype the `NetworkDriver` against an **in-process loopback relay first** (two browser tabs, no hosting) — ~80% of the netcode can be built/tested with zero infra. For real peers: start with **A** (we control it, known proxy pattern, no extra cost) for private playtests; graduate to **B** for global low-latency + zero-ops. If 1v1-first and latency-obsessed, **C**. **D** is worth a half-day spike since it's the least new infra we own.
+**Recommendation:** prototype the `NetworkDriver` against an **in-process loopback relay first** (two browser tabs, no hosting) — ~80% of the netcode can be built/tested with zero infra. For real peers: **A — self-hosted WS relay on Coolify.** Owning Coolify removes the need for both the old manual pfc-1 setup and Cloudflare DO — Coolify does the ops (TLS/restart/deploy) that those steps did by hand. Path: `loopback (0 infra, dev) → WS relay container on Coolify (prod)`. Single region (own box) is fine for private/community play; only reach for **D** if global low-latency becomes a real requirement, or **C** if 1v1-first and latency-obsessed.
 
 ---
 
@@ -97,7 +97,7 @@ The game bundle stays where it is (static host / publish-site). The only new inf
 2. Kill cross-machine non-determinism (Path A, fall back to B) + ship map in snapshot. **← dominates the schedule**
 3. Make commands self-describing (`+playerId, +eids`) and put RNG state in the snapshot. *(Days–1 wk.)*
 4. `NetworkDriver` against a loopback relay: input-delay buffer (`tick+3`), stall handling, join-snapshot + catch-up. *(1–2 wks.)*
-5. Stand up the relay (pick hosting above) + minimal lobby. *(Days.)*
+5. Stand up the relay (self-hosted WS container on Coolify — see hosting) + minimal lobby. *(Days.)*
 6. Playtest 1v1 → N-player; watch the checksum stream for desyncs.
 
-**Honest effort read:** steps 1, 3, 5 are days each; step 4 is a week or two; **step 2 is the multi-week wildcard** — auditing a 7,594-line spatial sim for bit-determinism is invasive and bug-prone, and is the reason it was deferred. Everything else is comparatively mechanical because the command-queue and pure-reducer foundations are already correct.
+**Honest effort read:** steps 1, 3, 5 are days each; step 4 is a week or two; **step 2 is the multi-week wildcard** — auditing an 8,147-line spatial sim for bit-determinism is invasive and bug-prone, and is the reason it was deferred. Everything else is comparatively mechanical because the command-queue and pure-reducer foundations are already correct.
