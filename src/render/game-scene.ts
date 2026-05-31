@@ -1845,6 +1845,21 @@ export class GameScene extends Phaser.Scene {
         case 'toggleSelectedUnitStance':
           net = { type: 'cmdToggleStance', playerId: pid, eids };
           break;
+        case 'setSelectedUnitStance':
+          net = { type: 'cmdSetStance', playerId: pid, eids, stance: input.stance };
+          break;
+        case 'setFormationMode':
+          net = { type: 'cmdSetFormationMode', playerId: pid, eids, mode: input.mode };
+          break;
+        case 'adjustFormationMode':
+          net = { type: 'cmdAdjustFormationMode', playerId: pid, eids, delta: input.delta };
+          break;
+        case 'rotateSelectedFormation':
+          net = { type: 'cmdRotateFormation', playerId: pid, eids, delta: input.delta };
+          break;
+        case 'reformSelectedFormation':
+          net = { type: 'cmdReformFormation', playerId: pid, eids };
+          break;
         default:
           net = input; // placeBuilding/trainUnit/researchTech/etc. already carry playerId
       }
@@ -2539,7 +2554,7 @@ export class GameScene extends Phaser.Scene {
   private setSelectedUnitStance(stance: UnitStanceValue): void {
     const military = this.selectedPlayerStanceUnits();
     if (military.length === 0) return;
-    this.world.inputs.push({ type: 'setSelectedUnitStance', stance });
+    this.dispatch({ type: 'setSelectedUnitStance', stance });
     setLastEvent(
       stance === UnitStanceId.HOLD_POSITION
         ? 'units holding position'
@@ -2551,17 +2566,27 @@ export class GameScene extends Phaser.Scene {
     const military = this.selectedPlayerStanceUnits();
     if (military.length <= 1) return;
     const nextMode = this.clampFormationMode(mode);
-    this.world.inputs.push({ type: 'setFormationMode', mode: nextMode });
+    this.dispatch({ type: 'setFormationMode', mode: nextMode });
     setLastEvent(`formation: ${this.formationModeLabel(nextMode)}`);
   }
 
   private rotateFormation(delta: number): void {
     const military = this.selectedPlayerStanceUnits();
     if (military.length <= 1) return;
-    if (this.clampFormationMode(this.world.formationMode) === 0) return;
-    const nextFacing = this.normalizeFormationFacing(this.world.formationFacing + delta);
-    this.world.inputs.push({ type: 'rotateSelectedFormation', delta });
+    if (this.clampFormationMode(this.perspectiveFormationMode()) === 0) return;
+    const nextFacing = this.normalizeFormationFacing(this.perspectiveFormationFacing() + delta);
+    this.dispatch({ type: 'rotateSelectedFormation', delta });
     setLastEvent(`formation facing: ${this.formationFacingLabel(nextFacing)}`);
+  }
+
+  /** This client's own formation shape (host=1, guest=2 perspective). */
+  private perspectiveFormationMode(): number {
+    return this.world.formationModes[this.perspectivePlayerId] ?? 0;
+  }
+
+  /** This client's own formation facing. */
+  private perspectiveFormationFacing(): number {
+    return this.world.formationFacings[this.perspectivePlayerId] ?? 0;
   }
 
   private clampFormationMode(mode: number): number {
@@ -2573,7 +2598,7 @@ export class GameScene extends Phaser.Scene {
     return ((Math.trunc(facing) % 8) + 8) % 8;
   }
 
-  private formationModeLabel(mode = this.world.formationMode): string {
+  private formationModeLabel(mode = this.perspectiveFormationMode()): string {
     switch (this.clampFormationMode(mode)) {
       case 1: return 'line';
       case 2: return 'compact';
@@ -2581,7 +2606,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private formationFacingLabel(facing = this.world.formationFacing): string {
+  private formationFacingLabel(facing = this.perspectiveFormationFacing()): string {
     const labels = ['S', 'SW', 'W', 'NW', 'N', 'NE', 'E', 'SE'];
     return labels[this.normalizeFormationFacing(facing)];
   }
@@ -4060,7 +4085,7 @@ export class GameScene extends Phaser.Scene {
         holdCount === selectedMilitaryEids.length;
       const allAutoDefending = selectedMilitaryEids.length > 0 && holdCount === 0;
       const stanceMeta = allHolding || allAutoDefending ? 'Active' : 'Mixed';
-      const formationMode = this.clampFormationMode(this.world.formationMode);
+      const formationMode = this.clampFormationMode(this.perspectiveFormationMode());
       const facingLabel = `Face ${this.formationFacingLabel()}`;
       actions.push({
         id: 'stance-hold-position',

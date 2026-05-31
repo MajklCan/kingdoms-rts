@@ -312,6 +312,11 @@ export type SimInput =
   | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos }
   | { type: 'cmdRemoveBuildings'; playerId: number; eids: number[] }
+  | { type: 'cmdSetStance'; playerId: number; eids: number[]; stance: UnitStanceValue }
+  | { type: 'cmdSetFormationMode'; playerId: number; eids: number[]; mode: number }
+  | { type: 'cmdAdjustFormationMode'; playerId: number; eids: number[]; delta: number }
+  | { type: 'cmdRotateFormation'; playerId: number; eids: number[]; delta: number }
+  | { type: 'cmdReformFormation'; playerId: number; eids: number[] }
   // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
@@ -639,10 +644,17 @@ export interface SimWorld {
   movementStuck: Map<number, MovementStuckState>;
   /** Temporary speed caps for selected groups moving as a formation. */
   formationSpeedCaps: Map<number, number>;
-  /** Local-player command formation shape: 0 = free, 1 = line, 2 = compact. */
-  formationMode: number;
-  /** Local-player command formation facing. Eight 45-degree steps, 0 faces +Y. */
-  formationFacing: number;
+  /**
+   * Per-player command formation shape: 0 = free, 1 = line, 2 = compact.
+   * Indexed by playerId. Each player's choice is independent so it stays correct
+   * in multiplayer (a peer changing formation must not reshape your army).
+   */
+  formationModes: number[];
+  /**
+   * Per-player command formation facing. Eight 45-degree steps, 0 faces +Y.
+   * Indexed by playerId.
+   */
+  formationFacings: number[];
   pathfinder: Pathfinder;
   /** Static map grid (0 walkable, 1+ blocked). */
   grid: number[][];
@@ -832,8 +844,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     paths: new Map(),
     movementStuck: new Map(),
     formationSpeedCaps: new Map(),
-    formationMode: FORMATION_MODE_DEFAULT,
-    formationFacing: FORMATION_FACING_DEFAULT,
+    formationModes: new Array(MAX_PLAYERS).fill(FORMATION_MODE_DEFAULT),
+    formationFacings: new Array(MAX_PLAYERS).fill(FORMATION_FACING_DEFAULT),
     pathfinder,
     grid,
     resources,
@@ -3875,6 +3887,21 @@ function applyInput(world: SimWorld, input: SimInput): void {
     case 'cmdRemoveBuildings':
       applyRemoveBuildingsCommand(world, input.playerId, input.eids);
       return;
+    case 'cmdSetStance':
+      applySetStanceCommand(world, input.playerId, input.eids, input.stance);
+      return;
+    case 'cmdSetFormationMode':
+      applySetFormationModeCommand(world, input.playerId, input.eids, input.mode);
+      return;
+    case 'cmdAdjustFormationMode':
+      applyAdjustFormationModeCommand(world, input.playerId, input.eids, input.delta);
+      return;
+    case 'cmdRotateFormation':
+      applyRotateFormationCommand(world, input.playerId, input.eids, input.delta);
+      return;
+    case 'cmdReformFormation':
+      applyReformFormationCommand(world, input.playerId, input.eids);
+      return;
     case 'trainUnit':
       if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
       applyTrainUnit(world, input.atEid, input.defId, input.count);
@@ -4139,13 +4166,14 @@ function applyAttackMoveCommand(
   const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
     isMovableEntity(world, eid)
   );
-  const destinations = formationModeUsesSlots(world.formationMode)
-    ? formationDestinations(world, units, to, world.formationMode)
+  const mode = playerFormationMode(world, playerId);
+  const destinations = formationModeUsesSlots(mode)
+    ? formationDestinations(world, units, to, mode)
     : units.map((eid) => ({ eid, dest: to }));
   const ordered: number[] = [];
   for (const { eid, dest } of destinations) {
     if (!hasComponent(world.ecs, Combat, eid)) continue;
-    if (!formationModeUsesSlots(world.formationMode)) clearFormationSpeedCap(world, eid);
+    if (!formationModeUsesSlots(mode)) clearFormationSpeedCap(world, eid);
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
     AttackTarget.targetEid[eid] = -1;
     AttackTarget.retainGoal[eid] = 0;
@@ -4161,7 +4189,7 @@ function applyAttackMoveCommand(
     clearWorkOrders(world, eid);
     ordered.push(eid);
   }
-  if (formationModeUsesSlots(world.formationMode)) {
+  if (formationModeUsesSlots(mode)) {
     applyFormationSpeedCap(world, ordered);
   }
 }
@@ -4179,12 +4207,13 @@ function applyMoveCommand(
   const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
     isMovableEntity(world, eid)
   );
-  const destinations = formationModeUsesSlots(world.formationMode)
-    ? formationDestinations(world, units, to, world.formationMode)
+  const mode = playerFormationMode(world, playerId);
+  const destinations = formationModeUsesSlots(mode)
+    ? formationDestinations(world, units, to, mode)
     : units.map((eid) => ({ eid, dest: to }));
   const ordered: number[] = [];
   for (const { eid, dest } of destinations) {
-    if (!formationModeUsesSlots(world.formationMode)) clearFormationSpeedCap(world, eid);
+    if (!formationModeUsesSlots(mode)) clearFormationSpeedCap(world, eid);
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
     // Move overrides any combat, gather, or build state.
     clearCombatOrders(world, eid);
@@ -4192,23 +4221,36 @@ function applyMoveCommand(
     setUnitHoldAnchor(world, eid, dest.x, dest.y);
     ordered.push(eid);
   }
-  if (formationModeUsesSlots(world.formationMode)) {
+  if (formationModeUsesSlots(mode)) {
     applyFormationSpeedCap(world, ordered);
   }
 }
 
+/** SP convenience: reshape the local player's current selection. */
 function applyReformSelectedFormation(world: SimWorld): void {
-  const units = selectedFormationUnits(world);
+  applyReformFormationCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
+}
+
+/**
+ * Re-pack a player's selected military into their current formation shape,
+ * centered on the group. Network-safe: operates only on the supplied eids that
+ * the player actually owns, and reads that player's own formation mode/facing.
+ */
+function applyReformFormationCommand(world: SimWorld, playerId: number, eids: number[]): void {
+  const units = ownedCommandableEids(world, playerId, eids).filter(
+    (eid) => hasComponent(world.ecs, UnitStance, eid) && isMovableEntity(world, eid)
+  );
   if (units.length <= 1) return;
-  if (!formationModeUsesSlots(world.formationMode)) {
+  const mode = playerFormationMode(world, playerId);
+  if (!formationModeUsesSlots(mode)) {
     for (const eid of units) clearFormationSpeedCap(world, eid);
     return;
   }
 
   const center = formationCenter(units);
-  const facing = formationFacingVector(world.formationFacing);
+  const facing = formationFacingVector(playerFormationFacing(world, playerId));
   const ordered: number[] = [];
-  for (const { eid, dest } of formationDestinations(world, units, center, world.formationMode, facing)) {
+  for (const { eid, dest } of formationDestinations(world, units, center, mode, facing)) {
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
@@ -4325,6 +4367,16 @@ function clampFormationMode(mode: number): number {
     FORMATION_MODE_MIN,
     Math.min(FORMATION_MODE_MAX, Math.trunc(mode))
   );
+}
+
+/** Current formation shape for a player (clamped, default-safe). */
+export function playerFormationMode(world: SimWorld, playerId: number): number {
+  return clampFormationMode(world.formationModes[playerId] ?? FORMATION_MODE_DEFAULT);
+}
+
+/** Current formation facing for a player (normalized, default-safe). */
+export function playerFormationFacing(world: SimWorld, playerId: number): number {
+  return normalizeFormationFacing(world.formationFacings[playerId] ?? FORMATION_FACING_DEFAULT);
 }
 
 function formationModeUsesSlots(mode: number): boolean {
@@ -4472,9 +4524,22 @@ function applyToggleStanceCommand(world: SimWorld, playerId: number, eids: numbe
   }
 }
 
+/** SP convenience: set the local player's selected units' stance. */
 function applySetSelectedUnitStance(world: SimWorld, stance: UnitStanceValue): void {
+  applySetStanceCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), stance);
+}
+
+/** Network-safe stance set: only the player's own stance-capable eids. */
+function applySetStanceCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  stance: UnitStanceValue
+): void {
   if (stance !== UnitStanceId.AUTO_DEFEND && stance !== UnitStanceId.HOLD_POSITION) return;
-  const units = selectedStanceUnits(world);
+  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
+    hasComponent(world.ecs, UnitStance, eid)
+  );
   if (units.length === 0) return;
 
   for (const eid of units) {
@@ -4486,30 +4551,54 @@ function applySetSelectedUnitStance(world: SimWorld, stance: UnitStanceValue): v
   }
 }
 
+/** SP convenience: nudge the local player's formation mode by delta. */
 function applyAdjustFormationMode(world: SimWorld, delta: number): void {
-  if (!Number.isFinite(delta) || delta === 0) return;
-  applySetFormationMode(world, world.formationMode + delta);
+  applyAdjustFormationModeCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), delta);
 }
 
+function applyAdjustFormationModeCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  delta: number
+): void {
+  if (!Number.isFinite(delta) || delta === 0) return;
+  applySetFormationModeCommand(world, playerId, eids, playerFormationMode(world, playerId) + delta);
+}
+
+/** SP convenience: set the local player's formation mode. */
 function applySetFormationMode(world: SimWorld, mode: number): void {
-  world.formationMode = clampFormationMode(mode);
-  applyReformSelectedFormation(world);
+  applySetFormationModeCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), mode);
 }
 
+/** Network-safe: set a player's own formation mode, then re-pack their group. */
+function applySetFormationModeCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  mode: number
+): void {
+  world.formationModes[playerId] = clampFormationMode(mode);
+  applyReformFormationCommand(world, playerId, eids);
+}
+
+/** SP convenience: rotate the local player's formation facing by delta. */
 function applyRotateSelectedFormation(world: SimWorld, delta: number): void {
+  applyRotateFormationCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), delta);
+}
+
+/** Network-safe: rotate a player's own formation facing, then re-pack. */
+function applyRotateFormationCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  delta: number
+): void {
   if (!Number.isFinite(delta) || delta === 0) return;
-  world.formationFacing = normalizeFormationFacing(world.formationFacing + delta);
-  applyReformSelectedFormation(world);
-}
-
-function selectedStanceUnits(world: SimWorld): number[] {
-  return commandableSelection(world).filter((eid) =>
-    hasComponent(world.ecs, UnitStance, eid)
+  world.formationFacings[playerId] = normalizeFormationFacing(
+    playerFormationFacing(world, playerId) + delta
   );
-}
-
-function selectedFormationUnits(world: SimWorld): number[] {
-  return selectedStanceUnits(world).filter((eid) => isMovableEntity(world, eid));
+  applyReformFormationCommand(world, playerId, eids);
 }
 
 function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {

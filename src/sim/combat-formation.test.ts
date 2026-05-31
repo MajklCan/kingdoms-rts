@@ -283,7 +283,7 @@ describe('combat engagement and formations', () => {
     lineWorld.paused = false;
     const lineSpot = findWideFormationTile(lineWorld);
     const lineUnits = selectedSpearmanLine(lineWorld, lineSpot, 12);
-    lineWorld.formationMode = 1;
+    lineWorld.formationModes[1] = 1;
     lineWorld.inputs.push({ type: 'moveSelected', to: { x: lineSpot.x + 12, y: lineSpot.y } });
 
     step(lineWorld);
@@ -292,7 +292,7 @@ describe('combat engagement and formations', () => {
     blockWorld.paused = false;
     const blockSpot = findWideFormationTile(blockWorld);
     const blockUnits = selectedSpearmanLine(blockWorld, blockSpot, 12);
-    blockWorld.formationMode = 2;
+    blockWorld.formationModes[1] = 2;
     blockWorld.inputs.push({ type: 'moveSelected', to: { x: blockSpot.x + 12, y: blockSpot.y } });
 
     step(blockWorld);
@@ -320,7 +320,7 @@ describe('combat engagement and formations', () => {
 
     expect(UnitStance.stance[archer]).toBe(UnitStanceId.AUTO_DEFEND);
     expect(UnitStance.stance[spearman]).toBe(UnitStanceId.AUTO_DEFEND);
-    expect(world.formationMode).toBe(2);
+    expect(world.formationModes[1]).toBe(2);
 
     world.inputs.push({ type: 'setSelectedUnitStance', stance: UnitStanceId.HOLD_POSITION });
     world.inputs.push({ type: 'setFormationMode', mode: -99 });
@@ -328,7 +328,7 @@ describe('combat engagement and formations', () => {
 
     expect(UnitStance.stance[archer]).toBe(UnitStanceId.HOLD_POSITION);
     expect(UnitStance.stance[spearman]).toBe(UnitStanceId.HOLD_POSITION);
-    expect(world.formationMode).toBe(0);
+    expect(world.formationModes[1]).toBe(0);
   });
 
   it('reforms selected units immediately when formation mode changes', () => {
@@ -346,7 +346,7 @@ describe('combat engagement and formations', () => {
         return `${dest.x},${dest.y}`;
       })
     );
-    expect(world.formationMode).toBe(1);
+    expect(world.formationModes[1]).toBe(1);
     expect(destinations.size).toBeGreaterThan(1);
     expect(units.some((eid) => world.paths.has(eid))).toBe(true);
   });
@@ -356,7 +356,7 @@ describe('combat engagement and formations', () => {
     world.paused = false;
     const spot = findWideFormationTile(world);
     const units = selectedSpearmanLine(world, spot, 8);
-    world.formationMode = 1;
+    world.formationModes[1] = 1;
 
     world.inputs.push({ type: 'reformSelectedFormation' });
     step(world);
@@ -366,7 +366,7 @@ describe('combat engagement and formations', () => {
     world.inputs.push({ type: 'rotateSelectedFormation', delta: 2 });
     step(world);
 
-    expect(world.formationFacing).toBe(2);
+    expect(world.formationFacings[1]).toBe(2);
     expect(destinationYSpan(world, units)).toBeGreaterThan(destinationXSpan(world, units));
   });
 

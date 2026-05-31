@@ -29,7 +29,7 @@ import {
   type SimInput,
   type SimWorld,
 } from '@sim/world';
-import { Building, Owner, Position, UnitKindId, UnitStance } from '@sim/components';
+import { Building, Owner, Position, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
 import { BuildingDefId } from '@sim/defs';
 import { MultiplayerSession, type SessionCallbacks } from './session';
 import type { Transport } from './transport';
@@ -359,6 +359,47 @@ const SCENARIOS: ReadonlyArray<{ name: string; issue: (ctx: MatchCtx) => void }>
     },
   },
   {
+    name: 'cmdSetStance',
+    issue: ({ sides }) => {
+      for (const [sess, world, pid] of sides) {
+        const eids = ownedUnits(world, pid).slice(0, 3);
+        if (eids.length) sess.sendCommand({ type: 'cmdSetStance', playerId: pid, eids, stance: UnitStanceId.HOLD_POSITION });
+      }
+    },
+  },
+  {
+    name: 'cmdSetFormationMode',
+    issue: ({ sides }) => {
+      for (const [sess, world, pid] of sides) {
+        const eids = ownedUnits(world, pid).slice(0, 4);
+        // P1 → line, P2 → compact. Diverging per-player modes must NOT cross-contaminate.
+        if (eids.length) sess.sendCommand({ type: 'cmdSetFormationMode', playerId: pid, eids, mode: pid === 1 ? 1 : 2 });
+      }
+    },
+  },
+  {
+    name: 'cmdRotateFormation',
+    issue: ({ sides }) => {
+      for (const [sess, world, pid] of sides) {
+        const eids = ownedUnits(world, pid).slice(0, 4);
+        if (!eids.length) continue;
+        sess.sendCommand({ type: 'cmdSetFormationMode', playerId: pid, eids, mode: 1 });
+        sess.sendCommand({ type: 'cmdRotateFormation', playerId: pid, eids, delta: pid });
+      }
+    },
+  },
+  {
+    name: 'cmdReformFormation',
+    issue: ({ sides }) => {
+      for (const [sess, world, pid] of sides) {
+        const eids = ownedUnits(world, pid).slice(0, 4);
+        if (!eids.length) continue;
+        sess.sendCommand({ type: 'cmdSetFormationMode', playerId: pid, eids, mode: 2 });
+        sess.sendCommand({ type: 'cmdReformFormation', playerId: pid, eids });
+      }
+    },
+  },
+  {
     name: 'setArmyRallyPoint',
     issue: ({ sides }) => {
       for (const [sess, , pid] of sides) sess.sendCommand({ type: 'setArmyRallyPoint', playerId: pid, x: 12 + pid, y: 12 + pid });
@@ -419,6 +460,23 @@ describe('multiplayer 1v1 — per-command parity matrix', () => {
       assertParity(ctx);
     });
   }
+
+  it('formation mode is per-player: P1 line + P2 compact stay independent on both clients', () => {
+    const ctx = setupMatch();
+    const { worldA, worldB, sides, pumpN } = ctx;
+    for (const [sess, world, pid] of sides) {
+      const eids = ownedUnits(world, pid).slice(0, 4);
+      sess.sendCommand({ type: 'cmdSetFormationMode', playerId: pid, eids, mode: pid === 1 ? 1 : 2 });
+    }
+    pumpN(6);
+    assertParity(ctx);
+    // Both clients agree on each player's mode, and the two players differ —
+    // P2 picking 'compact' must not have reshaped P1's 'line' (and vice-versa).
+    expect(worldA.formationModes[1]).toBe(1);
+    expect(worldA.formationModes[2]).toBe(2);
+    expect(worldB.formationModes[1]).toBe(1);
+    expect(worldB.formationModes[2]).toBe(2);
+  });
 
   it('all commands in one match — no interaction desync + observable effects', () => {
     const ctx = setupMatch();
