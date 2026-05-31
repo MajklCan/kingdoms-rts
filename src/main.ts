@@ -167,8 +167,11 @@ function bindMultiplayer(): void {
 
   const onState = (state: SessionState) => {
     if (state === 'lobby') setStatus('In lobby — waiting for players.');
-    else if (state === 'playing') setStatus('Match started.');
-    else if (state === 'peer-left') setStatus('A player left the match.');
+    else if (state === 'playing') {
+      setStatus('Match started.');
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start Match';
+    } else if (state === 'peer-left') setStatus('A player left the match.');
     else if (state === 'desync') setStatus('Desync detected — the match state diverged.');
     else if (state === 'disconnected') setStatus('Disconnected from relay.');
   };
@@ -201,6 +204,12 @@ function bindMultiplayer(): void {
       },
       onDesync: (tick, local, peer, peerId) => {
         setLastEvent(`DESYNC at tick ${tick}: local ${local.toString(16)} vs P${peerId} ${peer.toString(16)}`);
+      },
+      onError: (message) => {
+        setStatus(`Relay error: ${message}`);
+        connectBtn.disabled = false;
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Match';
       },
     });
   });

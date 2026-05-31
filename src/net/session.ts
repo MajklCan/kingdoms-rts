@@ -35,6 +35,8 @@ export interface SessionCallbacks {
   /** Fired once the deterministic world is built and the match begins. */
   onMatchStart?: (world: SimWorld, localPlayerId: number) => void;
   onDesync?: (tick: number, localHash: number, peerHash: number, peerId: number) => void;
+  /** Fired when the relay rejects us (protocol mismatch, room full, already started). */
+  onError?: (message: string) => void;
 }
 
 /** Largest frame delta we honour, so a backgrounded tab can't request a huge
@@ -146,6 +148,8 @@ export class MultiplayerSession {
         this.setState('peer-left');
         return;
       case 'error':
+        this.cb.onError?.(msg.message);
+        this.setState('disconnected');
         return;
     }
   }

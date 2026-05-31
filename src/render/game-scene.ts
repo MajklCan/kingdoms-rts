@@ -1779,7 +1779,8 @@ export class GameScene extends Phaser.Scene {
       mp.sendCommand(net);
       return;
     }
-    this.dispatch(input);
+    // Single-player (or pre-match): straight into the sim input queue.
+    this.world.inputs.push(input);
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
@@ -2083,8 +2084,11 @@ export class GameScene extends Phaser.Scene {
     setLastEvent(`F2: selected ${n} unit${n === 1 ? '' : 's'}`);
   }
 
-  /** Toggle the sim's paused state. Used by the title screen + future pause menu. */
+  /** Toggle the sim's paused state. Used by the title screen + future pause menu.
+   *  No-op during a networked match: pause is not synced across clients, so a
+   *  local pause would diverge tick counts and desync the lockstep. */
   setPaused(paused: boolean): void {
+    if (this.multiplayer) return;
     this.world.paused = paused;
   }
 
@@ -2375,7 +2379,11 @@ export class GameScene extends Phaser.Scene {
       setLastEvent('no removable building selected');
       return;
     }
-    this.dispatch({ type: 'removeSelectedBuildings', playerId: 1 });
+    this.dispatch({
+      type: 'cmdRemoveBuildings',
+      playerId: this.perspectivePlayerId,
+      eids: selectedBuildings,
+    });
     setLastEvent(
       selectedBuildings.length === 1
         ? 'removing selected building'

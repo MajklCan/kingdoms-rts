@@ -255,6 +255,7 @@ export type SimInput =
   | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
   | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos }
+  | { type: 'cmdRemoveBuildings'; playerId: number; eids: number[] }
   // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
@@ -3216,6 +3217,9 @@ function applyInput(world: SimWorld, input: SimInput): void {
     case 'removeSelectedBuildings':
       applyRemoveSelectedBuildings(world, input.playerId);
       return;
+    case 'cmdRemoveBuildings':
+      applyRemoveBuildingsCommand(world, input.playerId, input.eids);
+      return;
     case 'trainUnit':
       if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
       applyTrainUnit(world, input.atEid, input.defId);
@@ -3728,6 +3732,17 @@ function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
 
 function applyRemoveSelectedBuildings(world: SimWorld, playerId: number): void {
   for (const eid of selectedQuery(world.ecs)) {
+    if (!isRemovableBuilding(world, eid, playerId)) continue;
+    markWorksiteWorkersDead(world, eid);
+    addComponent(world.ecs, DeadTag, eid);
+  }
+}
+
+/** Self-describing (network-safe) building removal: the sender resolves the
+ *  exact building eids, and we validate ownership here so a peer can replay it
+ *  identically. Ascending eid order keeps the mutation order deterministic. */
+function applyRemoveBuildingsCommand(world: SimWorld, playerId: number, eids: number[]): void {
+  for (const eid of [...eids].sort((a, b) => a - b)) {
     if (!isRemovableBuilding(world, eid, playerId)) continue;
     markWorksiteWorkersDead(world, eid);
     addComponent(world.ecs, DeadTag, eid);
