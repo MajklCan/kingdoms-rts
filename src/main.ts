@@ -26,7 +26,7 @@ const LOCAL_SAVE_KEY = 'kingdoms.manualSave.v1';
 function defaultRelayUrl(): string {
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') return 'ws://localhost:8080';
-  return 'ws://e2kua8dx9vjhxlwpnbc7qtix.46.224.96.239.sslip.io';
+  return 'ws://a8evlomrnvx2no9lztcpflly.176.57.150.247.sslip.io';
 }
 
 const config: Phaser.Types.Core.GameConfig = {
