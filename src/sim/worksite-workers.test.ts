@@ -228,8 +228,8 @@ describe('resource worksite workers', () => {
       world,
       Position.x[siteEid],
       Position.y[siteEid],
-      12,
-      20
+      30,
+      38
     );
     const farWood = spawnResource(world, ResourceKindId.WOOD, farWoodTile.x, farWoodTile.y, 80);
 

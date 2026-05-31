@@ -57,6 +57,20 @@ function findFormationTile(world: SimWorld): { x: number; y: number } {
   throw new Error('No formation tile found');
 }
 
+function findWideFormationTile(world: SimWorld): { x: number; y: number } {
+  for (let y = 12; y < MAP.HEIGHT - 18; y++) {
+    for (let x = 8; x < MAP.WIDTH - 22; x++) {
+      if (!isOpen(world, x, y)) continue;
+      let openLanes = 0;
+      for (let dy = -8; dy <= 8; dy++) {
+        if (isOpen(world, x + 12, y + dy)) openLanes++;
+      }
+      if (openLanes >= 13) return { x, y };
+    }
+  }
+  throw new Error('No wide formation tile found');
+}
+
 function findPriorityTile(world: SimWorld): { x: number; y: number } {
   for (let y = 6; y < MAP.HEIGHT - 16; y++) {
     for (let x = 6; x < MAP.WIDTH - 16; x++) {
@@ -95,6 +109,27 @@ function finalWaypoint(world: SimWorld, eid: number): { x: number; y: number } {
 
 function stepN(world: SimWorld, ticks: number): void {
   for (let i = 0; i < ticks; i++) step(world);
+}
+
+function selectedSpearmanLine(world: SimWorld, spot: { x: number; y: number }, count: number): number[] {
+  const units: number[] = [];
+  clearSelection(world);
+  for (let i = 0; i < count; i++) {
+    const eid = spawnSpearman(world, spot.x, spot.y + (i % 3), 1);
+    setSelected(world, eid, true);
+    units.push(eid);
+  }
+  return units;
+}
+
+function destinationYSpan(world: SimWorld, eids: number[]): number {
+  const ys = eids.map((eid) => finalWaypoint(world, eid).y);
+  return Math.max(...ys) - Math.min(...ys);
+}
+
+function destinationXSpan(world: SimWorld, eids: number[]): number {
+  const xs = eids.map((eid) => finalWaypoint(world, eid).x);
+  return Math.max(...xs) - Math.min(...xs);
 }
 
 function stepUntilCannonFire(
@@ -188,7 +223,7 @@ describe('combat engagement and formations', () => {
     expect(AttackTarget.targetEid[defender]).toBe(attacker);
   });
 
-  it('gives multi-unit moves spaced formation destinations with cavalry ahead of archers', () => {
+  it('defaults multi-unit moves to free formation at the clicked destination', () => {
     const world = createSimWorld(124);
     world.paused = false;
     clearSelection(world);
@@ -204,9 +239,36 @@ describe('combat engagement and formations', () => {
 
     step(world);
 
-    const scoutDest = finalWaypoint(world, scout);
-    const archerDest = finalWaypoint(world, archer);
-    expect(scoutDest.x).toBeGreaterThan(archerDest.x);
+    expect(
+      new Set([
+        `${finalWaypoint(world, scout).x},${finalWaypoint(world, scout).y}`,
+        `${finalWaypoint(world, spearman).x},${finalWaypoint(world, spearman).y}`,
+        `${finalWaypoint(world, archer).x},${finalWaypoint(world, archer).y}`,
+      ]).size
+    ).toBe(1);
+    expect(finalWaypoint(world, scout)).toEqual({ x: spot.x + 10, y: spot.y });
+    expect(finalWaypoint(world, spearman)).toEqual({ x: spot.x + 10, y: spot.y });
+    expect(finalWaypoint(world, archer)).toEqual({ x: spot.x + 10, y: spot.y });
+    expect(world.formationSpeedCaps.size).toBe(0);
+  });
+
+  it('uses spaced slots when line formation is active', () => {
+    const world = createSimWorld(124);
+    world.paused = false;
+    clearSelection(world);
+    const spot = findFormationTile(world);
+    const scout = spawnScoutCavalry(world, spot.x, spot.y, 1);
+    const spearman = spawnSpearman(world, spot.x, spot.y + 1, 1);
+    const archer = spawnArcher(world, spot.x, spot.y + 2, 1);
+
+    setSelected(world, archer, true);
+    setSelected(world, scout, true);
+    setSelected(world, spearman, true);
+    world.inputs.push({ type: 'setFormationMode', mode: 1 });
+    world.inputs.push({ type: 'moveSelected', to: { x: spot.x + 10, y: spot.y } });
+
+    step(world);
+
     expect(
       new Set([
         `${finalWaypoint(world, scout).x},${finalWaypoint(world, scout).y}`,
@@ -214,6 +276,98 @@ describe('combat engagement and formations', () => {
         `${finalWaypoint(world, archer).x},${finalWaypoint(world, archer).y}`,
       ]).size
     ).toBe(3);
+  });
+
+  it('widens and tightens selected army formation destinations', () => {
+    const lineWorld = createSimWorld(144);
+    lineWorld.paused = false;
+    const lineSpot = findWideFormationTile(lineWorld);
+    const lineUnits = selectedSpearmanLine(lineWorld, lineSpot, 12);
+    lineWorld.formationMode = 1;
+    lineWorld.inputs.push({ type: 'moveSelected', to: { x: lineSpot.x + 12, y: lineSpot.y } });
+
+    step(lineWorld);
+
+    const blockWorld = createSimWorld(144);
+    blockWorld.paused = false;
+    const blockSpot = findWideFormationTile(blockWorld);
+    const blockUnits = selectedSpearmanLine(blockWorld, blockSpot, 12);
+    blockWorld.formationMode = 2;
+    blockWorld.inputs.push({ type: 'moveSelected', to: { x: blockSpot.x + 12, y: blockSpot.y } });
+
+    step(blockWorld);
+
+    expect(destinationYSpan(lineWorld, lineUnits)).toBeGreaterThan(
+      destinationYSpan(blockWorld, blockUnits)
+    );
+  });
+
+  it('sets selected stances explicitly and clamps formation mode states', () => {
+    const world = createSimWorld(145);
+    world.paused = false;
+    clearSelection(world);
+    const spot = findOpenTile(world);
+    const archer = spawnArcher(world, spot.x, spot.y, 1);
+    const spearman = spawnSpearman(world, spot.x + 1, spot.y, 1);
+    UnitStance.stance[archer] = UnitStanceId.HOLD_POSITION;
+    UnitStance.stance[spearman] = UnitStanceId.AUTO_DEFEND;
+    setSelected(world, archer, true);
+    setSelected(world, spearman, true);
+
+    world.inputs.push({ type: 'setSelectedUnitStance', stance: UnitStanceId.AUTO_DEFEND });
+    world.inputs.push({ type: 'setFormationMode', mode: 99 });
+    step(world);
+
+    expect(UnitStance.stance[archer]).toBe(UnitStanceId.AUTO_DEFEND);
+    expect(UnitStance.stance[spearman]).toBe(UnitStanceId.AUTO_DEFEND);
+    expect(world.formationMode).toBe(2);
+
+    world.inputs.push({ type: 'setSelectedUnitStance', stance: UnitStanceId.HOLD_POSITION });
+    world.inputs.push({ type: 'setFormationMode', mode: -99 });
+    step(world);
+
+    expect(UnitStance.stance[archer]).toBe(UnitStanceId.HOLD_POSITION);
+    expect(UnitStance.stance[spearman]).toBe(UnitStanceId.HOLD_POSITION);
+    expect(world.formationMode).toBe(0);
+  });
+
+  it('reforms selected units immediately when formation mode changes', () => {
+    const world = createSimWorld(146);
+    world.paused = false;
+    const spot = findWideFormationTile(world);
+    const units = selectedSpearmanLine(world, spot, 8);
+
+    world.inputs.push({ type: 'setFormationMode', mode: 1 });
+    step(world);
+
+    const destinations = new Set(
+      units.map((eid) => {
+        const dest = finalWaypoint(world, eid);
+        return `${dest.x},${dest.y}`;
+      })
+    );
+    expect(world.formationMode).toBe(1);
+    expect(destinations.size).toBeGreaterThan(1);
+    expect(units.some((eid) => world.paths.has(eid))).toBe(true);
+  });
+
+  it('rotates selected formation facing and reforms immediately', () => {
+    const world = createSimWorld(147);
+    world.paused = false;
+    const spot = findWideFormationTile(world);
+    const units = selectedSpearmanLine(world, spot, 8);
+    world.formationMode = 1;
+
+    world.inputs.push({ type: 'reformSelectedFormation' });
+    step(world);
+
+    expect(destinationXSpan(world, units)).toBeGreaterThan(destinationYSpan(world, units));
+
+    world.inputs.push({ type: 'rotateSelectedFormation', delta: 2 });
+    step(world);
+
+    expect(world.formationFacing).toBe(2);
+    expect(destinationYSpan(world, units)).toBeGreaterThan(destinationXSpan(world, units));
   });
 
   it('keeps the previous attack order when attack-move cannot path', () => {
@@ -405,12 +559,12 @@ describe('combat engagement and formations', () => {
 
     expect(Health.hp[target]).toBeLessThanOrEqual(0);
     expect(Health.hp[nearby]).toBeLessThanOrEqual(0);
-    expect(groupedHpBefore - Health.hp[grouped]).toBeGreaterThanOrEqual(30);
-    expect(groupedHpBefore - Health.hp[grouped]).toBeLessThanOrEqual(35);
+    expect(groupedHpBefore - Health.hp[grouped]).toBeGreaterThanOrEqual(25);
+    expect(groupedHpBefore - Health.hp[grouped]).toBeLessThanOrEqual(30);
     expect(Health.hp[grouped]).toBeGreaterThan(0);
     expect(Health.hp[outer]).toBeLessThan(outerHpBefore);
     expect(Health.hp[outer]).toBeGreaterThan(0);
-    expect(outerHpBefore - Health.hp[outer]).toBeLessThanOrEqual(14);
+    expect(outerHpBefore - Health.hp[outer]).toBeLessThanOrEqual(10);
     expect(Health.hp[friendly]).toBe(friendlyHpBefore);
   });
 
@@ -427,6 +581,7 @@ describe('combat engagement and formations', () => {
     const hpBefore = Health.hp[target];
 
     const shot = stepUntilCannonFire(world, cannon);
+    expect(shot.projectileTicks).toBeGreaterThanOrEqual(8);
     Position.x[target] = shot.toX + 1.6;
     Position.y[target] = shot.toY;
 
@@ -434,6 +589,21 @@ describe('combat engagement and formations', () => {
 
     expect(Health.hp[target]).toBeLessThan(hpBefore);
     expect(Health.hp[target]).toBeGreaterThan(0);
+  });
+
+  it('doubles cannon direct damage against buildings', () => {
+    const world = createSimWorld(135);
+    world.paused = false;
+    const spot = findOpenTile(world);
+    const cannon = spawnCannon(world, spot.x, spot.y, 1);
+    const house = spawnCompletedBuilding(world, BuildingDefId.HOUSE, spot.x + 4, spot.y, 2);
+    const hpBefore = Health.hp[house];
+
+    AttackTarget.targetEid[cannon] = house;
+    AttackTarget.retainGoal[cannon] = 1;
+    stepN(world, 32);
+
+    expect(hpBefore - Health.hp[house]).toBeGreaterThanOrEqual(120);
   });
 
   it('requires two direct cannon hits to destroy another cannon', () => {
@@ -573,7 +743,7 @@ describe('combat engagement and formations', () => {
     expect(world.combatEvents.filter((event) => event.attackerEid === machineGun)).toHaveLength(1);
   });
 
-  it('caps faster units to the slowest selected formation member while marching', () => {
+  it('does not cap free formation movement speed', () => {
     const world = createSimWorld(128);
     world.paused = false;
     clearSelection(world);
@@ -583,6 +753,24 @@ describe('combat engagement and formations', () => {
 
     setSelected(world, scout, true);
     setSelected(world, archer, true);
+    world.inputs.push({ type: 'moveSelected', to: { x: spot.x + 10, y: spot.y } });
+
+    step(world);
+
+    expect(world.formationSpeedCaps.size).toBe(0);
+  });
+
+  it('caps faster units to the slowest selected formation member while marching in line formation', () => {
+    const world = createSimWorld(128);
+    world.paused = false;
+    clearSelection(world);
+    const spot = findFormationTile(world);
+    const scout = spawnScoutCavalry(world, spot.x, spot.y, 1);
+    const archer = spawnArcher(world, spot.x, spot.y + 1, 1);
+
+    setSelected(world, scout, true);
+    setSelected(world, archer, true);
+    world.inputs.push({ type: 'setFormationMode', mode: 1 });
     world.inputs.push({ type: 'moveSelected', to: { x: spot.x + 10, y: spot.y } });
 
     step(world);

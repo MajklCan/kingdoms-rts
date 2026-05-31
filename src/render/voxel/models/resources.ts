@@ -53,6 +53,51 @@ export function buildTreeVoxels(): Voxel[] {
   return out;
 }
 
+export function buildSnowTreeVoxels(): Voxel[] {
+  const out: Voxel[] = [];
+  const put = (x: number, y: number, z: number, c: number) => out.push({ x, y, z, color: c });
+
+  for (let z = 0; z <= 5; z++) {
+    put(4, 4, z, z < 2 ? P.TREE_TRUNK_D : P.TREE_TRUNK_L);
+  }
+  put(3, 4, 0, P.TREE_TRUNK_D);
+  put(5, 4, 0, P.TREE_TRUNK_D);
+  put(4, 3, 0, P.TREE_TRUNK_D);
+  put(4, 5, 0, P.TREE_TRUNK_D);
+
+  for (let z = 4; z <= 6; z++) {
+    for (let x = 2; x <= 6; x++) {
+      for (let y = 2; y <= 6; y++) {
+        const corner = (x === 2 || x === 6) && (y === 2 || y === 6);
+        if (corner) continue;
+        const snowCap = z === 6 || ((x + y) % 4 === 0 && z === 5);
+        const tone = snowCap
+          ? ((x + y) % 3 === 0 ? P.SNOW_D : P.SNOW_L)
+          : ((x + y + z) % 3 === 0 ? P.TREE_CANOPY_D : P.TREE_CANOPY_M);
+        put(x, y, z, tone);
+      }
+    }
+  }
+
+  for (let z = 7; z <= 9; z++) {
+    for (let x = 3; x <= 5; x++) {
+      for (let y = 3; y <= 5; y++) {
+        const snowCap = z === 9 || (z === 8 && (x + y) % 2 === 0);
+        const tone = snowCap
+          ? ((x + y + z) % 3 === 0 ? P.SNOW_M : P.SNOW_L)
+          : ((x + y + z) % 3 === 0 ? P.TREE_CANOPY_L : P.TREE_CANOPY_M);
+        put(x, y, z, tone);
+      }
+    }
+  }
+
+  put(4, 4, 10, P.SNOW_L);
+  put(4, 4, 11, P.SNOW_L);
+  put(4, 4, 12, P.SNOW_M);
+
+  return out;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Linden tree
 // ────────────────────────────────────────────────────────────────────────────

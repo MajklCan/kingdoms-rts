@@ -6,6 +6,8 @@ export const CampaignMissionId = {
   SIEGE_OF_BRNO: 'siege_of_brno',
   BATTLE_OF_BILA_HORA: 'battle_of_bila_hora',
   BATTLE_OF_KUTNA_HORA: 'battle_of_kutna_hora',
+  BATTLE_OF_SUDOMER: 'battle_of_sudomer',
+  BATTLE_OF_ZBOROV: 'battle_of_zborov',
 } as const;
 
 export type CampaignMissionIdValue =
@@ -73,6 +75,39 @@ export const CAMPAIGN_MISSIONS: CampaignMissionDef[] = [
     objectives: [
       { id: 'survive_kutna_hora', label: 'Survive all crusader assault waves' },
       { id: 'hold_kutna_hora_tc', label: 'Keep the Kutná Hora Town Center standing' },
+    ],
+  },
+  {
+    id: CampaignMissionId.BATTLE_OF_SUDOMER,
+    name: 'Battle of Sudoměř',
+    description: 'Hold outnumbered Sudoměř: rebuild your economy and army during the lull, then break the crusader assault across two fronts.',
+    briefing:
+      '25 March 1420. Jan Žižka’s badly outnumbered Hussites have fortified Sudoměř between two ponds, but a royalist crusader host is already massing to attack. You have a few minutes before they charge — put every villager to work, raise pikemen and hand-gunners, and ready your defenses. Their infantry will storm the dry central gap; their cavalry must wade the drained pond’s mud. Hold the Town Hall until every assault breaks.',
+    startingAge: AgeId.GUNPOWDER,
+    enemyAge: AgeId.GUNPOWDER,
+    mapId: MapId.SUDOMER_PONDS,
+    lockedTechs: [],
+    objectives: [
+      { id: 'survive_sudomer_assault', label: 'Survive all crusader assault waves' },
+      { id: 'hold_sudomer_town', label: 'Keep the Sudoměř Town Hall standing' },
+    ],
+  },
+  {
+    id: CampaignMissionId.BATTLE_OF_ZBOROV,
+    name: 'Battle of Zborov',
+    description: 'Lead the Czechoslovak Legion up a fortified trench corridor: take each line in turn, screen your lone mortar, and storm the command bunker.',
+    briefing:
+      '2 July 1917. The Czechoslovak Legion goes over the top at Zborov. Three rifle lines of Austro-Hungarian infantry hold a narrow cratered corridor walled in by dense woods, machine-gun nests dug into the wire out front, with rifle companies fed forward in waves. This is bite-and-hold: take the forward trench, hold against the reserve’s counterattack, then push to the next line. You have only riflemen and a single mortar — that mortar is your sole means of cracking the nests, so screen it and keep it alive. Fresh Legionnaires muster behind whichever trench you’ve taken. Clear all three lines and storm the command bunker.',
+    startingAge: AgeId.TOTAL_WAR,
+    enemyAge: AgeId.TOTAL_WAR,
+    mapId: MapId.ZBOROV_LINES,
+    lockedTechs: [],
+    objectives: [
+      { id: 'silence_mg_nests', label: 'Silence the forward machine-gun nests', optional: true },
+      { id: 'take_trench_1', label: 'Take the forward trench line', optional: true },
+      { id: 'take_trench_2', label: 'Take the second trench line', optional: true },
+      { id: 'take_trench_3', label: 'Take the third trench line', optional: true },
+      { id: 'take_command_bunker', label: 'Capture the Austro-Hungarian command bunker' },
     ],
   },
 ];

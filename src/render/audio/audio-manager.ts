@@ -65,10 +65,20 @@ function clamp(value: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, value));
 }
 
+function shouldDefaultMuted(): boolean {
+  const hostname = globalThis.location?.hostname;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname?.endsWith('.localhost') === true
+  );
+}
+
 function loadSettings(): AudioSettings {
   const fallback: AudioSettings = {
     masterVolume: 0.7,
-    muted: false,
+    muted: shouldDefaultMuted(),
     music: 1,
     sfx: 1,
     voices: 1,
@@ -227,6 +237,26 @@ export class AudioManager {
     return this.settings.muted;
   }
 
+  private setSoundVolume(sound: Phaser.Sound.BaseSound | undefined, volume: number): boolean {
+    if (!sound) return false;
+    const candidate = sound as Phaser.Sound.BaseSound & {
+      currentConfig?: unknown;
+      pendingRemove?: boolean;
+      setVolume?: (value: number) => Phaser.Sound.BaseSound;
+      volumeNode?: unknown;
+    };
+    if (candidate.pendingRemove || candidate.currentConfig == null) return false;
+    if ('volumeNode' in candidate && candidate.volumeNode == null) return false;
+    if (typeof candidate.setVolume !== 'function') return false;
+
+    try {
+      candidate.setVolume(clamp(volume, 0, 1));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Background music ---
   //
   // Two contexts: a single looping MENU theme, and an IN-GAME playlist of tracks
@@ -332,7 +362,6 @@ export class AudioManager {
       current.destroy();
       return;
     }
-    const snd = current as Phaser.Sound.WebAudioSound;
     const proxy = { v: this.musicCurrentVol };
     this.scene.tweens.add({
       targets: proxy,
@@ -340,7 +369,7 @@ export class AudioManager {
       duration: fadeMs,
       ease: 'Sine.InOut',
       onUpdate: () => {
-        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+        this.setSoundVolume(current, proxy.v);
       },
       onComplete: () => {
         current.stop();
@@ -393,7 +422,6 @@ export class AudioManager {
       console.warn(`[AudioManager] failed to play ambience "${assetKey}":`, err);
       return;
     }
-    const snd = track as Phaser.Sound.WebAudioSound;
     const proxy = { v: 0 };
     this.scene.tweens.add({
       targets: proxy,
@@ -401,8 +429,9 @@ export class AudioManager {
       duration: AMBIENCE_FADE_MS,
       ease: 'Sine.InOut',
       onUpdate: () => {
-        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
-        this.ambienceCurrentVol = proxy.v;
+        if (this.ambience === track && this.setSoundVolume(track, proxy.v)) {
+          this.ambienceCurrentVol = proxy.v;
+        }
       },
     });
   }
@@ -418,7 +447,6 @@ export class AudioManager {
       current.destroy();
       return;
     }
-    const snd = current as Phaser.Sound.WebAudioSound;
     const proxy = { v: this.ambienceCurrentVol };
     this.scene.tweens.add({
       targets: proxy,
@@ -426,7 +454,7 @@ export class AudioManager {
       duration: fadeMs,
       ease: 'Sine.InOut',
       onUpdate: () => {
-        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
+        this.setSoundVolume(current, proxy.v);
       },
       onComplete: () => {
         current.stop();
@@ -442,10 +470,8 @@ export class AudioManager {
 
   private applyAmbienceVolume(): void {
     if (!this.ambience) return;
-    const snd = this.ambience as Phaser.Sound.WebAudioSound;
-    if (typeof snd.setVolume !== 'function') return;
     this.ambienceCurrentVol = this.ambienceVolume();
-    snd.setVolume(this.ambienceCurrentVol);
+    this.setSoundVolume(this.ambience, this.ambienceCurrentVol);
   }
 
   /** Tracks (asset keys) whose audio actually loaded, in shuffled order. */
@@ -514,7 +540,6 @@ export class AudioManager {
     // Fade in (crossfades against the previous track's fade-out).
     this.musicCurrentVol = 0;
     track.play({ volume: 0 });
-    const snd = track as Phaser.Sound.WebAudioSound;
     const proxy = { v: 0 };
     this.scene.tweens.add({
       targets: proxy,
@@ -522,8 +547,9 @@ export class AudioManager {
       duration: MUSIC_FADE_MS,
       ease: 'Sine.InOut',
       onUpdate: () => {
-        if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
-        this.musicCurrentVol = proxy.v;
+        if (this.music === track && this.setSoundVolume(track, proxy.v)) {
+          this.musicCurrentVol = proxy.v;
+        }
       },
     });
     if (fadeOutAtEnd && !loop) this.scheduleEndFade(track);
@@ -540,7 +566,6 @@ export class AudioManager {
     this.fadeOutTimer = this.scene.time.delayedCall(at, () => {
       this.fadeOutTimer = undefined;
       if (this.music !== track || this.settings.muted) return;
-      const snd = track as Phaser.Sound.WebAudioSound;
       const proxy = { v: this.musicCurrentVol };
       this.scene.tweens.add({
         targets: proxy,
@@ -548,8 +573,9 @@ export class AudioManager {
         duration: MUSIC_FADE_MS,
         ease: 'Sine.InOut',
         onUpdate: () => {
-          if (typeof snd.setVolume === 'function') snd.setVolume(proxy.v);
-          this.musicCurrentVol = proxy.v;
+          if (this.music === track && this.setSoundVolume(track, proxy.v)) {
+            this.musicCurrentVol = proxy.v;
+          }
         },
       });
     });
@@ -596,12 +622,10 @@ export class AudioManager {
 
   private applyMusicVolume(fadeMs: number): void {
     if (!this.music) return;
-    const snd = this.music as Phaser.Sound.WebAudioSound;
-    if (typeof snd.setVolume !== 'function') return;
+    const current = this.music;
     const target = this.musicVolume();
     if (fadeMs <= 0) {
-      snd.setVolume(target);
-      this.musicCurrentVol = target;
+      if (this.setSoundVolume(current, target)) this.musicCurrentVol = target;
       return;
     }
     const proxy = { v: this.musicCurrentVol };
@@ -611,8 +635,9 @@ export class AudioManager {
       duration: fadeMs,
       ease: 'Sine.InOut',
       onUpdate: () => {
-        snd.setVolume(proxy.v);
-        this.musicCurrentVol = proxy.v;
+        if (this.music === current && this.setSoundVolume(current, proxy.v)) {
+          this.musicCurrentVol = proxy.v;
+        }
       },
     });
   }

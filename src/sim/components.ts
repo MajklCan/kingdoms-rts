@@ -74,6 +74,7 @@ export const UnitKindId = {
   GUNMAN: 5,
   CANNON: 6,
   MACHINE_GUN: 7,
+  MORTAR: 8,
 } as const;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -279,3 +280,6 @@ export const MachineGunDeployment = defineComponent({
   deployed: Types.ui8,
   setupTicks: Types.ui16,
 });
+
+/** Tag — entity is a Total War Age mortar team (indirect-fire siege). */
+export const MortarTag = defineComponent();

@@ -300,9 +300,9 @@
       }
       .tech-tree-canvas {
         position: relative;
-        width: 1720px;
+        width: 1240px;
         height: 680px;
-        min-width: 1720px;
+        min-width: 1240px;
         min-height: 680px;
         background:
           linear-gradient(90deg, rgba(0,0,0,0.12), transparent 28%, transparent 72%, rgba(0,0,0,0.18)),
@@ -724,8 +724,8 @@
           height: 80px;
         }
         .tech-tree-canvas {
-          width: 1720px;
-          min-width: 1720px;
+          width: 1240px;
+          min-width: 1240px;
           height: 680px;
           min-height: 680px;
         }
@@ -1724,6 +1724,10 @@
                 <option value="ore_mountain_pass">Ore Mountain Pass</option>
                 <option value="machovo_jezero">Machovo Jezero</option>
                 <option value="silesian_marsh">Silesian Marsh</option>
+                <option value="sudomer_ponds">Sudoměř Ponds</option>
+                <option value="krkonose_winter_crown">Krkonoše Winter Crown</option>
+                <option value="zborov_lines">Zborov Lines</option>
+                <option value="flooded_basin">Flooded Basin</option>
               </select>
             </label>
             <button id="start-button" class="skirmish-start" type="button">Begin Skirmish</button>
@@ -1760,6 +1764,22 @@
                 </span>
                 <span class="mission-cta">Start</span>
                 <span class="mission-meta"><span>City defense</span><span>Train reinforcements</span><span>Assault waves</span></span>
+              </button>
+              <button class="mission-card" type="button" data-campaign-mission="battle_of_sudomer">
+                <span>
+                  <strong>Battle of Sudoměř</strong>
+                  <span class="mission-desc">Defend Sudoměř from a dry infantry push and a muddy cavalry flank.</span>
+                </span>
+                <span class="mission-cta">Start</span>
+                <span class="mission-meta"><span>Town defense</span><span>Two fronts</span><span>Largest battle</span></span>
+              </button>
+              <button class="mission-card" type="button" data-campaign-mission="battle_of_zborov">
+                <span>
+                  <strong>Battle of Zborov</strong>
+                  <span class="mission-desc">Lead the Czechoslovak Legion over the top — shell the machine-gun nests, then storm the trenches.</span>
+                </span>
+                <span class="mission-cta">Start</span>
+                <span class="mission-meta"><span>Trench assault</span><span>WWI · 1917</span><span>Artillery first</span></span>
               </button>
             </div>
           </section>
@@ -1802,6 +1822,7 @@
       <button id="cheat-add-resources" class="cheat-button" type="button">+500</button>
       <button id="cheat-spawn-cavalry" class="cheat-button" type="button">Cav</button>
       <button id="cheat-spawn-machine-gun" class="cheat-button" type="button">MG</button>
+      <button id="cheat-spawn-mortar" class="cheat-button" type="button">Mtr</button>
       <button id="cheat-dump-state" class="cheat-button" type="button">Dump</button>
     </div>
 

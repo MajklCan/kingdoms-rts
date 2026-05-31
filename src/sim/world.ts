@@ -35,6 +35,7 @@ import {
   Health,
   MachineGunDeployment,
   MachineGunTag,
+  MortarTag,
   Owner,
   PathTarget,
   PopulationCost,
@@ -60,6 +61,7 @@ import {
   Velocity,
   WorksiteWorker,
   type ResourceKind,
+  type UnitStanceValue,
 } from './components';
 import {
   AGE_TABLE,
@@ -144,6 +146,7 @@ const STARTING_RESOURCE_BANKS: Record<AgeIdValue, Readonly<Record<ResourceKind, 
 const REGENERATED_TREE_AMOUNT = 80;
 const FOREST_TILE_INITIAL_TREE_CHANCE = 0.48;
 const FOREST_EDGE_INITIAL_TREE_BONUS = 0.2;
+const LOCAL_STARTING_TREE_COUNT = 20;
 const INITIAL_SCATTERED_TREE_COUNT = 72;
 const INITIAL_EDGE_TREE_COUNT = 48;
 const TREE_EDGE_BAND_TILES = 10;
@@ -173,16 +176,61 @@ const BILA_HORA_ENEMY_OPENING_WAIT_TICKS = SIM.TICK_HZ * 15;
 const KUTNA_HORA_FIRST_WAVE_TICKS = SIM.TICK_HZ * 30;
 const KUTNA_HORA_WAVE_INTERVAL_TICKS = SIM.TICK_HZ * 65;
 const KUTNA_HORA_TOTAL_WAVES = 5;
-const FORMATION_SPACING = 1.15;
-const FORMATION_MAX_COLUMNS = 4;
+const SUDOMER_FIRST_WAVE_TICKS = SIM.TICK_HZ * 300;
+const SUDOMER_WAVE_INTERVAL_TICKS = SIM.TICK_HZ * 55;
+const SUDOMER_TOTAL_WAVES = 5;
+const SUDOMER_POP_CAP = 120;
+const SUDOMER_MUD_INFANTRY_SPEED_MULTIPLIER = 0.62;
+const SUDOMER_MUD_CAVALRY_SPEED_MULTIPLIER = 0.34;
+const ZBOROV_REINFORCE_INTERVAL_TICKS = SIM.TICK_HZ * 40;
+const ZBOROV_WIRE_SPEED_MULTIPLIER = 0.4;
+// Continuous reinforcement: the enemy is kept at max(floor, player rifles) so it
+// matches the player and never lets them outnumber it (the floor sets minimum
+// difficulty); the player is only topped up to a target when his rifles fall
+// below a trigger, so he can't stockpile a big army.
+const ZBOROV_ENEMY_FLOOR = 12;
+const ZBOROV_ENEMY_REINFORCE_CAP = 10;
+const ZBOROV_PLAYER_REINFORCE_TRIGGER = 7;
+const ZBOROV_PLAYER_REINFORCE_TARGET = 10;
+// Half-width of the playable corridor (must match generateZborovMap); the rest
+// of the map is impassable woods so the assault can't flank around the lines.
+const ZBOROV_CORRIDOR_HALF = Math.round(MAP.WIDTH * 0.24);
+// Reserve riflemen thrown forward each time the player takes a trench line.
+const ZBOROV_COUNTERATTACK_SIZE = 9;
+// Arena layout as fractions of MAP.HEIGHT (south/high = player, north/low =
+// enemy). Each wire belt sits just SOUTH of (in front of) its rifle line; the
+// forward machine-gun nests sit just NORTH of the forward belt (behind the
+// wire, firing south through it). There is a broad no-man's-land between the
+// player jump-off and the forward belt so nothing is in range at spawn.
+const ZBOROV_FORWARD_LINE_FRAC = 0.48;
+const ZBOROV_FORWARD_WIRE_FRAC = 0.55;
+const ZBOROV_MID_LINE_FRAC = 0.375;
+const ZBOROV_MID_WIRE_FRAC = 0.42;
+const ZBOROV_REAR_LINE_FRAC = 0.27;
+const ZBOROV_REAR_WIRE_FRAC = 0.31;
+const ZBOROV_BUNKER_FRAC = 0.19;
+const ZBOROV_MG_OFFSETS = [-13, -4, 4, 13];
+const FORMATION_MODE_FREE = 0;
+const FORMATION_MODE_LINE = 1;
+const FORMATION_MODE_COMPACT = 2;
+const FORMATION_MODE_MIN = FORMATION_MODE_FREE;
+const FORMATION_MODE_MAX = FORMATION_MODE_COMPACT;
+const FORMATION_MODE_DEFAULT = FORMATION_MODE_FREE;
+const FORMATION_FACING_STEPS = 8;
+const FORMATION_FACING_DEFAULT = 0;
+const FORMATION_MAX_COLUMNS = 12;
 const ATTACK_RANGE_TOLERANCE = 0.5;
 const CANNON_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 0.9);
 const CANNON_SPLASH_FULL_DAMAGE_RADIUS = 0.48;
 const CANNON_SPLASH_MAX_RADIUS = 2.6;
 const CANNON_SPLASH_MIN_DAMAGE_FRACTION = 0.08;
-const CANNON_SPLASH_FALLOFF_EXPONENT = 1.7;
+const CANNON_SPLASH_FALLOFF_EXPONENT = 2.3;
 const CANNON_BUILDING_DIRECT_HIT_RADIUS = 0.35;
+const CANNON_BUILDING_DAMAGE_MULTIPLIER = 2;
 const MACHINE_GUN_DEPLOY_TICKS = Math.round(SIM.TICK_HZ * 1.35);
+// Mortars reuse the cannon's windup + splash + impact machinery, but lob on a
+// higher, slower arc — a longer aim/elevation delay before each shell.
+const MORTAR_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 1.2);
 export const AI_PLAYER_ID = 2;
 const AI_DEFENSE_RADIUS = 11;
 const AI_DEFENSE_ORDER_RADIUS = 18;
@@ -208,7 +256,10 @@ function isResourceTerrainTile(tile: number): boolean {
   return (
     tile !== TileType.WATER &&
     tile !== TileType.WATER_SHALLOW &&
-    tile !== TileType.BRIDGE
+    tile !== TileType.BRIDGE &&
+    tile !== TileType.MUD &&
+    tile !== TileType.ICE &&
+    tile !== TileType.PACKED_SNOW
   );
 }
 
@@ -239,12 +290,17 @@ export type SimInput =
   | { type: 'gatherSelected'; targetEid: number }
   | { type: 'stopSelected' }
   | { type: 'toggleSelectedUnitStance' }
+  | { type: 'setSelectedUnitStance'; stance: UnitStanceValue }
+  | { type: 'setFormationMode'; mode: number }
+  | { type: 'adjustFormationMode'; delta: number }
+  | { type: 'rotateSelectedFormation'; delta: number }
+  | { type: 'reformSelectedFormation' }
   | { type: 'attackSelected'; targetEid: number }
   | { type: 'attackMoveSelected'; to: GridPos }
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
   | { type: 'removeSelectedBuildings'; playerId: number }
-  | { type: 'trainUnit'; atEid: number; defId: number }
+  | { type: 'trainUnit'; atEid: number; defId: number; count?: number }
   | { type: 'cancelProduction'; atEid: number }
   | { type: 'advanceAge'; playerId: number }
   | { type: 'researchTech'; playerId: number; techId: TechIdValue };
@@ -282,6 +338,11 @@ export interface CampaignState {
   nextReinforcementTick: number;
   scriptedWaveIndex?: number;
   scriptedWaveCount?: number;
+  /** Zborov bite-and-hold: how many trench lines the player has taken so far,
+   *  and the y the player's reinforcements now muster at (advances as lines
+   *  fall). */
+  zborovLinesTaken?: number;
+  zborovForwardY?: number;
 }
 
 export interface PopState {
@@ -562,6 +623,10 @@ export interface SimWorld {
   movementStuck: Map<number, MovementStuckState>;
   /** Temporary speed caps for selected groups moving as a formation. */
   formationSpeedCaps: Map<number, number>;
+  /** Local-player command formation shape: 0 = free, 1 = line, 2 = compact. */
+  formationMode: number;
+  /** Local-player command formation facing. Eight 45-degree steps, 0 faces +Y. */
+  formationFacing: number;
   pathfinder: Pathfinder;
   /** Static map grid (0 walkable, 1+ blocked). */
   grid: number[][];
@@ -747,6 +812,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     paths: new Map(),
     movementStuck: new Map(),
     formationSpeedCaps: new Map(),
+    formationMode: FORMATION_MODE_DEFAULT,
+    formationFacing: FORMATION_FACING_DEFAULT,
     pathfinder,
     grid,
     resources,
@@ -801,14 +868,31 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
 
   /** Try to spawn at (x, y). If that tile is water, bridge, occupied, or
    *  otherwise invalid, search outward for the nearest valid land tile. */
+  const resolveResourceSpawn = (x: number, y: number): GridPos | null => {
+    if (canPlaceResourceAt(x, y)) return { x: Math.round(x), y: Math.round(y) };
+    return nearestResourceTile(x, y, 6);
+  };
+
   const safeSpawnResource = (kind: ResourceKind, x: number, y: number, amt: number) => {
-    if (!canPlaceResourceAt(x, y)) {
-      const fallback = nearestResourceTile(x, y, 6);
-      if (!fallback) return;
-      x = fallback.x;
-      y = fallback.y;
+    const spot = resolveResourceSpawn(x, y);
+    if (!spot) return;
+    spawnResource(world, kind, spot.x, spot.y, amt);
+  };
+
+  const safeSpawnMirroredResource = (kind: ResourceKind, x: number, y: number, amt: number) => {
+    const spot = resolveResourceSpawn(x, y);
+    if (!spot) return;
+    spawnResource(world, kind, spot.x, spot.y, amt);
+
+    const mirror = { x: MAP.WIDTH - 1 - spot.x, y: MAP.HEIGHT - 1 - spot.y };
+    if (mirror.x !== spot.x || mirror.y !== spot.y) {
+      if (canPlaceResourceAt(mirror.x, mirror.y)) {
+        spawnResource(world, kind, mirror.x, mirror.y, amt);
+      } else {
+        const fallback = resolveResourceSpawn(mirror.x, mirror.y);
+        if (fallback) spawnResource(world, kind, fallback.x, fallback.y, amt);
+      }
     }
-    spawnResource(world, kind, x, y, amt);
   };
 
   const safeSpawnCombatUnit = (
@@ -824,6 +908,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     else spawnScoutCavalry(world, spot.x, spot.y, p);
   };
 
+  const mirroredSnowSkirmish = selectedMapId === MapId.KRKONOSE_WINTER_CROWN;
+
   // ── Player 1 (Bohemia, lower-left) ────────────────────────────────────────
   const p1 = mapData.spawns[1];
   const p1x = p1.x;
@@ -835,29 +921,56 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
 
   // Player 1's local resource patches — denser around the TC so each AI/human
   // has plenty to harvest without crossing the map.
-  for (let i = 0; i < 14; i++) {
-    safeSpawnResource(
-      ResourceKindId.WOOD,
-      p1x + 4 + (i % 5),
-      p1y - 3 - Math.floor(i / 5) * 2,
-      TREE_RESOURCE_AMOUNT
-    );
-  }
-  for (let i = 0; i < 4; i++) {
-    safeSpawnResource(
-      ResourceKindId.GOLD,
-      p1x - 3 - (i % 2),
-      p1y - 2 - Math.floor(i / 2),
-      LOCAL_GOLD_DEPOSIT_AMOUNT
-    );
-  }
-  for (let i = 0; i < 3; i++) {
-    safeSpawnResource(
-      ResourceKindId.STONE,
-      p1x - 4 - i,
-      p1y + 3 + (i % 2),
-      LOCAL_STONE_DEPOSIT_AMOUNT
-    );
+  if (mirroredSnowSkirmish) {
+    for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
+      safeSpawnMirroredResource(
+        ResourceKindId.WOOD,
+        p1x + 4 + (i % 5),
+        p1y - 3 - Math.floor(i / 5) * 2,
+        TREE_RESOURCE_AMOUNT
+      );
+    }
+    for (let i = 0; i < 4; i++) {
+      safeSpawnMirroredResource(
+        ResourceKindId.GOLD,
+        p1x - 3 - (i % 2),
+        p1y - 2 - Math.floor(i / 2),
+        LOCAL_GOLD_DEPOSIT_AMOUNT
+      );
+    }
+    for (let i = 0; i < 3; i++) {
+      safeSpawnMirroredResource(
+        ResourceKindId.STONE,
+        p1x - 4 - i,
+        p1y + 3 + (i % 2),
+        LOCAL_STONE_DEPOSIT_AMOUNT
+      );
+    }
+  } else {
+    for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
+      safeSpawnResource(
+        ResourceKindId.WOOD,
+        p1x + 4 + (i % 5),
+        p1y - 3 - Math.floor(i / 5) * 2,
+        TREE_RESOURCE_AMOUNT
+      );
+    }
+    for (let i = 0; i < 4; i++) {
+      safeSpawnResource(
+        ResourceKindId.GOLD,
+        p1x - 3 - (i % 2),
+        p1y - 2 - Math.floor(i / 2),
+        LOCAL_GOLD_DEPOSIT_AMOUNT
+      );
+    }
+    for (let i = 0; i < 3; i++) {
+      safeSpawnResource(
+        ResourceKindId.STONE,
+        p1x - 4 - i,
+        p1y + 3 + (i % 2),
+        LOCAL_STONE_DEPOSIT_AMOUNT
+      );
+    }
   }
 
   // ── Player 2 (Frankia, upper-right) ──────────────────────────────────────
@@ -870,77 +983,95 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   safeSpawnCombatUnit('SCOUT_CAVALRY', p2x + 2, p2y + 2, 2);
 
   // Player 2's local patches mirror player 1.
-  for (let i = 0; i < 14; i++) {
-    safeSpawnResource(
-      ResourceKindId.WOOD,
-      p2x - 4 - (i % 5),
-      p2y + 3 + Math.floor(i / 5) * 2,
-      TREE_RESOURCE_AMOUNT
-    );
-  }
-  for (let i = 0; i < 4; i++) {
-    safeSpawnResource(
-      ResourceKindId.GOLD,
-      p2x + 3 + (i % 2),
-      p2y + 2 + Math.floor(i / 2),
-      LOCAL_GOLD_DEPOSIT_AMOUNT
-    );
-  }
-  for (let i = 0; i < 3; i++) {
-    safeSpawnResource(
-      ResourceKindId.STONE,
-      p2x + 4 + i,
-      p2y - 3 - (i % 2),
-      LOCAL_STONE_DEPOSIT_AMOUNT
-    );
-  }
-
-  // Map-wide resource scatter — gives the bigger 64×64 playfield enough
-  // ambient resources that expanding feels rewarding. Deterministic via rng.
-  const mx = Math.floor(MAP.WIDTH / 2);
-  const my = Math.floor(MAP.HEIGHT / 2);
-  // Contested centre gold/stone — worth crossing the river for.
-  safeSpawnResource(ResourceKindId.GOLD, mx - 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-  safeSpawnResource(ResourceKindId.GOLD, mx, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-  safeSpawnResource(ResourceKindId.GOLD, mx + 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-  safeSpawnResource(ResourceKindId.STONE, mx - 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-  safeSpawnResource(ResourceKindId.STONE, mx, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-  safeSpawnResource(ResourceKindId.STONE, mx + 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-
-  if (selectedMapId === MapId.BOHEMIAN_BORDER_FOREST) {
-    const nwX = Math.round(MAP.WIDTH * 0.22);
-    const nwY = Math.round(MAP.HEIGHT * 0.22);
-    const seX = Math.round(MAP.WIDTH * 0.78);
-    const seY = Math.round(MAP.HEIGHT * 0.78);
+  if (!mirroredSnowSkirmish) {
+    for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
+      safeSpawnResource(
+        ResourceKindId.WOOD,
+        p2x - 4 - (i % 5),
+        p2y + 3 + Math.floor(i / 5) * 2,
+        TREE_RESOURCE_AMOUNT
+      );
+    }
+    for (let i = 0; i < 4; i++) {
+      safeSpawnResource(
+        ResourceKindId.GOLD,
+        p2x + 3 + (i % 2),
+        p2y + 2 + Math.floor(i / 2),
+        LOCAL_GOLD_DEPOSIT_AMOUNT
+      );
+    }
     for (let i = 0; i < 3; i++) {
-      safeSpawnResource(ResourceKindId.GOLD, nwX - 2 + i, nwY - 1, SCATTERED_GOLD_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.STONE, nwX + 1 + i, nwY + 2, SCATTERED_STONE_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.GOLD, seX + 2 - i, seY + 1, SCATTERED_GOLD_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.STONE, seX - 1 - i, seY - 2, SCATTERED_STONE_DEPOSIT_AMOUNT);
+      safeSpawnResource(
+        ResourceKindId.STONE,
+        p2x + 4 + i,
+        p2y - 3 - (i % 2),
+        LOCAL_STONE_DEPOSIT_AMOUNT
+      );
+    }
+  }
+
+  if (mirroredSnowSkirmish) {
+    const mirroredExpansionResources: Array<[ResourceKind, number, number, number]> = [
+      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.42), Math.round(MAP.HEIGHT * 0.46), CENTER_GOLD_DEPOSIT_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.35), Math.round(MAP.HEIGHT * 0.57), SCATTERED_GOLD_DEPOSIT_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.20), Math.round(MAP.HEIGHT * 0.37), SCATTERED_GOLD_DEPOSIT_AMOUNT],
+      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.45), Math.round(MAP.HEIGHT * 0.59), CENTER_STONE_DEPOSIT_AMOUNT],
+      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.28), Math.round(MAP.HEIGHT * 0.52), SCATTERED_STONE_DEPOSIT_AMOUNT],
+      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.16), Math.round(MAP.HEIGHT * 0.57), SCATTERED_STONE_DEPOSIT_AMOUNT],
+    ];
+    for (const [kind, x, y, amount] of mirroredExpansionResources) {
+      safeSpawnMirroredResource(kind, x, y, amount);
+    }
+  } else {
+    // Map-wide resource scatter — gives the bigger 64×64 playfield enough
+    // ambient resources that expanding feels rewarding. Deterministic via rng.
+    const mx = Math.floor(MAP.WIDTH / 2);
+    const my = Math.floor(MAP.HEIGHT / 2);
+    // Contested centre gold/stone — worth crossing the river for.
+    safeSpawnResource(ResourceKindId.GOLD, mx - 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
+    safeSpawnResource(ResourceKindId.GOLD, mx, my, CENTER_GOLD_DEPOSIT_AMOUNT);
+    safeSpawnResource(ResourceKindId.GOLD, mx + 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
+    safeSpawnResource(ResourceKindId.STONE, mx - 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+    safeSpawnResource(ResourceKindId.STONE, mx, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+    safeSpawnResource(ResourceKindId.STONE, mx + 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+
+    if (selectedMapId === MapId.BOHEMIAN_BORDER_FOREST) {
+      const nwX = Math.round(MAP.WIDTH * 0.22);
+      const nwY = Math.round(MAP.HEIGHT * 0.22);
+      const seX = Math.round(MAP.WIDTH * 0.78);
+      const seY = Math.round(MAP.HEIGHT * 0.78);
+      for (let i = 0; i < 3; i++) {
+        safeSpawnResource(ResourceKindId.GOLD, nwX - 2 + i, nwY - 1, SCATTERED_GOLD_DEPOSIT_AMOUNT);
+        safeSpawnResource(ResourceKindId.STONE, nwX + 1 + i, nwY + 2, SCATTERED_STONE_DEPOSIT_AMOUNT);
+        safeSpawnResource(ResourceKindId.GOLD, seX + 2 - i, seY + 1, SCATTERED_GOLD_DEPOSIT_AMOUNT);
+        safeSpawnResource(ResourceKindId.STONE, seX - 1 - i, seY - 2, SCATTERED_STONE_DEPOSIT_AMOUNT);
+      }
     }
   }
 
   // Real tree resources on generated forest terrain, plus scattered singletons.
-  seedInitialForestTrees(world);
-  for (let i = 0; i < INITIAL_SCATTERED_TREE_COUNT; i++) {
-    const x = Math.floor(rng.next() * MAP.WIDTH);
-    const y = Math.floor(rng.next() * MAP.HEIGHT);
-    safeSpawnResource(ResourceKindId.WOOD, x, y, 80);
-  }
-  for (let i = 0; i < INITIAL_EDGE_TREE_COUNT; i++) {
-    const spot = randomEdgeTile(world);
-    safeSpawnResource(ResourceKindId.WOOD, spot.x, spot.y, 80);
-  }
-  // A few extra gold/stone outcrops far from spawns.
-  for (let i = 0; i < 8; i++) {
-    const x = Math.floor(rng.next() * MAP.WIDTH);
-    const y = Math.floor(rng.next() * MAP.HEIGHT);
-    safeSpawnResource(ResourceKindId.GOLD, x, y, SCATTERED_GOLD_DEPOSIT_AMOUNT);
-  }
-  for (let i = 0; i < 6; i++) {
-    const x = Math.floor(rng.next() * MAP.WIDTH);
-    const y = Math.floor(rng.next() * MAP.HEIGHT);
-    safeSpawnResource(ResourceKindId.STONE, x, y, SCATTERED_STONE_DEPOSIT_AMOUNT);
+  seedInitialForestTrees(world, mirroredSnowSkirmish);
+  if (!mirroredSnowSkirmish) {
+    for (let i = 0; i < INITIAL_SCATTERED_TREE_COUNT; i++) {
+      const x = Math.floor(rng.next() * MAP.WIDTH);
+      const y = Math.floor(rng.next() * MAP.HEIGHT);
+      safeSpawnResource(ResourceKindId.WOOD, x, y, 80);
+    }
+    for (let i = 0; i < INITIAL_EDGE_TREE_COUNT; i++) {
+      const spot = randomEdgeTile(world);
+      safeSpawnResource(ResourceKindId.WOOD, spot.x, spot.y, 80);
+    }
+    // A few extra gold/stone outcrops far from spawns.
+    for (let i = 0; i < 8; i++) {
+      const x = Math.floor(rng.next() * MAP.WIDTH);
+      const y = Math.floor(rng.next() * MAP.HEIGHT);
+      safeSpawnResource(ResourceKindId.GOLD, x, y, SCATTERED_GOLD_DEPOSIT_AMOUNT);
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = Math.floor(rng.next() * MAP.WIDTH);
+      const y = Math.floor(rng.next() * MAP.HEIGHT);
+      safeSpawnResource(ResourceKindId.STONE, x, y, SCATTERED_STONE_DEPOSIT_AMOUNT);
+    }
   }
 
   updatePlayerVisibility(world, LOCAL_PLAYER_ID);
@@ -965,6 +1096,10 @@ export function createCampaignWorld(
     configureBattleOfBilaHora(world);
   } else if (mission.id === CampaignMissionId.BATTLE_OF_KUTNA_HORA) {
     configureBattleOfKutnaHora(world);
+  } else if (mission.id === CampaignMissionId.BATTLE_OF_SUDOMER) {
+    configureBattleOfSudomer(world);
+  } else if (mission.id === CampaignMissionId.BATTLE_OF_ZBOROV) {
+    configureBattleOfZborov(world);
   }
 
   const configuredCampaign = world.campaign;
@@ -986,6 +1121,8 @@ export function createCampaignWorld(
       configuredCampaign?.nextReinforcementTick ?? world.tick + SIM.TICK_HZ * 70,
     scriptedWaveIndex: configuredCampaign?.scriptedWaveIndex,
     scriptedWaveCount: configuredCampaign?.scriptedWaveCount,
+    zborovLinesTaken: configuredCampaign?.zborovLinesTaken,
+    zborovForwardY: configuredCampaign?.zborovForwardY,
   };
 
   updateCampaignObjectives(world);
@@ -1038,6 +1175,228 @@ function configureBattleOfBilaHora(world: SimWorld): void {
   };
   world.aiPlayers[AI_PLAYER_ID] = null;
   revealMapForPlayer(world, LOCAL_PLAYER_ID);
+}
+
+function configureBattleOfZborov(world: SimWorld): void {
+  clearBattlefieldForTownlessMission(world);
+  // Bare battlefield — strip any scattered resource nodes (trees/ore) so the
+  // field is nothing but mud and dirt, and nothing blocks unit/bunker placement.
+  for (const eid of [...resourceQuery(world.ecs)]) removeEntity(world.ecs, eid);
+  layZborovWire(world);
+  scatterZborovTrees(world);
+
+  world.ages[LOCAL_PLAYER_ID] = createAgeState(AgeId.TOTAL_WAR);
+  world.ages[AI_PLAYER_ID] = createAgeState(AgeId.TOTAL_WAR);
+  world.researchedTechs[LOCAL_PLAYER_ID] = createAllTechSet();
+  world.researchedTechs[AI_PLAYER_ID] = createAllTechSet();
+  world.resources[LOCAL_PLAYER_ID].set([0, 0, 0, 0]);
+  world.resources[AI_PLAYER_ID].set([0, 0, 0, 0]);
+  world.population[LOCAL_PLAYER_ID].cap = POP_CAP_HARD_LIMIT;
+  world.population[AI_PLAYER_ID].cap = POP_CAP_HARD_LIMIT;
+
+  const jumpOff = world.map.spawns[LOCAL_PLAYER_ID];
+
+  const bunkerEids = placeZborovBunker(world);
+  const garrison = spawnZborovGarrison(world);
+  setBilaHoraDefensiveStance(world, garrison.all);
+  spawnZborovAssaultForce(world, jumpOff);
+
+  world.armyRallyPoints[LOCAL_PLAYER_ID] = { x: jumpOff.x, y: jumpOff.y - 6 };
+  world.armyRallyPoints[AI_PLAYER_ID] = null;
+  world.aiPlayers[AI_PLAYER_ID] = null;
+  world.campaign = {
+    missionId: CampaignMissionId.BATTLE_OF_ZBOROV,
+    name: 'Battle of Zborov',
+    description: '',
+    briefing: '',
+    lockedTechs: [],
+    objectives: [],
+    trackedObjectiveEids: {
+      silence_mg_nests: garrison.nestEids,
+      take_trench_1: garrison.line1,
+      take_trench_2: garrison.line2,
+      take_trench_3: garrison.line3,
+      take_command_bunker: bunkerEids,
+      zborov_garrison: garrison.all,
+      zborov_reinforcements: [],
+      zborov_enemy_reinforcements: [],
+    },
+    enemyAiMode: 'defensive',
+    nextReinforcementTick: world.tick + ZBOROV_REINFORCE_INTERVAL_TICKS,
+    zborovLinesTaken: 0,
+    zborovForwardY: jumpOff.y,
+  };
+  pushAiEvent(
+    world,
+    AI_PLAYER_ID,
+    'The Legion goes over the top — bite into each trench line in turn, hold it, and keep your lone mortar alive to crack the machine-gun nests.'
+  );
+  revealMapForPlayer(world, LOCAL_PLAYER_ID);
+}
+
+function placeZborovBunker(world: SimWorld): number[] {
+  // The lone rear structure on the field — the command bunker the assault must
+  // take. Everything else is rifle lines and machine-gun nests (units).
+  const bunker = placePresetBuildingExact(
+    world,
+    BuildingDefId.FOUNDRY,
+    Math.round(MAP.WIDTH * 0.5),
+    Math.round(MAP.HEIGHT * ZBOROV_BUNKER_FRAC),
+    AI_PLAYER_ID
+  );
+  return bunker !== null ? [bunker] : [];
+}
+
+function scatterZborovTrees(world: SimWorld): void {
+  // Dot the impassable wooded flanks with real tree sprites so the sealed edges
+  // read as dense woods hemming in the corridor. Purely decorative — those
+  // tiles are already non-walkable; the trees never touch the playable lane.
+  // Spawned after the resource-clear so they persist for the mission.
+  const cx = Math.round(MAP.WIDTH * 0.5);
+  const leftEdge = cx - ZBOROV_CORRIDOR_HALF;
+  const rightEdge = cx + ZBOROV_CORRIDOR_HALF;
+  const columns = [
+    leftEdge - 2,
+    leftEdge - 6,
+    leftEdge - 11,
+    rightEdge + 2,
+    rightEdge + 6,
+    rightEdge + 11,
+  ];
+  for (let y = 3; y < MAP.HEIGHT - 3; y += 3) {
+    for (const x of columns) {
+      if (!isTileInMap(x, y)) continue;
+      if (world.map.tiles[y * MAP.WIDTH + x] !== TileType.FOREST) continue;
+      if (findResourceAt(world, x, y, 1.4) !== null) continue;
+      spawnResource(world, ResourceKindId.WOOD, x, y, TREE_RESOURCE_AMOUNT);
+    }
+  }
+}
+
+function zborovMgEmplacements(): GridPos[] {
+  // Each MG nest sits two tiles NORTH of (behind) the forward wire belt — the
+  // enemy side — in a wire bay, firing south through a slit in the wire at the
+  // player (see layZborovWire). Well out of range of the player at spawn.
+  const cx = Math.round(MAP.WIDTH * 0.5);
+  const beltY = Math.round(MAP.HEIGHT * ZBOROV_FORWARD_WIRE_FRAC);
+  return ZBOROV_MG_OFFSETS.map((dx) => ({ x: cx + dx, y: beltY - 2 }));
+}
+
+function layZborovWire(world: SimWorld): void {
+  // Barbed-wire belts in front of each rifle line — the WW1 wall replacement.
+  // Walkable but slows units to a crawl (ZBOROV_WIRE_SPEED_MULTIPLIER); left
+  // open at GAP LANES so attackers can pour through, and INDENTED into wire
+  // pockets around each machine-gun nest so the MGs read as dug-in emplacements.
+  const cx = Math.round(MAP.WIDTH * 0.5);
+  // Span the full playable corridor so the belts run wall-to-wall between the
+  // impassable woods — no open shoulder to walk around them.
+  const leftX = cx - ZBOROV_CORRIDOR_HALF;
+  const rightX = cx + ZBOROV_CORRIDOR_HALF;
+
+  const wireAt = (x: number, y: number) => {
+    if (!isTileInMap(x, y)) return;
+    const idx = y * MAP.WIDTH + x;
+    if (isWaterCampaignTile(world.map.tiles[idx])) return; // clip to the dry arena
+    if (world.map.tiles[idx] === TileType.FOREST) return; // never unseal the flank woods
+    world.map.tiles[idx] = TileType.BARBED_WIRE;
+    world.map.walkability[y][x] = 0; // crossed, not a wall
+    world.grid[y][x] = 0;
+  };
+  const isGap = (x: number, gaps: number[]) => gaps.some((g) => Math.abs(x - g) <= 1);
+
+  // Mid + rear belts: plain two-row entanglements with three sally gaps.
+  const plainGaps = [cx - 9, cx, cx + 9];
+  for (const frac of [ZBOROV_MID_WIRE_FRAC, ZBOROV_REAR_WIRE_FRAC]) {
+    const beltY = Math.round(MAP.HEIGHT * frac);
+    for (let x = leftX; x <= rightX; x++) {
+      if (isGap(x, plainGaps)) continue;
+      wireAt(x, beltY);
+      wireAt(x, beltY + 1);
+    }
+  }
+
+  // Forward belt: sally gaps + a machine-gun emplacement at each nest. The two-
+  // row belt runs in FRONT of the MG (south, toward the player); at the nest it
+  // opens a one-tile firing slit and throws short wire "wings" back north on
+  // either side, forming a bay the MG (at beltY-2, behind the wire) fires from.
+  const beltY = Math.round(MAP.HEIGHT * ZBOROV_FORWARD_WIRE_FRAC);
+  const fwdGaps = [cx - 9, cx, cx + 9];
+  const mgXs = zborovMgEmplacements().map((p) => p.x);
+  for (let x = leftX; x <= rightX; x++) {
+    if (isGap(x, fwdGaps)) continue;
+    const nestX = mgXs.find((mx) => Math.abs(x - mx) <= 2);
+    if (nestX === undefined) {
+      wireAt(x, beltY);
+      wireAt(x, beltY + 1);
+    } else {
+      const rel = x - nestX;
+      if (rel !== 0) {
+        // Belt in front of the bay (a 1-tile firing slit stays open at rel 0).
+        wireAt(x, beltY);
+        wireAt(x, beltY + 1);
+      }
+      if (Math.abs(rel) === 2) {
+        // Side wings running back (north) to flank the MG nest.
+        wireAt(x, beltY - 1);
+        wireAt(x, beltY - 2);
+      }
+    }
+  }
+}
+
+interface ZborovGarrison {
+  line1: number[];
+  line2: number[];
+  line3: number[];
+  nestEids: number[];
+  all: number[];
+}
+
+function spawnZborovGarrison(world: SimWorld): ZborovGarrison {
+  const midX = Math.round(MAP.WIDTH * 0.5);
+  const south = { x: 0, y: 1 };
+  const across = { x: 1, y: 0 };
+  const y1 = Math.round(MAP.HEIGHT * ZBOROV_FORWARD_LINE_FRAC);
+  const y2 = Math.round(MAP.HEIGHT * ZBOROV_MID_LINE_FRAC);
+  const y3 = Math.round(MAP.HEIGHT * ZBOROV_REAR_LINE_FRAC);
+  // Rifle lines spread across the corridor (wide spacing) so the defence covers
+  // its full width — no thin centre to skirt around.
+  const riflemen = (y: number) =>
+    spawnFormationRow(world, UnitDefId.GUNMAN, { x: midX, y }, south, across, 0, 0, AI_PLAYER_ID, 12, 2.4);
+
+  // Forward line = its riflemen + the machine-gun nests dug into the wire in
+  // front of it; taking this trench means clearing both.
+  const line1 = riflemen(y1);
+  const nestEids: number[] = [];
+  for (const nest of zborovMgEmplacements()) {
+    const eid = spawnPresetUnitAt(world, UnitDefId.MACHINE_GUN, nest.x, nest.y, AI_PLAYER_ID);
+    if (eid !== null) nestEids.push(eid);
+  }
+  line1.push(...nestEids);
+
+  const line2 = riflemen(y2);
+
+  // Rear line keeps two counter-battery mortars on the wings.
+  const line3 = riflemen(y3);
+  line3.push(...spawnFormationRow(world, UnitDefId.MORTAR, { x: midX, y: y3 }, south, across, 0, -9, AI_PLAYER_ID, 1, 1.6));
+  line3.push(...spawnFormationRow(world, UnitDefId.MORTAR, { x: midX, y: y3 }, south, across, 0, 9, AI_PLAYER_ID, 1, 1.6));
+
+  return { line1, line2, line3, nestEids, all: [...line1, ...line2, ...line3] };
+}
+
+function spawnZborovAssaultForce(world: SimWorld, jumpOff: GridPos): number[] {
+  const north = { x: 0, y: -1 };
+  const across = { x: 1, y: 0 };
+  const force: number[] = [];
+  const push = (eids: number[]) => force.push(...eids);
+
+  // A lean rifle line leads the clash; a single mortar trails at the rear — the
+  // player's only tool for cracking the machine-gun nests, and the unit they
+  // must screen and keep alive. (Reinforcement waves rebuild the rifle numbers.)
+  push(spawnFormationRow(world, UnitDefId.GUNMAN, jumpOff, north, across, 2.0, 0, LOCAL_PLAYER_ID, 9, 1.1));
+  push(spawnFormationRow(world, UnitDefId.MORTAR, jumpOff, north, across, -1.0, 0, LOCAL_PLAYER_ID, 1, 2.0));
+
+  return force;
 }
 
 function configureBattleOfKutnaHora(world: SimWorld): void {
@@ -1095,6 +1454,192 @@ function configureBattleOfKutnaHora(world: SimWorld): void {
     scriptedWaveCount: KUTNA_HORA_TOTAL_WAVES,
   };
   updatePlayerVisibility(world, LOCAL_PLAYER_ID);
+}
+
+function configureBattleOfSudomer(world: SimWorld): void {
+  clearBattlefieldForTownlessMission(world);
+
+  world.ages[LOCAL_PLAYER_ID] = createAgeState(AgeId.GUNPOWDER);
+  world.ages[AI_PLAYER_ID] = createAgeState(AgeId.GUNPOWDER);
+  world.researchedTechs[LOCAL_PLAYER_ID] = createAllTechSet();
+  world.researchedTechs[AI_PLAYER_ID] = createAllTechSet();
+  // [food, wood, gold, stone] — a modest stockpile: enough to queue a handful of
+  // units immediately, but the prep window must be spent ramping the economy.
+  world.resources[LOCAL_PLAYER_ID].set([400, 500, 150, 200]);
+  world.resources[AI_PLAYER_ID].set([0, 0, 0, 0]);
+
+  const town = sudomerTownCenter();
+  const muster = { x: town.x + 3, y: town.y + 6 };
+  const firstAttack = sudomerWaveSpawnAnchor(0);
+  world.map.spawns[LOCAL_PLAYER_ID] = muster;
+  world.map.spawns[AI_PLAYER_ID] = firstAttack;
+
+  // Clear a generous dry bowl for the town + economy, and keep the two enemy
+  // approach lanes (dry central choke, muddy right flank) walkable.
+  clearSudomerGround(world, town, 18, 15, false, true);
+  clearSudomerGround(world, { x: town.x + 14, y: town.y + 14 }, 14, 5, false);
+  clearSudomerGround(world, { x: town.x + 27, y: town.y + 9 }, 6, 8, true);
+  for (let i = 0; i < SUDOMER_TOTAL_WAVES; i++) {
+    clearSudomerGround(world, sudomerWaveSpawnAnchor(i), 8, 6, i % 2 === 1);
+  }
+
+  const townCenter = buildSudomerPlayerTown(world, town);
+  spawnSudomerStartingSquad(world, muster);
+  spawnSudomerVillagers(world, town, 12);
+
+  world.population[LOCAL_PLAYER_ID].cap = SUDOMER_POP_CAP;
+  world.population[AI_PLAYER_ID].cap = SUDOMER_POP_CAP;
+  world.armyRallyPoints[LOCAL_PLAYER_ID] = { x: town.x + 12, y: town.y + 12 };
+  world.armyRallyPoints[AI_PLAYER_ID] = null;
+  world.aiPlayers[AI_PLAYER_ID] = null;
+  world.campaign = {
+    missionId: CampaignMissionId.BATTLE_OF_SUDOMER,
+    name: 'Battle of Sudoměř',
+    description: '',
+    briefing: '',
+    lockedTechs: [],
+    objectives: [],
+    trackedObjectiveEids: {
+      sudomer_attackers: [],
+      sudomer_town_center: townCenter !== null ? [townCenter] : [],
+    },
+    enemyAiMode: 'defensive',
+    nextReinforcementTick: world.tick + SUDOMER_FIRST_WAVE_TICKS,
+    scriptedWaveIndex: 0,
+    scriptedWaveCount: SUDOMER_TOTAL_WAVES,
+  };
+  pushAiEvent(
+    world,
+    AI_PLAYER_ID,
+    'A royalist crusader host masses across the field — first assault in 5 minutes. Marshal Sudoměř.'
+  );
+  revealMapForPlayer(world, LOCAL_PLAYER_ID);
+}
+
+function clearSudomerGround(
+  world: SimWorld,
+  center: GridPos,
+  radiusX: number,
+  radiusY: number,
+  keepMud: boolean,
+  preserveDirt = false
+): void {
+  const minX = Math.max(1, Math.round(center.x - radiusX));
+  const maxX = Math.min(MAP.WIDTH - 2, Math.round(center.x + radiusX));
+  const minY = Math.max(1, Math.round(center.y - radiusY));
+  const maxY = Math.min(MAP.HEIGHT - 2, Math.round(center.y + radiusY));
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const idx = y * MAP.WIDTH + x;
+      if (keepMud && world.map.tiles[idx] === TileType.MUD) {
+        world.map.elevation[idx] = Math.min(world.map.elevation[idx], 2);
+      } else if (preserveDirt && world.map.tiles[idx] === TileType.DIRT) {
+        world.map.elevation[idx] = 3;
+      } else if (!isWaterCampaignTile(world.map.tiles[idx])) {
+        world.map.tiles[idx] = Math.abs(x - center.x) <= 1 ? TileType.DIRT : TileType.GRASS;
+        world.map.elevation[idx] = 3;
+      }
+      if (!isWaterCampaignTile(world.map.tiles[idx])) {
+        world.map.walkability[y][x] = 0;
+        world.grid[y][x] = 0;
+      }
+    }
+  }
+
+  for (const eid of [...resourceQuery(world.ecs)]) {
+    if (
+      Position.x[eid] >= minX - 1 &&
+      Position.x[eid] <= maxX + 1 &&
+      Position.y[eid] >= minY - 1 &&
+      Position.y[eid] <= maxY + 1
+    ) {
+      removeEntity(world.ecs, eid);
+    }
+  }
+}
+
+function isWaterCampaignTile(tile: number): boolean {
+  return tile === TileType.WATER || tile === TileType.WATER_SHALLOW;
+}
+
+function sudomerTownCenter(): GridPos {
+  return {
+    x: Math.round(MAP.WIDTH * 0.14),
+    y: Math.round(MAP.HEIGHT * 0.14),
+  };
+}
+
+function buildSudomerPlayerTown(world: SimWorld, town: GridPos): number | null {
+  const townCenter = spawnTownCenter(world, town.x, town.y, LOCAL_PLAYER_ID);
+
+  const place = (defId: number, dx: number, dy: number) =>
+    placePresetBuilding(world, defId, town.x + dx, town.y + dy, LOCAL_PLAYER_ID);
+
+  const houseOffsets: GridPos[] = [
+    { x: -7, y: -5 }, { x: -4, y: -6 }, { x: -1, y: -6 },
+    { x: -8, y: 0 }, { x: -8, y: 4 }, { x: -6, y: 7 },
+    { x: 2, y: -6 }, { x: 5, y: -5 },
+  ];
+  for (const offset of houseOffsets) {
+    place(BuildingDefId.HOUSE, offset.x, offset.y);
+  }
+
+  // Military production: pikemen from the barracks, hand-gunners from the foundry.
+  place(BuildingDefId.BARRACKS, -5, 3);
+  place(BuildingDefId.FOUNDRY, 5, 3);
+
+  // Economy. Each worksite seeds its own resource nodes and auto-starts one
+  // worker; the player must assign the idle villagers to ramp income — gold
+  // especially, since gunmen cost 75 gold apiece.
+  placeKutnaHoraWorksite(world, BuildingDefId.LUMBER_CAMP, town.x - 9, town.y - 3, ResourceKindId.WOOD);
+  placeKutnaHoraWorksite(world, BuildingDefId.STONE_QUARRY, town.x + 9, town.y - 4, ResourceKindId.STONE);
+  placeKutnaHoraWorksite(world, BuildingDefId.GOLD_MINE, town.x + 10, town.y + 2, ResourceKindId.GOLD);
+
+  place(BuildingDefId.FARM, -6, 8);
+  place(BuildingDefId.FARM, -3, 9);
+  place(BuildingDefId.FARM, 0, 9);
+  place(BuildingDefId.MILL, 3, 8);
+
+  return townCenter;
+}
+
+function spawnSudomerStartingSquad(world: SimWorld, muster: GridPos): number[] {
+  const squad: number[] = [];
+  const block = (defId: number, originX: number, originY: number, cols: number, count: number) => {
+    for (let i = 0; i < count; i++) {
+      const preferredX = originX + (i % cols);
+      const preferredY = originY + Math.floor(i / cols);
+      const spot = findPresetUnitSpot(world, preferredX, preferredY, 4, LOCAL_PLAYER_ID, 6);
+      if (!spot) continue;
+      const eid = spawnPresetUnitAt(world, defId, spot.x, spot.y, LOCAL_PLAYER_ID);
+      if (eid === null) continue;
+      setUnitHoldAnchor(world, eid, spot.x, spot.y);
+      squad.push(eid);
+    }
+  };
+  // A tidy square mustered in the base: 12 pikemen in front, 6 gunmen ranked up
+  // behind. Default stance — the player repositions them before the assault.
+  block(UnitDefId.SPEARMAN, muster.x - 2, muster.y, 4, 12);
+  block(UnitDefId.GUNMAN, muster.x - 2, muster.y + 4, 3, 6);
+  return squad;
+}
+
+function spawnSudomerVillagers(world: SimWorld, town: GridPos, count: number): void {
+  for (let i = 0; i < count; i++) {
+    const preferredX = town.x - 3 + (i % 4);
+    const preferredY = town.y + 3 + Math.floor(i / 4);
+    const spot = findPresetUnitSpot(world, preferredX, preferredY, 5, LOCAL_PLAYER_ID, 6);
+    if (!spot) continue;
+    spawnVillager(world, spot.x, spot.y, LOCAL_PLAYER_ID);
+  }
+}
+
+function sudomerAttackTarget(route: SudomerWaveRoute): GridPos {
+  const town = sudomerTownCenter();
+  if (route === 'mud') {
+    return { x: town.x + 27, y: town.y + 9 };
+  }
+  return { x: town.x + 12, y: town.y + 12 };
 }
 
 function clearPlayerBuildingsForCampaign(world: SimWorld, playerId: number): void {
@@ -1564,7 +2109,7 @@ function setBilaHoraDefensiveStance(world: SimWorld, eids: number[]): void {
 
 function issueBilaHoraEnemyAdvance(world: SimWorld, eids: number[], target: GridPos): void {
   const ordered: number[] = [];
-  for (const { eid, dest } of formationDestinations(world, eids, target)) {
+  for (const { eid, dest } of formationDestinations(world, eids, target, FORMATION_MODE_LINE)) {
     if (!hasComponent(world.ecs, Combat, eid)) continue;
     if (!hasComponent(world.ecs, AttackTarget, eid)) continue;
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
@@ -2004,6 +2549,7 @@ function spawnPresetUnitAt(
   if (defId === UnitDefId.GUNMAN) return spawnGunman(world, x, y, playerId);
   if (defId === UnitDefId.CANNON) return spawnCannon(world, x, y, playerId);
   if (defId === UnitDefId.MACHINE_GUN) return spawnMachineGun(world, x, y, playerId);
+  if (defId === UnitDefId.MORTAR) return spawnMortar(world, x, y, playerId);
   return null;
 }
 
@@ -2043,7 +2589,13 @@ function canPresetUnitStandAt(
   if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return false;
   if (world.map.walkability[y][x] !== 0) return false;
   const tile = world.map.tiles[y * MAP.WIDTH + x];
-  if (tile !== TileType.GRASS && tile !== TileType.DIRT) return false;
+  if (
+    tile !== TileType.GRASS
+    && tile !== TileType.DIRT
+    && tile !== TileType.MUD
+    && tile !== TileType.SNOW
+    && tile !== TileType.PACKED_SNOW
+  ) return false;
   if (isNearWaterOrBridge(world, x, y, waterClearance)) return false;
   if (findResourceAt(world, x, y, 0.7) !== null) return false;
   if (findBuildingAt(world, x, y, 2.2) !== null) return false;
@@ -2457,6 +3009,58 @@ export function spawnMachineGun(
   return eid;
 }
 
+/** Spawn a Total War Age mortar team at tile (x,y) owned by playerId. */
+export function spawnMortar(
+  world: SimWorld,
+  x: number,
+  y: number,
+  playerId: number
+): number {
+  const { ecs } = world;
+  const eid = addEntity(ecs);
+  addComponent(ecs, Position, eid);
+  addComponent(ecs, Velocity, eid);
+  addComponent(ecs, Speed, eid);
+  addComponent(ecs, UnitKind, eid);
+  addComponent(ecs, PopulationCost, eid);
+  addComponent(ecs, Owner, eid);
+  addComponent(ecs, MortarTag, eid);
+  addComponent(ecs, Health, eid);
+  addComponent(ecs, Combat, eid);
+  addComponent(ecs, AttackTarget, eid);
+  addComponent(ecs, AttackMoveGoal, eid);
+  addComponent(ecs, UnitStance, eid);
+  addComponent(ecs, Cooldown, eid);
+  addComponent(ecs, PrevPosition, eid);
+  Position.x[eid] = x;
+  Position.y[eid] = y;
+  PrevPosition.x[eid] = x;
+  PrevPosition.y[eid] = y;
+  Velocity.x[eid] = 0;
+  Velocity.y[eid] = 0;
+  Speed.value[eid] = 1.2;
+  UnitKind.kind[eid] = UnitKindId.MORTAR;
+  PopulationCost.value[eid] = 2;
+  Owner.player[eid] = playerId;
+  Health.hp[eid] = 55;
+  Health.hpMax[eid] = 55;
+  Health.armor[eid] = 0;
+  // Longest reach in the game (out-ranges MG 6.5 and Cannon 8.5) with arcing
+  // splash; slow reload and the cavalry counter keep it honest.
+  Combat.atk[eid] = 40;
+  Combat.range[eid] = 10;
+  Combat.attackSpeedTicks[eid] = 85;
+  Combat.aggroRadius[eid] = 10;
+  AttackTarget.targetEid[eid] = -1;
+  AttackTarget.retainGoal[eid] = 0;
+  UnitStance.stance[eid] = UnitStanceId.AUTO_DEFEND;
+  UnitStance.anchorX[eid] = x;
+  UnitStance.anchorY[eid] = y;
+  Cooldown.ticksRemaining[eid] = 0;
+  world.population[playerId].current += 2;
+  return eid;
+}
+
 /** Spawn a Resource node (tree, gold pile, stone pile, berry bush). */
 export function spawnResource(
   world: SimWorld,
@@ -2476,10 +3080,39 @@ export function spawnResource(
   return eid;
 }
 
-function seedInitialForestTrees(world: SimWorld): void {
+function seedInitialForestTrees(world: SimWorld, mirrored = false): void {
+  const canSeedForestTile = (x: number, y: number): boolean => {
+    const tile = world.map.tiles[y * MAP.WIDTH + x];
+    return tile === TileType.FOREST || tile === TileType.SNOW_FOREST;
+  };
+
+  if (mirrored) {
+    const seen = new Set<number>();
+    for (let y = 0; y < MAP.HEIGHT; y++) {
+      for (let x = 0; x < MAP.WIDTH; x++) {
+        const idx = y * MAP.WIDTH + x;
+        if (seen.has(idx) || !canSeedForestTile(x, y)) continue;
+        const mx = MAP.WIDTH - 1 - x;
+        const my = MAP.HEIGHT - 1 - y;
+        const mirrorIdx = my * MAP.WIDTH + mx;
+        seen.add(idx);
+        seen.add(mirrorIdx);
+        if (!canSeedForestTile(mx, my)) continue;
+        const edgeBonus = Math.max(edgeProximity01(x, y), edgeProximity01(mx, my))
+          * FOREST_EDGE_INITIAL_TREE_BONUS;
+        if (world.rng.next() > FOREST_TILE_INITIAL_TREE_CHANCE + edgeBonus) continue;
+        trySpawnTreeAt(world, x, y, TREE_RESOURCE_AMOUNT, TREE_REGEN_BUILDING_CLEARANCE);
+        if (mx !== x || my !== y) {
+          trySpawnTreeAt(world, mx, my, TREE_RESOURCE_AMOUNT, TREE_REGEN_BUILDING_CLEARANCE);
+        }
+      }
+    }
+    return;
+  }
+
   for (let y = 0; y < MAP.HEIGHT; y++) {
     for (let x = 0; x < MAP.WIDTH; x++) {
-      if (world.map.tiles[y * MAP.WIDTH + x] !== TileType.FOREST) continue;
+      if (!canSeedForestTile(x, y)) continue;
       const edgeBonus = edgeProximity01(x, y) * FOREST_EDGE_INITIAL_TREE_BONUS;
       if (world.rng.next() > FOREST_TILE_INITIAL_TREE_CHANCE + edgeBonus) continue;
       trySpawnTreeAt(world, x, y, TREE_RESOURCE_AMOUNT, TREE_REGEN_BUILDING_CLEARANCE);
@@ -2523,7 +3156,12 @@ function canTreeGrowAt(
   if (world.map.walkability[y][x] !== 0) return false;
   const tile = world.map.tiles[y * MAP.WIDTH + x];
   if (!isResourceTerrainTile(tile)) return false;
-  if (tile !== TileType.GRASS && tile !== TileType.FOREST) return false;
+  if (
+    tile !== TileType.GRASS
+    && tile !== TileType.FOREST
+    && tile !== TileType.SNOW
+    && tile !== TileType.SNOW_FOREST
+  ) return false;
   if (hasMapFeatureAt(world, x, y, 0.6)) return false;
   if (findResourceAt(world, x, y, 0.6) !== null) return false;
   return !isNearBuilding(world, x, y, buildingClearance);
@@ -2978,6 +3616,8 @@ function lineOfSightRadius(world: SimWorld, eid: number): number {
   }
   if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return SCOUT_LINE_OF_SIGHT;
   if (hasComponent(world.ecs, MachineGunTag, eid)) return 8;
+  // Indirect fire is useless without spotting — match LOS to the 10-tile range.
+  if (hasComponent(world.ecs, MortarTag, eid)) return 10;
   return DEFAULT_UNIT_LINE_OF_SIGHT;
 }
 
@@ -3159,6 +3799,21 @@ function applyInput(world: SimWorld, input: SimInput): void {
     case 'toggleSelectedUnitStance':
       applyToggleSelectedUnitStance(world);
       return;
+    case 'setSelectedUnitStance':
+      applySetSelectedUnitStance(world, input.stance);
+      return;
+    case 'setFormationMode':
+      applySetFormationMode(world, input.mode);
+      return;
+    case 'adjustFormationMode':
+      applyAdjustFormationMode(world, input.delta);
+      return;
+    case 'rotateSelectedFormation':
+      applyRotateSelectedFormation(world, input.delta);
+      return;
+    case 'reformSelectedFormation':
+      applyReformSelectedFormation(world);
+      return;
     case 'attackSelected':
       applyAttackSelected(world, input.targetEid);
       return;
@@ -3175,7 +3830,7 @@ function applyInput(world: SimWorld, input: SimInput): void {
       applyRemoveSelectedBuildings(world, input.playerId);
       return;
     case 'trainUnit':
-      applyTrainUnit(world, input.atEid, input.defId);
+      applyTrainUnit(world, input.atEid, input.defId, input.count);
       return;
     case 'cancelProduction':
       applyCancelProduction(world, input.atEid);
@@ -3389,10 +4044,13 @@ function applyAttackSelected(world: SimWorld, targetEid: number): void {
 
 function applyAttackMoveSelected(world: SimWorld, to: GridPos): void {
   const units = commandableMovableSelection(world);
-  const destinations = formationDestinations(world, units, to);
+  const destinations = formationModeUsesSlots(world.formationMode)
+    ? formationDestinations(world, units, to, world.formationMode)
+    : units.map((eid) => ({ eid, dest: to }));
   const ordered: number[] = [];
   for (const { eid, dest } of destinations) {
     if (!hasComponent(world.ecs, Combat, eid)) continue;
+    if (!formationModeUsesSlots(world.formationMode)) clearFormationSpeedCap(world, eid);
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
     AttackTarget.targetEid[eid] = -1;
     AttackTarget.retainGoal[eid] = 0;
@@ -3408,15 +4066,44 @@ function applyAttackMoveSelected(world: SimWorld, to: GridPos): void {
     clearWorkOrders(world, eid);
     ordered.push(eid);
   }
-  applyFormationSpeedCap(world, ordered);
+  if (formationModeUsesSlots(world.formationMode)) {
+    applyFormationSpeedCap(world, ordered);
+  }
 }
 
 function applyMoveSelected(world: SimWorld, to: GridPos): void {
   const units = commandableMovableSelection(world);
+  const destinations = formationModeUsesSlots(world.formationMode)
+    ? formationDestinations(world, units, to, world.formationMode)
+    : units.map((eid) => ({ eid, dest: to }));
   const ordered: number[] = [];
-  for (const { eid, dest } of formationDestinations(world, units, to)) {
+  for (const { eid, dest } of destinations) {
+    if (!formationModeUsesSlots(world.formationMode)) clearFormationSpeedCap(world, eid);
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
     // Move overrides any combat, gather, or build state.
+    clearCombatOrders(world, eid);
+    clearWorkOrders(world, eid);
+    setUnitHoldAnchor(world, eid, dest.x, dest.y);
+    ordered.push(eid);
+  }
+  if (formationModeUsesSlots(world.formationMode)) {
+    applyFormationSpeedCap(world, ordered);
+  }
+}
+
+function applyReformSelectedFormation(world: SimWorld): void {
+  const units = selectedFormationUnits(world);
+  if (units.length <= 1) return;
+  if (!formationModeUsesSlots(world.formationMode)) {
+    for (const eid of units) clearFormationSpeedCap(world, eid);
+    return;
+  }
+
+  const center = formationCenter(units);
+  const facing = formationFacingVector(world.formationFacing);
+  const ordered: number[] = [];
+  for (const { eid, dest } of formationDestinations(world, units, center, world.formationMode, facing)) {
+    if (!pathTo(world, eid, dest.x, dest.y)) continue;
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
     setUnitHoldAnchor(world, eid, dest.x, dest.y);
@@ -3451,10 +4138,27 @@ function isMovableEntity(world: SimWorld, eid: number): boolean {
   );
 }
 
+function formationCenter(units: number[]): GridPos {
+  const center = units.reduce(
+    (acc, eid) => {
+      acc.x += Position.x[eid];
+      acc.y += Position.y[eid];
+      return acc;
+    },
+    { x: 0, y: 0 }
+  );
+  return {
+    x: Math.round(center.x / units.length),
+    y: Math.round(center.y / units.length),
+  };
+}
+
 function formationDestinations(
   world: SimWorld,
   units: number[],
-  to: GridPos
+  to: GridPos,
+  formationMode = FORMATION_MODE_DEFAULT,
+  facing?: { x: number; y: number }
 ): Array<{ eid: number; dest: GridPos }> {
   if (units.length <= 1) {
     return units.map((eid) => ({ eid, dest: to }));
@@ -3477,22 +4181,22 @@ function formationDestinations(
   center.x /= sorted.length;
   center.y /= sorted.length;
 
-  let dirX = to.x - center.x;
-  let dirY = to.y - center.y;
-  const len = Math.hypot(dirX, dirY);
-  if (len < 0.001) {
-    dirX = 0;
-    dirY = 1;
+  let dirX = facing?.x ?? (to.x - center.x);
+  let dirY = facing?.y ?? (to.y - center.y);
+  const dirLen = Math.hypot(dirX, dirY);
+  if (dirLen < 0.001) {
+    const defaultFacing = formationFacingVector(FORMATION_FACING_DEFAULT);
+    dirX = defaultFacing.x;
+    dirY = defaultFacing.y;
   } else {
-    dirX /= len;
-    dirY /= len;
+    dirX /= dirLen;
+    dirY /= dirLen;
   }
   const sideX = -dirY;
   const sideY = dirX;
-  const columns = Math.min(
-    FORMATION_MAX_COLUMNS,
-    Math.max(2, Math.ceil(Math.sqrt(sorted.length)))
-  );
+  const mode = clampFormationMode(formationMode);
+  const spacing = formationSpacing(mode);
+  const columns = formationColumnCount(sorted.length, mode);
   const rowCount = Math.ceil(sorted.length / columns);
   const reserved = new Set<string>();
 
@@ -3503,8 +4207,8 @@ function formationDestinations(
     const col = i % columns;
     const rowStart = row * columns;
     const rowSize = Math.min(columns, sorted.length - rowStart);
-    const sideOffset = (col - (rowSize - 1) / 2) * FORMATION_SPACING;
-    const forwardOffset = ((rowCount - 1) / 2 - row) * FORMATION_SPACING;
+    const sideOffset = (col - (rowSize - 1) / 2) * spacing;
+    const forwardOffset = ((rowCount - 1) / 2 - row) * spacing;
     const desired = {
       x: Math.round(to.x + dirX * forwardOffset + sideX * sideOffset),
       y: Math.round(to.y + dirY * forwardOffset + sideY * sideOffset),
@@ -3513,6 +4217,55 @@ function formationDestinations(
     if (dest) out.push({ eid, dest });
   }
   return out;
+}
+
+function clampFormationMode(mode: number): number {
+  if (!Number.isFinite(mode)) return FORMATION_MODE_DEFAULT;
+  return Math.max(
+    FORMATION_MODE_MIN,
+    Math.min(FORMATION_MODE_MAX, Math.trunc(mode))
+  );
+}
+
+function formationModeUsesSlots(mode: number): boolean {
+  return clampFormationMode(mode) !== FORMATION_MODE_FREE;
+}
+
+function normalizeFormationFacing(facing: number): number {
+  if (!Number.isFinite(facing)) return FORMATION_FACING_DEFAULT;
+  return ((Math.trunc(facing) % FORMATION_FACING_STEPS) + FORMATION_FACING_STEPS) %
+    FORMATION_FACING_STEPS;
+}
+
+function formationFacingVector(facing: number): { x: number; y: number } {
+  const angle = Math.PI / 2 + normalizeFormationFacing(facing) * (Math.PI * 2 / FORMATION_FACING_STEPS);
+  return {
+    x: Math.cos(angle),
+    y: Math.sin(angle),
+  };
+}
+
+function formationColumnCount(count: number, mode: number): number {
+  const maxColumns = Math.min(FORMATION_MAX_COLUMNS, count);
+  if (count <= 2) return count;
+  const lineColumns = Math.max(
+    2,
+    Math.min(maxColumns, count <= 10 ? count : Math.ceil(count / 2))
+  );
+  const squareColumns = Math.max(
+    2,
+    Math.min(maxColumns, Math.ceil(Math.sqrt(count)))
+  );
+  if (mode === FORMATION_MODE_COMPACT) return squareColumns;
+  return lineColumns;
+}
+
+function formationSpacing(mode: number): number {
+  switch (mode) {
+    case FORMATION_MODE_LINE: return 1.45;
+    case FORMATION_MODE_COMPACT: return 1.04;
+    default: return 1.2;
+  }
 }
 
 function formationRank(world: SimWorld, eid: number): number {
@@ -3581,9 +4334,7 @@ function applyStopSelected(world: SimWorld): void {
 }
 
 function applyToggleSelectedUnitStance(world: SimWorld): void {
-  const units = commandableSelection(world).filter((eid) =>
-    hasComponent(world.ecs, UnitStance, eid)
-  );
+  const units = selectedStanceUnits(world);
   if (units.length === 0) return;
 
   const allHolding = units.every((eid) =>
@@ -3600,6 +4351,46 @@ function applyToggleSelectedUnitStance(world: SimWorld): void {
       clearNonExplicitCombatTarget(world, eid);
     }
   }
+}
+
+function applySetSelectedUnitStance(world: SimWorld, stance: UnitStanceValue): void {
+  if (stance !== UnitStanceId.AUTO_DEFEND && stance !== UnitStanceId.HOLD_POSITION) return;
+  const units = selectedStanceUnits(world);
+  if (units.length === 0) return;
+
+  for (const eid of units) {
+    UnitStance.stance[eid] = stance;
+    if (stance === UnitStanceId.HOLD_POSITION) {
+      setUnitHoldAnchor(world, eid);
+      clearNonExplicitCombatTarget(world, eid);
+    }
+  }
+}
+
+function applyAdjustFormationMode(world: SimWorld, delta: number): void {
+  if (!Number.isFinite(delta) || delta === 0) return;
+  applySetFormationMode(world, world.formationMode + delta);
+}
+
+function applySetFormationMode(world: SimWorld, mode: number): void {
+  world.formationMode = clampFormationMode(mode);
+  applyReformSelectedFormation(world);
+}
+
+function applyRotateSelectedFormation(world: SimWorld, delta: number): void {
+  if (!Number.isFinite(delta) || delta === 0) return;
+  world.formationFacing = normalizeFormationFacing(world.formationFacing + delta);
+  applyReformSelectedFormation(world);
+}
+
+function selectedStanceUnits(world: SimWorld): number[] {
+  return commandableSelection(world).filter((eid) =>
+    hasComponent(world.ecs, UnitStance, eid)
+  );
+}
+
+function selectedFormationUnits(world: SimWorld): number[] {
+  return selectedStanceUnits(world).filter((eid) => isMovableEntity(world, eid));
 }
 
 function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
@@ -3685,16 +4476,29 @@ function canPlaceBuildingAt(
   return true;
 }
 
-function applyTrainUnit(world: SimWorld, atEid: number, defId: number): void {
-  if (!hasComponent(world.ecs, Producer, atEid)) return;
+function applyTrainUnit(
+  world: SimWorld,
+  atEid: number,
+  defId: number,
+  count = 1
+): void {
+  const numericCount = Number.isFinite(count) ? count : 1;
+  const requested = Math.max(1, Math.min(5, Math.trunc(numericCount)));
+  for (let i = 0; i < requested; i++) {
+    if (!applyTrainUnitOnce(world, atEid, defId)) return;
+  }
+}
+
+function applyTrainUnitOnce(world: SimWorld, atEid: number, defId: number): boolean {
+  if (!hasComponent(world.ecs, Producer, atEid)) return false;
   const unitDef = getUnitDef(defId);
-  if (!unitDef) return;
-  if (!hasComponent(world.ecs, Building, atEid)) return;
+  if (!unitDef) return false;
+  if (!hasComponent(world.ecs, Building, atEid)) return false;
   const producerDef = getBuildingDef(Building.defId[atEid]);
-  if (!producerDef) return;
+  if (!producerDef) return false;
   const playerId = Owner.player[atEid];
   const bank = world.resources[playerId];
-  if (!bank) return;
+  if (!bank) return false;
   const queue = world.productionQueues.get(atEid) ?? [];
   const isWorksiteWorker =
     defId === UnitDefId.VILLAGER &&
@@ -3703,29 +4507,30 @@ function applyTrainUnit(world: SimWorld, atEid: number, defId: number): void {
   if (isWorksiteWorker) {
     const slots = getWorksiteWorkerSlots(world, atEid);
     const occupied = countWorksiteWorkers(world, atEid) + countQueuedWorksiteWorkers(world, atEid);
-    if (occupied >= slots) return;
-    if (queue.length >= 2) return;
-    if (!canAfford(bank, unitDef.cost)) return;
+    if (occupied >= slots) return false;
+    if (queue.length >= 2) return false;
+    if (!canAfford(bank, unitDef.cost)) return false;
     spend(bank, unitDef.cost);
     queue.push(defId);
     world.productionQueues.set(atEid, queue);
-    return;
+    return true;
   }
 
-  if (unitDef.trainAt !== producerDef.id) return;
-  if (!producerDef.trains.includes(unitDef.id)) return;
-  if (!isUnitUnlocked(world, playerId, defId)) return;
-  if (!canAfford(bank, unitDef.cost)) return;
+  if (unitDef.trainAt !== producerDef.id) return false;
+  if (!producerDef.trains.includes(unitDef.id)) return false;
+  if (!isUnitUnlocked(world, playerId, defId)) return false;
+  if (!canAfford(bank, unitDef.cost)) return false;
 
   const pop = world.population[playerId];
   // Will the spawned unit exceed cap? (Front-of-queue spawns immediately when ready.)
   // We allow queueing past current cap only if pop.cap can grow (Houses). For
   // simplicity, block queueing if even the existing queue + pop.current >= cap.
-  if (pop.current + countQueuedPopCost(world, playerId) + unitDef.popCost > pop.cap) return;
+  if (pop.current + countQueuedPopCost(world, playerId) + unitDef.popCost > pop.cap) return false;
 
   spend(bank, unitDef.cost);
   queue.push(defId);
   world.productionQueues.set(atEid, queue);
+  return true;
 }
 
 function applyCancelProduction(world: SimWorld, atEid: number): void {
@@ -4030,7 +4835,15 @@ function worksiteProductionRateTicks(
 }
 
 function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number): void {
-  if (ResourceWorksite.freeWorkersSpawned[siteEid] > 0) return;
+  if (ResourceWorksite.freeWorkersSpawned[siteEid] > 0) {
+    if (Owner.player[siteEid] !== AI_PLAYER_ID || countWorksiteWorkers(world, siteEid) > 0) return;
+    const def = getBuildingDef(Building.defId[siteEid]);
+    if (def && worksiteUsesResourceNodes(def) && !aiResourceWorksiteCanStillProduce(world, siteEid, def)) {
+      return;
+    }
+    spawnWorksiteWorker(world, siteEid);
+    return;
+  }
   const slots = getWorksiteWorkerSlots(world, siteEid);
   if (slots <= 0 || countWorksiteWorkers(world, siteEid) >= slots) {
     ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
@@ -4196,7 +5009,8 @@ function forestRegrowthSystem(world: SimWorld): void {
     if (!canTreeGrowAt(world, x, y, TREE_REGEN_BUILDING_CLEARANCE)) continue;
 
     const nearbyTrees = countNearbyTrees(world, x, y, TREE_REGEN_RADIUS);
-    const forestTileBonus = world.map.tiles[y * MAP.WIDTH + x] === TileType.FOREST ? 1 : 0;
+    const tile = world.map.tiles[y * MAP.WIDTH + x];
+    const forestTileBonus = tile === TileType.FOREST || tile === TileType.SNOW_FOREST ? 1 : 0;
     const edgeBonus = edgeProximity01(x, y) * TREE_REGEN_EDGE_PRESSURE_BONUS;
     const growthPressure = nearbyTrees + forestTileBonus + edgeBonus;
     if (growthPressure <= 0) continue;
@@ -4304,6 +5118,10 @@ function productionSystem(world: SimWorld): void {
         }
         if (trainingDefId === UnitDefId.MACHINE_GUN) {
           spawnedEid = spawnMachineGun(world, spot.x, spot.y, Owner.player[eid]);
+          break;
+        }
+        if (trainingDefId === UnitDefId.MORTAR) {
+          spawnedEid = spawnMortar(world, spot.x, spot.y, Owner.player[eid]);
           break;
         }
       }
@@ -4587,7 +5405,7 @@ function combatSystem(world: SimWorld): void {
       Cooldown.ticksRemaining[eid] -= 1;
     }
     if (Health.hp[eid] <= 0) continue;
-    if (hasComponent(world.ecs, CannonTag, eid) && processCannonWindup(world, eid)) {
+    if (usesSiegeWindup(world, eid) && processCannonWindup(world, eid)) {
       continue;
     }
     if (hasComponent(world.ecs, MachineGunTag, eid) && !processMachineGunDeployment(world, eid)) {
@@ -4637,7 +5455,7 @@ function combatSystem(world: SimWorld): void {
     world.paths.delete(eid);
     clearFormationSpeedCap(world, eid);
     if (Cooldown.ticksRemaining[eid] > 0) continue;
-    if (hasComponent(world.ecs, CannonTag, eid)) {
+    if (usesSiegeWindup(world, eid)) {
       startCannonWindup(world, eid, target, range);
       continue;
     }
@@ -4774,30 +5592,43 @@ function isCannonWindupTargetValid(world: SimWorld, attacker: number, target: nu
     Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
 }
 
+/** Cannons and mortars share the wind-up → splash-impact pipeline. */
+function usesSiegeWindup(world: SimWorld, eid: number): boolean {
+  return (
+    hasComponent(world.ecs, CannonTag, eid) ||
+    hasComponent(world.ecs, MortarTag, eid)
+  );
+}
+
 function startCannonWindup(world: SimWorld, attacker: number, target: number, range: number): void {
+  const isMortar = hasComponent(world.ecs, MortarTag, attacker);
+  const windupTicks = isMortar ? MORTAR_WINDUP_TICKS : CANNON_WINDUP_TICKS;
   world.cannonWindups.set(attacker, {
     targetEid: target,
-    ticksRemaining: CANNON_WINDUP_TICKS,
+    ticksRemaining: windupTicks,
   });
   world.combatEvents.push({
     type: 'attack',
     tick: world.tick,
     attackerEid: attacker,
     targetEid: target,
-    attackerKind: UnitDefId.CANNON,
+    attackerKind: isMortar ? UnitDefId.MORTAR : UnitDefId.CANNON,
     range,
     fromX: Position.x[attacker],
     fromY: Position.y[attacker],
     toX: Position.x[target],
     toY: Position.y[target],
     phase: 'windup',
-    windupTicks: CANNON_WINDUP_TICKS,
+    windupTicks,
   });
 }
 
 function fireCannonShot(world: SimWorld, attacker: number, target: number): void {
+  const isMortar = hasComponent(world.ecs, MortarTag, attacker);
   const dist = Math.hypot(Position.x[attacker] - Position.x[target], Position.y[attacker] - Position.y[target]);
-  const projectileTicks = cannonProjectileTravelTicks(dist);
+  const projectileTicks = isMortar
+    ? mortarProjectileTravelTicks(dist)
+    : cannonProjectileTravelTicks(dist);
   world.pendingCannonImpacts.push({
     impactTick: world.tick + projectileTicks,
     attackerEid: attacker,
@@ -4812,7 +5643,7 @@ function fireCannonShot(world: SimWorld, attacker: number, target: number): void
     tick: world.tick,
     attackerEid: attacker,
     targetEid: target,
-    attackerKind: UnitDefId.CANNON,
+    attackerKind: isMortar ? UnitDefId.MORTAR : UnitDefId.CANNON,
     range: Combat.range[attacker],
     fromX: Position.x[attacker],
     fromY: Position.y[attacker],
@@ -4838,7 +5669,12 @@ function projectileTravelTicksForAttack(
 }
 
 function cannonProjectileTravelTicks(distanceTiles: number): number {
-  return projectileTravelTicks(distanceTiles, 240, 620, 72);
+  return projectileTravelTicks(distanceTiles, 320, 827, 96);
+}
+
+/** Mortar shells hang on a higher, slower arc than a flat cannon shot. */
+function mortarProjectileTravelTicks(distanceTiles: number): number {
+  return projectileTravelTicks(distanceTiles, 300, 760, 95);
 }
 
 function projectileTravelTicks(
@@ -4898,7 +5734,10 @@ function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): 
     if (distToBuildingEdge(world, impact.impactX, impact.impactY, building) > CANNON_BUILDING_DIRECT_HIT_RADIUS) {
       continue;
     }
-    Health.hp[building] -= Math.max(1, impact.damage - Health.armor[building]);
+    Health.hp[building] -= Math.max(
+      1,
+      Math.ceil(impact.damage * CANNON_BUILDING_DAMAGE_MULTIPLIER) - Health.armor[building]
+    );
     retaliateWhenEngaged(world, building, impact.attackerEid);
   }
 
@@ -5019,6 +5858,12 @@ function computeAttackDamage(world: SimWorld, attacker: number, target: number):
     hasComponent(world.ecs, MachineGunTag, target)
   ) {
     bonus += 8;
+  }
+  if (
+    hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
+    hasComponent(world.ecs, MortarTag, target)
+  ) {
+    bonus += 10;
   }
   return Math.max(1, Combat.atk[attacker] + bonus - Health.armor[target]);
 }
@@ -5148,6 +5993,96 @@ function markWorksiteWorkersDead(world: SimWorld, siteEid: number): void {
 // 09 — Campaign mission state
 // ────────────────────────────────────────────────────────────────────────────
 
+function zborovAssaultSystem(world: SimWorld): void {
+  const campaign = world.campaign;
+  if (!campaign) return;
+  if (campaign.zborovForwardY === undefined) {
+    campaign.zborovForwardY = world.map.spawns[LOCAL_PLAYER_ID].y;
+  }
+
+  // Bite-and-hold. Trench lines are cleared front-to-back. The moment the next
+  // line in sequence is wiped out, mark it taken, advance the player's
+  // reinforcement muster point up to it, and throw ONE measured reserve
+  // counterattack forward — a sharp, finite riposte, never a whole-map charge.
+  const lineKeys = ['take_trench_1', 'take_trench_2', 'take_trench_3'];
+  const lineFracs = [
+    ZBOROV_FORWARD_LINE_FRAC,
+    ZBOROV_MID_LINE_FRAC,
+    ZBOROV_REAR_LINE_FRAC,
+  ];
+  let taken = campaign.zborovLinesTaken ?? 0;
+  while (taken < lineKeys.length) {
+    const lineEids = campaign.trackedObjectiveEids[lineKeys[taken]] ?? [];
+    if (lineEids.length === 0 || countLiveTrackedEids(world, lineEids) > 0) break;
+    completeCampaignObjective(campaign, lineKeys[taken]);
+    // Muster fresh waves just behind the trench we just seized.
+    campaign.zborovForwardY = Math.round(MAP.HEIGHT * lineFracs[taken]) + 4;
+    spawnZborovCounterattack(world, campaign);
+    pushAiEvent(world, AI_PLAYER_ID, `Trench line ${taken + 1} has fallen — the reserve counterattacks!`);
+    taken += 1;
+    campaign.zborovLinesTaken = taken;
+  }
+
+  if (world.tick < campaign.nextReinforcementTick) return;
+  campaign.nextReinforcementTick = world.tick + ZBOROV_REINFORCE_INTERVAL_TICKS;
+
+  const playerRifles = countLiveGunmen(world, LOCAL_PLAYER_ID);
+  const enemyRifles = countLiveGunmen(world, AI_PLAYER_ID);
+
+  // A) Enemy keeps itself at max(floor, player rifles) — matching the player and
+  //    never letting him outnumber it (the floor sets minimum difficulty). Fresh
+  //    companies form at the rear and are thrown forward into the clash.
+  const enemyWave = Math.min(
+    ZBOROV_ENEMY_REINFORCE_CAP,
+    Math.max(ZBOROV_ENEMY_FLOOR, playerRifles) - enemyRifles
+  );
+  if (enemyWave > 0) {
+    const fresh = spawnFormationRow(
+      world, UnitDefId.GUNMAN, world.map.spawns[AI_PLAYER_ID], { x: 0, y: 1 }, { x: 1, y: 0 }, 1.0, 0, AI_PLAYER_ID, enemyWave, 1.1
+    );
+    issueBilaHoraEnemyAdvance(world, fresh, world.map.spawns[LOCAL_PLAYER_ID]);
+    campaign.trackedObjectiveEids.zborov_enemy_reinforcements =
+      (campaign.trackedObjectiveEids.zborov_enemy_reinforcements ?? []).concat(fresh);
+  }
+
+  // B) The player is reinforced only when his rifle line has fallen below the
+  //    trigger, and only back up to the target floor — never stacking past it.
+  //    Fresh Legionnaires muster at the forward point (which advances as he
+  //    takes trenches) so they arrive where the fighting is, not way at the rear.
+  if (playerRifles < ZBOROV_PLAYER_REINFORCE_TRIGGER) {
+    const topUp = ZBOROV_PLAYER_REINFORCE_TARGET - playerRifles;
+    if (topUp > 0) {
+      const muster = { x: Math.round(MAP.WIDTH * 0.5), y: campaign.zborovForwardY };
+      const fresh = spawnFormationRow(
+        world, UnitDefId.GUNMAN, muster, { x: 0, y: -1 }, { x: 1, y: 0 }, 1.0, 0, LOCAL_PLAYER_ID, topUp, 1.1
+      );
+      campaign.trackedObjectiveEids.zborov_reinforcements =
+        (campaign.trackedObjectiveEids.zborov_reinforcements ?? []).concat(fresh);
+    }
+  }
+}
+
+function spawnZborovCounterattack(world: SimWorld, campaign: CampaignState): void {
+  // One measured reserve company from the rear, sent forward at the player —
+  // fires once per trench taken (the bite-and-hold riposte, not a mass charge).
+  const fresh = spawnFormationRow(
+    world, UnitDefId.GUNMAN, world.map.spawns[AI_PLAYER_ID], { x: 0, y: 1 }, { x: 1, y: 0 }, 1.0, 0, AI_PLAYER_ID, ZBOROV_COUNTERATTACK_SIZE, 1.1
+  );
+  issueBilaHoraEnemyAdvance(world, fresh, world.map.spawns[LOCAL_PLAYER_ID]);
+  campaign.trackedObjectiveEids.zborov_enemy_reinforcements =
+    (campaign.trackedObjectiveEids.zborov_enemy_reinforcements ?? []).concat(fresh);
+}
+
+function countLiveGunmen(world: SimWorld, playerId: number): number {
+  let n = 0;
+  for (const eid of unitQuery(world.ecs)) {
+    if (Owner.player[eid] !== playerId) continue;
+    if (Health.hp[eid] <= 0) continue;
+    if (hasComponent(world.ecs, GunmanTag, eid)) n++;
+  }
+  return n;
+}
+
 function campaignSystem(world: SimWorld): void {
   if (!world.campaign) return;
   updateCampaignObjectives(world);
@@ -5157,6 +6092,10 @@ function campaignSystem(world: SimWorld): void {
     bilaHoraOpeningAdvanceSystem(world);
   } else if (world.campaign.missionId === CampaignMissionId.BATTLE_OF_KUTNA_HORA) {
     kutnaHoraWaveSystem(world);
+  } else if (world.campaign.missionId === CampaignMissionId.BATTLE_OF_SUDOMER) {
+    sudomerWaveSystem(world);
+  } else if (world.campaign.missionId === CampaignMissionId.BATTLE_OF_ZBOROV) {
+    zborovAssaultSystem(world);
   }
 }
 
@@ -5351,6 +6290,163 @@ function getKutnaHoraAttackTarget(world: SimWorld, enemyEdge: GridPos): GridPos 
   return offsetBattlePoint(town, road, across, -4, 0);
 }
 
+function sudomerWaveSystem(world: SimWorld): void {
+  const campaign = world.campaign;
+  if (!campaign) return;
+  campaign.scriptedWaveIndex ??= 0;
+  campaign.scriptedWaveCount ??= SUDOMER_TOTAL_WAVES;
+
+  if (campaign.scriptedWaveIndex < campaign.scriptedWaveCount) {
+    // Telegraph the approaching wave so the player can shift between the two
+    // fronts. Exact-tick checks fire each warning exactly once.
+    const next = campaign.nextReinforcementTick;
+    if (next < Number.MAX_SAFE_INTEGER) {
+      const upcoming = SUDOMER_WAVES[Math.min(campaign.scriptedWaveIndex, SUDOMER_WAVES.length - 1)];
+      if (world.tick === next - SIM.TICK_HZ * 40) {
+        pushAiEvent(world, AI_PLAYER_ID, `The crusaders form up — ${sudomerWaveThreatLabel(upcoming)} incoming.`);
+      } else if (world.tick === next - SIM.TICK_HZ * 12) {
+        pushAiEvent(world, AI_PLAYER_ID, `Assault imminent — brace for ${sudomerWaveThreatLabel(upcoming)}!`);
+      }
+    }
+
+    if (world.tick >= campaign.nextReinforcementTick) {
+      const waveIndex = campaign.scriptedWaveIndex;
+      const spawned = spawnSudomerAssaultWave(world, waveIndex);
+      const attackers = campaign.trackedObjectiveEids.sudomer_attackers ?? [];
+      campaign.trackedObjectiveEids.sudomer_attackers = attackers.concat(spawned);
+      campaign.scriptedWaveIndex = waveIndex + 1;
+      campaign.nextReinforcementTick =
+        campaign.scriptedWaveIndex >= campaign.scriptedWaveCount
+          ? Number.MAX_SAFE_INTEGER
+          : world.tick + SUDOMER_WAVE_INTERVAL_TICKS;
+      const wave = SUDOMER_WAVES[Math.min(waveIndex, SUDOMER_WAVES.length - 1)];
+      pushAiEvent(
+        world,
+        AI_PLAYER_ID,
+        `Crusader assault ${waveIndex + 1} of ${campaign.scriptedWaveCount} charges — ${sudomerWaveThreatLabel(wave)}!`
+      );
+    }
+    return;
+  }
+
+  const liveAttackers = countLiveTrackedEids(
+    world,
+    campaign.trackedObjectiveEids.sudomer_attackers ?? []
+  );
+  if (liveAttackers > 0) return;
+  completeCampaignObjective(campaign, 'survive_sudomer_assault');
+  if (findOwnedTownCenter(world, LOCAL_PLAYER_ID) !== null) {
+    completeCampaignObjective(campaign, 'hold_sudomer_town');
+  }
+}
+
+type SudomerWaveRoute = 'middle' | 'mud';
+
+interface SudomerWaveProng {
+  route: SudomerWaveRoute;
+  spearmen: number;
+  archers: number;
+  cavalry: number;
+  gunmen?: number;
+  cannons?: number;
+}
+
+interface SudomerWaveDef {
+  prongs: SudomerWaveProng[];
+}
+
+// Five escalating waves alternating the dry central gap and the muddy flank,
+// building to wave 4's simultaneous two-front squeeze and a combined finale.
+// Counts are first-pass "balanced" values — tune against tests/playthrough.
+const SUDOMER_WAVES: SudomerWaveDef[] = [
+  { prongs: [{ route: 'middle', spearmen: 14, archers: 6, cavalry: 0 }] },
+  { prongs: [{ route: 'mud', spearmen: 4, archers: 0, cavalry: 18 }] },
+  { prongs: [{ route: 'middle', spearmen: 20, archers: 8, cavalry: 0, gunmen: 4 }] },
+  {
+    prongs: [
+      { route: 'middle', spearmen: 16, archers: 6, cavalry: 0 },
+      { route: 'mud', spearmen: 0, archers: 0, cavalry: 16 },
+    ],
+  },
+  {
+    prongs: [
+      { route: 'middle', spearmen: 18, archers: 8, cavalry: 0, gunmen: 6, cannons: 1 },
+      { route: 'mud', spearmen: 6, archers: 0, cavalry: 16 },
+    ],
+  },
+];
+
+function sudomerWaveThreatLabel(wave: SudomerWaveDef): string {
+  const routes = new Set(wave.prongs.map((prong) => prong.route));
+  if (routes.has('middle') && routes.has('mud')) return 'infantry at the gap and horse in the mud';
+  if (routes.has('mud')) return 'cavalry through the mud';
+  return 'infantry through the central gap';
+}
+
+function spawnSudomerAssaultWave(world: SimWorld, waveIndex: number): number[] {
+  const wave = SUDOMER_WAVES[Math.min(waveIndex, SUDOMER_WAVES.length - 1)];
+  const eids: number[] = [];
+  wave.prongs.forEach((prong, i) => {
+    eids.push(...spawnSudomerProng(world, prong, waveIndex + i));
+  });
+  return eids;
+}
+
+function spawnSudomerProng(world: SimWorld, prong: SudomerWaveProng, ordinal: number): number[] {
+  const enemyEdge = sudomerRouteAnchor(prong.route);
+  world.map.spawns[AI_PLAYER_ID] = enemyEdge;
+  clearSudomerGround(world, enemyEdge, 8, 6, prong.route === 'mud');
+  const target = sudomerAttackTarget(prong.route);
+  const advance = normalizeVector(target.x - enemyEdge.x, target.y - enemyEdge.y);
+  const across = { x: -advance.y, y: advance.x };
+  const anchor = offsetBattlePoint(
+    enemyEdge,
+    advance,
+    across,
+    ordinal % 2 === 0 ? 0 : -2,
+    (ordinal - 1.5) * 1.5
+  );
+
+  const eids: number[] = [];
+  if (prong.cavalry > 0) {
+    const left = Math.ceil(prong.cavalry / 2);
+    const right = prong.cavalry - left;
+    eids.push(...spawnFormationRow(world, UnitDefId.SCOUT_CAVALRY, anchor, advance, across, 1.0, -6.5, AI_PLAYER_ID, left, 1.1));
+    eids.push(...spawnFormationRow(world, UnitDefId.SCOUT_CAVALRY, anchor, advance, across, 1.0, 6.5, AI_PLAYER_ID, right, 1.1));
+  }
+  if (prong.spearmen > 0) {
+    const front = Math.ceil(prong.spearmen / 2);
+    eids.push(...spawnFormationRow(world, UnitDefId.SPEARMAN, anchor, advance, across, 0.0, -4.0, AI_PLAYER_ID, front, 1.05));
+    eids.push(...spawnFormationRow(world, UnitDefId.SPEARMAN, anchor, advance, across, 1.4, 4.0, AI_PLAYER_ID, prong.spearmen - front, 1.05));
+  }
+  if (prong.archers > 0) {
+    eids.push(...spawnFormationRow(world, UnitDefId.ARCHER, anchor, advance, across, -1.6, 0, AI_PLAYER_ID, prong.archers, 1.1));
+  }
+  if (prong.gunmen && prong.gunmen > 0) {
+    eids.push(...spawnFormationRow(world, UnitDefId.GUNMAN, anchor, advance, across, -3.0, 0, AI_PLAYER_ID, prong.gunmen, 1.12));
+  }
+  if (prong.cannons && prong.cannons > 0) {
+    eids.push(...spawnFormationRow(world, UnitDefId.CANNON, anchor, advance, across, -4.6, 0, AI_PLAYER_ID, prong.cannons, 3.0));
+  }
+  issueBilaHoraEnemyAdvance(world, eids, target);
+  return eids;
+}
+
+function sudomerRouteAnchor(route: SudomerWaveRoute): GridPos {
+  if (route === 'mud') {
+    return { x: MAP.WIDTH - 4, y: Math.round(MAP.HEIGHT * 0.25) };
+  }
+  return { x: Math.round(MAP.WIDTH * 0.49), y: MAP.HEIGHT - 4 };
+}
+
+function sudomerWaveSpawnAnchor(waveIndex: number): GridPos {
+  const anchors: GridPos[] = [
+    { x: Math.round(MAP.WIDTH * 0.49), y: MAP.HEIGHT - 4 },
+    { x: MAP.WIDTH - 4, y: Math.round(MAP.HEIGHT * 0.25) },
+  ];
+  return anchors[waveIndex % anchors.length];
+}
+
 function countLiveTrackedEids(world: SimWorld, eids: number[]): number {
   let count = 0;
   for (const eid of eids) {
@@ -5516,6 +6612,35 @@ function aiHasAnyBuilding(snapshot: AiSnapshot, defId: number): boolean {
 
 function countAiBuildings(snapshot: AiSnapshot, defId: number): number {
   return countBuildings(snapshot.myBuildings, defId);
+}
+
+function countAiEffectiveEconomyBuildings(
+  world: SimWorld,
+  snapshot: AiSnapshot,
+  defId: number
+): number {
+  const def = getBuildingDef(defId);
+  if (!def || !worksiteUsesResourceNodes(def)) return countAiBuildings(snapshot, defId);
+  return snapshot.myBuildings.filter((eid) =>
+    Building.defId[eid] === defId && aiResourceWorksiteCanStillProduce(world, eid, def)
+  ).length;
+}
+
+function aiResourceWorksiteCanStillProduce(
+  world: SimWorld,
+  eid: number,
+  def: BuildingDef
+): boolean {
+  if (hasComponent(world.ecs, ConstructionSite, eid)) return true;
+  if (Health.hp[eid] <= 0) return false;
+  if (def.harvestKind === undefined) return true;
+  return findNearestResource(
+    world,
+    Position.x[eid],
+    Position.y[eid],
+    def.harvestKind as ResourceKind,
+    def.harvestRadius ?? 6
+  ) !== null;
 }
 
 function countEnemyBuildings(snapshot: AiSnapshot, defId: number): number {
@@ -5723,9 +6848,9 @@ function aiHardEconomyTargets(
       : settings.maxFarmsDark;
   const hasCompletedBarracks = aiCompletedBuildingCount(world, snapshot, BuildingDefId.BARRACKS) > 0;
   const currentFarms = countAiBuildings(snapshot, BuildingDefId.FARM);
-  const currentLumber = countAiBuildings(snapshot, BuildingDefId.LUMBER_CAMP);
-  const currentStone = countAiBuildings(snapshot, BuildingDefId.STONE_QUARRY);
-  const currentGold = countAiBuildings(snapshot, BuildingDefId.GOLD_MINE);
+  const currentLumber = countAiEffectiveEconomyBuildings(world, snapshot, BuildingDefId.LUMBER_CAMP);
+  const currentStone = countAiEffectiveEconomyBuildings(world, snapshot, BuildingDefId.STONE_QUARRY);
+  const currentGold = countAiEffectiveEconomyBuildings(world, snapshot, BuildingDefId.GOLD_MINE);
 
   if (!hasCompletedBarracks) {
     return {
@@ -5752,7 +6877,7 @@ function aiHardEconomyTargets(
   let lumber = Math.max(currentLumber, 3, supportProducers + 2, Math.ceil(farms / 4));
   let stone = Math.max(currentStone, 1);
   let gold = currentGold;
-  if (age >= AgeId.CASTLE || hasTech(world, playerId, TechId.GOLD_MINES)) {
+  if (age >= AgeId.CASTLE) {
     gold = Math.max(gold, settings.goldMinesCastle);
   }
 
@@ -5817,6 +6942,7 @@ function aiDesiredStoneQuarryCount(world: SimWorld, playerId: number, snapshot: 
     countEnemyBuildings(snapshot, BuildingDefId.STONE_QUARRY) * settings.economyMirrorFraction
   );
   const techTarget = !hasTech(world, playerId, TechId.ARCHERS) ||
+    !hasTech(world, playerId, TechId.MILLS) ||
     !hasTech(world, playerId, TechId.FARMS) ||
     !hasTech(world, playerId, TechId.HOUSING_I)
     ? settings.stoneQuarries
@@ -5825,7 +6951,7 @@ function aiDesiredStoneQuarryCount(world: SimWorld, playerId: number, snapshot: 
 }
 
 function aiDesiredGoldMineCount(world: SimWorld, playerId: number, snapshot: AiSnapshot): number {
-  if (!hasTech(world, playerId, TechId.GOLD_MINES)) return 0;
+  if ((world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE) return 0;
   const settings = aiSettings(world);
   const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const cap = age >= AgeId.GUNPOWDER
@@ -5849,11 +6975,9 @@ function aiDesiredMillCount(world: SimWorld, playerId: number, snapshot: AiSnaps
 }
 
 function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const farmCount = countAiBuildings(snapshot, BuildingDefId.FARM);
   const hasLumber = aiHasAnyBuilding(snapshot, BuildingDefId.LUMBER_CAMP);
   const hasStone = aiHasAnyBuilding(snapshot, BuildingDefId.STONE_QUARRY);
-  const hasGold = aiHasAnyBuilding(snapshot, BuildingDefId.GOLD_MINE);
   const hasBarracks = aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS);
   const houseCount = countAiBuildings(snapshot, BuildingDefId.HOUSE);
   const pop = world.population[playerId];
@@ -5882,6 +7006,9 @@ function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot
     if (aiTryResearchTech(world, playerId, TechId.HOUSING_I)) return;
   }
   if (hasTech(world, playerId, TechId.BARRACKS_PIKEMEN) && farmCount >= 3) {
+    if (aiTryResearchTech(world, playerId, TechId.MILLS)) return;
+  }
+  if (hasTech(world, playerId, TechId.MILLS) && farmCount >= 3) {
     if (aiTryResearchTech(world, playerId, TechId.FARMS)) return;
   }
   if (hasTech(world, playerId, TechId.FARMS) && farmCount >= 5) {
@@ -5894,13 +7021,6 @@ function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot
     (capPressure || world.aiDifficulty === 'hard')
   ) {
     if (aiTryResearchTech(world, playerId, TechId.HOUSING_II)) return;
-  }
-  if (hasTech(world, playerId, TechId.FARMS_II) && farmCount >= 5) {
-    if (aiTryResearchTech(world, playerId, TechId.MILLS)) return;
-  }
-  if (age >= AgeId.CASTLE) {
-    if (aiTryResearchTech(world, playerId, TechId.GOLD_MINES)) return;
-    if (hasGold) aiTryResearchTech(world, playerId, TechId.KNIGHTS);
   }
 }
 
@@ -5950,7 +7070,7 @@ function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: AiSnapsh
   const currentCounts = new Map<number, number>();
   for (const item of economyPlan) {
     if (!currentCounts.has(item.defId)) {
-      currentCounts.set(item.defId, countAiBuildings(snapshot, item.defId));
+      currentCounts.set(item.defId, countAiEffectiveEconomyBuildings(world, snapshot, item.defId));
     }
   }
   let placementsRemaining = aiSettings(world).economyPlacementsPerThink;
@@ -6009,7 +7129,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
   const currentCounts = new Map<number, number>();
   for (const item of adaptiveEconomyPlan) {
     if (!currentCounts.has(item.defId)) {
-      currentCounts.set(item.defId, countAiBuildings(snapshot, item.defId));
+      currentCounts.set(item.defId, countAiEffectiveEconomyBuildings(world, snapshot, item.defId));
     }
   }
 
@@ -6073,6 +7193,10 @@ function aiTrainWorksiteWorkers(world: SimWorld, playerId: number, snapshot: AiS
   for (const siteEid of snapshot.myBuildings) {
     if (!aiIsCompletedBuilding(world, siteEid)) continue;
     if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) continue;
+    const def = getBuildingDef(Building.defId[siteEid]);
+    if (def && worksiteUsesResourceNodes(def) && !aiResourceWorksiteCanStillProduce(world, siteEid, def)) {
+      continue;
+    }
     const slots = getWorksiteWorkerSlots(world, siteEid);
     const desired = Math.min(slots, aiDesiredWorksiteWorkers(world, playerId, siteEid));
     const occupied = countWorksiteWorkers(world, siteEid) + countQueuedWorksiteWorkers(world, siteEid);
@@ -6915,7 +8039,8 @@ function aiNearestOwnedBuildingTypeDistance(
 function aiBuildingPlacementSearchRadius(def: BuildingDef): number {
   if (def.id === 'FARM') return 24;
   if (def.id === 'MILL') return 20;
-  if (worksiteUsesResourceNodes(def)) return 28;
+  if (def.id === 'LUMBER_CAMP') return 52;
+  if (worksiteUsesResourceNodes(def)) return 34;
   return 12;
 }
 
@@ -6953,6 +8078,36 @@ function winConditionSystem(world: SimWorld): void {
       objective.id === 'survive_kutna_hora'
     )?.completed;
     if (survived) {
+      world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
+    }
+    return;
+  }
+  if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_SUDOMER) {
+    // Town defense: lose if the Town Hall falls, win by surviving every wave.
+    if (findOwnedTownCenter(world, LOCAL_PLAYER_ID) === null) {
+      world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
+      return;
+    }
+    const survived = world.campaign.objectives.find((objective) =>
+      objective.id === 'survive_sudomer_assault'
+    )?.completed;
+    if (survived) {
+      world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
+    }
+    return;
+  }
+  if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_ZBOROV) {
+    // Trench assault: defeat if the assault force is wiped; victory by taking
+    // the command bunker or clearing every defender from the trenches.
+    const playerArmy = countLiveMilitary(world, LOCAL_PLAYER_ID);
+    const enemyArmy = countLiveMilitary(world, AI_PLAYER_ID);
+    if (playerArmy <= 0 && enemyArmy > 0) {
+      world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
+      return;
+    }
+    const bunker = world.campaign.trackedObjectiveEids.take_command_bunker ?? [];
+    const bunkerDown = bunker.length > 0 && countLiveTrackedEids(world, bunker) === 0;
+    if (bunkerDown || enemyArmy <= 0) {
       world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
     }
     return;
@@ -7208,9 +8363,10 @@ function movementSystem(world: SimWorld): void {
     const dy = waypoint.y - py;
     const dist = Math.hypot(dx, dy);
     const speedCap = world.formationSpeedCaps.get(eid);
-    const speed = speedCap === undefined
+    const baseSpeed = speedCap === undefined
       ? Speed.value[eid]
       : Math.min(Speed.value[eid], speedCap);
+    const speed = baseSpeed * movementTerrainSpeedMultiplier(world, eid);
     const stepDist = speed * dt;
     const arrivalTolerance = pathArrivalTolerance(world, eid, path);
 
@@ -7227,6 +8383,20 @@ function movementSystem(world: SimWorld): void {
     }
   }
   unitSeparationSystem(world);
+}
+
+function movementTerrainSpeedMultiplier(world: SimWorld, eid: number): number {
+  const tx = Math.round(Position.x[eid]);
+  const ty = Math.round(Position.y[eid]);
+  if (!isTileInMap(tx, ty)) return 1;
+  const tile = world.map.tiles[ty * MAP.WIDTH + tx];
+  // Barbed wire bogs any unit to a crawl — the WW1 kill-zone in front of the
+  // machine-gun nests.
+  if (tile === TileType.BARBED_WIRE) return ZBOROV_WIRE_SPEED_MULTIPLIER;
+  if (tile !== TileType.MUD) return 1;
+  return hasComponent(world.ecs, ScoutCavalryTag, eid)
+    ? SUDOMER_MUD_CAVALRY_SPEED_MULTIPLIER
+    : SUDOMER_MUD_INFANTRY_SPEED_MULTIPLIER;
 }
 
 function pathArrivalTolerance(world: SimWorld, eid: number, path: GridPos[]): number {

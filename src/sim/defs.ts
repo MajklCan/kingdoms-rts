@@ -191,7 +191,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     trains: [],
     harvestKind: 1,
     workerSlots: 3,
-    harvestRadius: 28,
+    harvestRadius: 42,
     harvestRateTicks: Math.round(SIM.TICK_HZ * 1.15),
   },
   {
@@ -305,6 +305,7 @@ export const UnitDefId = {
   GUNMAN: 5,
   CANNON: 6,
   MACHINE_GUN: 7,
+  MORTAR: 8,
 } as const;
 
 export type UnitDefIdValue = (typeof UnitDefId)[keyof typeof UnitDefId];
@@ -382,6 +383,15 @@ export const UNIT_TABLE: UnitDef[] = [
     popCost: 2,
     trainAt: 'TOTAL_WAR_DEPOT',
   },
+  {
+    id: 'MORTAR',
+    name: 'Mortar Team',
+    hp: 55,
+    cost: { food: 0, wood: 100, gold: 175, stone: 90 },
+    trainTimeTicks: Math.round(SIM.TICK_HZ * 42),
+    popCost: 2,
+    trainAt: 'TOTAL_WAR_DEPOT',
+  },
 ];
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -408,7 +418,7 @@ export interface AgeDef {
 
 export const AGE_TABLE: AgeDef[] = [
   { id: AgeId.DARK, name: 'Dark Age', advanceCost: { food: 0, wood: 0, gold: 0, stone: 0 }, advanceTicks: 0 },
-  { id: AgeId.CASTLE, name: 'Castle Age', advanceCost: { food: 0, wood: 1000, gold: 0, stone: 800 }, advanceTicks: Math.round(SIM.TICK_HZ * 40) },
+  { id: AgeId.CASTLE, name: 'Castle Age', advanceCost: { food: 0, wood: 750, gold: 0, stone: 500 }, advanceTicks: Math.round(SIM.TICK_HZ * 40) },
   { id: AgeId.GUNPOWDER, name: 'Gunpowder Age', advanceCost: { food: 0, wood: 1400, gold: 1200, stone: 1000 }, advanceTicks: Math.round(SIM.TICK_HZ * 50) },
   { id: AgeId.TOTAL_WAR, name: 'Total War Age', advanceCost: { food: 1600, wood: 1800, gold: 1800, stone: 1400 }, advanceTicks: Math.round(SIM.TICK_HZ * 65) },
 ];

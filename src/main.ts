@@ -340,11 +340,13 @@ const TECH_TREE_LINKS: Array<{
   { from: TechId.HOUSING_I, to: TechId.HOUSING_II, branch: 'housing' },
   { from: TechId.LUMBER_CREWS, to: TechId.MINING_CREWS, branch: 'economy' },
   { from: TechId.MINING_CREWS, to: TechId.CASTLE_AGE, branch: 'economy' },
-  { from: TechId.CASTLE_AGE, to: TechId.GOLD_MINES, branch: 'castle' },
-  { from: TechId.GOLD_MINES, to: TechId.KNIGHTS, branch: 'castle' },
+  { from: TechId.CASTLE_AGE, to: TechId.HOUSING_II, branch: 'castle' },
+  { from: TechId.BARRACKS_PIKEMEN, to: TechId.MILLS, branch: 'food' },
+  { from: TechId.CASTLE_AGE, to: TechId.FARMS, branch: 'castle' },
+  { from: TechId.MILLS, to: TechId.FARMS, branch: 'food' },
+  { from: TechId.GUNPOWDER_AGE, to: TechId.FARMS_II, branch: 'gunpowder' },
   { from: TechId.FARMS, to: TechId.FARMS_II, branch: 'food' },
-  { from: TechId.FARMS_II, to: TechId.MILLS, branch: 'food' },
-  { from: TechId.KNIGHTS, to: TechId.GUNPOWDER_AGE, branch: 'gunpowder' },
+  { from: TechId.CASTLE_AGE, to: TechId.GUNPOWDER_AGE, branch: 'gunpowder' },
 ];
 
 function renderResourceIcon(kind: ResourceIconKey, size: 'bar' | 'mini' = 'mini'): string {
@@ -613,14 +615,16 @@ function bindCheatControls(): void {
   const resourcesBtn = document.getElementById('cheat-add-resources') as HTMLButtonElement | null;
   const cavalryBtn = document.getElementById('cheat-spawn-cavalry') as HTMLButtonElement | null;
   const machineGunBtn = document.getElementById('cheat-spawn-machine-gun') as HTMLButtonElement | null;
+  const mortarBtn = document.getElementById('cheat-spawn-mortar') as HTMLButtonElement | null;
   const dumpBtn = document.getElementById('cheat-dump-state') as HTMLButtonElement | null;
-  if (!revealBtn || !resourcesBtn || !cavalryBtn || !machineGunBtn || !dumpBtn) return;
+  if (!revealBtn || !resourcesBtn || !cavalryBtn || !machineGunBtn || !mortarBtn || !dumpBtn) return;
 
   const getScene = () => game.scene.getScene('GameScene') as GameScene | null;
   revealBtn.addEventListener('click', () => getScene()?.cheatRevealMap(1));
   resourcesBtn.addEventListener('click', () => getScene()?.cheatAddResources(1, 500));
   cavalryBtn.addEventListener('click', () => getScene()?.cheatSpawnCavalryByTownHall(1));
   machineGunBtn.addEventListener('click', () => getScene()?.cheatSpawnMachineGunByTownHall(1));
+  mortarBtn.addEventListener('click', () => getScene()?.cheatSpawnMortarByTownHall(1));
   dumpBtn.addEventListener('click', () => {
     const scene = getScene();
     if (!scene) return;
@@ -700,6 +704,12 @@ const TILE_COLORS: Record<number, string> = {
   [TileType.WATER_SHALLOW]: '#346e98',
   [TileType.STONE]:         '#8c8a82',
   [TileType.BRIDGE]:        '#7e5a32',
+  [TileType.MUD]:           '#55502d',
+  [TileType.BARBED_WIRE]:   '#5e4a30',
+  [TileType.SNOW]:          '#dcecf4',
+  [TileType.SNOW_FOREST]:   '#9fb9c6',
+  [TileType.ICE]:           '#83bfd4',
+  [TileType.PACKED_SNOW]:   '#cbdce6',
 };
 
 const TEAM_HEX: Record<number, string> = {
@@ -922,7 +932,9 @@ function updateActionGrid(scene: GameScene): void {
       cell.appendChild(tooltip);
 
       if (a.enabled) {
-        cell.addEventListener('click', () => scene.triggerAction(a.id));
+        cell.addEventListener('click', (ev) => {
+          scene.triggerAction(a.id, a.kind === 'train' && ev.shiftKey ? 5 : 1);
+        });
       }
     } else {
       cell.disabled = true;
@@ -934,7 +946,7 @@ function updateActionGrid(scene: GameScene): void {
 // ── Tech tree panel ────────────────────────────────────────────────────────
 const techTreeBoardEl = document.getElementById('tech-tree-board');
 let lastTechTreeSig = '';
-const TECH_TREE_CANVAS_WIDTH = 1720;
+const TECH_TREE_CANVAS_WIDTH = 1240;
 const TECH_TREE_CANVAS_HEIGHT = 680;
 const TECH_TREE_NODE_WIDTH = 250;
 const TECH_TREE_NODE_HEIGHT = 84;
@@ -1108,6 +1120,10 @@ function renderMissionCard(scene: GameScene): void {
       ? 'No town center. No economy. Victory requires destroying every enemy unit.'
       : mission.id === CampaignMissionId.BATTLE_OF_KUTNA_HORA
         ? 'City defense. Train reinforcements and keep the Town Center standing until every assault wave is destroyed.'
+        : mission.id === CampaignMissionId.BATTLE_OF_SUDOMER
+          ? 'Outnumbered town defense. You start with a small guard — put villagers to work and raise pikemen and gunmen during the lull, then hold the dry choke and the muddy flank. Keep the Town Hall standing.'
+        : mission.id === CampaignMissionId.BATTLE_OF_ZBOROV
+          ? 'Rifle clash. You have only riflemen and a single mortar — screen it and use it to knock out the forward machine-gun nests. Both sides feed gunmen into no-man’s-land; win the clash and take the command bunker.'
         : '';
 
   missionBodyEl.innerHTML = `
