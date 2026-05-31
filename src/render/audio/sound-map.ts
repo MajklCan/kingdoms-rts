@@ -159,7 +159,7 @@ export function combatSound(
   if (attackerKind === UnitDefId.GUNMAN || attackerKind === UnitDefId.MACHINE_GUN) {
     return { key: 'gun_shot', minIntervalMs: 60, volume: 0.6 };
   }
-  if (attackerKind === UnitDefId.CANNON) {
+  if (attackerKind === UnitDefId.CANNON || attackerKind === UnitDefId.MORTAR) {
     return { key: 'cannon_fire', minIntervalMs: 80, volume: 0.95 };
   }
   if (attackerKind === UnitDefId.ARCHER || isBuildingAttacker) {

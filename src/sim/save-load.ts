@@ -24,6 +24,7 @@ import {
   MachineGunDeployment,
   MachineGunTag,
   MilitiaTag,
+  MortarTag,
   Owner,
   PathTarget,
   PopulationCost,
@@ -103,6 +104,7 @@ export interface SavedEntityV1 {
   cannon?: true;
   machineGun?: true;
   machineGunDeployment?: { deployed: number; setupTicks: number };
+  mortar?: true;
   resource?: { kind: number; amount: number };
   resourceCarry?: { kind: number; amount: number };
   gatherer?: { targetEid: number; state: number; cooldown: number };
@@ -214,6 +216,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     if (hasComponent(world.ecs, GunmanTag, eid)) entity.gunman = true;
     if (hasComponent(world.ecs, CannonTag, eid)) entity.cannon = true;
     if (hasComponent(world.ecs, MachineGunTag, eid)) entity.machineGun = true;
+    if (hasComponent(world.ecs, MortarTag, eid)) entity.mortar = true;
     if (hasComponent(world.ecs, MachineGunDeployment, eid)) {
       entity.machineGunDeployment = {
         deployed: MachineGunDeployment.deployed[eid],
@@ -556,7 +559,8 @@ function isSavedMilitaryEntity(saved: SavedEntityV1): boolean {
       saved.scoutCavalry ||
       saved.gunman ||
       saved.cannon ||
-      saved.machineGun
+      saved.machineGun ||
+      saved.mortar
   );
 }
 
@@ -597,6 +601,7 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
   if (saved.gunman) addComponent(ecs, GunmanTag, eid);
   if (saved.cannon) addComponent(ecs, CannonTag, eid);
   if (saved.machineGun) addComponent(ecs, MachineGunTag, eid);
+  if (saved.mortar) addComponent(ecs, MortarTag, eid);
   if (saved.machineGunDeployment || saved.machineGun) {
     addComponent(ecs, MachineGunDeployment, eid);
     MachineGunDeployment.deployed[eid] = saved.machineGunDeployment?.deployed ?? 1;

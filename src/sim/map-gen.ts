@@ -26,6 +26,12 @@ export const TileType = {
   WATER_SHALLOW: 5,
   STONE: 6,
   BRIDGE: 7,
+  MUD: 8,
+  SNOW: 9,
+  SNOW_FOREST: 10,
+  ICE: 11,
+  PACKED_SNOW: 12,
+  BARBED_WIRE: 13, // walkable WW1 wire entanglement — bogs units to a crawl
 } as const;
 
 export type TileTypeValue = (typeof TileType)[keyof typeof TileType];
@@ -36,6 +42,10 @@ export const MapId = {
   ORE_MOUNTAIN_PASS: 'ore_mountain_pass',
   MACHOVO_JEZERO: 'machovo_jezero',
   SILESIAN_MARSH: 'silesian_marsh',
+  SUDOMER_PONDS: 'sudomer_ponds',
+  KRKONOSE_WINTER_CROWN: 'krkonose_winter_crown',
+  ZBOROV_LINES: 'zborov_lines',
+  FLOODED_BASIN: 'flooded_basin',
 } as const;
 
 export type MapIdValue = (typeof MapId)[keyof typeof MapId];
@@ -86,6 +96,26 @@ export const MAP_DEFS: MapDef[] = [
     name: 'Silesian Marsh',
     description: 'Braided wetlands, shallow channels, causeways, and scattered dry islands.',
   },
+  {
+    id: MapId.SUDOMER_PONDS,
+    name: 'Sudoměř Ponds',
+    description: 'Upper-left Sudoměř, a blocked lower pond, a dry choke, and a muddy right-pond flank.',
+  },
+  {
+    id: MapId.KRKONOSE_WINTER_CROWN,
+    name: 'Krkonoše Winter Crown',
+    description: 'A mirrored highland snow map with frozen crown ice, packed passes, and balanced pine lines.',
+  },
+  {
+    id: MapId.ZBOROV_LINES,
+    name: 'Zborov Lines',
+    description: 'A WWI battlefield: a southern jump-off trench, churned no-man’s-land of shell craters, and fortified enemy lines to the north.',
+  },
+  {
+    id: MapId.FLOODED_BASIN,
+    name: 'Flooded Basin',
+    description: 'A round, shell-cratered battlefield ringed by impassable floodwater. Symmetric north/south bases for a tight 1v1.',
+  },
 ];
 
 export interface MapData {
@@ -126,6 +156,14 @@ export function generateMap(rng: Rng, mapId: MapIdValue = MapId.RIVERLANDS): Map
       return generateMachovoJezeroMap();
     case MapId.SILESIAN_MARSH:
       return generateSilesianMarshMap(rng);
+    case MapId.SUDOMER_PONDS:
+      return generateSudomerPondsMap();
+    case MapId.KRKONOSE_WINTER_CROWN:
+      return generateKrkonoseWinterCrownMap();
+    case MapId.ZBOROV_LINES:
+      return generateZborovMap();
+    case MapId.FLOODED_BASIN:
+      return generateFloodedBasinMap();
     default:
       return generateRiverlandsMap(rng);
   }
@@ -540,6 +578,569 @@ function generateSilesianMarshMap(rng: Rng): MapData {
   return map;
 }
 
+function generateSudomerPondsMap(): MapData {
+  const map = createBaseMap(TileType.GRASS, 3);
+  const town = { x: Math.round(W * 0.14), y: Math.round(H * 0.14) };
+  const bottomAttack = { x: Math.round(W * 0.49), y: H - 5 };
+  const leftPond = {
+    cx: Math.round(W * 0.12),
+    cy: Math.round(H * 0.62),
+    rx: Math.round(W * 0.34),
+    ry: Math.round(H * 0.27),
+  };
+  const rightPond = {
+    cx: Math.round(W * 0.66),
+    cy: Math.round(H * 0.52),
+    rx: Math.round(W * 0.18),
+    ry: Math.round(H * 0.25),
+  };
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = mapIndex(x, y);
+      const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
+      map.elevation[idx] = edge < 5 ? 4 : 3;
+    }
+  }
+
+  paintSudomerPond(map, leftPond, 0.72, 0.93, 1.06);
+  paintSudomerPond(map, rightPond, 0.62, 0.83, 1.0);
+  clearSpawnPatch(map, town.x + 8, town.y + 8, 4);
+  clearSpawnPatch(map, bottomAttack.x, bottomAttack.y, 5);
+  clearSpawnPatch(map, W - 4, Math.round(H * 0.25), 5);
+  paintSudomerRightMud(map, rightPond);
+  carveSudomerDryChoke(map);
+  carveSudomerTownSite(map, town);
+
+  addForestBlob(map, Math.round(W * 0.05), Math.round(H * 0.12), 5, 0.70);
+  addForestBlob(map, Math.round(W * 0.25), Math.round(H * 0.06), 7, 0.82);
+  addForestBlob(map, Math.round(W * 0.34), Math.round(H * 0.18), 6, 0.74);
+  addForestBlob(map, Math.round(W * 0.82), Math.round(H * 0.12), 9, 0.90);
+  addForestBlob(map, Math.round(W * 0.91), Math.round(H * 0.32), 7, 0.82);
+  addForestBlob(map, Math.round(W * 0.87), Math.round(H * 0.78), 9, 0.88);
+  addForestBlob(map, Math.round(W * 0.68), Math.round(H * 0.86), 7, 0.78);
+  addForestBlob(map, Math.round(W * 0.52), Math.round(H * 0.10), 5, 0.66);
+  addForestBlob(map, Math.round(W * 0.18), Math.round(H * 0.40), 5, 0.70);
+  addSudomerLindenTrees(map);
+
+  rebuildWalkability(map);
+  setSpawns(map, { x: town.x + 8, y: town.y + 8 }, bottomAttack);
+  refreshBridgePositions(map);
+  return map;
+}
+
+function generateZborovMap(): MapData {
+  // A shell-torn CORRIDOR: churned dirt + mud craters down the middle, hemmed by
+  // impassable woods on both flanks so the assault can't just walk around the
+  // trench lines. Player jump-off south, enemy lines + bunker north. Trench wire,
+  // machine-gun nests, and tree-sprites are placed in the mission config.
+  const map = createBaseMap(TileType.DIRT, 3);
+  const cx = Math.round(W * 0.5);
+  const corridorHalf = Math.round(W * 0.24);
+  const leftEdge = cx - corridorHalf;
+  const rightEdge = cx + corridorHalf;
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = mapIndex(x, y);
+      if (x < leftEdge || x > rightEdge) {
+        map.tiles[idx] = TileType.FOREST; // wooded flank (sealed below)
+        map.elevation[idx] = 3;
+        continue;
+      }
+      const crater = Math.sin(x * 0.45 + y * 0.31) + Math.cos(x * 0.21 - y * 0.6);
+      if (crater > 1.4) {
+        map.tiles[idx] = TileType.MUD;
+        map.elevation[idx] = 2;
+      }
+    }
+  }
+
+  // A few stony patches inside the corridor for texture (walkable).
+  for (const [px, py, pr] of [
+    [leftEdge + 3, Math.round(H * 0.46), 2],
+    [rightEdge - 3, Math.round(H * 0.56), 2],
+    [leftEdge + 4, Math.round(H * 0.3), 2],
+  ]) {
+    for (let dy = -pr; dy <= pr; dy++) {
+      for (let dx = -pr; dx <= pr; dx++) {
+        const x = px + dx;
+        const y = py + dy;
+        if (!inBounds(x, y) || Math.hypot(dx, dy) > pr) continue;
+        if (x < leftEdge || x > rightEdge) continue;
+        map.tiles[mapIndex(x, y)] = TileType.STONE;
+        map.elevation[mapIndex(x, y)] = 3;
+      }
+    }
+  }
+
+  rebuildWalkability(map);
+  // Seal the wooded flanks — impassable, so the fight stays in the corridor.
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (x < leftEdge || x > rightEdge) map.walkability[y][x] = 1;
+    }
+  }
+  setSpawns(map, { x: cx, y: Math.round(H * 0.80) }, { x: cx, y: Math.round(H * 0.23) });
+  refreshBridgePositions(map);
+  return map;
+}
+
+function generateFloodedBasinMap(): MapData {
+  // The parked "circle" arena, kept as a 1v1 skirmish map: a round grassy basin
+  // pocked with mud shell-craters, ringed by impassable floodwater, with
+  // symmetric north/south bases.
+  const map = createBaseMap(TileType.WATER, 0);
+  const cx = Math.round(W * 0.5);
+  const cy = Math.round(H * 0.5);
+  const R = Math.round(Math.min(W, H) * 0.31);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = mapIndex(x, y);
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= R) {
+        const crater = Math.sin(x * 0.45 + y * 0.31) + Math.cos(x * 0.21 - y * 0.6);
+        if (crater > 1.55) {
+          map.tiles[idx] = TileType.MUD;
+          map.elevation[idx] = 2;
+        } else {
+          map.tiles[idx] = TileType.GRASS;
+          map.elevation[idx] = 3;
+        }
+      } else if (d <= R + 1.4) {
+        map.tiles[idx] = TileType.WATER_SHALLOW;
+        map.elevation[idx] = 1;
+      }
+    }
+  }
+
+  // Mirrored woodland near each base + a neutral central copse. (The world's
+  // resource scatter fills in gold/stone/berries on the open ground.)
+  addForestBlob(map, cx - 11, cy + 11, 4, 0.78);
+  addForestBlob(map, cx + 11, cy + 11, 4, 0.78);
+  addForestBlob(map, cx - 11, cy - 11, 4, 0.78);
+  addForestBlob(map, cx + 11, cy - 11, 4, 0.78);
+  addForestBlob(map, cx, cy, 3, 0.6);
+
+  rebuildWalkability(map);
+  setSpawns(
+    map,
+    { x: cx, y: cy + Math.round(R * 0.72) },
+    { x: cx, y: cy - Math.round(R * 0.72) }
+  );
+  refreshBridgePositions(map);
+  return map;
+}
+
+function generateKrkonoseWinterCrownMap(): MapData {
+  const map = createBaseMap(TileType.SNOW, 3);
+  const p1 = { x: Math.round(W * 0.18), y: Math.round(H * 0.78) };
+  const p2 = mirrorMapPoint(p1);
+  const centerX = (W - 1) / 2;
+  const centerY = (H - 1) / 2;
+  const mainPassA = p1;
+  const mainPassB = p2;
+  const crossPassA = { x: Math.round(W * 0.18), y: Math.round(H * 0.30) };
+  const crossPassB = mirrorMapPoint(crossPassA);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = mapIndex(x, y);
+      const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
+      const mainPassD = pointSegmentDistance(x, y, mainPassA.x, mainPassA.y, mainPassB.x, mainPassB.y);
+      const crossPassD = pointSegmentDistance(x, y, crossPassA.x, crossPassA.y, crossPassB.x, crossPassB.y);
+      const crownD = Math.abs(
+        Math.hypot((x - centerX) / (W * 0.28), (y - centerY) / (H * 0.22)) - 1
+      );
+      const shoulderD = Math.abs(
+        Math.hypot((x - centerX) / (W * 0.38), (y - centerY) / (H * 0.34)) - 1
+      );
+
+      let elevation = 3;
+      if (edge < 4) elevation = 6;
+      else if (edge < 8) elevation = 5;
+      if (shoulderD < 0.06) elevation = Math.max(elevation, 4);
+      if (crownD < 0.15 && mainPassD > 4.0 && crossPassD > 3.0) elevation = Math.max(elevation, 5);
+      if (crownD < 0.07 && mainPassD > 4.6 && crossPassD > 3.4) elevation = Math.max(elevation, 6);
+      if (mainPassD < 2.6 || crossPassD < 1.6) elevation = Math.min(elevation, 3);
+
+      map.elevation[idx] = clampElevation(elevation);
+      map.tiles[idx] = elevation >= 6 ? TileType.STONE : TileType.SNOW;
+    }
+  }
+
+  carvePackedSnowRoad(map, mainPassA, mainPassB, 2.0);
+  carvePackedSnowRoad(map, crossPassA, crossPassB, 1.15);
+  paintCentralIce(map, centerX, centerY);
+
+  addMirroredSnowForestBlob(map, Math.round(W * 0.10), Math.round(H * 0.68), 8, 0.95);
+  addMirroredSnowForestBlob(map, Math.round(W * 0.24), Math.round(H * 0.87), 9, 0.92);
+  addMirroredSnowForestBlob(map, Math.round(W * 0.34), Math.round(H * 0.64), 7, 0.86);
+  addMirroredSnowForestBlob(map, Math.round(W * 0.14), Math.round(H * 0.91), 6, 0.84);
+  addMirroredSnowForestBlob(map, Math.round(W * 0.30), Math.round(H * 0.37), 6, 0.76);
+  addMirroredSnowForestBlob(map, Math.round(W * 0.42), Math.round(H * 0.20), 6, 0.76);
+
+  addMirroredSnowStonePocket(map, Math.round(W * 0.28), Math.round(H * 0.57), 4);
+  addMirroredSnowStonePocket(map, Math.round(W * 0.17), Math.round(H * 0.47), 3);
+  addMirroredSnowStonePocket(map, Math.round(W * 0.40), Math.round(H * 0.78), 3);
+
+  clearSnowSpawnPatch(map, p1.x, p1.y, 5);
+  clearSnowSpawnPatch(map, p2.x, p2.y, 5);
+
+  rebuildWalkability(map);
+  setSpawns(map, p1, p2);
+  refreshBridgePositions(map);
+  return map;
+}
+
+function mirrorMapPoint(point: { x: number; y: number }): { x: number; y: number } {
+  return { x: W - 1 - point.x, y: H - 1 - point.y };
+}
+
+function carvePackedSnowRoad(
+  map: MapData,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  radius: number
+): void {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (pointSegmentDistance(x, y, a.x, a.y, b.x, b.y) > radius) continue;
+      const idx = mapIndex(x, y);
+      map.tiles[idx] = TileType.PACKED_SNOW;
+      map.elevation[idx] = Math.min(map.elevation[idx], 3);
+    }
+  }
+}
+
+function paintCentralIce(map: MapData, centerX: number, centerY: number): void {
+  const rx = W * 0.16;
+  const ry = H * 0.12;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = mapIndex(x, y);
+      const d = Math.hypot((x - centerX) / rx, (y - centerY) / ry);
+      const frostRipple = Math.cos((x - centerX) * 0.54) * 0.025
+        + Math.cos((y - centerY) * 0.46) * 0.025;
+      const edge = d + frostRipple;
+      if (edge <= 0.82) {
+        map.tiles[idx] = TileType.ICE;
+        map.elevation[idx] = 2;
+      } else if (edge <= 1.04 && map.tiles[idx] !== TileType.STONE) {
+        map.tiles[idx] = TileType.PACKED_SNOW;
+        map.elevation[idx] = Math.min(map.elevation[idx], 3);
+      }
+    }
+  }
+}
+
+function addMirroredSnowForestBlob(
+  map: MapData,
+  cx: number,
+  cy: number,
+  radius: number,
+  fullness: number
+): void {
+  addSnowForestBlob(map, cx, cy, radius, fullness);
+  const mirrored = mirrorMapPoint({ x: cx, y: cy });
+  if (mirrored.x !== cx || mirrored.y !== cy) {
+    addSnowForestBlob(map, mirrored.x, mirrored.y, radius, fullness);
+  }
+}
+
+function addSnowForestBlob(
+  map: MapData,
+  cx: number,
+  cy: number,
+  radius: number,
+  fullness: number
+): void {
+  const clampedFullness = Math.max(0, Math.min(1, fullness));
+  const effectiveRadius = radius * (0.62 + clampedFullness * 0.38);
+  for (let y = cy - radius; y <= cy + radius; y++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      if (!inBounds(x, y)) continue;
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.hypot(dx, dy);
+      const edge = effectiveRadius
+        * (1 + Math.cos(dx * 0.41 + dy * 0.17) * 0.04 + Math.cos((dx - dy) * 0.29) * 0.04);
+      if (d > edge) continue;
+      const idx = mapIndex(x, y);
+      const tile = map.tiles[idx];
+      if (
+        tile === TileType.ICE
+        || tile === TileType.PACKED_SNOW
+        || tile === TileType.STONE
+        || isWaterTile(tile)
+      ) {
+        continue;
+      }
+      map.tiles[idx] = TileType.SNOW_FOREST;
+    }
+  }
+}
+
+function addMirroredSnowStonePocket(map: MapData, cx: number, cy: number, radius: number): void {
+  addSnowStonePocket(map, cx, cy, radius);
+  const mirrored = mirrorMapPoint({ x: cx, y: cy });
+  if (mirrored.x !== cx || mirrored.y !== cy) {
+    addSnowStonePocket(map, mirrored.x, mirrored.y, radius);
+  }
+}
+
+function addSnowStonePocket(map: MapData, cx: number, cy: number, radius: number): void {
+  for (let y = cy - radius; y <= cy + radius; y++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      if (!inBounds(x, y)) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > radius) continue;
+      const idx = mapIndex(x, y);
+      if (map.tiles[idx] === TileType.ICE || map.tiles[idx] === TileType.PACKED_SNOW) continue;
+      map.tiles[idx] = TileType.STONE;
+      map.elevation[idx] = d < radius * 0.55 ? 5 : 4;
+    }
+  }
+}
+
+function clearSnowSpawnPatch(
+  map: MapData,
+  cx: number,
+  cy: number,
+  radius: number
+): void {
+  for (let y = cy - radius; y <= cy + radius; y++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      if (!inBounds(x, y)) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > radius) continue;
+      const idx = mapIndex(x, y);
+      map.tiles[idx] = Math.abs(x - cx) + Math.abs(y - cy) <= 1
+        ? TileType.PACKED_SNOW
+        : TileType.SNOW;
+      map.elevation[idx] = 3;
+    }
+  }
+}
+
+function paintSudomerPond(
+  map: MapData,
+  pond: { cx: number; cy: number; rx: number; ry: number },
+  waterEdge: number,
+  shallowEdge: number,
+  sandEdge: number
+): void {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = mapIndex(x, y);
+      const d = ellipseDistance(x, y, pond.cx, pond.cy, pond.rx, pond.ry);
+      const ripple =
+        Math.sin(x * 0.34 + y * 0.17) * 0.035 +
+        Math.cos(x * 0.19 - y * 0.27) * 0.025;
+      const shoreline = d + ripple;
+      if (shoreline <= waterEdge) {
+        map.tiles[idx] = TileType.WATER;
+        map.elevation[idx] = 0;
+      } else if (shoreline <= shallowEdge) {
+        map.tiles[idx] = TileType.WATER_SHALLOW;
+        map.elevation[idx] = 1;
+      } else if (shoreline <= sandEdge && map.tiles[idx] === TileType.GRASS) {
+        map.tiles[idx] = TileType.SAND;
+        map.elevation[idx] = 2;
+      }
+    }
+  }
+}
+
+function ellipseDistance(
+  x: number,
+  y: number,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number
+): number {
+  const nx = (x - cx) / Math.max(1, rx);
+  const ny = (y - cy) / Math.max(1, ry);
+  return Math.hypot(nx, ny);
+}
+
+function paintSudomerRightMud(
+  map: MapData,
+  rightPond: { cx: number; cy: number; rx: number; ry: number }
+): void {
+  const mudMinX = rightPond.cx - 1;
+  const guaranteedEdgeX = rightPond.cx + Math.round(rightPond.rx * 0.45);
+  const edgeBandBottom = rightPond.cy + Math.round(rightPond.ry * 0.42);
+  const routeStart = {
+    x: rightPond.cx - 1,
+    y: rightPond.cy - rightPond.ry + 4,
+  };
+  const routeEnd = {
+    x: W - 1,
+    y: Math.round(H * 0.12),
+  };
+
+  for (let y = 0; y <= edgeBandBottom; y++) {
+    for (let x = mudMinX; x < W; x++) {
+      if (!inBounds(x, y)) continue;
+      const idx = mapIndex(x, y);
+      if (isWaterTile(map.tiles[idx])) continue;
+      const pondD = ellipseDistance(x, y, rightPond.cx, rightPond.cy, rightPond.rx, rightPond.ry);
+      const routeD = pointSegmentDistance(
+        x,
+        y,
+        routeStart.x,
+        routeStart.y,
+        routeEnd.x,
+        routeEnd.y
+      );
+      const wetPatchNoise =
+        Math.sin(x * 0.71 + y * 0.19) +
+        Math.cos(x * 0.31 - y * 0.53);
+
+      const reachesMapEdge = x >= guaranteedEdgeX;
+      const northernRoute = routeD <= 8.5 && y <= rightPond.cy + 1;
+      const pondShore = pondD > 0.82 && pondD < 1.58 && y <= edgeBandBottom;
+      const unevenShore = pondShore && wetPatchNoise > -1.1;
+      const easternShore = x >= rightPond.cx + Math.round(rightPond.rx * 0.2) && y <= edgeBandBottom;
+
+      if (reachesMapEdge || northernRoute || easternShore || unevenShore) {
+        map.tiles[idx] = TileType.MUD;
+        map.elevation[idx] = 2;
+      }
+    }
+  }
+}
+
+function carveSudomerDryChoke(map: MapData): void {
+  const minX = Math.round(W * 0.45);
+  const maxX = minX + 2;
+  const minY = Math.round(H * 0.48);
+  const maxY = Math.round(H * 0.80);
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (!inBounds(x, y)) continue;
+      const idx = mapIndex(x, y);
+      map.tiles[idx] = Math.abs(x - Math.round((minX + maxX) / 2)) <= 1
+        ? TileType.DIRT
+        : TileType.GRASS;
+      map.elevation[idx] = 3;
+    }
+  }
+}
+
+function carveSudomerTownSite(map: MapData, town: { x: number; y: number }): void {
+  const minX = 0;
+  const maxX = Math.min(W - 2, town.x + 18);
+  const minY = 0;
+  const maxY = Math.min(H - 2, town.y + 14);
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const idx = mapIndex(x, y);
+      map.tiles[idx] = isSudomerTownRoad(x, y, town)
+        ? TileType.DIRT
+        : TileType.GRASS;
+      map.elevation[idx] = 3;
+    }
+  }
+}
+
+function isSudomerTownRoad(x: number, y: number, town: { x: number; y: number }): boolean {
+  const mainRoad = [
+    { x: 0, y: town.y + 3 },
+    { x: town.x - 6, y: town.y + 2 },
+    { x: town.x - 2, y: town.y },
+    { x: town.x + 3, y: town.y },
+    { x: town.x + 9, y: town.y + 1 },
+    { x: town.x + 15, y: town.y + 4 },
+    { x: town.x + 19, y: town.y + 7 },
+  ];
+  const northLane = [
+    { x: town.x - 2, y: town.y },
+    { x: town.x - 3, y: town.y - 4 },
+    { x: town.x - 1, y: 0 },
+  ];
+  const eastLane = [
+    { x: town.x + 3, y: town.y },
+    { x: town.x + 7, y: town.y - 4 },
+    { x: town.x + 14, y: town.y - 4 },
+    { x: town.x + 18, y: town.y - 2 },
+  ];
+  const lowerLane = [
+    { x: town.x - 2, y: town.y },
+    { x: town.x - 3, y: town.y + 5 },
+    { x: town.x - 6, y: town.y + 9 },
+  ];
+  const westLane = [
+    { x: town.x - 8, y: town.y - 4 },
+    { x: town.x - 8, y: town.y + 2 },
+    { x: town.x - 6, y: town.y + 4 },
+  ];
+  const topLane = [
+    { x: town.x - 5, y: town.y - 7 },
+    { x: town.x + 1, y: town.y - 7 },
+    { x: town.x + 7, y: town.y - 5 },
+  ];
+  const innerLane = [
+    { x: town.x - 1, y: town.y + 3 },
+    { x: town.x + 3, y: town.y + 2 },
+    { x: town.x + 8, y: town.y + 3 },
+    { x: town.x + 13, y: town.y + 5 },
+  ];
+  const southEdgeLane = [
+    { x: town.x - 4, y: town.y + 7 },
+    { x: town.x + 1, y: town.y + 7 },
+    { x: town.x + 8, y: town.y + 9 },
+    { x: town.x + 17, y: town.y + 9 },
+  ];
+  const easternLoop = [
+    { x: town.x + 13, y: town.y - 2 },
+    { x: town.x + 17, y: town.y + 1 },
+    { x: town.x + 17, y: town.y + 9 },
+  ];
+  const roadSets = [
+    mainRoad,
+    northLane,
+    eastLane,
+    lowerLane,
+    westLane,
+    topLane,
+    innerLane,
+    southEdgeLane,
+    easternLoop,
+  ];
+  for (const road of roadSets) {
+    for (let i = 1; i < road.length; i++) {
+      if (pointSegmentDistance(x, y, road[i - 1].x, road[i - 1].y, road[i].x, road[i].y) <= 1.15) {
+        return true;
+      }
+    }
+  }
+  return Math.abs(x - (town.x + 2)) <= 2 && Math.abs(y - town.y) <= 1;
+}
+
+function addSudomerLindenTrees(map: MapData): void {
+  const anchors = [
+    { x: 0.24, y: 0.06 },
+    { x: 0.32, y: 0.16 },
+    { x: 0.52, y: 0.10 },
+    { x: 0.76, y: 0.12 },
+    { x: 0.86, y: 0.18 },
+    { x: 0.91, y: 0.32 },
+    { x: 0.83, y: 0.76 },
+    { x: 0.70, y: 0.86 },
+    { x: 0.20, y: 0.40 },
+    { x: 0.12, y: 0.31 },
+    { x: 0.38, y: 0.09 },
+    { x: 0.74, y: 0.76 },
+  ];
+  for (const anchor of anchors) {
+    addLindenTreeFeature(map, Math.round(W * anchor.x), Math.round(H * anchor.y));
+  }
+}
+
 function mapIndex(x: number, y: number): number {
   return y * W + x;
 }
@@ -651,6 +1252,7 @@ function addForestBlob(
         || tile === TileType.BRIDGE
         || tile === TileType.DIRT
         || tile === TileType.SAND
+        || tile === TileType.MUD
       ) {
         continue;
       }
@@ -948,7 +1550,12 @@ function findClearSpawn(map: MapData, preferX: number, preferY: number): { x: nu
         if (x < 4 || y < 4 || x >= W - 4 || y >= H - 4) continue;
         if (map.walkability[y][x] !== 0) continue;
         const tile = map.tiles[mapIndex(x, y)];
-        if (tile !== TileType.GRASS && tile !== TileType.DIRT) continue;
+        if (
+          tile !== TileType.GRASS
+          && tile !== TileType.DIRT
+          && tile !== TileType.SNOW
+          && tile !== TileType.PACKED_SNOW
+        ) continue;
         if (hasNearbyWater(map, x, y, 2)) continue;
         return { x, y };
       }

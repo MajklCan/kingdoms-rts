@@ -49,6 +49,17 @@ function findOpenTileAtRange(
   minRange: number,
   maxRange: number
 ): { x: number; y: number } {
+  return findOpenTileAtRangeMatching(world, cx, cy, minRange, maxRange, () => true);
+}
+
+function findOpenTileAtRangeMatching(
+  world: SimWorld,
+  cx: number,
+  cy: number,
+  minRange: number,
+  maxRange: number,
+  matches: (x: number, y: number) => boolean
+): { x: number; y: number } {
   for (let y = 6; y < MAP.HEIGHT - 8; y++) {
     for (let x = 6; x < MAP.WIDTH - 8; x++) {
       const dist = Math.hypot(x - cx, y - cy);
@@ -56,6 +67,7 @@ function findOpenTileAtRange(
       if (world.map.walkability[y][x] !== 0) continue;
       if (findBuildingAt(world, x, y, 1.5) !== null) continue;
       if (findResourceAt(world, x, y, 0.8) !== null) continue;
+      if (!matches(x, y)) continue;
       return { x, y };
     }
   }
@@ -253,6 +265,37 @@ describe('enemy AI', () => {
     expect(Math.hypot(Position.x[lumber] - Position.x[wood], Position.y[lumber] - Position.y[wood]))
       .toBeLessThanOrEqual(3);
     expect(Math.hypot(Position.x[lumber] - spawn.x, Position.y[lumber] - spawn.y)).toBeGreaterThan(4);
+  });
+
+  it('hard AI replaces depleted lumber huts near remote wood', () => {
+    const world = createSimWorld(213, { aiDifficulty: 'hard' });
+    world.paused = false;
+    world.resources[AI_PLAYER_ID].set([0, 1000, 0, 0]);
+    removeResources(world, ResourceKindId.WOOD);
+
+    const spawn = world.map.spawns[AI_PLAYER_ID];
+    const oldSpot = findOpenTileAtRange(world, spawn.x, spawn.y, 4, 7);
+    spawnCompletedBuilding(world, BuildingDefId.LUMBER_CAMP, oldSpot.x, oldSpot.y, AI_PLAYER_ID);
+    const woodTile = findOpenTileAtRangeMatching(
+      world,
+      spawn.x,
+      spawn.y,
+      45,
+      50,
+      (x, y) => Math.hypot(x - oldSpot.x, y - oldSpot.y) > 42.5
+    );
+    const wood = spawnResource(world, ResourceKindId.WOOD, woodTile.x, woodTile.y, 100);
+    const before = countAiBuildings(world, BuildingDefId.LUMBER_CAMP);
+
+    for (let i = 0; i < 5; i++) step(world);
+
+    const lumberHuts = buildingQuery(world.ecs).filter((eid) =>
+      Owner.player[eid] === AI_PLAYER_ID && Building.defId[eid] === BuildingDefId.LUMBER_CAMP
+    );
+    expect(lumberHuts.length).toBeGreaterThan(before);
+    expect(lumberHuts.some((eid) =>
+      Math.hypot(Position.x[eid] - Position.x[wood], Position.y[eid] - Position.y[wood]) <= 3
+    )).toBe(true);
   });
 
   it('hard AI fills multiple barracks queues when it can afford units', () => {

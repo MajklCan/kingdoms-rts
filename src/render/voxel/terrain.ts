@@ -26,6 +26,12 @@ const TILE_COLORS: Record<number, { top: number; right: number; left: number }> 
   [TileType.WATER_SHALLOW]: { top: P.WATER_L, right: P.WATER_M, left: P.WATER_M },
   [TileType.STONE]:         { top: P.STONE_ORE_L, right: P.STONE_ORE_M, left: P.STONE_ORE_D },
   [TileType.BRIDGE]:        { top: P.WOOD_L, right: P.WOOD_M, left: P.WOOD_D },
+  [TileType.MUD]:           { top: 0x5b5630, right: 0x494325, left: 0x3a351e },
+  [TileType.BARBED_WIRE]:   { top: 0x6e5a38, right: 0x55432a, left: 0x3f311d },
+  [TileType.SNOW]:          { top: P.SNOW_L, right: P.SNOW_M, left: P.SNOW_D },
+  [TileType.SNOW_FOREST]:   { top: P.SNOW_M, right: P.SNOW_D, left: P.SNOW_SHADOW },
+  [TileType.ICE]:           { top: P.ICE_L, right: P.ICE_M, left: P.ICE_D },
+  [TileType.PACKED_SNOW]:   { top: P.SNOW_M, right: P.SNOW_D, left: P.SNOW_SHADOW },
 };
 
 /**
@@ -138,6 +144,69 @@ export function bakeTerrain(
     if (tileType === TileType.WATER_SHALLOW) {
       g.fillStyle(P.WATER_FOAM, 0.35);
       g.fillCircle(sx + 4, sy - 2, 2);
+    }
+
+    if (tileType === TileType.MUD) {
+      g.fillStyle(0x2f2b19, 0.18);
+      g.fillCircle(sx - 5, sy + 1, 2);
+      g.fillCircle(sx + 6, sy - 2, 1);
+    }
+
+    if (tileType === TileType.BARBED_WIRE) {
+      // Tangled wire running continuously along the belt (down-right, toward the
+      // +x neighbour so adjacent tiles join up), wavy and jittered per tile so it
+      // reads as a messy entanglement instead of a repeated stamp.
+      const h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+      const jit = (n: number) => ((h >> ((n % 7) * 4)) & 15) / 15 - 0.5;
+      const ex = halfW * 0.5;   // half-vector along the belt axis
+      const ey = halfH * 0.5;
+      const lx = halfW * 0.13;  // lateral (perpendicular) step
+      const ly = -halfH * 0.13;
+      const strand = (lane: number, color: number) => {
+        g.lineStyle(1, color, 0.8);
+        g.beginPath();
+        const N = 6;
+        for (let i = 0; i <= N; i++) {
+          const t = (i / N) * 2 - 1; // -1..1 along the belt
+          const lat = lane + (i % 2 === 0 ? 1 : -1) * (1 + jit(i));
+          const xx = sx + ex * t + lx * lat;
+          const yy = sy + ey * t + ly * lat;
+          if (i === 0) g.moveTo(xx, yy); else g.lineTo(xx, yy);
+        }
+        g.strokePath();
+      };
+      strand(-1.1 + jit(1), 0x7c7565);
+      strand(1.2 + jit(2), 0x9a9384);
+      // A few short barbs poking off the wire at jittered points.
+      g.lineStyle(1, 0xb0a994, 0.8);
+      for (let i = 1; i <= 3; i++) {
+        const t = (i / 4) * 2 - 1 + jit(i) * 0.3;
+        const bx = sx + ex * t + lx * jit(i + 3) * 2;
+        const by = sy + ey * t + ly * jit(i + 3) * 2;
+        g.beginPath();
+        g.moveTo(bx - lx * 1.6, by - ly * 1.6);
+        g.lineTo(bx + lx * 1.6, by + ly * 1.6);
+        g.strokePath();
+      }
+    }
+
+    if (tileType === TileType.SNOW || tileType === TileType.SNOW_FOREST) {
+      g.fillStyle(0xffffff, 0.22);
+      g.fillCircle(sx - 7, sy - 1, 1);
+      g.fillCircle(sx + 5, sy + 2, 1);
+    }
+
+    if (tileType === TileType.ICE) {
+      g.lineStyle(1, 0xe9fbff, 0.30);
+      g.beginPath();
+      g.moveTo(sx - halfW * 0.42, sy + halfH * 0.05);
+      g.lineTo(sx + halfW * 0.32, sy - halfH * 0.18);
+      g.strokePath();
+      g.lineStyle(1, 0x4f8aa0, 0.18);
+      g.beginPath();
+      g.moveTo(sx - halfW * 0.15, sy + halfH * 0.28);
+      g.lineTo(sx + halfW * 0.48, sy + halfH * 0.03);
+      g.strokePath();
     }
   }
 

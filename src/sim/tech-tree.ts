@@ -110,13 +110,14 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.HOUSING_II,
     name: 'Manor Housing',
-    description: 'Upgrades housing compounds so each house supports eight population.',
+    description: 'Castle Age housing compounds so each house supports eight population.',
     cost: { food: 0, wood: 600, gold: 0, stone: 400 },
     path: 'housing',
     icon: 'house',
-    x: 29.5,
+    x: 49.5,
     y: 90,
     requires: [TechId.HOUSING_I],
+    requiresAge: AgeId.CASTLE,
     unlocks: ['Houses +8 pop'],
   },
   {
@@ -146,8 +147,8 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.CASTLE_AGE,
     name: 'Castle Age',
-    description: 'Advance the town center into the Castle Age.',
-    cost: { food: 0, wood: 1000, gold: 0, stone: 800 },
+    description: 'Advance into Castle Age and unlock gold mining, stables, and knights.',
+    cost: { food: 0, wood: 750, gold: 0, stone: 500 },
     path: 'age',
     icon: 'castle',
     x: 49.5,
@@ -156,56 +157,7 @@ export const TECH_TREE: TechDef[] = [
       [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS],
       [TechId.LUMBER_CREWS, TechId.MINING_CREWS],
     ],
-    unlocks: ['Castle Town Center'],
-  },
-  {
-    id: TechId.GOLD_MINES,
-    name: 'Gold Mines',
-    description: 'Unlocks gold extraction. Further Castle research costs gold.',
-    cost: { food: 0, wood: 500, gold: 0, stone: 500 },
-    path: 'castle',
-    icon: 'gold',
-    x: 69.5,
-    y: 18,
-    requiresAge: AgeId.CASTLE,
-    unlocks: ['Gold Mine'],
-  },
-  {
-    id: TechId.KNIGHTS,
-    name: 'Knights',
-    description: 'Unlocks the stable and mounted heavy cavalry.',
-    cost: { food: 0, wood: 0, gold: 700, stone: 0 },
-    path: 'castle',
-    icon: 'horse',
-    x: 89.5,
-    y: 18,
-    requires: [TechId.GOLD_MINES],
-    requiresAge: AgeId.CASTLE,
-    unlocks: ['Stable', 'Knights'],
-  },
-  {
-    id: TechId.FARMS,
-    name: 'Farm Yields',
-    description: 'Improves farm harvests so each work cycle produces more food.',
-    cost: { food: 0, wood: 300, gold: 0, stone: 150 },
-    path: 'food',
-    icon: 'farm',
-    x: 9.5,
-    y: 126,
-    requires: [TechId.BARRACKS_PIKEMEN],
-    unlocks: ['Farms +3 food'],
-  },
-  {
-    id: TechId.FARMS_II,
-    name: 'Crop Rotation',
-    description: 'A second farm upgrade for stronger sustained food income.',
-    cost: { food: 0, wood: 600, gold: 0, stone: 350 },
-    path: 'food',
-    icon: 'farm',
-    x: 29.5,
-    y: 126,
-    requires: [TechId.FARMS],
-    unlocks: ['Farms +4 food'],
+    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Knights'],
   },
   {
     id: TechId.MILLS,
@@ -214,10 +166,36 @@ export const TECH_TREE: TechDef[] = [
     cost: { food: 0, wood: 450, gold: 0, stone: 300 },
     path: 'food',
     icon: 'mill',
+    x: 9.5,
+    y: 126,
+    requires: [TechId.BARRACKS_PIKEMEN],
+    unlocks: ['Mill', 'Food drop-off bonus'],
+  },
+  {
+    id: TechId.FARMS,
+    name: 'Farm Yields',
+    description: 'Castle Age farm improvements so each work cycle produces more food.',
+    cost: { food: 0, wood: 300, gold: 0, stone: 150 },
+    path: 'food',
+    icon: 'farm',
     x: 49.5,
     y: 126,
-    requires: [TechId.FARMS_II],
-    unlocks: ['Mill', 'Food drop-off bonus'],
+    requires: [TechId.MILLS],
+    requiresAge: AgeId.CASTLE,
+    unlocks: ['Farms +3 food'],
+  },
+  {
+    id: TechId.FARMS_II,
+    name: 'Crop Rotation',
+    description: 'Gunpowder Age crop rotation for stronger sustained food income.',
+    cost: { food: 0, wood: 600, gold: 0, stone: 350 },
+    path: 'food',
+    icon: 'farm',
+    x: 69.5,
+    y: 126,
+    requires: [TechId.FARMS],
+    requiresAge: AgeId.GUNPOWDER,
+    unlocks: ['Farms +4 food'],
   },
   {
     id: TechId.GUNPOWDER_AGE,
@@ -226,9 +204,8 @@ export const TECH_TREE: TechDef[] = [
     cost: { food: 0, wood: 1400, gold: 1200, stone: 1000 },
     path: 'age',
     icon: 'gunpowder',
-    x: 109.5,
+    x: 69.5,
     y: 18,
-    requires: [TechId.GOLD_MINES, TechId.KNIGHTS],
     requiresAge: AgeId.CASTLE,
     unlocks: ['Foundry', 'Gunmen', 'Field Cannons'],
   },
@@ -250,14 +227,14 @@ export function createStartingTechSetForAge(ageId: number): Set<TechIdValue> {
     techs.add(TechId.HOUSING_I);
     techs.add(TechId.LUMBER_CREWS);
     techs.add(TechId.MINING_CREWS);
+    techs.add(TechId.MILLS);
   }
   if (ageId >= AgeId.GUNPOWDER) {
-    techs.add(TechId.GOLD_MINES);
-    techs.add(TechId.KNIGHTS);
     techs.add(TechId.FARMS);
-    techs.add(TechId.FARMS_II);
-    techs.add(TechId.MILLS);
     techs.add(TechId.HOUSING_II);
+  }
+  if (ageId >= AgeId.TOTAL_WAR) {
+    techs.add(TechId.FARMS_II);
   }
   return techs;
 }
@@ -332,9 +309,9 @@ export function isBuildingUnlocked(
       return hasTech(world, playerId, TechId.ARCHERS) ||
         (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE;
     case BuildingDefId.GOLD_MINE:
-      return hasTech(world, playerId, TechId.GOLD_MINES);
+      return (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE;
     case BuildingDefId.STABLE:
-      return hasTech(world, playerId, TechId.KNIGHTS);
+      return (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE;
     case BuildingDefId.FARM:
       return hasTech(world, playerId, TechId.LUMBER_HUTS);
     case BuildingDefId.MILL:
@@ -359,11 +336,12 @@ export function isUnitUnlocked(
     case UnitDefId.ARCHER:
       return hasTech(world, playerId, TechId.ARCHERS);
     case UnitDefId.SCOUT_CAVALRY:
-      return hasTech(world, playerId, TechId.KNIGHTS);
+      return (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE;
     case UnitDefId.GUNMAN:
     case UnitDefId.CANNON:
       return (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.GUNPOWDER;
     case UnitDefId.MACHINE_GUN:
+    case UnitDefId.MORTAR:
       return false;
     default:
       return false;

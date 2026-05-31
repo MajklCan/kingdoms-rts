@@ -15,6 +15,7 @@ import {
   unitQuery,
 } from './world';
 import {
+  TECH_TREE,
   TechId,
   createStartingTechSet,
   createStartingTechSetForAge,
@@ -103,7 +104,10 @@ describe('technology tree', () => {
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
     expect(isUnitUnlocked(castle, 1, UnitDefId.ARCHER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.DEFENSIVE_TOWER)).toBe(true);
-    expect(isBuildingUnlocked(castle, 1, BuildingDefId.GOLD_MINE)).toBe(false);
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.GOLD_MINE)).toBe(true);
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.STABLE)).toBe(true);
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.MILL)).toBe(true);
+    expect(isUnitUnlocked(castle, 1, UnitDefId.SCOUT_CAVALRY)).toBe(true);
 
     const gunpowder = createSimWorld(509, { startingAge: AgeId.GUNPOWDER });
 
@@ -122,7 +126,8 @@ describe('technology tree', () => {
     expect(totalWar.ages[1].current).toBe(AgeId.TOTAL_WAR);
     expect(totalWar.resources[1][ResourceKindId.WOOD]).toBeGreaterThan(gunpowder.resources[1][ResourceKindId.WOOD]);
     expect(totalWar.resources[1][ResourceKindId.GOLD]).toBeGreaterThan(gunpowder.resources[1][ResourceKindId.GOLD]);
-    expect(createStartingTechSetForAge(AgeId.TOTAL_WAR)).toEqual(createStartingTechSetForAge(AgeId.GUNPOWDER));
+    expect(createStartingTechSetForAge(AgeId.GUNPOWDER).has(TechId.FARMS_II)).toBe(false);
+    expect(createStartingTechSetForAge(AgeId.TOTAL_WAR).has(TechId.FARMS_II)).toBe(true);
     expect(UNIT_TABLE[UnitDefId.MACHINE_GUN].name).toBe('Machine Gun');
     expect(isUnitUnlocked(totalWar, 1, UnitDefId.MACHINE_GUN)).toBe(false);
   });
@@ -166,7 +171,7 @@ describe('technology tree', () => {
     expect(getWorksiteWorkerSlots(world, stone)).toBe(3);
   });
 
-  it('allows Castle Age after either complete early path, then gates gold research and later paths', () => {
+  it('allows Castle Age after either complete early path, then folds gold and cavalry into the age unlock', () => {
     const military = createSimWorld(504);
     military.researchedTechs[1].add(TechId.BARRACKS_PIKEMEN);
     expect(techStatus(military, 1, TechId.CASTLE_AGE)).toBe('locked');
@@ -180,18 +185,10 @@ describe('technology tree', () => {
     economy.researchedTechs[1].add(TechId.MINING_CREWS);
     expect(techStatus(economy, 1, TechId.CASTLE_AGE)).toBe('available');
 
+    expect(TECH_TREE.some((tech) => tech.id === TechId.GOLD_MINES)).toBe(false);
+    expect(TECH_TREE.some((tech) => tech.id === TechId.KNIGHTS)).toBe(false);
     economy.ages[1].current = AgeId.CASTLE;
-    expect(techStatus(economy, 1, TechId.GOLD_MINES)).toBe('available');
-    expect(isBuildingUnlocked(economy, 1, BuildingDefId.GOLD_MINE)).toBe(false);
-    economy.resources[1].set([0, 2000, 0, 2000]);
-    economy.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.GOLD_MINES });
-    economy.paused = false;
-    step(economy);
     expect(isBuildingUnlocked(economy, 1, BuildingDefId.GOLD_MINE)).toBe(true);
-
-    economy.resources[1].set([0, 0, 3000, 0]);
-    economy.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.KNIGHTS });
-    step(economy);
     expect(isBuildingUnlocked(economy, 1, BuildingDefId.STABLE)).toBe(true);
     expect(isUnitUnlocked(economy, 1, UnitDefId.SCOUT_CAVALRY)).toBe(true);
   });
@@ -216,9 +213,11 @@ describe('technology tree', () => {
 
     expect(getBuildingPopProvided(world, 1, BuildingDefId.HOUSE)).toBe(5);
     expect(world.population[1].cap).toBe(capAfterHouse + 2);
-    expect(techStatus(world, 1, TechId.HOUSING_II)).toBe('available');
+    expect(techStatus(world, 1, TechId.HOUSING_II)).toBe('locked');
     expect(techStatus(world, 1, TechId.CASTLE_AGE)).toBe('locked');
 
+    world.ages[1].current = AgeId.CASTLE;
+    expect(techStatus(world, 1, TechId.HOUSING_II)).toBe('available');
     world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.HOUSING_II });
     step(world);
 
@@ -226,39 +225,43 @@ describe('technology tree', () => {
     expect(world.population[1].cap).toBe(capAfterHouse + 5);
   });
 
-  it('unlocks farm productivity and mills through an independent food path', () => {
+  it('unlocks mills and farm productivity through the age-gated food path', () => {
     const world = createSimWorld(512);
     world.paused = false;
     world.researchedTechs[1].add(TechId.BARRACKS_PIKEMEN);
 
-    expect(techStatus(world, 1, TechId.FARMS)).toBe('available');
+    expect(techStatus(world, 1, TechId.MILLS)).toBe('available');
+    expect(techStatus(world, 1, TechId.FARMS)).toBe('locked');
     expect(techStatus(world, 1, TechId.FARMS_II)).toBe('locked');
-    expect(techStatus(world, 1, TechId.MILLS)).toBe('locked');
     expect(techStatus(world, 1, TechId.GUNPOWDER_AGE)).toBe('locked');
     expect(isBuildingUnlocked(world, 1, BuildingDefId.MILL)).toBe(false);
 
     world.resources[1].set([0, 2000, 1000, 1000]);
-    world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.FARMS });
-    step(world);
-    expect(techStatus(world, 1, TechId.FARMS_II)).toBe('available');
-    expect(techStatus(world, 1, TechId.GUNPOWDER_AGE)).toBe('locked');
-
-    world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.FARMS_II });
-    step(world);
-    expect(techStatus(world, 1, TechId.MILLS)).toBe('available');
-
     world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.MILLS });
     step(world);
     expect(isBuildingUnlocked(world, 1, BuildingDefId.MILL)).toBe(true);
+    expect(techStatus(world, 1, TechId.FARMS)).toBe('locked');
+    expect(techStatus(world, 1, TechId.FARMS_II)).toBe('locked');
     expect(techStatus(world, 1, TechId.GUNPOWDER_AGE)).toBe('locked');
+
+    world.ages[1].current = AgeId.CASTLE;
+    expect(techStatus(world, 1, TechId.FARMS)).toBe('available');
+    world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.FARMS });
+    step(world);
+    expect(techStatus(world, 1, TechId.FARMS_II)).toBe('locked');
+    expect(techStatus(world, 1, TechId.GUNPOWDER_AGE)).toBe('available');
+
+    world.ages[1].current = AgeId.GUNPOWDER;
+    expect(techStatus(world, 1, TechId.FARMS_II)).toBe('available');
+    world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.FARMS_II });
+    step(world);
+    expect(techStatus(world, 1, TechId.FARMS_II)).toBe('researched');
   });
 
   it('advances from Castle Age into Gunpowder Age and unlocks the foundry line', () => {
     const world = createSimWorld(506);
     world.paused = false;
     world.ages[1].current = AgeId.CASTLE;
-    world.researchedTechs[1].add(TechId.GOLD_MINES);
-    world.researchedTechs[1].add(TechId.KNIGHTS);
 
     expect(techStatus(world, 1, TechId.GUNPOWDER_AGE)).toBe('available');
     expect(isBuildingUnlocked(world, 1, BuildingDefId.FOUNDRY)).toBe(false);
@@ -309,6 +312,27 @@ describe('technology tree', () => {
       .map((eid) => UnitKind.kind[eid]);
     expect(playerKinds).toContain(UnitDefId.GUNMAN);
     expect(playerKinds).toContain(UnitDefId.CANNON);
+  });
+
+  it('batch queues train commands up to available resources', () => {
+    const world = createSimWorld(513);
+    world.paused = false;
+    world.ages[1].current = AgeId.GUNPOWDER;
+    world.resources[1].set([45 * 3, 1000, 75 * 3, 1000]);
+    world.population[1].cap = world.population[1].current + 5;
+    const spot = findOpenBuildingTile(world, 2);
+    const foundry = spawnCompletedBuilding(world, BuildingDefId.FOUNDRY, spot.x, spot.y, 1);
+
+    world.inputs.push({ type: 'trainUnit', atEid: foundry, defId: UnitDefId.GUNMAN, count: 5 });
+    step(world);
+
+    expect(world.productionQueues.get(foundry)).toEqual([
+      UnitDefId.GUNMAN,
+      UnitDefId.GUNMAN,
+      UnitDefId.GUNMAN,
+    ]);
+    expect(world.resources[1][ResourceKindId.FOOD]).toBe(0);
+    expect(world.resources[1][ResourceKindId.GOLD]).toBe(0);
   });
 
   it('sends newly trained army units to the global army rally point', () => {

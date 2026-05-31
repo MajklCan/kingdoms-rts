@@ -25,6 +25,7 @@ import {
   Health,
   MachineGunDeployment,
   MachineGunTag,
+  MortarTag,
   Owner,
   Position,
   PrevPosition,
@@ -43,6 +44,7 @@ import {
   VillagerTag,
   Velocity,
   WorksiteWorker,
+  type UnitStanceValue,
 } from '../sim/components';
 import {
   BUILDING_TABLE,
@@ -50,6 +52,7 @@ import {
   type AgeIdValue,
   type BuildingDef,
   BuildingDefId,
+  type CostTuple,
   UNIT_TABLE,
   UnitDefId,
   getAgeDef,
@@ -79,6 +82,7 @@ import {
   setSelected,
   spawnScoutCavalry,
   spawnMachineGun,
+  spawnMortar,
   step,
   townCenterQuery,
   unitQuery,
@@ -90,6 +94,7 @@ import {
 } from '../sim/world';
 import {
   MapFeatureKind,
+  TileType,
   type MapFeature,
   type MapFeatureKindValue,
   type MapIdValue,
@@ -207,6 +212,15 @@ import {
   type MachineGunAnim,
   type MachineGunFacing,
 } from './voxel/models/total-war-machine-gun';
+import {
+  MORTAR_ANIMS,
+  MORTAR_BAKE_BOUNDS,
+  MORTAR_FACINGS,
+  MORTAR_FRAME_COUNTS,
+  buildMortarVoxels,
+  type MortarAnim,
+  type MortarFacing,
+} from './voxel/models/total-war-mortar';
 import { buildDarkArcheryRangeVoxels } from './voxel/models/dark-archery-range';
 import { buildDarkStableVoxels } from './voxel/models/dark-stable';
 import { buildGunpowderFoundryVoxels } from './voxel/models/gunpowder-foundry';
@@ -218,6 +232,7 @@ import { buildDarkDefensiveTowerVoxels } from './voxel/models/dark-defensive-tow
 import { buildWallVoxels } from './voxel/models/wall';
 import {
   buildTreeVoxels,
+  buildSnowTreeVoxels,
   buildLindenTreeVoxels,
   buildJaggedRockVoxels,
   buildGoldVoxels,
@@ -258,7 +273,7 @@ const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   DEFENSIVE_TOWER: BuildingDefId.DEFENSIVE_TOWER,
 };
 
-type ProjectileKind = 'arrow' | 'bullet' | 'cannon';
+type ProjectileKind = 'arrow' | 'bullet' | 'cannon' | 'mortar';
 
 interface AttackProjectile {
   kind: ProjectileKind;
@@ -364,6 +379,7 @@ export class GameScene extends Phaser.Scene {
   private gunmanFacing = new Map<number, GunmanFacing>();
   private cannonFacing = new Map<number, CannonFacing>();
   private machineGunFacing = new Map<number, MachineGunFacing>();
+  private mortarFacing = new Map<number, MortarFacing>();
   private villagerFacing = new Map<number, VillagerFacing>();
   private unitAttackUntilTick = new Map<number, number>();
   private scoutInspectionMode = false;
@@ -382,6 +398,8 @@ export class GameScene extends Phaser.Scene {
   private static readonly ZOOM_WHEEL_CLAMP = 0.05;
   private static readonly UNIT_VISUAL_SCALE = 0.8;
   private static readonly CANNON_UNIT_ORIGIN_Y = 0.645;
+  private static readonly MORTAR_UNIT_ORIGIN_Y = 0.64;
+  private static readonly TRAIN_BATCH_COUNT = 5;
   private static readonly COMBAT_ATTACK_ANIM_TICKS = 10;
   private static readonly MINIMAP_COMBAT_ALERT_TICKS = SIM.TICK_HZ * 5;
   /** How long battle music/ambience persist after the last local combat event.
@@ -426,7 +444,9 @@ export class GameScene extends Phaser.Scene {
   private static readonly GUNMAN_KEY_PREFIX = 'voxel-gunman-p';
   private static readonly CANNON_KEY_PREFIX = 'voxel-cannon-p';
   private static readonly MACHINE_GUN_KEY_PREFIX = 'voxel-machine-gun-p';
+  private static readonly MORTAR_KEY_PREFIX = 'voxel-mortar-p';
   private static readonly TREE_KEY = 'voxel-tree';
+  private static readonly SNOW_TREE_KEY = 'voxel-snow-tree';
   private static readonly LINDEN_TREE_KEY = 'voxel-linden-tree';
   private static readonly JAGGED_ROCK_KEY = 'voxel-jagged-rock';
   private static readonly GOLD_KEY = 'voxel-gold';
@@ -437,6 +457,7 @@ export class GameScene extends Phaser.Scene {
   private static readonly FOG_UNEXPLORED_KEY = 'fog-of-war-unexplored';
   /** Drag-box select state. dragStart is set on left-pointer-down; cleared on up. */
   private dragStart: { x: number; y: number } | null = null;
+  private dragCurrent: { x: number; y: number } | null = null;
   private isDragging = false;
   private dragGfx?: Phaser.GameObjects.Graphics;
   private static readonly DRAG_THRESHOLD_PX = 6;
@@ -519,6 +540,16 @@ export class GameScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
       this.onPointerUp(pointer);
     });
+    window.addEventListener('pointermove', this.onWindowPointerMove, true);
+    window.addEventListener('pointerup', this.onWindowPointerUp, true);
+    window.addEventListener('pointercancel', this.onWindowPointerUp, true);
+    window.addEventListener('blur', this.onWindowBlur);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('pointermove', this.onWindowPointerMove, true);
+      window.removeEventListener('pointerup', this.onWindowPointerUp, true);
+      window.removeEventListener('pointercancel', this.onWindowPointerUp, true);
+      window.removeEventListener('blur', this.onWindowBlur);
+    });
     // Top-most graphics layer dedicated to drawing the drag-box rectangle.
     this.dragGfx = this.add.graphics();
     this.dragGfx.setDepth(20000);
@@ -532,7 +563,7 @@ export class GameScene extends Phaser.Scene {
       if (this.awaitingBuildKind) {
         this.startBuildMode('HOUSE', 'build HOUSE — left-click to place, right-click to cancel');
       } else {
-        this.toggleSelectedUnitStance();
+        this.setSelectedUnitStance(UnitStanceId.HOLD_POSITION);
       }
     });
     this.input.keyboard?.on('keydown-M', () => {
@@ -834,7 +865,7 @@ export class GameScene extends Phaser.Scene {
     for (const eid of ents) {
       if (!this.isResourceExploredByLocal(eid)) continue;
       const kind = Resource.kind[eid];
-      const key = this.resourceTextureKey(kind);
+      const key = this.resourceTextureKey(eid, kind);
       if (!key || !this.textures.exists(key)) continue;
       seen.add(eid);
       const screen = this.tileToScreenElev(Position.x[eid], Position.y[eid]);
@@ -1015,6 +1046,7 @@ export class GameScene extends Phaser.Scene {
         this.gunmanFacing.delete(eid);
         this.cannonFacing.delete(eid);
         this.machineGunFacing.delete(eid);
+        this.mortarFacing.delete(eid);
         this.villagerFacing.delete(eid);
         this.unitAttackUntilTick.delete(eid);
       }
@@ -1034,10 +1066,12 @@ export class GameScene extends Phaser.Scene {
         event.attackerKind === UnitDefId.SPEARMAN ||
         event.attackerKind === UnitDefId.GUNMAN ||
         event.attackerKind === UnitDefId.CANNON ||
-        event.attackerKind === UnitDefId.MACHINE_GUN
+        event.attackerKind === UnitDefId.MACHINE_GUN ||
+        event.attackerKind === UnitDefId.MORTAR
       ) {
         const animTicks =
-          event.attackerKind === UnitDefId.CANNON && event.phase === 'windup'
+          (event.attackerKind === UnitDefId.CANNON || event.attackerKind === UnitDefId.MORTAR) &&
+          event.phase === 'windup'
             ? Math.max(GameScene.COMBAT_ATTACK_ANIM_TICKS, event.windupTicks ?? 0)
             : GameScene.COMBAT_ATTACK_ANIM_TICKS;
         this.unitAttackUntilTick.set(
@@ -1045,7 +1079,12 @@ export class GameScene extends Phaser.Scene {
           this.world.tick + animTicks
         );
       }
-      if (event.attackerKind === UnitDefId.CANNON && event.phase === 'windup') continue;
+      if (
+        (event.attackerKind === UnitDefId.CANNON || event.attackerKind === UnitDefId.MORTAR) &&
+        event.phase === 'windup'
+      ) {
+        continue;
+      }
       if (
         event.range > 1 &&
         (isTileVisibleTo(this.world, this.perspectivePlayerId, event.fromX, event.fromY) ||
@@ -1055,6 +1094,8 @@ export class GameScene extends Phaser.Scene {
           this.spawnAttackProjectile(event, 'bullet');
         } else if (event.attackerKind === UnitDefId.CANNON) {
           this.spawnAttackProjectile(event, 'cannon');
+        } else if (event.attackerKind === UnitDefId.MORTAR) {
+          this.spawnAttackProjectile(event, 'mortar');
         } else if (
           event.attackerKind === UnitDefId.ARCHER ||
           hasComponent(this.world.ecs, Building, event.attackerEid)
@@ -1322,6 +1363,8 @@ export class GameScene extends Phaser.Scene {
     if (hasComponent(this.world.ecs, GunmanTag, eid)) return 'soldier_1';
     if (hasComponent(this.world.ecs, CannonTag, eid)) return 'soldier_2';
     if (hasComponent(this.world.ecs, MachineGunTag, eid)) return 'soldier_3';
+    // Mortar teams are siege crews — no callouts.
+    if (hasComponent(this.world.ecs, MortarTag, eid)) return null;
     return null;
   }
 
@@ -1398,24 +1441,31 @@ export class GameScene extends Phaser.Scene {
       ? -68
       : kind === 'cannon'
         ? -18
-        : -28;
+        : kind === 'mortar'
+          ? -34
+          : -28;
     const targetOffsetY = hasComponent(this.world.ecs, Building, event.targetEid)
       ? -42
-      : kind === 'cannon'
+      : kind === 'cannon' || kind === 'mortar'
         ? -16
         : -22;
     const distTiles = Math.hypot(event.fromX - event.toX, event.fromY - event.toY);
+    const eventMs = (event.projectileTicks ?? 0) > 0 ? event.projectileTicks! * SIM.TICK_MS : 0;
     const durationMs = kind === 'bullet'
-      ? (event.projectileTicks ?? 0) > 0
-        ? event.projectileTicks! * SIM.TICK_MS
+      ? eventMs > 0
+        ? eventMs
         : Math.max(70, Math.min(160, distTiles * 24))
       : kind === 'cannon'
-        ? (event.projectileTicks ?? 0) > 0
-          ? event.projectileTicks! * SIM.TICK_MS
+        ? eventMs > 0
+          ? eventMs
           : Math.max(240, Math.min(620, distTiles * 72))
-        : (event.projectileTicks ?? 0) > 0
-          ? event.projectileTicks! * SIM.TICK_MS
-          : Math.max(180, Math.min(520, distTiles * 70));
+        : kind === 'mortar'
+          ? eventMs > 0
+            ? eventMs
+            : Math.max(300, Math.min(760, distTiles * 95))
+          : eventMs > 0
+            ? eventMs
+            : Math.max(180, Math.min(520, distTiles * 70));
     this.activeProjectiles.push({
       kind,
       startX: start.x,
@@ -1462,6 +1512,28 @@ export class GameScene extends Phaser.Scene {
         if (t > 0.75) {
           g.lineStyle(2, 0xd6a51f, (t - 0.75) * 2.2);
           g.strokeCircle(projectile.endX, projectile.endY, 8 + pulse * 5);
+        }
+      } else if (projectile.kind === 'mortar') {
+        // High, slow lob with a smoke trail; bigger impact bloom than a cannon.
+        const arc = -Math.sin(t * Math.PI) * 46;
+        const x = Phaser.Math.Linear(projectile.startX, projectile.endX, t);
+        const y = Phaser.Math.Linear(projectile.startY, projectile.endY, t) + arc;
+        const tailT = Math.max(0, t - 0.12);
+        const tailArc = -Math.sin(tailT * Math.PI) * 46;
+        const tx = Phaser.Math.Linear(projectile.startX, projectile.endX, tailT);
+        const ty = Phaser.Math.Linear(projectile.startY, projectile.endY, tailT) + tailArc;
+        const pulse = Math.sin(t * Math.PI);
+        g.lineStyle(3, 0xb7bdc0, 0.35 * (1 - t));
+        g.lineBetween(tx, ty, x, y);
+        g.fillStyle(0x0f1114, 0.7);
+        g.fillCircle(x + 2, y + 2, 4.5);
+        g.fillStyle(0x2a2f32, 1);
+        g.fillCircle(x, y, 3.5);
+        g.fillStyle(0xb89a4a, 0.85);
+        g.fillCircle(x - 1, y - 1.5, 1.3);
+        if (t > 0.7) {
+          g.lineStyle(2, 0xd6a51f, (t - 0.7) * 2.4);
+          g.strokeCircle(projectile.endX, projectile.endY, 10 + pulse * 8);
         }
       } else {
         const tailT = Math.max(0, t - 0.1);
@@ -1783,6 +1855,42 @@ export class GameScene extends Phaser.Scene {
     this.world.inputs.push(input);
   }
 
+  private onWindowPointerMove = (ev: PointerEvent): void => {
+    if (!this.dragStart) return;
+    const point = this.clientPointerToWorld(ev.clientX, ev.clientY);
+    if ((ev.buttons & 1) === 0) {
+      this.finishDragAt(point);
+      return;
+    }
+    this.updateDragBox(point);
+  };
+
+  private onWindowPointerUp = (ev: PointerEvent): void => {
+    if (!this.dragStart) return;
+    this.finishDragAt(this.clientPointerToWorld(ev.clientX, ev.clientY));
+  };
+
+  private onWindowBlur = (): void => {
+    this.cancelDragBox();
+  };
+
+  private clientPointerToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    const canvas = this.scale.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const canvasX = Phaser.Math.Clamp(
+      (clientX - rect.left) * (canvas.width / Math.max(1, rect.width)),
+      0,
+      canvas.width
+    );
+    const canvasY = Phaser.Math.Clamp(
+      (clientY - rect.top) * (canvas.height / Math.max(1, rect.height)),
+      0,
+      canvas.height
+    );
+    const worldPoint = this.cameras.main.getWorldPoint(canvasX, canvasY);
+    return { x: worldPoint.x, y: worldPoint.y };
+  }
+
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     const { tx, ty, tileX, tileY } = this.pointerToTile(pointer);
     // Fractional coords for sub-tile picking (e.g. unit selection precision).
@@ -1884,6 +1992,7 @@ export class GameScene extends Phaser.Scene {
       // onPointerMove/onPointerUp will clear/replace selection if a drag actually
       // happens.
       this.dragStart = { x: pointer.worldX, y: pointer.worldY };
+      this.dragCurrent = this.dragStart;
       this.isDragging = false;
 
       // Attack-move modifier: A held → attackMove the clicked tile.
@@ -1928,9 +2037,19 @@ export class GameScene extends Phaser.Scene {
 
   /** Pointer-move: update drag-box rectangle if we're dragging. */
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
-    if (!this.dragStart || !pointer.isDown) return;
-    const dx = pointer.worldX - this.dragStart.x;
-    const dy = pointer.worldY - this.dragStart.y;
+    if (!this.dragStart) return;
+    if (!pointer.isDown) {
+      this.finishDragAt(this.dragCurrent ?? this.dragStart);
+      return;
+    }
+    this.updateDragBox({ x: pointer.worldX, y: pointer.worldY });
+  }
+
+  private updateDragBox(point: { x: number; y: number }): void {
+    if (!this.dragStart) return;
+    this.dragCurrent = point;
+    const dx = point.x - this.dragStart.x;
+    const dy = point.y - this.dragStart.y;
     if (!this.isDragging && Math.hypot(dx, dy) > GameScene.DRAG_THRESHOLD_PX) {
       this.isDragging = true;
       this.lastLeftUnitClick = null;
@@ -1939,8 +2058,8 @@ export class GameScene extends Phaser.Scene {
       clearSelection(this.world);
     }
     if (!this.isDragging || !this.dragGfx) return;
-    const x = Math.min(this.dragStart.x, pointer.worldX);
-    const y = Math.min(this.dragStart.y, pointer.worldY);
+    const x = Math.min(this.dragStart.x, point.x);
+    const y = Math.min(this.dragStart.y, point.y);
     const w = Math.abs(dx);
     const h = Math.abs(dy);
     this.dragGfx.clear();
@@ -1952,16 +2071,26 @@ export class GameScene extends Phaser.Scene {
 
   /** Pointer-up: finalise the drag-box, or clean up the no-op single-click case. */
   private onPointerUp(pointer: Phaser.Input.Pointer): void {
+    this.finishDragAt({ x: pointer.worldX, y: pointer.worldY });
+  }
+
+  private finishDragAt(point: { x: number; y: number }): void {
     if (!this.dragStart) return;
+    this.dragCurrent = point;
     if (this.isDragging) {
-      const x0 = Math.min(this.dragStart.x, pointer.worldX);
-      const y0 = Math.min(this.dragStart.y, pointer.worldY);
-      const x1 = Math.max(this.dragStart.x, pointer.worldX);
-      const y1 = Math.max(this.dragStart.y, pointer.worldY);
+      const x0 = Math.min(this.dragStart.x, point.x);
+      const y0 = Math.min(this.dragStart.y, point.y);
+      const x1 = Math.max(this.dragStart.x, point.x);
+      const y1 = Math.max(this.dragStart.y, point.y);
       this.selectUnitsInWorldBox(x0, y0, x1, y1);
     }
+    this.cancelDragBox();
+  }
+
+  private cancelDragBox(): void {
     this.dragGfx?.clear();
     this.dragStart = null;
+    this.dragCurrent = null;
     this.isDragging = false;
   }
 
@@ -2176,6 +2305,30 @@ export class GameScene extends Phaser.Scene {
     return eid;
   }
 
+  cheatSpawnMortarByTownHall(playerId = 1): number | null {
+    let townHall: number | null = null;
+    for (const eid of townCenterQuery(this.world.ecs)) {
+      if (Owner.player[eid] !== playerId) continue;
+      townHall = eid;
+      break;
+    }
+    if (townHall === null) {
+      setLastEvent('cheat: no town hall');
+      return null;
+    }
+
+    const spot = this.findCheatSpawnSpotNear(Position.x[townHall], Position.y[townHall]);
+    if (!spot) {
+      setLastEvent('cheat: no mortar spawn tile');
+      return null;
+    }
+    const eid = spawnMortar(this.world, spot.x, spot.y, playerId);
+    clearSelection(this.world);
+    setSelected(this.world, eid, true);
+    setLastEvent(`cheat: mortar spawned (${spot.x},${spot.y})`);
+    return eid;
+  }
+
   private findCheatSpawnSpotNear(
     cx: number,
     cy: number
@@ -2237,6 +2390,17 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private affordableCountForCost(playerId: number, cost: CostTuple, requestedCount: number): number {
+    const bank = this.world.resources[playerId];
+    if (!bank) return 0;
+    let count = Math.max(0, Math.trunc(requestedCount));
+    if (cost.food > 0) count = Math.min(count, Math.floor(bank[ResourceKindId.FOOD] / cost.food));
+    if (cost.wood > 0) count = Math.min(count, Math.floor(bank[ResourceKindId.WOOD] / cost.wood));
+    if (cost.gold > 0) count = Math.min(count, Math.floor(bank[ResourceKindId.GOLD] / cost.gold));
+    if (cost.stone > 0) count = Math.min(count, Math.floor(bank[ResourceKindId.STONE] / cost.stone));
+    return count;
+  }
+
   private formatCost(cost: { food: number; wood: number; gold: number; stone: number }): string {
     const parts: string[] = [];
     if (cost.food) parts.push(`${cost.food} food`);
@@ -2273,6 +2437,15 @@ export class GameScene extends Phaser.Scene {
     const pop = this.world.population[playerId];
     if (!unit || !pop) return false;
     return pop.current + this.countQueuedPopCost(playerId) + unit.popCost <= pop.cap;
+  }
+
+  private populationRoomForUnitCount(playerId: number, unitDefId: number, requestedCount: number): number {
+    const unit = UNIT_TABLE[unitDefId];
+    const pop = this.world.population[playerId];
+    if (!unit || !pop) return 0;
+    if (unit.popCost <= 0) return Math.max(0, Math.trunc(requestedCount));
+    const room = pop.cap - pop.current - this.countQueuedPopCost(playerId);
+    return Math.max(0, Math.min(Math.trunc(requestedCount), Math.floor(room / unit.popCost)));
   }
 
   private countOwnedArmyProducers(playerId: number): number {
@@ -2356,17 +2529,61 @@ export class GameScene extends Phaser.Scene {
     this.onAdvanceAgeHotkey();
   }
 
-  private toggleSelectedUnitStance(): void {
-    const military = selectedQuery(this.world.ecs).filter((eid) =>
+  private selectedPlayerStanceUnits(): number[] {
+    return selectedQuery(this.world.ecs).filter((eid) =>
       hasComponent(this.world.ecs, UnitStance, eid) &&
       Owner.player[eid] === this.perspectivePlayerId
     );
+  }
+
+  private setSelectedUnitStance(stance: UnitStanceValue): void {
+    const military = this.selectedPlayerStanceUnits();
     if (military.length === 0) return;
-    this.dispatch({ type: 'toggleSelectedUnitStance' });
-    const allHolding = military.every((eid) =>
-      UnitStance.stance[eid] === UnitStanceId.HOLD_POSITION
+    this.world.inputs.push({ type: 'setSelectedUnitStance', stance });
+    setLastEvent(
+      stance === UnitStanceId.HOLD_POSITION
+        ? 'units holding position'
+        : 'units set to auto-defend'
     );
-    setLastEvent(allHolding ? 'units set to auto-defend' : 'units holding position');
+  }
+
+  private setFormationMode(mode: number): void {
+    const military = this.selectedPlayerStanceUnits();
+    if (military.length <= 1) return;
+    const nextMode = this.clampFormationMode(mode);
+    this.world.inputs.push({ type: 'setFormationMode', mode: nextMode });
+    setLastEvent(`formation: ${this.formationModeLabel(nextMode)}`);
+  }
+
+  private rotateFormation(delta: number): void {
+    const military = this.selectedPlayerStanceUnits();
+    if (military.length <= 1) return;
+    if (this.clampFormationMode(this.world.formationMode) === 0) return;
+    const nextFacing = this.normalizeFormationFacing(this.world.formationFacing + delta);
+    this.world.inputs.push({ type: 'rotateSelectedFormation', delta });
+    setLastEvent(`formation facing: ${this.formationFacingLabel(nextFacing)}`);
+  }
+
+  private clampFormationMode(mode: number): number {
+    if (!Number.isFinite(mode)) return 0;
+    return Math.max(0, Math.min(2, Math.trunc(mode)));
+  }
+
+  private normalizeFormationFacing(facing: number): number {
+    return ((Math.trunc(facing) % 8) + 8) % 8;
+  }
+
+  private formationModeLabel(mode = this.world.formationMode): string {
+    switch (this.clampFormationMode(mode)) {
+      case 1: return 'line';
+      case 2: return 'compact';
+      default: return 'free';
+    }
+  }
+
+  private formationFacingLabel(facing = this.world.formationFacing): string {
+    const labels = ['S', 'SW', 'W', 'NW', 'N', 'NE', 'E', 'SE'];
+    return labels[this.normalizeFormationFacing(facing)];
   }
 
   private removeSelectedBuildings(): void {
@@ -2391,14 +2608,20 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private trainUnitAtSelectedProducer(unitDefId: number): void {
+  private trainUnitAtSelectedProducer(unitDefId: number, requestedCount = 1): void {
     const unitDef = UNIT_TABLE[unitDefId];
     if (!unitDef) return;
+    const numericCount = Number.isFinite(requestedCount) ? requestedCount : 1;
+    const targetCount = Math.max(
+      1,
+      Math.min(GameScene.TRAIN_BATCH_COUNT, Math.trunc(numericCount))
+    );
     const sel = selectedQuery(this.world.ecs);
     for (const eid of sel) {
       if (!hasComponent(this.world.ecs, Producer, eid)) continue;
       if (!hasComponent(this.world.ecs, Building, eid)) continue;
       if (Owner.player[eid] !== 1) continue;
+      const playerId = Owner.player[eid];
       const buildingDef = BUILDING_TABLE[Building.defId[eid]];
       if (
         unitDefId === UnitDefId.VILLAGER &&
@@ -2407,33 +2630,69 @@ export class GameScene extends Phaser.Scene {
         const queue = this.world.productionQueues.get(eid) ?? [];
         const queuedWorkers = queue.filter((defId) => defId === UnitDefId.VILLAGER).length;
         const slots = getWorksiteWorkerSlots(this.world, eid);
-        if (ResourceWorksite.assignedWorkers[eid] + queuedWorkers >= slots) {
+        const slotRoom = slots - ResourceWorksite.assignedWorkers[eid] - queuedWorkers;
+        if (slotRoom <= 0) {
           setLastEvent(`workers full (${slots}/${slots})`);
           return;
         }
-        this.dispatch({ type: 'trainUnit', atEid: eid, defId: unitDefId, playerId: this.perspectivePlayerId });
-        setLastEvent(`queued worker at eid=${eid}`);
+        const queueRoom = Math.max(0, 2 - queue.length);
+        if (queueRoom <= 0) {
+          setLastEvent('worker queue full');
+          return;
+        }
+        const affordable = this.affordableCountForCost(playerId, unitDef.cost, targetCount);
+        if (affordable <= 0) {
+          this.playUi(SFX_ERROR);
+          setLastEvent(`${unitDef.name} needs ${this.formatCost(unitDef.cost)}`);
+          return;
+        }
+        const trainCount = Math.min(targetCount, slotRoom, queueRoom, affordable);
+        this.dispatch({
+          type: 'trainUnit',
+          atEid: eid,
+          defId: unitDefId,
+          count: trainCount,
+          playerId: this.perspectivePlayerId,
+        });
+        setLastEvent(
+          trainCount === 1
+            ? `queued worker at eid=${eid}`
+            : `queued ${trainCount}x worker at eid=${eid}`
+        );
         return;
       }
       if (!buildingDef?.trains.includes(unitDef.id)) continue;
-      if (!isUnitUnlocked(this.world, Owner.player[eid], unitDefId)) {
+      if (!isUnitUnlocked(this.world, playerId, unitDefId)) {
         this.playUi(SFX_ERROR);
         setLastEvent(`${unitDef.name} is locked`);
         return;
       }
-      if (!this.canAffordCost(Owner.player[eid], unitDef.cost)) {
+      const affordable = this.affordableCountForCost(playerId, unitDef.cost, targetCount);
+      if (affordable <= 0) {
         this.playUi(SFX_ERROR);
         setLastEvent(`${unitDef.name} needs ${this.formatCost(unitDef.cost)}`);
         return;
       }
-      if (!this.hasPopulationRoomForUnit(Owner.player[eid], unitDefId)) {
+      const popRoom = this.populationRoomForUnitCount(playerId, unitDefId, targetCount);
+      if (popRoom <= 0) {
         this.playUi(SFX_ERROR);
-        const pop = this.world.population[Owner.player[eid]];
+        const pop = this.world.population[playerId];
         setLastEvent(`${unitDef.name} needs pop space (${pop?.current ?? 0}/${pop?.cap ?? 0})`);
         return;
       }
-      this.dispatch({ type: 'trainUnit', atEid: eid, defId: unitDefId, playerId: this.perspectivePlayerId });
-      setLastEvent(`queued ${unitDef.name} at eid=${eid}`);
+      const trainCount = Math.min(targetCount, affordable, popRoom);
+      this.dispatch({
+        type: 'trainUnit',
+        atEid: eid,
+        defId: unitDefId,
+        count: trainCount,
+        playerId: this.perspectivePlayerId,
+      });
+      setLastEvent(
+        trainCount === 1
+          ? `queued ${unitDef.name} at eid=${eid}`
+          : `queued ${trainCount}x ${unitDef.name} at eid=${eid}`
+      );
       return;
     }
     setLastEvent(`${unitDef.name}: no ${unitDef.trainAt.toLowerCase().replace('_', ' ')} selected`);
@@ -2741,6 +3000,7 @@ export class GameScene extends Phaser.Scene {
     this.gunmanFacing.clear();
     this.cannonFacing.clear();
     this.machineGunFacing.clear();
+    this.mortarFacing.clear();
     this.villagerFacing.clear();
     this.unitAttackUntilTick.clear();
     this.fogGfx.clear();
@@ -3387,6 +3647,7 @@ export class GameScene extends Phaser.Scene {
       | 'gunman'
       | 'cannon'
       | 'machineGun'
+      | 'mortar'
       | 'tc'
       | 'house'
       | 'farm'
@@ -3430,6 +3691,7 @@ export class GameScene extends Phaser.Scene {
       else if (hasComponent(this.world.ecs, GunmanTag, eid)) k = 'gunman';
       else if (hasComponent(this.world.ecs, CannonTag, eid)) k = 'cannon';
       else if (hasComponent(this.world.ecs, MachineGunTag, eid)) k = 'machineGun';
+      else if (hasComponent(this.world.ecs, MortarTag, eid)) k = 'mortar';
       else if (hasComponent(this.world.ecs, TownCenterTag, eid)) k = 'tc';
       else if (hasComponent(this.world.ecs, Building, eid)) {
         if (hasComponent(this.world.ecs, ConstructionSite, eid)) {
@@ -3467,6 +3729,7 @@ export class GameScene extends Phaser.Scene {
       gunman: 'Gunman',
       cannon: 'Field Cannon',
       machineGun: 'Machine Gun',
+      mortar: 'Mortar Team',
       tc: 'Town Center',
       house: 'House',
       farm: 'Farm',
@@ -3490,6 +3753,7 @@ export class GameScene extends Phaser.Scene {
       gunman: '•',
       cannon: '●',
       machineGun: '▰',
+      mortar: '◤',
       tc: '🏰',
       house: '🏠',
       farm: '🌾',
@@ -3514,7 +3778,8 @@ export class GameScene extends Phaser.Scene {
       kind === 'scoutCavalry' ||
       kind === 'gunman' ||
       kind === 'cannon' ||
-      kind === 'machineGun'
+      kind === 'machineGun' ||
+      kind === 'mortar'
     ) {
       const e0 = sel[0];
       const speed = Speed.value[e0];
@@ -3793,15 +4058,77 @@ export class GameScene extends Phaser.Scene {
       ).length;
       const allHolding = selectedMilitaryEids.length > 0 &&
         holdCount === selectedMilitaryEids.length;
+      const allAutoDefending = selectedMilitaryEids.length > 0 && holdCount === 0;
+      const stanceMeta = allHolding || allAutoDefending ? 'Active' : 'Mixed';
+      const formationMode = this.clampFormationMode(this.world.formationMode);
+      const facingLabel = `Face ${this.formationFacingLabel()}`;
       actions.push({
-        id: 'toggle-unit-stance',
-        label: allHolding ? 'Auto Defend' : 'Hold Position',
+        id: 'stance-hold-position',
+        label: 'Hold Position',
         key: 'H',
-        glyph: allHolding ? 'A' : 'H',
+        glyph: 'H',
         enabled: selectedMilitaryEids.length > 0,
         kind: 'command',
-        meta: allHolding ? 'Resume auto-defense' : 'No auto-chase',
+        meta: allHolding ? stanceMeta : 'No auto-chase',
         active: allHolding,
+      });
+      actions.push({
+        id: 'stance-auto-defend',
+        label: 'Auto Defend',
+        key: '',
+        glyph: 'A',
+        enabled: selectedMilitaryEids.length > 0,
+        kind: 'command',
+        meta: allAutoDefending ? stanceMeta : 'Chase nearby',
+        active: allAutoDefending,
+      });
+      actions.push({
+        id: 'formation-free',
+        label: 'Free Formation',
+        key: '',
+        glyph: '··',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationMode === 0 ? 'Active' : 'Loose movement',
+        active: formationMode === 0,
+      });
+      actions.push({
+        id: 'formation-line',
+        label: 'Line Formation',
+        key: '',
+        glyph: '↔',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationMode === 1 ? 'Active' : 'Spread line',
+        active: formationMode === 1,
+      });
+      actions.push({
+        id: 'formation-compact',
+        label: 'Compact Formation',
+        key: '',
+        glyph: '▦',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationMode === 2 ? 'Active' : 'Dense block',
+        active: formationMode === 2,
+      });
+      actions.push({
+        id: 'formation-rotate-ccw',
+        label: 'Rotate CCW',
+        key: '',
+        glyph: '⟲',
+        enabled: selectedMilitaryEids.length > 1 && formationMode !== 0,
+        kind: 'command',
+        meta: facingLabel,
+      });
+      actions.push({
+        id: 'formation-rotate-cw',
+        label: 'Rotate CW',
+        key: '',
+        glyph: '⟳',
+        enabled: selectedMilitaryEids.length > 1 && formationMode !== 0,
+        kind: 'command',
+        meta: facingLabel,
       });
       actions.push({ id: 'stop', label: 'Stop', key: 'S', glyph: 'X', enabled: true, kind: 'command' });
     }
@@ -3809,10 +4136,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Trigger an action by id (called from action grid clicks). */
-  triggerAction(actionId: string): void {
+  triggerAction(actionId: string, trainCount = 1): void {
     if (actionId.startsWith('train-unit-')) {
       const defId = Number(actionId.slice('train-unit-'.length));
-      this.trainUnitAtSelectedProducer(defId);
+      this.trainUnitAtSelectedProducer(defId, trainCount);
       return;
     }
     switch (actionId) {
@@ -3828,7 +4155,13 @@ export class GameScene extends Phaser.Scene {
       case 'build-defensive-tower': this.startBuildMode('DEFENSIVE_TOWER', 'build DEFENSIVE TOWER — click to place'); return;
       case 'set-army-rally': this.startArmyRallyMode(); return;
       case 'remove-building': this.removeSelectedBuildings(); return;
-      case 'toggle-unit-stance': this.toggleSelectedUnitStance(); return;
+      case 'stance-hold-position': this.setSelectedUnitStance(UnitStanceId.HOLD_POSITION); return;
+      case 'stance-auto-defend': this.setSelectedUnitStance(UnitStanceId.AUTO_DEFEND); return;
+      case 'formation-free': this.setFormationMode(0); return;
+      case 'formation-line': this.setFormationMode(1); return;
+      case 'formation-compact': this.setFormationMode(2); return;
+      case 'formation-rotate-ccw': this.rotateFormation(-1); return;
+      case 'formation-rotate-cw': this.rotateFormation(1); return;
       case 'stop': this.dispatch({ type: 'stopSelected' }); return;
       case 'advance-age': this.onAdvanceAgeHotkey(); return;
     }
@@ -3930,6 +4263,17 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+      for (const facing of MORTAR_FACINGS) {
+        for (const anim of MORTAR_ANIMS) {
+          for (let frame = 0; frame < MORTAR_FRAME_COUNTS[anim]; frame++) {
+            this.bakeIfMissing(
+              GameScene.mortarTextureKey(p, facing, anim, frame),
+              () => buildMortarVoxels(teamColor, { facing, anim, frame }),
+              { voxelW: 4, bounds: MORTAR_BAKE_BOUNDS }
+            );
+          }
+        }
+      }
     }
 
     this.bakeIfMissing(GameScene.HOUSE_KEY, buildDarkHouseVoxels, { voxelW: 4 });
@@ -3947,6 +4291,7 @@ export class GameScene extends Phaser.Scene {
     this.bakeIfMissing(GameScene.WALL_Y_KEY, () => buildWallVoxels('y'), { voxelW: 4, bounds: wallBounds });
 
     this.bakeIfMissing(GameScene.TREE_KEY, buildTreeVoxels, { voxelW: 4 });
+    this.bakeIfMissing(GameScene.SNOW_TREE_KEY, buildSnowTreeVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.LINDEN_TREE_KEY, buildLindenTreeVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.JAGGED_ROCK_KEY, buildJaggedRockVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.GOLD_KEY, buildGoldVoxels, { voxelW: 4 });
@@ -3988,6 +4333,15 @@ export class GameScene extends Phaser.Scene {
     frame: number
   ): string {
     return `${GameScene.MACHINE_GUN_KEY_PREFIX}${playerId}-${facing}-${anim}-${frame}`;
+  }
+
+  private static mortarTextureKey(
+    playerId: number,
+    facing: MortarFacing,
+    anim: MortarAnim,
+    frame: number
+  ): string {
+    return `${GameScene.MORTAR_KEY_PREFIX}${playerId}-${facing}-${anim}-${frame}`;
   }
 
   private static archerTextureKey(
@@ -4162,6 +4516,8 @@ export class GameScene extends Phaser.Scene {
         return this.cannonTextureKeyForUnit(eid, playerId);
       case UnitDefId.MACHINE_GUN:
         return this.machineGunTextureKeyForUnit(eid, playerId);
+      case UnitDefId.MORTAR:
+        return this.mortarTextureKeyForUnit(eid, playerId);
       default:
         return null;
     }
@@ -4174,6 +4530,7 @@ export class GameScene extends Phaser.Scene {
     if (kind === UnitDefId.GUNMAN) return 0.7;
     if (kind === UnitDefId.CANNON) return GameScene.CANNON_UNIT_ORIGIN_Y;
     if (kind === UnitDefId.MACHINE_GUN) return 0.69;
+    if (kind === UnitDefId.MORTAR) return GameScene.MORTAR_UNIT_ORIGIN_Y;
     return 0.82;
   }
 
@@ -4329,6 +4686,24 @@ export class GameScene extends Phaser.Scene {
     return GameScene.machineGunTextureKey(playerId, facing, anim, frame);
   }
 
+  private mortarTextureKeyForUnit(eid: number, playerId: number): string {
+    const moving = this.isUnitMoving(eid);
+    const facing = this.mortarFacingForUnit(eid, moving);
+    const attackUntil = this.unitAttackUntilTick.get(eid) ?? -1;
+    const anim: MortarAnim = attackUntil > this.world.tick ? 'attack' : moving ? 'move' : 'idle';
+    let frame = 0;
+    if (anim === 'move') {
+      frame = Math.floor(this.world.tick / 8) % MORTAR_FRAME_COUNTS.move;
+    } else if (anim === 'attack') {
+      const age = GameScene.COMBAT_ATTACK_ANIM_TICKS - (attackUntil - this.world.tick);
+      frame = Math.min(
+        MORTAR_FRAME_COUNTS.attack - 1,
+        Math.floor(age / Math.max(1, GameScene.COMBAT_ATTACK_ANIM_TICKS / MORTAR_FRAME_COUNTS.attack))
+      );
+    }
+    return GameScene.mortarTextureKey(playerId, facing, anim, frame);
+  }
+
   private isUnitMoving(eid: number): boolean {
     if (!hasComponent(this.world.ecs, Velocity, eid)) return false;
     return Math.hypot(Velocity.x[eid], Velocity.y[eid]) > 0.05;
@@ -4362,6 +4737,11 @@ export class GameScene extends Phaser.Scene {
   private machineGunFacingForUnit(eid: number, moving: boolean): MachineGunFacing {
     const facing = this.combatFacingForUnit(eid, moving, this.machineGunFacing);
     return facing as MachineGunFacing;
+  }
+
+  private mortarFacingForUnit(eid: number, moving: boolean): MortarFacing {
+    const facing = this.combatFacingForUnit(eid, moving, this.mortarFacing);
+    return facing as MortarFacing;
   }
 
   private combatFacingForUnit<TFacing extends ScoutCavalryFacing>(
@@ -4400,6 +4780,7 @@ export class GameScene extends Phaser.Scene {
     if (hasComponent(this.world.ecs, GunmanTag, eid)) return 'gunman';
     if (hasComponent(this.world.ecs, CannonTag, eid)) return 'field cannon';
     if (hasComponent(this.world.ecs, MachineGunTag, eid)) return 'machine gun';
+    if (hasComponent(this.world.ecs, MortarTag, eid)) return 'mortar team';
     if (hasComponent(this.world.ecs, TownCenterTag, eid)) return 'TC';
     if (hasComponent(this.world.ecs, Building, eid)) {
       const def = BUILDING_TABLE[Building.defId[eid]];
@@ -4437,14 +4818,27 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Look up the texture key for a resource kind. */
-  private resourceTextureKey(kind: number): string | null {
+  private resourceTextureKey(eid: number, kind: number): string | null {
     switch (kind) {
-      case ResourceKindId.WOOD: return GameScene.TREE_KEY;
+      case ResourceKindId.WOOD: return this.isSnowResourceTile(eid)
+        ? GameScene.SNOW_TREE_KEY
+        : GameScene.TREE_KEY;
       case ResourceKindId.GOLD: return GameScene.GOLD_KEY;
       case ResourceKindId.STONE: return GameScene.STONE_KEY;
       case ResourceKindId.FOOD: return GameScene.BERRY_KEY;
       default: return null;
     }
+  }
+
+  private isSnowResourceTile(eid: number): boolean {
+    const x = Math.round(Position.x[eid]);
+    const y = Math.round(Position.y[eid]);
+    if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return false;
+    const tile = this.world.map.tiles[y * MAP.WIDTH + x];
+    return tile === TileType.SNOW
+      || tile === TileType.SNOW_FOREST
+      || tile === TileType.PACKED_SNOW
+      || tile === TileType.ICE;
   }
 
   private mapFeatureTextureKey(kind: MapFeatureKindValue): string | null {
