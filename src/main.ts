@@ -26,7 +26,11 @@ const LOCAL_SAVE_KEY = 'kingdoms.manualSave.v1';
 function defaultRelayUrl(): string {
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') return 'ws://localhost:8080';
-  return 'ws://a8evlomrnvx2no9lztcpflly.176.57.150.247.sslip.io';
+  // Match the page scheme: a wss:// relay on an https build, ws:// otherwise.
+  // Plain ws:// from an https page is mixed active content and browsers block
+  // the socket before the lobby can connect.
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${scheme}://a8evlomrnvx2no9lztcpflly.176.57.150.247.sslip.io`;
 }
 
 const config: Phaser.Types.Core.GameConfig = {
