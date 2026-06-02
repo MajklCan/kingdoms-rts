@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kingdoms — Dark to Castle Age</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=UnifrakturMaguntia&display=swap"
+      rel="stylesheet"
+    />
     <style>
       html, body {
         margin: 0;
@@ -1397,193 +1403,456 @@
       }
       #game-over button:hover { background: #fbc36b; }
 
-      /* ─── Title screen ────────────────────────────────────────────── */
+      /* ─── Title screen · Illuminated Manuscript ─────────────────────── */
       #title-screen {
+        --gold: #c9a227;
+        --gold-hi: #f6dd86;
+        --gold-lo: #8a6a1c;
+        --gold-deep: #5f4810;
+        --parch: #e6d5ad;
+        --parch-hi: #f3e7c8;
+        --parch-lo: #cdb486;
+        --parch-ink: #241a0e;
+        --parch-mut: #6f5836;
         position: fixed;
         inset: 0;
-        background:
-          radial-gradient(circle at 50% 45%, rgba(10, 11, 22, 0.18) 0%, rgba(10, 11, 22, 0.7) 62%, rgba(5, 6, 14, 0.94) 100%),
-          linear-gradient(180deg, rgba(8, 9, 19, 0.28) 0%, rgba(8, 9, 19, 0.42) 100%),
-          url('/assets/title-czechia-voxel-map.png') center center / cover no-repeat,
-          #0f1027;
-          display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 28px;
-        overflow: auto;
-        z-index: 300;
+        background: #0a0d12;
+        font-family: "EB Garamond", serif;
+        color: #e9e3d4;
+        overflow: hidden;
+        z-index: 400;
       }
       #title-screen.hidden { display: none; }
+
+      /* background layers */
+      #title-screen .ts-bg {
+        position: absolute;
+        inset: -6% -6%;
+        background: url('/assets/menu-bg.jpg') center 38% / cover no-repeat;
+        will-change: transform;
+        animation: ts-drift 46s ease-in-out infinite alternate;
+      }
+      @keyframes ts-drift {
+        from { transform: scale(1.04) translate(-0.6%, -0.4%); }
+        to { transform: scale(1.08) translate(0.8%, 0.6%); }
+      }
+      #title-screen .ts-haze {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(120% 80% at 50% 46%, transparent 36%, rgba(6, 8, 12, 0.55) 74%, rgba(4, 6, 9, 0.92) 100%),
+          linear-gradient(180deg, rgba(6, 8, 12, 0.55), transparent 22%, transparent 80%, rgba(5, 7, 10, 0.8));
+      }
+      #title-screen .ts-glow-hall {
+        position: absolute;
+        left: 50%;
+        bottom: -6%;
+        width: 80vmin;
+        height: 46vmin;
+        transform: translateX(-50%);
+        pointer-events: none;
+        mix-blend-mode: screen;
+        background: radial-gradient(ellipse at center, rgba(255, 160, 70, 0.16), transparent 70%);
+      }
+      #title-screen .ts-glow-core {
+        position: absolute;
+        left: 50%;
+        top: 30%;
+        width: 60vmin;
+        height: 60vmin;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        mix-blend-mode: screen;
+        will-change: opacity, transform;
+        background: radial-gradient(circle, rgba(255, 176, 84, 0.3), rgba(255, 150, 60, 0.1) 38%, transparent 66%);
+      }
+      #title-screen #ts-dust {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      /* corner filigree */
+      #title-screen .ts-corner {
+        position: absolute;
+        width: 120px;
+        height: 120px;
+        color: var(--gold);
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      #title-screen .ts-corner svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+      }
+      #title-screen .ts-corner.tl { top: 22px; left: 22px; }
+      #title-screen .ts-corner.tr { top: 22px; right: 22px; transform: scaleX(-1); }
+      #title-screen .ts-corner.bl { bottom: 22px; left: 22px; transform: scaleY(-1); }
+      #title-screen .ts-corner.br { bottom: 22px; right: 22px; transform: scale(-1, -1); }
+
+      /* content column */
       #title-screen .panel {
-        text-align: center;
-        width: min(1080px, calc(100vw - 56px));
-        max-width: 1080px;
-        padding: 0;
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
-      }
-      #title-screen .crest {
-        width: 72px;
-        height: 72px;
-        margin: 0 auto 12px;
-        background: linear-gradient(180deg, #2e86de 0% 50%, #c0392b 50% 100%);
-        border-radius: 50%;
-        border: 3px solid #e8b923;
-        box-shadow: 0 0 40px rgba(232, 185, 35, 0.4);
-      }
-      #title-screen h1 {
-        font-size: 48px;
-        margin: 0 0 8px;
-        color: #e8b923;
-        letter-spacing: 0.06em;
-      }
-      #title-screen h2 {
-        font-size: 16px;
-        margin: 0 0 18px;
-        color: #cfd8dc;
-        font-weight: 400;
-        letter-spacing: 0.04em;
-      }
-      #title-screen .lore {
-        color: #aab5bf;
-        line-height: 1.6;
-        margin: 0 auto 22px;
-        font-size: 14px;
-        max-width: 680px;
-      }
-      #title-screen button {
-        background: #e8b923;
-        color: #1b1b2f;
-        border: none;
-        padding: 14px 32px;
-        font-size: 18px;
-        font-weight: 600;
-        border-radius: 6px;
-        cursor: pointer;
-        letter-spacing: 0.06em;
-        box-shadow: 0 4px 24px rgba(232, 185, 35, 0.3);
-      }
-      #title-screen button:hover { background: #fbc36b; }
-      #title-screen .mode-menu {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        width: 100%;
-        margin: 0 auto;
+        gap: clamp(10px, 1.6vh, 20px);
+        padding: 5vh 24px;
         text-align: center;
+        overflow: auto;
       }
-      #title-screen .mode-menu.hidden,
-      #title-screen .mode-panel.hidden {
-        display: none;
+      #title-screen .crest {
+        width: clamp(104px, 12.5vh, 150px);
+        height: auto;
+        margin: 0;
+        background: none;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.6));
+        animation: ts-bob 6.5s ease-in-out infinite;
+        transform-origin: center;
       }
-      #title-screen .mode-choice {
-        width: 220px;
-        height: 49px;
-        display: inline-flex;
-        flex-direction: column;
+      @keyframes ts-bob {
+        0%, 100% { transform: translateY(0) rotate(0); }
+        50% { transform: translateY(-6px) rotate(0.2deg); }
+      }
+      #title-screen h1 {
+        margin: 0;
+        font-family: "UnifrakturMaguntia", serif;
+        font-weight: 400;
+        line-height: 0.9;
+        letter-spacing: 0.01em;
+        font-size: clamp(48px, 8.6vw, 104px);
+        background: linear-gradient(180deg, #fbe6a4 0%, #e9c659 30%, #c9a227 52%, #9b7a1d 74%, #e7cf7e 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+        filter: drop-shadow(0 2px 0 rgba(60, 42, 8, 0.6)) drop-shadow(0 6px 16px rgba(0, 0, 0, 0.55));
+      }
+      #title-screen h2 {
+        display: flex;
         align-items: center;
         justify-content: center;
-        padding-top: 0;
-        padding-bottom: 0;
+        gap: 14px;
+        width: min(560px, 86vw);
+        margin: -2px 0 0;
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: clamp(11px, 1.45vw, 14px);
+        letter-spacing: 0.42em;
+        text-transform: uppercase;
+        color: #f0e0b6;
       }
-      #title-screen .mode-choice:disabled {
-        cursor: default;
-        opacity: 0.58;
-        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.24);
+      #title-screen h2::before,
+      #title-screen h2::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--gold) 60%, var(--gold-hi));
       }
-      #title-screen .mode-choice:disabled:hover {
-        background: #e8b923;
+      #title-screen h2::after {
+        background: linear-gradient(270deg, transparent, var(--gold) 60%, var(--gold-hi));
       }
-      #title-screen .mode-soon {
-        display: block;
-        margin-top: 1px;
-        color: #1b1b2f;
-        font-size: 10px;
-        line-height: 1;
+      #title-screen .lore {
+        max-width: 520px;
+        margin: 2px 0 4px;
+        font-size: clamp(14px, 1.6vw, 17px);
+        line-height: 1.5;
+        color: #cdbf9f;
+        font-style: italic;
+        text-wrap: pretty;
+      }
+
+      /* primary menu — charters */
+      #title-screen .mode-menu {
+        display: flex;
+        flex-direction: column;
+        gap: clamp(9px, 1.3vh, 14px);
+        width: min(440px, 90vw);
+        margin-top: 4px;
+      }
+      #title-screen .mode-menu.hidden,
+      #title-screen .mode-panel.hidden { display: none; }
+      #title-screen .mode-choice {
+        position: relative;
+        display: grid;
+        grid-template-columns: 54px 1fr auto;
+        align-items: center;
+        gap: 14px;
+        padding: 11px 16px 11px 11px;
+        cursor: pointer;
+        text-align: left;
+        border: 0;
+        color: var(--parch-ink);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 30%),
+          radial-gradient(120% 160% at 20% 0%, var(--parch-hi), var(--parch) 46%, var(--parch-lo) 100%);
+        box-shadow:
+          inset 0 0 0 1px var(--gold-hi),
+          inset 0 0 0 4px rgba(231, 216, 180, 0.55),
+          inset 0 0 0 5px var(--gold-lo),
+          0 6px 16px rgba(0, 0, 0, 0.5);
+        clip-path: polygon(0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px));
+        transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.22s, filter 0.22s;
+        overflow: hidden;
+      }
+      #title-screen .mode-choice::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.25s;
+        background: radial-gradient(120% 200% at 0% 50%, rgba(255, 170, 70, 0.22), transparent 55%);
+      }
+      #title-screen .mode-choice:hover,
+      #title-screen .mode-choice:focus-visible,
+      #title-screen .mode-choice.sel {
+        transform: translateX(7px);
+        outline: none;
+        box-shadow:
+          inset 0 0 0 1px var(--gold-hi),
+          inset 0 0 0 4px rgba(243, 231, 200, 0.7),
+          inset 0 0 0 5px var(--gold),
+          0 8px 22px rgba(0, 0, 0, 0.55), 0 0 22px rgba(201, 162, 39, 0.45);
+        filter: brightness(1.04);
+      }
+      #title-screen .mode-choice:hover::after,
+      #title-screen .mode-choice:focus-visible::after,
+      #title-screen .mode-choice.sel::after { opacity: 1; }
+      #title-screen .mode-choice:active { transform: translateX(7px) scale(0.992); }
+      #title-screen .medallion {
+        position: relative;
+        width: 54px;
+        height: 54px;
+        display: grid;
+        place-items: center;
+      }
+      #title-screen .medallion .ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #fff0c0, var(--gold) 46%, var(--gold-deep) 100%);
+        box-shadow: inset 0 0 0 2px rgba(95, 72, 16, 0.7), 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
+      #title-screen .medallion .disc {
+        position: absolute;
+        inset: 5px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 30%, #7c1620, #560c12);
+        box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+      }
+      #title-screen .medallion svg {
+        position: relative;
+        width: 28px;
+        height: 28px;
+        color: var(--gold-hi);
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+      }
+      #title-screen .mode-choice:hover .disc,
+      #title-screen .mode-choice.sel .disc {
+        background: radial-gradient(circle at 40% 30%, #98202c, #6b1018);
+      }
+      #title-screen .writ-body {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+      }
+      #title-screen .writ-label {
+        font-family: "Cinzel", serif;
         font-weight: 700;
-        letter-spacing: 0.08em;
-        opacity: 0.72;
+        font-size: clamp(16px, 2vw, 20px);
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: #2c1f0e;
+        line-height: 1.1;
       }
+      #title-screen .writ-sub {
+        font-size: 12.5px;
+        font-style: italic;
+        color: var(--parch-mut);
+        letter-spacing: 0.01em;
+      }
+      #title-screen .writ-arrow {
+        color: var(--gold-lo);
+        opacity: 0.65;
+        transition: transform 0.22s, opacity 0.22s, color 0.22s;
+      }
+      #title-screen .mode-choice:hover .writ-arrow,
+      #title-screen .mode-choice.sel .writ-arrow {
+        transform: translateX(3px);
+        opacity: 1;
+        color: var(--gold-deep);
+      }
+
+      /* secondary pills */
+      #title-screen .secondary {
+        display: flex;
+        gap: 12px;
+        margin-top: 6px;
+      }
+      #title-screen .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        cursor: pointer;
+        border: 0;
+        color: #ecd9a8;
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        background: linear-gradient(180deg, rgba(40, 30, 14, 0.55), rgba(18, 14, 8, 0.55));
+        box-shadow: inset 0 0 0 1px var(--gold-lo), 0 2px 8px rgba(0, 0, 0, 0.4);
+        border-radius: 2px;
+        transition: transform 0.2s, box-shadow 0.2s, color 0.2s, background 0.2s;
+      }
+      #title-screen .pill svg {
+        width: 16px;
+        height: 16px;
+        color: var(--gold);
+        transition: color 0.2s;
+      }
+      #title-screen .pill:hover,
+      #title-screen .pill:focus-visible {
+        outline: none;
+        transform: translateY(-2px);
+        color: #fff2d2;
+        background: linear-gradient(180deg, rgba(70, 52, 20, 0.6), rgba(34, 24, 10, 0.6));
+        box-shadow: inset 0 0 0 1px var(--gold-hi), 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 14px rgba(201, 162, 39, 0.35);
+      }
+      #title-screen .pill:hover svg { color: var(--gold-hi); }
+
+      /* mode setup panels — parchment scrolls */
       #title-screen .mode-panel {
-        width: min(760px, 100%);
+        width: min(560px, 90vw);
         margin: 0 auto;
         text-align: left;
       }
-      #title-screen #skirmish-panel {
-        width: min(520px, 100%);
+      #title-screen .start-section {
+        position: relative;
+        padding: 26px 28px 24px;
+        color: var(--parch-ink);
+        background: radial-gradient(120% 140% at 20% 0%, var(--parch-hi), var(--parch) 50%, var(--parch-lo));
+        box-shadow:
+          inset 0 0 0 1px var(--gold-hi),
+          inset 0 0 0 5px rgba(231, 216, 180, 0.5),
+          inset 0 0 0 6px var(--gold-lo),
+          0 24px 60px rgba(0, 0, 0, 0.6);
+        clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px));
       }
       #title-screen .panel-heading {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 14px;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
       }
-      #title-screen .panel-heading .section-label {
-        margin-bottom: 0;
-      }
-      #title-screen .mode-back {
-        padding: 8px 14px;
-        background: #1c1810;
-        color: #fbc36b;
-        border: 1px solid #6a5b2b;
-        font-size: 12px;
-        box-shadow: none;
-      }
-      #title-screen .mode-back:hover {
-        background: #2a2418;
-        border-color: #e8b923;
-      }
-      #title-screen .start-section {
-        background: linear-gradient(180deg, rgba(42, 36, 24, 0.9), rgba(18, 15, 10, 0.92));
-        border: 1px solid rgba(106, 91, 43, 0.95);
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 14px 44px rgba(0, 0, 0, 0.38);
-      }
+      #title-screen .panel-heading .section-label { margin-bottom: 0; }
       #title-screen .section-label {
         margin-bottom: 12px;
-        color: #fbc36b;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 13px;
+        font-family: "Cinzel", serif;
+        font-weight: 700;
+        font-size: 18px;
         text-transform: uppercase;
         letter-spacing: 0.12em;
+        color: #5a1018;
       }
       #title-screen .section-copy {
-        min-height: 42px;
-        margin: 0 0 14px;
-        color: #aab5bf;
-        font-size: 13px;
-        line-height: 1.45;
+        min-height: 38px;
+        margin: 0 0 16px;
+        font-size: 14.5px;
+        line-height: 1.5;
+        font-style: italic;
+        color: #4a3a22;
+      }
+      #title-screen .mode-back {
+        padding: 8px 16px;
+        cursor: pointer;
+        border: 0;
+        color: #fbe6a4;
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        background: linear-gradient(180deg, #7c1620, #560c12);
+        box-shadow: inset 0 0 0 1px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4);
+        border-radius: 2px;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #title-screen .mode-back:hover {
+        transform: translateY(-1px);
+        box-shadow: inset 0 0 0 1px var(--gold-hi), 0 5px 14px rgba(0, 0, 0, 0.5);
       }
       #title-screen .start-options {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        margin: 0 0 10px;
-        color: #cfd8dc;
-        font-size: 13px;
-        letter-spacing: 0.04em;
+        margin: 0 0 12px;
+        font-family: "Cinzel", serif;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #4a3a22;
       }
-      #title-screen .start-options select {
+      #title-screen .start-options select,
+      #title-screen .start-options input {
         appearance: none;
         min-width: 230px;
         padding: 9px 34px 9px 12px;
-        color: #f6d58a;
-        background:
-          linear-gradient(45deg, transparent 50%, #e8b923 50%) right 14px center / 7px 7px no-repeat,
-          linear-gradient(135deg, #2a2418 0%, #171620 100%);
-        border: 1px solid #6a5b2b;
-        border-radius: 6px;
         font: inherit;
+        font-family: "EB Garamond", serif;
+        font-weight: 500;
+        font-size: 14px;
+        letter-spacing: 0;
+        text-transform: none;
+        color: #2c1f0e;
+        background:
+          linear-gradient(45deg, transparent 50%, #7c1620 50%) right 14px center / 7px 7px no-repeat,
+          linear-gradient(180deg, #f3e7c8, #d9c79b);
+        border: 1px solid var(--gold-lo);
+        border-radius: 3px;
         cursor: pointer;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      }
+      #title-screen .start-options input {
+        background: linear-gradient(180deg, #f3e7c8, #d9c79b);
+        padding-right: 12px;
+        cursor: text;
       }
       #title-screen .skirmish-start {
         width: 100%;
-        margin-top: 6px;
+        margin-top: 8px;
+        padding: 12px 22px;
+        cursor: pointer;
+        border: 0;
+        color: #fbe6a4;
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        background: linear-gradient(180deg, #7c1620, #560c12);
+        box-shadow: inset 0 0 0 1px var(--gold), 0 4px 12px rgba(0, 0, 0, 0.45);
+        border-radius: 3px;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #title-screen .skirmish-start:hover {
+        transform: translateY(-2px);
+        box-shadow: inset 0 0 0 1px var(--gold-hi), 0 7px 18px rgba(0, 0, 0, 0.5);
       }
       #title-screen .mission-list {
         display: grid;
@@ -1593,102 +1862,330 @@
         width: 100%;
         display: grid;
         grid-template-columns: 1fr auto;
-        gap: 8px 14px;
+        gap: 7px 14px;
         align-items: center;
-        padding: 13px 14px;
-        background: linear-gradient(180deg, rgba(28, 24, 16, 0.98), rgba(15, 13, 9, 0.98));
-        color: #d9e2ec;
-        border: 1px solid #6a5b2b;
-        border-radius: 7px;
+        padding: 13px 15px;
+        cursor: pointer;
         text-align: left;
-        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.34);
-        font-size: 13px;
-        letter-spacing: 0;
+        color: var(--parch-ink);
+        background: linear-gradient(180deg, #f1e4c4, #ddca9d);
+        border: 0;
+        box-shadow: inset 0 0 0 1px var(--gold-hi), inset 0 0 0 3px rgba(231, 216, 180, 0.5), inset 0 0 0 4px var(--gold-lo), 0 5px 16px rgba(0, 0, 0, 0.4);
+        clip-path: polygon(0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px));
+        transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
       }
       #title-screen .mission-card:hover {
-        background: linear-gradient(180deg, rgba(42, 36, 24, 0.98), rgba(22, 18, 12, 0.98));
-        border-color: #e8b923;
+        transform: translateX(5px);
+        filter: brightness(1.03);
+        box-shadow: inset 0 0 0 1px var(--gold-hi), inset 0 0 0 3px rgba(243, 231, 200, 0.7), inset 0 0 0 4px var(--gold), 0 7px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(201, 162, 39, 0.4);
       }
       #title-screen .mission-card strong {
         display: block;
         margin-bottom: 3px;
-        color: #f6d58a;
+        font-family: "Cinzel", serif;
+        font-weight: 700;
         font-size: 16px;
-        letter-spacing: 0.02em;
+        letter-spacing: 0.03em;
+        color: #5a1018;
       }
       #title-screen .mission-card .mission-desc {
         display: block;
-        color: #aab5bf;
+        font-style: italic;
+        color: #4a3a22;
         line-height: 1.35;
+        font-size: 13.5px;
       }
       #title-screen .mission-card .mission-meta {
         grid-column: 1 / -1;
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        color: #9fd36c;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 11px;
+        font-family: "Cinzel", serif;
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--parch-mut);
       }
       #title-screen .mission-card .mission-cta {
-        color: #e8b923;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 12px;
+        font-family: "Cinzel", serif;
+        font-size: 11px;
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.12em;
+        color: #7c1620;
       }
+
+      /* nameplate + build tag */
+      #title-screen .ts-nameplate {
+        position: absolute;
+        left: 30px;
+        bottom: 26px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 9px 18px 9px 10px;
+        background: linear-gradient(180deg, rgba(30, 22, 12, 0.78), rgba(14, 10, 6, 0.78));
+        box-shadow: inset 0 0 0 1px var(--gold-lo), 0 4px 16px rgba(0, 0, 0, 0.5);
+        border-radius: 3px;
+        backdrop-filter: blur(2px);
+      }
+      #title-screen .ts-avatar {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        flex: none;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 35% 30%, #fff0c0, var(--gold) 48%, var(--gold-deep));
+        box-shadow: inset 0 0 0 2px rgba(95, 72, 16, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+      }
+      #title-screen .ts-avatar .inner {
+        position: absolute;
+        inset: 3px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 32%, #98202c, #5a0d13);
+        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6);
+      }
+      #title-screen .ts-avatar svg {
+        position: relative;
+        width: 22px;
+        height: 22px;
+        color: var(--gold-hi);
+      }
+      #title-screen .ts-name-txt {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        text-align: left;
+      }
+      #title-screen .ts-name-txt .n {
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 13.5px;
+        letter-spacing: 0.06em;
+        color: #f1e3bd;
+      }
+      #title-screen .ts-name-txt .r {
+        font-size: 11.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #9a8a64;
+      }
+      #title-screen .ts-name-txt .r b { color: var(--gold-hi); font-weight: 600; }
+      #title-screen .ts-build {
+        position: absolute;
+        right: 30px;
+        bottom: 30px;
+        font-family: "Cinzel", serif;
+        font-size: 10.5px;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        color: #7d7152;
+      }
+      #title-screen .ts-build span { color: var(--gold-lo); }
+
+      /* controls hint */
       #title-screen .controls {
-        margin-top: 28px;
-        font-size: 12px;
-        color: #777;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        margin-top: 6px;
+        font-family: "Cinzel", serif;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        color: #b6a578;
         line-height: 1.8;
       }
-      #title-screen .controls.hidden {
-        display: none;
-      }
+      #title-screen .controls.hidden { display: none; }
       #title-screen .controls kbd {
-        background: #2a2d3e;
-        border: 1px solid #555;
+        background: rgba(20, 15, 8, 0.7);
+        border: 1px solid var(--gold-lo);
         border-radius: 3px;
         padding: 1px 5px;
+        font-family: "EB Garamond", serif;
         font-size: 11px;
-        color: #e8b923;
+        color: var(--gold-hi);
+      }
+
+      /* decree overlay (settings / profile placeholder) */
+      #title-screen .ts-veil {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 30;
+        background: rgba(5, 7, 11, 0.62);
+        backdrop-filter: blur(3px);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      #title-screen .ts-veil.on { display: flex; opacity: 1; }
+      #title-screen .scroll-card {
+        position: relative;
+        width: min(440px, 88vw);
+        padding: 34px 34px 28px;
+        text-align: center;
+        transform: translateY(10px) scale(0.97);
+        transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.3, 1);
+        color: var(--parch-ink);
+        background: radial-gradient(120% 140% at 20% 0%, var(--parch-hi), var(--parch) 50%, var(--parch-lo));
+        box-shadow:
+          inset 0 0 0 1px var(--gold-hi),
+          inset 0 0 0 5px rgba(231, 216, 180, 0.5),
+          inset 0 0 0 6px var(--gold-lo),
+          0 24px 60px rgba(0, 0, 0, 0.6);
+        clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px));
+      }
+      #title-screen .ts-veil.on .scroll-card { transform: translateY(0) scale(1); }
+      #title-screen .scroll-card .eyebrow {
+        font-family: "Cinzel", serif;
+        font-size: 11px;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--parch-mut);
+      }
+      #title-screen .scroll-card h3 {
+        margin: 0 0 4px;
+        font-family: "UnifrakturMaguntia", serif;
+        font-size: 40px;
+        font-weight: 400;
+        color: #5a1018;
+      }
+      #title-screen .scroll-card p {
+        margin: 12px auto 22px;
+        max-width: 330px;
+        font-size: 15.5px;
+        line-height: 1.5;
+        font-style: italic;
+        color: #4a3a22;
+      }
+      #title-screen .scroll-card .return {
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 12px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        padding: 10px 22px;
+        cursor: pointer;
+        border: 0;
+        color: #fbe6a4;
+        background: linear-gradient(180deg, #7c1620, #560c12);
+        box-shadow: inset 0 0 0 1px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4);
+        border-radius: 2px;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #title-screen .scroll-card .return:hover {
+        transform: translateY(-2px);
+        box-shadow: inset 0 0 0 1px var(--gold-hi), 0 6px 16px rgba(0, 0, 0, 0.5);
+      }
+
+      @media (max-height: 640px) {
+        #title-screen .ts-nameplate,
+        #title-screen .ts-build { display: none; }
       }
       @media (max-width: 840px) {
-        #title-screen {
-          align-items: flex-start;
-          padding: 20px;
-        }
-        #title-screen .panel {
-          width: min(100%, calc(100vw - 40px));
-        }
-        #title-screen .mode-choice { width: min(280px, 100%); }
+        #title-screen .ts-corner { display: none; }
+        #title-screen .mode-menu { width: min(360px, 90vw); }
         #title-screen .start-options {
           align-items: stretch;
           flex-direction: column;
+          gap: 6px;
         }
-        #title-screen .start-options select {
-          width: 100%;
-        }
+        #title-screen .start-options select,
+        #title-screen .start-options input { width: 100%; min-width: 0; }
       }
     </style>
   </head>
   <body>
     <div id="title-screen">
+      <div class="ts-bg"></div>
+      <div class="ts-haze"></div>
+      <div class="ts-glow-hall"></div>
+      <div class="ts-glow-core" id="ts-glow-core"></div>
+      <canvas id="ts-dust"></canvas>
+
+      <div class="ts-corner tl"><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 8 V70 M8 8 H70" stroke-width="3"/><path d="M8 34 C30 34 34 14 34 8"/><path d="M20 8 C20 22 14 26 8 26" opacity=".7"/><circle cx="8" cy="8" r="4" fill="currentColor" stroke="none"/><path d="M40 12 q10 0 12 10 q2 -8 -12 -10Z" fill="currentColor" stroke="none" opacity=".8"/></svg></div>
+      <div class="ts-corner tr"><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 8 V70 M8 8 H70" stroke-width="3"/><path d="M8 34 C30 34 34 14 34 8"/><path d="M20 8 C20 22 14 26 8 26" opacity=".7"/><circle cx="8" cy="8" r="4" fill="currentColor" stroke="none"/></svg></div>
+      <div class="ts-corner bl"><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 8 V70 M8 8 H70" stroke-width="3"/><path d="M8 34 C30 34 34 14 34 8"/><path d="M20 8 C20 22 14 26 8 26" opacity=".7"/><circle cx="8" cy="8" r="4" fill="currentColor" stroke="none"/></svg></div>
+      <div class="ts-corner br"><svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 8 V70 M8 8 H70" stroke-width="3"/><path d="M8 34 C30 34 34 14 34 8"/><path d="M20 8 C20 22 14 26 8 26" opacity=".7"/><circle cx="8" cy="8" r="4" fill="currentColor" stroke="none"/></svg></div>
+
       <div class="panel">
-        <div class="crest"></div>
-        <h1>KINGDOMS</h1>
-        <h2>Bohemian RTS Prototype</h2>
+        <svg class="crest" id="ts-crest" viewBox="0 0 200 244" xmlns="http://www.w3.org/2000/svg" aria-label="Kingdoms crest">
+          <defs>
+            <linearGradient id="ts-cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6dd86"/><stop offset=".45" stop-color="#c9a227"/><stop offset="1" stop-color="#7c5e16"/></linearGradient>
+            <linearGradient id="ts-cgh" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbe7a6"/><stop offset=".5" stop-color="#cda428"/><stop offset="1" stop-color="#8a6a1c"/></linearGradient>
+            <radialGradient id="ts-crd" cx=".5" cy=".38" r=".75"><stop offset="0" stop-color="#bb2733"/><stop offset="1" stop-color="#6c0f17"/></radialGradient>
+            <linearGradient id="ts-csl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfdff"/><stop offset=".5" stop-color="#dde6ec"/><stop offset="1" stop-color="#9fafba"/></linearGradient>
+            <radialGradient id="ts-chl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="rgba(246,221,134,.55)"/><stop offset="1" stop-color="rgba(246,221,134,0)"/></radialGradient>
+          </defs>
+          <circle cx="100" cy="130" r="80" fill="url(#ts-chl)" id="ts-crest-halo"/>
+          <path d="M30 40 H170 V118 C170 174 134 205 100 224 C66 205 30 174 30 118 Z" fill="url(#ts-crd)" stroke="url(#ts-cg)" stroke-width="5"/>
+          <path d="M37 47 H163 V117 C163 168 131 196 100 214 C69 196 37 168 37 117 Z" fill="none" stroke="rgba(246,221,134,.35)" stroke-width="1.3"/>
+          <g stroke="#566570" stroke-width="1.1">
+            <g transform="rotate(32 100 128)">
+              <rect x="96.4" y="60" width="7.2" height="92" rx="1.6" fill="url(#ts-csl)"/>
+              <line x1="100" y1="64" x2="100" y2="148" stroke="#b9c6cf" stroke-width="1"/>
+              <path d="M96.4 60 L100 50 L103.6 60 Z" fill="url(#ts-csl)"/>
+              <rect x="84" y="152" width="32" height="7" rx="2" fill="url(#ts-cgh)"/>
+              <rect x="96.6" y="159" width="6.8" height="20" rx="2" fill="url(#ts-cgh)"/>
+              <circle cx="100" cy="183" r="5.4" fill="url(#ts-cgh)"/>
+            </g>
+            <g transform="rotate(-32 100 128)">
+              <rect x="96.4" y="60" width="7.2" height="92" rx="1.6" fill="url(#ts-csl)"/>
+              <line x1="100" y1="64" x2="100" y2="148" stroke="#b9c6cf" stroke-width="1"/>
+              <path d="M96.4 60 L100 50 L103.6 60 Z" fill="url(#ts-csl)"/>
+              <rect x="84" y="152" width="32" height="7" rx="2" fill="url(#ts-cgh)"/>
+              <rect x="96.6" y="159" width="6.8" height="20" rx="2" fill="url(#ts-cgh)"/>
+              <circle cx="100" cy="183" r="5.4" fill="url(#ts-cgh)"/>
+            </g>
+          </g>
+          <circle cx="100" cy="128" r="11" fill="url(#ts-cgh)" stroke="#7c5e16" stroke-width="1.4"/>
+          <circle cx="100" cy="128" r="4.4" fill="#7c1620" stroke="#5f4810" stroke-width="1"/>
+          <g fill="url(#ts-cg)" stroke="#7c5e16" stroke-width="1.2">
+            <path d="M62 36 L70 17 L84 30 L100 13 L116 30 L130 17 L138 36 Z"/>
+            <rect x="60" y="36" width="80" height="9" rx="2"/>
+            <circle cx="70" cy="17" r="4"/><circle cx="100" cy="13" r="4.6"/><circle cx="130" cy="17" r="4"/>
+            <circle cx="84" cy="40.5" r="2.5" fill="#b3232f" stroke="none"/><circle cx="100" cy="40.5" r="2.5" fill="#2f6fb0" stroke="none"/><circle cx="116" cy="40.5" r="2.5" fill="#b3232f" stroke="none"/>
+          </g>
+        </svg>
+        <h1>Kingdoms</h1>
+        <h2>Bohemian Real&#8209;Time Strategy</h2>
         <p class="lore">
-          Build an economy in skirmish or play authored Bohemian missions with fixed
-          objectives, terrain, and starting forces.
+          Forge an economy in open skirmish, or take up authored campaigns across the
+          contested Bohemian crownlands.
         </p>
-        <div id="mode-menu" class="mode-menu" aria-label="Choose game mode">
-          <button class="mode-choice" type="button" data-title-mode="campaign">Campaign</button>
-          <button class="mode-choice" type="button" data-title-mode="skirmish">Skirmish</button>
-          <button class="mode-choice" type="button" data-title-mode="multiplayer">Multiplayer</button>
-        </div>
+        <nav id="mode-menu" class="mode-menu" aria-label="Choose game mode">
+          <button class="mode-choice" type="button" data-title-mode="campaign">
+            <span class="medallion"><span class="ring"></span><span class="disc"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h9l3 3v13H6z"/><path d="M9 4v4h6"/><path d="M9 12h6M9 15.5h6"/></svg>
+            </span>
+            <span class="writ-body"><span class="writ-label">Campaign</span><span class="writ-sub">Authored chronicle of the crown</span></span>
+            <svg class="writ-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="mode-choice" type="button" data-title-mode="skirmish">
+            <span class="medallion"><span class="ring"></span><span class="disc"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l9 9M19 4l-9 9"/><path d="M4 14l4 4M20 14l-4 4M8 13l3 3M16 13l-3 3"/></svg>
+            </span>
+            <span class="writ-body"><span class="writ-label">Skirmish</span><span class="writ-sub">Free-build economy versus AI</span></span>
+            <svg class="writ-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <button class="mode-choice" type="button" data-title-mode="multiplayer">
+            <span class="medallion"><span class="ring"></span><span class="disc"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21V7l6-3v17M17 21V9l-4-2"/><path d="M7 9h6M7 13h6"/></svg>
+            </span>
+            <span class="writ-body"><span class="writ-label">Multiplayer</span><span class="writ-sub">Wage war against rival lords</span></span>
+            <svg class="writ-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+          <div class="secondary">
+            <button class="pill" type="button" data-veil="Settings" data-eyebrow="The Steward&#8217;s Ledger" data-flavor="Graphics, audio, and controls live in the game itself — open the cog once a match begins.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M4.2 7l2.1 1.2M17.7 15.8l2.1 1.2M4.2 17l2.1-1.2M17.7 8.2l2.1-1.2"/></svg>
+              Settings
+            </button>
+            <button class="pill" type="button" data-veil="Profile" data-eyebrow="Roll of Arms" data-flavor="Your banner, titles, and recorded deeds will be kept here in a future age.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21v-2a6 6 0 0112 0v2"/><path d="M6 10a6 6 0 0112 0v1H6z"/><path d="M9 11V8M15 11V8"/></svg>
+              Profile
+            </button>
+          </div>
+        </nav>
         <div id="skirmish-panel" class="mode-panel hidden">
           <section class="start-section" aria-label="Skirmish setup">
             <div class="panel-heading">
@@ -1815,6 +2312,26 @@
           <div><kbd>L-click</kbd> select  ·  <kbd>R-click</kbd> move / attack  ·  <kbd>A</kbd>+click attack-move</div>
           <div><kbd>B</kbd> then <kbd>M</kbd>/<kbd>I</kbd>/<kbd>L</kbd>/<kbd>G</kbd>/<kbd>C</kbd> farm/mill/worksites  ·  <kbd>H</kbd>/<kbd>R</kbd>/<kbd>T</kbd>/<kbd>Y</kbd> build  ·  <kbd>Q</kbd>/<kbd>E</kbd> train / advance</div>
           <div><kbd>F1</kbd> workers  ·  <kbd>F2</kbd> military  ·  <kbd>P</kbd> pause  ·  <kbd>X</kbd> 1x/2x speed  ·  <kbd>Wheel</kbd> zoom  ·  <kbd>WASD</kbd> pan</div>
+        </div>
+      </div>
+
+      <div class="ts-nameplate">
+        <div class="ts-avatar"><div class="inner"></div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9a7 7 0 0114 0v3l-2 6H7l-2-6z"/><path d="M9 9v3M15 9v3M9 18v2M15 18v2"/></svg>
+        </div>
+        <div class="ts-name-txt">
+          <span class="n">Vladislav of Prague</span>
+          <span class="r">Margrave &middot; Level <b>14</b></span>
+        </div>
+      </div>
+      <div class="ts-build">Prototype <span>&middot;</span> v0.4.2 <span>&middot;</span> build 1180</div>
+
+      <div class="ts-veil" id="ts-veil">
+        <div class="scroll-card">
+          <div class="eyebrow" id="ts-veil-eyebrow">A Royal Decree</div>
+          <h3 id="ts-veil-title">Settings</h3>
+          <p id="ts-veil-text"></p>
+          <button class="return" id="ts-veil-return" type="button">Return to the hall</button>
         </div>
       </div>
     </div>
@@ -1973,6 +2490,137 @@
       </div>
     </div>
 
+    <script>
+      /* ─── Title screen atmosphere (illuminated manuscript) ─── */
+      (function () {
+        var stage = document.getElementById('title-screen');
+        if (!stage) return;
+        var isHidden = function () { return stage.classList.contains('hidden'); };
+
+        /* parallax on pointer */
+        var bg = stage.querySelector('.ts-bg');
+        var crest = document.getElementById('ts-crest');
+        var tx = 0, ty = 0, cx = 0, cy = 0;
+        window.addEventListener('pointermove', function (e) {
+          if (isHidden()) return;
+          var nx = e.clientX / innerWidth - 0.5, ny = e.clientY / innerHeight - 0.5;
+          tx = -nx * 26; ty = -ny * 18; cx = nx * 10; cy = ny * 8;
+        });
+
+        /* candle flicker */
+        var core = document.getElementById('ts-glow-core');
+        var halo = document.getElementById('ts-crest-halo');
+        var f = 1;
+        setInterval(function () {
+          if (isHidden()) return;
+          f += (Math.random() - 0.5) * 0.5;
+          f = Math.max(0.6, Math.min(1.25, f));
+          if (core) {
+            core.style.opacity = (0.75 * f).toFixed(2);
+            core.style.transform = 'translate(-50%,-50%) scale(' + (0.96 + 0.08 * f).toFixed(3) + ')';
+          }
+          if (halo) halo.setAttribute('opacity', (0.85 * f).toFixed(2));
+        }, 110);
+
+        /* dust & embers */
+        var cv = document.getElementById('ts-dust');
+        var ctx = cv ? cv.getContext('2d') : null;
+        var W = 0, H = 0, parts = [];
+        function resize() {
+          if (!cv) return;
+          W = cv.width = innerWidth * devicePixelRatio;
+          H = cv.height = innerHeight * devicePixelRatio;
+          cv.style.width = innerWidth + 'px';
+          cv.style.height = innerHeight + 'px';
+        }
+        resize();
+        addEventListener('resize', resize);
+        function mk() {
+          var ember = Math.random() < 0.22;
+          return {
+            x: Math.random() * W, y: Math.random() * H,
+            r: (ember ? 1.6 : 0.9 + Math.random() * 1.3) * devicePixelRatio,
+            vy: -(0.08 + Math.random() * 0.22) * devicePixelRatio,
+            vx: (Math.random() - 0.5) * 0.12 * devicePixelRatio,
+            a: 0, ta: (ember ? 0.6 : 0.32) * (0.4 + Math.random() * 0.6),
+            tw: Math.random() * 6.28, ts: 0.01 + Math.random() * 0.03, ember: ember,
+          };
+        }
+        for (var i = 0; i < 78; i++) parts.push(mk());
+
+        function frame() {
+          if (!isHidden()) {
+            /* parallax apply */
+            if (bg) { bg.style.marginLeft = tx.toFixed(2) + 'px'; bg.style.marginTop = ty.toFixed(2) + 'px'; }
+            if (crest) crest.style.transform = 'translate(' + cx.toFixed(2) + 'px,' + cy.toFixed(2) + 'px)';
+            /* dust */
+            if (ctx) {
+              ctx.clearRect(0, 0, W, H);
+              for (var j = 0; j < parts.length; j++) {
+                var p = parts[j];
+                p.x += p.vx; p.y += p.vy; p.tw += p.ts;
+                var tw = 0.55 + 0.45 * Math.sin(p.tw);
+                if (p.a < p.ta) p.a += 0.01;
+                if (p.y < -10) { p.x = Math.random() * W; p.y = H + 10; p.a = 0; }
+                var al = p.a * tw;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+                if (p.ember) {
+                  ctx.fillStyle = 'rgba(255,164,72,' + al * 0.9 + ')';
+                  ctx.shadowColor = 'rgba(255,150,60,0.8)';
+                  ctx.shadowBlur = 6 * devicePixelRatio;
+                } else {
+                  ctx.fillStyle = 'rgba(232,222,196,' + al * 0.6 + ')';
+                  ctx.shadowBlur = 0;
+                }
+                ctx.fill();
+              }
+              ctx.shadowBlur = 0;
+            }
+          }
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+
+        /* keyboard select highlight on the charter writs */
+        var writs = Array.prototype.slice.call(stage.querySelectorAll('.mode-choice'));
+        var sel = -1;
+        function setSel(n) {
+          if (sel > -1) writs[sel].classList.remove('sel');
+          sel = (n + writs.length) % writs.length;
+          writs[sel].classList.add('sel');
+          writs[sel].focus();
+        }
+        var menu = document.getElementById('mode-menu');
+        if (menu) menu.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setSel(sel < 0 ? 0 : sel + 1); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(sel < 0 ? writs.length - 1 : sel - 1); }
+        });
+
+        /* decree overlay for Settings / Profile pills */
+        var veil = document.getElementById('ts-veil');
+        var vTitle = document.getElementById('ts-veil-title');
+        var vText = document.getElementById('ts-veil-text');
+        var vEye = document.getElementById('ts-veil-eyebrow');
+        function openVeil(el) {
+          if (!veil) return;
+          if (vTitle) vTitle.textContent = el.getAttribute('data-veil') || '';
+          if (vText) vText.textContent = el.getAttribute('data-flavor') || '';
+          if (vEye) vEye.textContent = el.getAttribute('data-eyebrow') || 'A Royal Decree';
+          veil.classList.add('on');
+        }
+        function closeVeil() { if (veil) veil.classList.remove('on'); }
+        stage.querySelectorAll('[data-veil]').forEach(function (el) {
+          el.addEventListener('click', function () { openVeil(el); });
+        });
+        var vReturn = document.getElementById('ts-veil-return');
+        if (vReturn) vReturn.addEventListener('click', closeVeil);
+        if (veil) veil.addEventListener('click', function (e) { if (e.target === veil) closeVeil(); });
+        addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') closeVeil();
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
