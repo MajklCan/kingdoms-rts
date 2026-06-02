@@ -69,6 +69,11 @@ describe('forest regrowth', () => {
   it('can replenish an empty grass tile near an existing tree', () => {
     const world = createSimWorld(77);
     world.paused = false;
+    // Suppress the player-2 AI: it also draws world.rng.int during the run, which
+    // would shift the parity of the deterministic int() stub below and make
+    // regrowth target the wrong tile. With both players "human" the regrowth
+    // system is the only rng.int consumer, so the stub stays aligned.
+    world.humanPlayers = new Set([1, 2]);
     clearWood(world);
 
     const spot = findRegrowthPair(world);
@@ -89,6 +94,8 @@ describe('forest regrowth', () => {
   it('favors empty edge grass for map-border replenishment', () => {
     const world = createSimWorld(88);
     world.paused = false;
+    // See note above: keep the AI from consuming rng.int and desyncing the stub.
+    world.humanPlayers = new Set([1, 2]);
     clearWood(world);
 
     const spot = findEdgeRegrowthSpot(world);
