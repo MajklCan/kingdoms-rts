@@ -2479,7 +2479,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onAdvanceAgeHotkey(): void {
-    const techId = this.nextAgeTechId(1);
+    const techId = this.nextAgeTechId(this.perspectivePlayerId);
     if (!techId) {
       setLastEvent('maximum age reached');
       return;
@@ -2645,7 +2645,7 @@ export class GameScene extends Phaser.Scene {
     for (const eid of sel) {
       if (!hasComponent(this.world.ecs, Producer, eid)) continue;
       if (!hasComponent(this.world.ecs, Building, eid)) continue;
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       const playerId = Owner.player[eid];
       const buildingDef = BUILDING_TABLE[Building.defId[eid]];
       if (

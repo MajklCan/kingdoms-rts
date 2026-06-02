@@ -9,6 +9,7 @@
 
 import { SIM } from '../config';
 import { checksumWorld } from '@sim/checksum';
+import { resetEcsGlobals } from '@sim/ecs-reset';
 import { createSimWorld, step, type SimInput, type SimWorld } from '@sim/world';
 import { LOCAL_PLAYER_ID } from '@sim/world';
 import { Lockstep } from './lockstep';
@@ -29,6 +30,15 @@ export type SessionState =
   | 'peer-left'
   | 'disconnected';
 
+export interface SessionOptions {
+  /** Reset the bitECS global eid space before building the match world. TRUE in
+   *  the real app (one client per process) so every client allocates identical
+   *  absolute eids. MUST be FALSE for in-process multi-session harnesses, whose
+   *  two worlds coexist in the same global stores and model the eid offset
+   *  themselves — resetting would clobber the co-resident world. Defaults true. */
+  resetEcsOnStart?: boolean;
+}
+
 export interface SessionCallbacks {
   onStateChange?: (state: SessionState) => void;
   onRoster?: (players: PlayerSlot[], localPlayerId: number, isHost: boolean) => void;
@@ -43,6 +53,34 @@ export interface SessionCallbacks {
  *  burst of catch-up ticks on return. */
 const MAX_FRAME_DELTA_MS = 250;
 
+/** Command types that are safe to accept from a peer: each is self-describing
+ *  (carries an explicit `playerId` and explicit actor eids, never reading the
+ *  receiver's local `Selected`/`LOCAL_PLAYER_ID`). Selection-relative commands
+ *  (`moveSelected`, `removeSelectedBuildings`, …) are deliberately excluded — a
+ *  peer has no idea what the receiver had selected, so honouring them would let
+ *  it act on the wrong (or our) entities. */
+const PEER_SAFE_COMMAND_TYPES: ReadonlySet<SimInput['type']> = new Set([
+  'cmdMove', 'cmdGather', 'cmdStop', 'cmdToggleStance', 'cmdAttack', 'cmdAttackMove',
+  'cmdRemoveBuildings', 'cmdSetStance', 'cmdSetFormationMode', 'cmdAdjustFormationMode',
+  'cmdRotateFormation', 'cmdReformFormation', 'setArmyRallyPoint', 'placeBuilding',
+  'trainUnit', 'cancelProduction', 'advanceAge', 'researchTech',
+]);
+
+/** Constrain a relayed turn to its sender: drop any command type that isn't
+ *  network-safe, and force every accepted command's `playerId` to the relay-
+ *  stamped sender id. This prevents a peer from spending or controlling another
+ *  player's state (e.g. `placeBuilding`/`researchTech`/`advanceAge` with a forged
+ *  playerId, or an ownerless `trainUnit`). The sim still validates that the named
+ *  eids actually belong to `playerId`, so a sender can only ever command itself. */
+export function sanitizePeerCommands(senderId: number, cmds: SimInput[]): SimInput[] {
+  const safe: SimInput[] = [];
+  for (const cmd of cmds) {
+    if (!PEER_SAFE_COMMAND_TYPES.has(cmd.type)) continue;
+    safe.push({ ...cmd, playerId: senderId } as SimInput);
+  }
+  return safe;
+}
+
 export class MultiplayerSession {
   state: SessionState = 'connecting';
   localPlayerId = LOCAL_PLAYER_ID;
@@ -55,12 +93,16 @@ export class MultiplayerSession {
   private readonly localChecksums = new Map<number, number>();
   private readonly pendingPeerChecksums = new Map<number, { peerId: number; hash: number }>();
 
+  private readonly resetEcsOnStart: boolean;
+
   constructor(
     private readonly transport: Transport,
     private readonly room: string,
     private readonly name: string,
-    private readonly cb: SessionCallbacks = {}
+    private readonly cb: SessionCallbacks = {},
+    options: SessionOptions = {}
   ) {
+    this.resetEcsOnStart = options.resetEcsOnStart ?? true;
     transport.onOpen(() => {
       transport.send({ t: 'join', v: PROTOCOL_VERSION, room: this.room, name: this.name });
     });
@@ -139,7 +181,11 @@ export class MultiplayerSession {
         this.beginMatch(msg.seed, msg.players);
         return;
       case 'turn':
-        this.lockstep?.receivePeerTurn(msg.playerId, msg.forTick, msg.cmds);
+        this.lockstep?.receivePeerTurn(
+          msg.playerId,
+          msg.forTick,
+          sanitizePeerCommands(msg.playerId, msg.cmds)
+        );
         return;
       case 'checksum':
         this.handlePeerChecksum(msg.playerId, msg.tick, msg.hash);
@@ -166,6 +212,13 @@ export class MultiplayerSession {
 
   private beginMatch(seed: number, players: PlayerSlot[]): void {
     this.players = players;
+    // Align the bitECS eid space across all clients before building the match
+    // world: the scene has already created a Date.now-seeded menu world, which
+    // advanced the process-global entity cursor by a per-client amount. Without
+    // this reset, identical seeds would yield different absolute eids per client
+    // and the raw eids carried in command packets would target the wrong entity
+    // on a peer — an instant desync. (See src/sim/ecs-reset.ts.)
+    if (this.resetEcsOnStart) resetEcsGlobals();
     const world = createSimWorld(seed);
     // Every listed player is human → suppress the AI controller for all of them.
     world.humanPlayers = new Set(players.map((p) => p.playerId));

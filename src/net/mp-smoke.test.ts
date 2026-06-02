@@ -224,8 +224,12 @@ function setupMatch(seed = 12345): MatchCtx {
   const tB = new PairedTransport(relay);
   const capA = makeCapture();
   const capB = makeCapture();
-  const sessA = new MultiplayerSession(tA, 'room', 'Alice', callbacks(capA));
-  const sessB = new MultiplayerSession(tB, 'room', 'Bob', callbacks(capB));
+  // In-process harness: the two worlds share bitECS global stores and model the
+  // eid offset K themselves (see translateEids). Opt out of the real-client eid
+  // reset, which would clobber the co-resident world.
+  const noReset = { resetEcsOnStart: false };
+  const sessA = new MultiplayerSession(tA, 'room', 'Alice', callbacks(capA), noReset);
+  const sessB = new MultiplayerSession(tB, 'room', 'Bob', callbacks(capB), noReset);
   tA.fireOpen();
   tB.fireOpen();
   sessA.start(seed);
