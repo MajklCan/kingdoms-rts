@@ -136,6 +136,41 @@ export interface MapData {
 const W = MAP.WIDTH;
 const H = MAP.HEIGHT;
 
+function hash01(x: number, y: number, seed: number): number {
+  let h = Math.imul(x + seed, 374761393) ^ Math.imul(y - seed, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
+}
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function valueNoise(x: number, y: number, scale: number, seed: number): number {
+  const gx = x / scale;
+  const gy = y / scale;
+  const x0 = Math.floor(gx);
+  const y0 = Math.floor(gy);
+  const fx = smoothstep(gx - x0);
+  const fy = smoothstep(gy - y0);
+  const a = hash01(x0, y0, seed);
+  const b = hash01(x0 + 1, y0, seed);
+  const c = hash01(x0, y0 + 1, seed);
+  const d = hash01(x0 + 1, y0 + 1, seed);
+  return lerp(lerp(a, b, fx), lerp(c, d, fx), fy);
+}
+
+export function isZborovMudPatch(x: number, y: number): boolean {
+  const broadPatch = valueNoise(x, y, 9, 29);
+  const smallBreakup = valueNoise(x + 17, y - 11, 4, 83);
+  const shellScarring = Math.sin(x * 0.33 + y * 0.21) + Math.cos(x * 0.17 - y * 0.37);
+  return broadPatch * 0.58 + smallBreakup * 0.28 + shellScarring * 0.07 > 0.58;
+}
+
 function isWaterTile(tile: number): boolean {
   return tile === TileType.WATER || tile === TileType.WATER_SHALLOW;
 }
@@ -630,10 +665,10 @@ function generateSudomerPondsMap(): MapData {
 }
 
 function generateZborovMap(): MapData {
-  // A shell-torn CORRIDOR: churned dirt + mud craters down the middle, hemmed by
-  // impassable woods on both flanks so the assault can't just walk around the
-  // trench lines. Player jump-off south, enemy lines + bunker north. Trench wire,
-  // machine-gun nests, and tree-sprites are placed in the mission config.
+  // A shell-torn CORRIDOR: churned dirt + mud only, with the flanks still
+  // impassable so the assault can't just walk around the trench lines. Player
+  // jump-off south, enemy lines + bunker north. Trench wire and machine-gun
+  // nests are placed in the mission config.
   const map = createBaseMap(TileType.DIRT, 3);
   const cx = Math.round(W * 0.5);
   const corridorHalf = Math.round(W * 0.24);
@@ -643,39 +678,14 @@ function generateZborovMap(): MapData {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const idx = mapIndex(x, y);
-      if (x < leftEdge || x > rightEdge) {
-        map.tiles[idx] = TileType.FOREST; // wooded flank (sealed below)
-        map.elevation[idx] = 3;
-        continue;
-      }
-      const crater = Math.sin(x * 0.45 + y * 0.31) + Math.cos(x * 0.21 - y * 0.6);
-      if (crater > 1.4) {
-        map.tiles[idx] = TileType.MUD;
-        map.elevation[idx] = 2;
-      }
-    }
-  }
-
-  // A few stony patches inside the corridor for texture (walkable).
-  for (const [px, py, pr] of [
-    [leftEdge + 3, Math.round(H * 0.46), 2],
-    [rightEdge - 3, Math.round(H * 0.56), 2],
-    [leftEdge + 4, Math.round(H * 0.3), 2],
-  ]) {
-    for (let dy = -pr; dy <= pr; dy++) {
-      for (let dx = -pr; dx <= pr; dx++) {
-        const x = px + dx;
-        const y = py + dy;
-        if (!inBounds(x, y) || Math.hypot(dx, dy) > pr) continue;
-        if (x < leftEdge || x > rightEdge) continue;
-        map.tiles[mapIndex(x, y)] = TileType.STONE;
-        map.elevation[mapIndex(x, y)] = 3;
-      }
+      const mudPatch = isZborovMudPatch(x, y);
+      map.tiles[idx] = mudPatch ? TileType.MUD : TileType.DIRT;
+      map.elevation[idx] = mudPatch ? 2 : 3;
     }
   }
 
   rebuildWalkability(map);
-  // Seal the wooded flanks — impassable, so the fight stays in the corridor.
+  // Seal the dirt/mud flanks — impassable, so the fight stays in the corridor.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (x < leftEdge || x > rightEdge) map.walkability[y][x] = 1;
@@ -693,7 +703,7 @@ function generateFloodedBasinMap(): MapData {
   const map = createBaseMap(TileType.WATER, 0);
   const cx = Math.round(W * 0.5);
   const cy = Math.round(H * 0.5);
-  const R = Math.round(Math.min(W, H) * 0.31);
+  const R = Math.round(Math.min(W, H) * 0.40);
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {

@@ -1244,7 +1244,7 @@ function renderMissionCard(scene: GameScene): void {
         : mission.id === CampaignMissionId.BATTLE_OF_SUDOMER
           ? 'Outnumbered town defense. You start with a small guard — put villagers to work and raise pikemen and gunmen during the lull, then hold the dry choke and the muddy flank. Keep the Town Hall standing.'
         : mission.id === CampaignMissionId.BATTLE_OF_ZBOROV
-          ? 'Rifle clash. You have only riflemen and a single mortar — screen it and use it to knock out the forward machine-gun nests. Both sides feed gunmen into no-man’s-land; win the clash and take the command bunker.'
+          ? 'Economy trench duel. Your command foundry and resource sites are live from the start; train gunmen and cannon, hold enemy waves, and mass enough force to break the three trench lines.'
         : '';
 
   missionBodyEl.innerHTML = `

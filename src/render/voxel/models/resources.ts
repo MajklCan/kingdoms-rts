@@ -98,6 +98,64 @@ export function buildSnowTreeVoxels(): Voxel[] {
   return out;
 }
 
+export function buildDeadTreeVoxels(): Voxel[] {
+  const out: Voxel[] = [];
+  const put = (x: number, y: number, z: number, c: number) => out.push({ x, y, z, color: c });
+  const line = (
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number,
+    color: number
+  ) => {
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0));
+    for (let i = 0; i <= steps; i++) {
+      const t = steps === 0 ? 0 : i / steps;
+      put(
+        Math.round(x0 + (x1 - x0) * t),
+        Math.round(y0 + (y1 - y0) * t),
+        Math.round(z0 + (z1 - z0) * t),
+        color
+      );
+    }
+  };
+
+  // Gnarled roots and a splintered trunk. No leaves/canopy: this is a WWI
+  // blasted tree silhouette for muddy trench maps.
+  put(5, 5, 0, P.TREE_TRUNK_D);
+  for (const [x, y] of [[4, 5], [6, 5], [5, 4], [5, 6], [3, 5], [7, 5], [5, 3], [6, 6]]) {
+    put(x, y, 0, P.TREE_TRUNK_D);
+  }
+  for (let z = 1; z <= 8; z++) {
+    put(5, 5, z, z < 4 ? P.TREE_TRUNK_D : P.TREE_TRUNK_L);
+    if (z <= 5) put(6, 5, z, z < 3 ? P.TREE_TRUNK_D : P.TREE_TRUNK_L);
+  }
+  put(5, 5, 9, P.TREE_TRUNK_D);
+  put(5, 5, 10, P.WOOD_D);
+
+  // Bare forked branches. Slight doubled starts make the limbs read as attached
+  // to the trunk rather than floating one-voxel lines.
+  const branches: Array<[number, number, number, number, number, number]> = [
+    [5, 5, 7, 2, 5, 9],
+    [5, 5, 7, 8, 4, 10],
+    [5, 5, 6, 4, 2, 8],
+    [5, 5, 6, 7, 7, 8],
+    [5, 5, 9, 4, 6, 12],
+    [5, 5, 8, 6, 3, 11],
+    [2, 5, 9, 1, 4, 10],
+    [8, 4, 10, 9, 3, 11],
+    [7, 7, 8, 8, 8, 9],
+    [4, 2, 8, 3, 1, 9],
+  ];
+  for (const [x0, y0, z0, x1, y1, z1] of branches) {
+    line(x0, y0, z0, x1, y1, z1, (x1 + y1 + z1) % 2 === 0 ? P.TREE_TRUNK_L : P.WOOD_D);
+  }
+
+  return out;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Linden tree
 // ────────────────────────────────────────────────────────────────────────────

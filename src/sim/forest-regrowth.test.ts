@@ -4,6 +4,7 @@ import { MAP } from '../config';
 import { Resource, ResourceKindId } from './components';
 import { TileType } from './map-gen';
 import {
+  AI_PLAYER_ID,
   createSimWorld,
   findBuildingAt,
   findResourceAt,
@@ -29,6 +30,12 @@ function clearWood(world: SimWorld): void {
   for (const eid of [...resourceQuery(world.ecs)]) {
     if (Resource.kind[eid] === ResourceKindId.WOOD) removeEntity(world.ecs, eid);
   }
+}
+
+function suppressAiEconomy(world: SimWorld): void {
+  world.humanPlayers = new Set([1, 2]);
+  world.aiPlayers[AI_PLAYER_ID] = null;
+  world.resources[AI_PLAYER_ID].set([0, 0, 0, 0]);
 }
 
 function findRegrowthPair(world: SimWorld): { seedX: number; seedY: number; growX: number; growY: number } {
@@ -69,11 +76,7 @@ describe('forest regrowth', () => {
   it('can replenish an empty grass tile near an existing tree', () => {
     const world = createSimWorld(77);
     world.paused = false;
-    // Suppress the player-2 AI: it also draws world.rng.int during the run, which
-    // would shift the parity of the deterministic int() stub below and make
-    // regrowth target the wrong tile. With both players "human" the regrowth
-    // system is the only rng.int consumer, so the stub stays aligned.
-    world.humanPlayers = new Set([1, 2]);
+    suppressAiEconomy(world);
     clearWood(world);
 
     const spot = findRegrowthPair(world);
@@ -94,8 +97,7 @@ describe('forest regrowth', () => {
   it('favors empty edge grass for map-border replenishment', () => {
     const world = createSimWorld(88);
     world.paused = false;
-    // See note above: keep the AI from consuming rng.int and desyncing the stub.
-    world.humanPlayers = new Set([1, 2]);
+    suppressAiEconomy(world);
     clearWood(world);
 
     const spot = findEdgeRegrowthSpot(world);

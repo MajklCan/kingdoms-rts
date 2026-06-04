@@ -213,6 +213,21 @@ describe('map bridges', () => {
     expect(countTiles(winter, TileType.SNOW_FOREST)).toBeGreaterThan(MAP.WIDTH * MAP.HEIGHT * 0.12);
     expect(countTiles(winter, TileType.ICE)).toBeGreaterThan(MAP.WIDTH * MAP.HEIGHT * 0.025);
     expect(countTiles(winter, TileType.WATER) + countTiles(winter, TileType.WATER_SHALLOW)).toBe(0);
+
+    const zborov = generateMap(new Rng(306), MapId.ZBOROV_LINES);
+    expect(countTiles(zborov, TileType.GRASS) + countTiles(zborov, TileType.FOREST)).toBe(0);
+    const zborovMud = countTiles(zborov, TileType.MUD);
+    expect(zborovMud).toBeGreaterThan(MAP.WIDTH * MAP.HEIGHT * 0.10);
+    expect(zborovMud).toBeLessThan(MAP.WIDTH * MAP.HEIGHT * 0.30);
+    const mudResidues = Array.from({ length: 5 }, () => 0);
+    for (let y = 0; y < MAP.HEIGHT; y++) {
+      for (let x = 0; x < MAP.WIDTH; x++) {
+        if (zborov.tiles[y * MAP.WIDTH + x] === TileType.MUD) mudResidues[(x + y) % 5]++;
+      }
+    }
+    const minResidueMud = Math.min(...mudResidues);
+    expect(minResidueMud).toBeGreaterThan(0);
+    expect(Math.max(...mudResidues) / minResidueMud).toBeLessThan(2);
   });
 
   it('keeps Krkonoše Winter Crown mirrored for skirmish fairness', () => {
@@ -268,6 +283,43 @@ describe('map bridges', () => {
       )
         .toBeGreaterThan(0);
     }
+  });
+
+  it('keeps Flooded Basin wide with fair contested centre mines', () => {
+    const map = generateMap(new Rng(703), MapId.FLOODED_BASIN);
+    const cx = Math.round(MAP.WIDTH * 0.5);
+    const cy = Math.round(MAP.HEIGHT * 0.5);
+    let eastEdge = cx;
+    while (eastEdge + 1 < MAP.WIDTH && !isWater(map.tiles[cy * MAP.WIDTH + eastEdge + 1])) {
+      eastEdge++;
+    }
+    expect(MAP.WIDTH - 1 - eastEdge).toBeLessThanOrEqual(
+      Math.ceil(Math.min(MAP.WIDTH, MAP.HEIGHT) * 0.10)
+    );
+
+    const world = createSimWorld(703, { mapId: MapId.FLOODED_BASIN });
+    const centralResources = resourceQuery(world.ecs)
+      .filter((eid) =>
+        (Resource.kind[eid] === ResourceKindId.GOLD && Resource.amount[eid] === 850)
+        || (Resource.kind[eid] === ResourceKindId.STONE && Resource.amount[eid] === 750)
+      )
+      .map((eid) => [
+        Resource.kind[eid],
+        Math.round(Position.x[eid]),
+        Math.round(Position.y[eid]),
+      ].join(':'))
+      .sort();
+
+    expect(centralResources).toEqual([
+      `${ResourceKindId.GOLD}:${Math.floor(MAP.WIDTH / 2) - 2}:${Math.floor(MAP.HEIGHT / 2) - 5}`,
+      `${ResourceKindId.GOLD}:${Math.floor(MAP.WIDTH / 2) - 2}:${Math.floor(MAP.HEIGHT / 2) + 5}`,
+      `${ResourceKindId.GOLD}:${Math.floor(MAP.WIDTH / 2) - 1}:${Math.floor(MAP.HEIGHT / 2) - 6}`,
+      `${ResourceKindId.GOLD}:${Math.floor(MAP.WIDTH / 2) - 1}:${Math.floor(MAP.HEIGHT / 2) + 6}`,
+      `${ResourceKindId.STONE}:${Math.floor(MAP.WIDTH / 2) + 1}:${Math.floor(MAP.HEIGHT / 2) - 5}`,
+      `${ResourceKindId.STONE}:${Math.floor(MAP.WIDTH / 2) + 1}:${Math.floor(MAP.HEIGHT / 2) + 5}`,
+      `${ResourceKindId.STONE}:${Math.floor(MAP.WIDTH / 2) + 2}:${Math.floor(MAP.HEIGHT / 2) - 6}`,
+      `${ResourceKindId.STONE}:${Math.floor(MAP.WIDTH / 2) + 2}:${Math.floor(MAP.HEIGHT / 2) + 6}`,
+    ].sort());
   });
 
   it('adds map-specific feature terrain without bleeding into other maps', () => {

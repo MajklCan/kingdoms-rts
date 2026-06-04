@@ -95,9 +95,9 @@ export const CAMPAIGN_MISSIONS: CampaignMissionDef[] = [
   {
     id: CampaignMissionId.BATTLE_OF_ZBOROV,
     name: 'Battle of Zborov',
-    description: 'Lead the Czechoslovak Legion up a fortified trench corridor: take each line in turn, screen your lone mortar, and storm the command bunker.',
+    description: 'Build a firing line and economy under pressure, then break through the Zborov trench corridor.',
     briefing:
-      '2 July 1917. The Czechoslovak Legion goes over the top at Zborov. Three rifle lines of Austro-Hungarian infantry hold a narrow cratered corridor walled in by dense woods, machine-gun nests dug into the wire out front, with rifle companies fed forward in waves. This is bite-and-hold: take the forward trench, hold against the reserve’s counterattack, then push to the next line. You have only riflemen and a single mortar — that mortar is your sole means of cracking the nests, so screen it and keep it alive. Fresh Legionnaires muster behind whichever trench you’ve taken. Clear all three lines and storm the command bunker.',
+      '2 July 1917. The Czechoslovak Legion faces a fortified Austro-Hungarian trench corridor at Zborov. The enemy still holds three gunman lines with machine-gun nests in the wire, but both sides now have rear foundries and working resource sites. You start with one gunman line, one machine gun, and a command foundry. Keep the economy flowing, train gunmen and cannon, hold off trained enemy waves, then build enough mass to take each trench line and destroy the command foundry.',
     startingAge: AgeId.TOTAL_WAR,
     enemyAge: AgeId.TOTAL_WAR,
     mapId: MapId.ZBOROV_LINES,
