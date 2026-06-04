@@ -75,6 +75,7 @@ import {
   isTileVisibleTo,
   LOCAL_PLAYER_ID,
   positionQuery,
+  pruneHiddenSelectionForPlayer,
   resourceQuery,
   revealMapForPlayer,
   selectedQuery,
@@ -683,11 +684,10 @@ export class GameScene extends Phaser.Scene {
     if (this.scoutInspectionMode) return;
 
     if (this.multiplayer) {
-      // Lockstep owns tick advancement and is pumped independently (main.ts rAF)
-      // so it runs even before this scene finished baking. The scene must NOT
-      // step here (that would double-step / desync); it only renders the shared
-      // world and advances the accumulator for interpolation alpha.
-      this.accumulatorMs = (this.accumulatorMs + delta) % SIM.TICK_MS;
+      // Lockstep owns tick advancement. Interpolation must follow the actual
+      // lockstep step time, not a free-running render accumulator, or render
+      // alpha drifts against PrevPosition -> Position and movement jitters.
+      this.accumulatorMs = this.multiplayer.interpolationMs();
     } else {
       this.accumulatorMs += delta * this.gameSpeed;
       let safety = 0;
@@ -696,6 +696,8 @@ export class GameScene extends Phaser.Scene {
         this.accumulatorMs -= SIM.TICK_MS;
       }
     }
+
+    pruneHiddenSelectionForPlayer(this.world, this.perspectivePlayerId);
 
     const cam = this.cameras.main;
     const speed = 6;
@@ -2111,7 +2113,7 @@ export class GameScene extends Phaser.Scene {
     this.isDragging = false;
   }
 
-  /** Select all of player 1's units whose sprite anchor falls inside the
+  /** Select all of the perspective player's units whose sprite anchor falls inside the
    *  given world-space rectangle. */
   private selectUnitsInWorldBox(
     x0: number,
@@ -2123,7 +2125,7 @@ export class GameScene extends Phaser.Scene {
     let n = 0;
     const ents = unitQuery(this.world.ecs);
     for (const eid of ents) {
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       const local = this.tileToScreenElev(Position.x[eid], Position.y[eid]);
       // Convert container-local coords to world coords (matches the dragRect
       // coordinate system which uses pointer.worldX/Y).
@@ -2209,7 +2211,7 @@ export class GameScene extends Phaser.Scene {
     const ents = unitQuery(this.world.ecs);
     let n = 0;
     for (const eid of ents) {
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (!hasComponent(this.world.ecs, VillagerTag, eid)) continue;
       setSelected(this.world, eid, true);
       n++;
@@ -2222,7 +2224,7 @@ export class GameScene extends Phaser.Scene {
     const ents = unitQuery(this.world.ecs);
     let n = 0;
     for (const eid of ents) {
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (hasComponent(this.world.ecs, VillagerTag, eid)) continue;
       setSelected(this.world, eid, true);
       n++;

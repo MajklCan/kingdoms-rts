@@ -19,6 +19,7 @@ import {
   GathererStateId,
   Health,
   MachineGunDeployment,
+  NetId,
   Owner,
   PathTarget,
   Position,
@@ -146,6 +147,7 @@ export function installWindowApi(
       const path = world.paths.get(eid);
       return {
         eid,
+        netId: hasComponent(world.ecs, NetId, eid) ? NetId.value[eid] : null,
         position: { x: Position.x[eid], y: Position.y[eid] },
         owner: Owner.player[eid],
         kind: UnitKind.kind[eid],
@@ -219,6 +221,7 @@ export function installWindowApi(
           const queue = world.productionQueues.get(eid) ?? [];
           buildings.push({
             eid,
+            netId: hasComponent(world.ecs, NetId, eid) ? NetId.value[eid] : null,
             owner,
             name,
             x: Number(Position.x[eid].toFixed(2)),
@@ -255,6 +258,7 @@ export function installWindowApi(
           const path = world.paths.get(eid);
           units.push({
             eid,
+            netId: hasComponent(world.ecs, NetId, eid) ? NetId.value[eid] : null,
             owner,
             name,
             villager: hasComponent(world.ecs, VillagerTag, eid),

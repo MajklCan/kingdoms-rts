@@ -42,6 +42,7 @@ import {
   MachineGunDeployment,
   MachineGunTag,
   MilitiaTag,
+  NetId,
   Owner,
   PathTarget,
   Position,
@@ -153,6 +154,7 @@ export function checksumWorld(world: SimWorld): number {
   };
   for (const eid of eids) {
     h.u32(canon(eid));
+    if (hasComponent(ecs, NetId, eid)) h.u32(NetId.value[eid]);
     h.f32(Position.x[eid]);
     h.f32(Position.y[eid]);
     if (hasComponent(ecs, PrevPosition, eid)) {

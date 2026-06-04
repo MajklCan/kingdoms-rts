@@ -16,6 +16,10 @@ import {
   isEntityVisibleTo,
   isTileExploredBy,
   isTileVisibleTo,
+  pruneHiddenSelectionForPlayer,
+  selectedQuery,
+  setSelected,
+  step,
   unitQuery,
   updatePlayerVisibility,
   type SimWorld,
@@ -35,6 +39,13 @@ function findLocalScout(world: SimWorld): number {
     }
   }
   throw new Error('local scout not found');
+}
+
+function findOwnedUnit(world: SimWorld, playerId: number): number {
+  for (const eid of unitQuery(world.ecs)) {
+    if (Owner.player[eid] === playerId) return eid;
+  }
+  throw new Error(`unit not found: player=${playerId}`);
 }
 
 describe('fog of war', () => {
@@ -99,5 +110,23 @@ describe('fog of war', () => {
     expect(isEntityVisibleTo(target, LOCAL_PLAYER_ID, restoredTc)).toBe(false);
     expect(restoredSeen?.x).toBe(Position.x[restoredTc]);
     expect(restoredSeen?.y).toBe(Position.y[restoredTc]);
+  });
+
+  it('does not let multi-human visibility ticks clear client-local selection', () => {
+    const world = createSimWorld(304);
+    const p2Unit = findOwnedUnit(world, 2);
+    world.humanPlayers = new Set([1, 2]);
+    world.paused = false;
+
+    setSelected(world, p2Unit, true);
+    step(world);
+
+    expect(selectedQuery(world.ecs)).toContain(p2Unit);
+
+    pruneHiddenSelectionForPlayer(world, 2);
+    expect(selectedQuery(world.ecs)).toContain(p2Unit);
+
+    pruneHiddenSelectionForPlayer(world, LOCAL_PLAYER_ID);
+    expect(selectedQuery(world.ecs)).not.toContain(p2Unit);
   });
 });

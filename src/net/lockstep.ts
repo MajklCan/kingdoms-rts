@@ -28,6 +28,25 @@ export interface ReadyTick {
   inputs: SimInput[];
 }
 
+export interface LockstepDebugSnapshot {
+  localPlayerId: number;
+  playerIds: number[];
+  inputDelay: number;
+  sendTick: number;
+  execTick: number;
+  stalled: boolean;
+  pendingLocalCmds: number;
+  bufferedTicks: number;
+  blockedTick: number;
+  missingPlayers: number[];
+  window: Array<{
+    tick: number;
+    receivedPlayers: number[];
+    missingPlayers: number[];
+    cmdCount: number;
+  }>;
+}
+
 /** Cap how many ticks we execute per drain so catch-up after a stall can't
  *  spiral the sim and freeze the render thread. */
 const MAX_CATCHUP_TICKS = 8;
@@ -134,5 +153,37 @@ export class Lockstep {
   /** True when we're waiting on a peer's packet to proceed (UI "waiting" hint). */
   isStalled(): boolean {
     return !this.isReady(this.execTick);
+  }
+
+  debugSnapshot(windowTicks = 8): LockstepDebugSnapshot {
+    const tickWindow: LockstepDebugSnapshot['window'] = [];
+    for (let tick = this.execTick; tick < this.execTick + Math.max(1, windowTicks); tick++) {
+      const m = this.received.get(tick);
+      const receivedPlayers = m ? [...m.keys()].sort((a, b) => a - b) : [];
+      const missingPlayers = this.missingPlayersForTick(tick);
+      let cmdCount = 0;
+      if (m) for (const cmds of m.values()) cmdCount += cmds.length;
+      tickWindow.push({ tick, receivedPlayers, missingPlayers, cmdCount });
+    }
+    return {
+      localPlayerId: this.localPlayerId,
+      playerIds: this.playerIds.slice(),
+      inputDelay: this.inputDelay,
+      sendTick: this.sendTick,
+      execTick: this.execTick,
+      stalled: this.isStalled(),
+      pendingLocalCmds: this.localPending.length,
+      bufferedTicks: this.received.size,
+      blockedTick: this.execTick,
+      missingPlayers: this.missingPlayersForTick(this.execTick),
+      window: tickWindow,
+    };
+  }
+
+  private missingPlayersForTick(tick: number): number[] {
+    if (tick < this.inputDelay) return [];
+    const m = this.received.get(tick);
+    if (!m) return this.playerIds.slice();
+    return this.playerIds.filter((playerId) => !m.has(playerId));
   }
 }

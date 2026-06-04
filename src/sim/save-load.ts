@@ -1,8 +1,6 @@
 import {
   addComponent,
-  addEntity,
   hasComponent,
-  removeEntity,
 } from 'bitecs';
 import { MAP } from '../config';
 import {
@@ -25,6 +23,7 @@ import {
   MachineGunTag,
   MilitiaTag,
   MortarTag,
+  NetId,
   Owner,
   PathTarget,
   PopulationCost,
@@ -60,8 +59,10 @@ import {
   LOCAL_PLAYER_ID,
   type MatchOutcome,
   type SimWorld,
+  addSimEntity,
   createLateGameTestWorld,
   positionQuery,
+  removeSimEntity,
   updatePlayerVisibility,
 } from './world';
 import { Pathfinder, type GridPos } from './pathfinding';
@@ -87,6 +88,7 @@ export interface SavedMapV1 {
 
 export interface SavedEntityV1 {
   id: number;
+  netId?: number;
   position: { x: number; y: number };
   prevPosition?: { x: number; y: number };
   velocity?: { x: number; y: number };
@@ -143,6 +145,7 @@ export interface SavedGameV1 {
    *  map gen). Lockstep join-snapshots and replays diverge without it.
    *  Optional for back-compat with v1 saves written before this field existed. */
   rngState?: number;
+  nextNetId?: number;
   paused: boolean;
   aiDifficulty?: AiDifficulty;
   map: SavedMapV1;
@@ -197,6 +200,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       id: eid,
       position: { x: Position.x[eid], y: Position.y[eid] },
     };
+    if (hasComponent(world.ecs, NetId, eid)) entity.netId = NetId.value[eid];
     if (hasComponent(world.ecs, PrevPosition, eid)) {
       entity.prevPosition = { x: PrevPosition.x[eid], y: PrevPosition.y[eid] };
     }
@@ -320,6 +324,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     savedAt: new Date().toISOString(),
     tick: world.tick,
     rngState: world.rng.getState(),
+    nextNetId: world.nextNetId,
     paused: world.paused,
     aiDifficulty: world.aiDifficulty,
     map: {
@@ -386,10 +391,12 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   }
 
   for (const eid of [...positionQuery(world.ecs)]) {
-    removeEntity(world.ecs, eid);
+    removeSimEntity(world, eid);
   }
 
   world.tick = snapshot.tick;
+  world.nextNetId = 1;
+  world.netIdToEid.clear();
   if (snapshot.rngState !== undefined) {
     world.rng.setState(snapshot.rngState);
   }
@@ -464,14 +471,22 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   }
 
   const eidMap = new Map<number, number>();
+  let maxRestoredNetId = 0;
   for (const saved of snapshot.entities) {
-    const eid = addEntity(world.ecs);
+    const eid = addSimEntity(world);
+    if (saved.netId !== undefined) {
+      world.netIdToEid.delete(NetId.value[eid]);
+      NetId.value[eid] = saved.netId;
+      world.netIdToEid.set(saved.netId, eid);
+      maxRestoredNetId = Math.max(maxRestoredNetId, saved.netId);
+    }
     eidMap.set(saved.id, eid);
     addComponent(world.ecs, Position, eid);
     Position.x[eid] = saved.position.x;
     Position.y[eid] = saved.position.y;
     restoreEntityComponents(world, eid, saved);
   }
+  world.nextNetId = snapshot.nextNetId ?? (maxRestoredNetId > 0 ? maxRestoredNetId + 1 : world.nextNetId);
 
   for (const saved of snapshot.entities) {
     const eid = eidMap.get(saved.id);

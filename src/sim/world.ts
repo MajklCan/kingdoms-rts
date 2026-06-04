@@ -36,6 +36,7 @@ import {
   MachineGunDeployment,
   MachineGunTag,
   MortarTag,
+  NetId,
   Owner,
   PathTarget,
   PopulationCost,
@@ -301,9 +302,9 @@ export type SimInput =
   | { type: 'reformSelectedFormation' }
   | { type: 'attackSelected'; targetEid: number }
   | { type: 'attackMoveSelected'; to: GridPos }
-  // ── Self-describing commands (network-safe). Every field needed to apply the
-  //    command on any client is present: the commanding playerId and the exact
-  //    actor eids. eids are resolved on the sender; receivers validate ownership.
+  // ── Self-describing commands. Inside the sim these eids are local raw bitECS
+  //    ids. MultiplayerSession converts them to deterministic NetIds before
+  //    putting commands on the wire, then decodes them back before applyInput().
   | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
   | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdStop'; playerId: number; eids: number[] }
@@ -639,6 +640,9 @@ export interface SimWorld {
   inputs: SimInput[];
   /** Per-entity remaining path waypoints. Cleared as the unit progresses. */
   paths: Map<number, GridPos[]>;
+  /** Deterministic command-id mapping for multiplayer wire payloads. */
+  nextNetId: number;
+  netIdToEid: Map<number, number>;
   /** Transient progress tracking used to sidestep/repath blocked movement. */
   movementStuck: Map<number, MovementStuckState>;
   /** Temporary speed caps for selected groups moving as a formation. */
@@ -713,6 +717,31 @@ export interface CreateSimWorldOptions {
   mapId?: MapIdValue;
   aiDifficulty?: AiDifficulty;
   campaignMissionId?: CampaignMissionIdValue;
+}
+
+export function addSimEntity(world: SimWorld): number {
+  const eid = addEntity(world.ecs);
+  addComponent(world.ecs, NetId, eid);
+  const netId = world.nextNetId++;
+  NetId.value[eid] = netId;
+  world.netIdToEid.set(netId, eid);
+  return eid;
+}
+
+export function removeSimEntity(world: SimWorld, eid: number): void {
+  if (hasComponent(world.ecs, NetId, eid)) {
+    world.netIdToEid.delete(NetId.value[eid]);
+  }
+  removeEntity(world.ecs, eid);
+}
+
+export function netIdForEntity(world: SimWorld, eid: number): number | null {
+  if (!hasComponent(world.ecs, NetId, eid)) return null;
+  return NetId.value[eid];
+}
+
+export function entityForNetId(world: SimWorld, netId: number): number | null {
+  return world.netIdToEid.get(netId) ?? null;
 }
 
 function normalizeStartingAge(ageId: number | undefined): AgeIdValue {
@@ -841,6 +870,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     tick: 0,
     inputs: [],
     paths: new Map(),
+    nextNetId: 1,
+    netIdToEid: new Map(),
     movementStuck: new Map(),
     formationSpeedCaps: new Map(),
     formationModes: new Array(MAX_PLAYERS).fill(FORMATION_MODE_DEFAULT),
@@ -1230,7 +1261,7 @@ function configureBattleOfZborov(world: SimWorld): void {
   clearBattlefieldForTownlessMission(world);
   // Strip the skirmish map's generic resources; this mission gets explicit rear
   // economies so the fight stays inside the trench corridor.
-  for (const eid of [...resourceQuery(world.ecs)]) removeEntity(world.ecs, eid);
+  for (const eid of [...resourceQuery(world.ecs)]) removeSimEntity(world, eid);
   layZborovWire(world);
 
   world.ages[LOCAL_PLAYER_ID] = createAgeState(AgeId.TOTAL_WAR);
@@ -1363,7 +1394,7 @@ function clearZborovBaseGround(
       Position.y[eid] >= minY - 1 &&
       Position.y[eid] <= maxY + 1
     ) {
-      removeEntity(world.ecs, eid);
+      removeSimEntity(world, eid);
     }
   }
 }
@@ -1797,7 +1828,7 @@ function clearSudomerGround(
       Position.y[eid] >= minY - 1 &&
       Position.y[eid] <= maxY + 1
     ) {
-      removeEntity(world.ecs, eid);
+      removeSimEntity(world, eid);
     }
   }
 }
@@ -1901,7 +1932,7 @@ function clearPlayerBuildingsForCampaign(world: SimWorld, playerId: number): voi
       );
     }
     world.productionQueues.delete(eid);
-    removeEntity(world.ecs, eid);
+    removeSimEntity(world, eid);
   }
   recalculatePlayerPopCap(world, playerId);
 }
@@ -1933,7 +1964,7 @@ function clearKutnaHoraGround(
       Position.y[eid] >= minY - 1 &&
       Position.y[eid] <= maxY + 1
     ) {
-      removeEntity(world.ecs, eid);
+      removeSimEntity(world, eid);
     }
   }
 }
@@ -2166,7 +2197,7 @@ function clearBattlefieldForTownlessMission(world: SimWorld): void {
     world.paths.delete(eid);
     world.movementStuck.delete(eid);
     clearFormationSpeedCap(world, eid);
-    removeEntity(world.ecs, eid);
+    removeSimEntity(world, eid);
   }
 
   for (const eid of [...buildingQuery(world.ecs)]) {
@@ -2181,7 +2212,7 @@ function clearBattlefieldForTownlessMission(world: SimWorld): void {
         false
       );
     }
-    removeEntity(world.ecs, eid);
+    removeSimEntity(world, eid);
   }
 
   world.productionQueues.clear();
@@ -2227,7 +2258,7 @@ function clearBilaHoraDeploymentZone(
     const lateral = relX * across.x + relY * across.y;
     const depth = relX * forward.x + relY * forward.y;
     if (Math.abs(lateral) <= halfAcross + 1 && Math.abs(depth) <= halfDepth + 1) {
-      removeEntity(world.ecs, eid);
+      removeSimEntity(world, eid);
     }
   }
 }
@@ -2618,7 +2649,7 @@ function removePresetStarterMilitary(world: SimWorld): void {
       );
     }
     world.paths.delete(eid);
-    removeEntity(world.ecs, eid);
+    removeSimEntity(world, eid);
   }
 }
 
@@ -2689,7 +2720,7 @@ function placePresetBuildingExact(
 function clearCampaignPlacementTile(world: SimWorld, x: number, y: number): void {
   for (const eid of [...resourceQuery(world.ecs)]) {
     if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= 0.6) {
-      removeEntity(world.ecs, eid);
+      removeSimEntity(world, eid);
     }
   }
 }
@@ -2899,7 +2930,7 @@ export function spawnVillager(
   popCost = 1
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -2958,7 +2989,7 @@ export function spawnArcher(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3008,7 +3039,7 @@ export function spawnSpearman(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3058,7 +3089,7 @@ export function spawnScoutCavalry(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3108,7 +3139,7 @@ export function spawnGunman(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3158,7 +3189,7 @@ export function spawnCannon(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3208,7 +3239,7 @@ export function spawnMachineGun(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3261,7 +3292,7 @@ export function spawnMortar(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Velocity, eid);
   addComponent(ecs, Speed, eid);
@@ -3314,7 +3345,7 @@ export function spawnResource(
   amount: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Resource, eid);
   Position.x[eid] = x;
@@ -3462,7 +3493,7 @@ export function spawnTownCenter(
   playerId: number
 ): number {
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Owner, eid);
   addComponent(ecs, DropOff, eid);
@@ -3503,7 +3534,7 @@ export function spawnFoundation(
   const def = getBuildingDef(defId);
   if (!def) throw new Error(`Unknown building defId ${defId}`);
   const { ecs } = world;
-  const eid = addEntity(ecs);
+  const eid = addSimEntity(world);
   addComponent(ecs, Position, eid);
   addComponent(ecs, Owner, eid);
   addComponent(ecs, Building, eid);
@@ -3769,7 +3800,6 @@ export function updatePlayerVisibility(
 
   smoothVisibilityFrontier(vis);
   updateLastSeenBuildings(world, playerId, vis);
-  pruneHiddenLocalSelection(world, playerId);
 }
 
 export function revealMapForPlayer(world: SimWorld, playerId = LOCAL_PLAYER_ID): void {
@@ -3916,7 +3946,7 @@ function snapshotBuilding(world: SimWorld, eid: number): LastSeenBuilding {
   };
 }
 
-function pruneHiddenLocalSelection(world: SimWorld, playerId: number): void {
+export function pruneHiddenSelectionForPlayer(world: SimWorld, playerId: number): void {
   for (const eid of selectedQuery(world.ecs)) {
     if (!hasComponent(world.ecs, Owner, eid)) continue;
     if (Owner.player[eid] === playerId) continue;
@@ -6401,7 +6431,7 @@ function cleanupSystem(world: SimWorld): void {
     }
     world.paths.delete(eid);
     clearFormationSpeedCap(world, eid);
-    removeEntity(world.ecs, eid);
+    removeSimEntity(world, eid);
     if (recalculatePopFor !== null) recalculatePlayerPopCap(world, recalculatePopFor);
   }
 }
@@ -8666,7 +8696,7 @@ function gatheringActive(world: SimWorld, eid: number): void {
 
   // If resource is now empty, retarget on next tick via WALKING_TO branch.
   if (Resource.amount[target] <= 0) {
-    removeEntity(world.ecs, target);
+    removeSimEntity(world, target);
     Gatherer.targetEid[eid] = -1;
   }
 

@@ -55,6 +55,11 @@ export const Owner = defineComponent({
   player: Types.ui8,
 });
 
+/** Deterministic per-world entity id used for multiplayer command payloads. */
+export const NetId = defineComponent({
+  value: Types.ui32,
+});
+
 /** Selection tag — entity is currently selected by the local player. */
 export const Selected = defineComponent();
 

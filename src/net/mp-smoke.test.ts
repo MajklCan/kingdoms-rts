@@ -22,11 +22,9 @@ import {
   buildingQuery,
   findBuildingAt,
   findResourceAt,
-  positionQuery,
   resourceQuery,
   townCenterQuery,
   unitQuery,
-  type SimInput,
   type SimWorld,
 } from '@sim/world';
 import { Building, Owner, Position, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
@@ -43,28 +41,10 @@ import {
 
 const MAX_SLOTS = 2;
 
-/** Self-describing commands carry entity ids resolved in the SENDER's world.
- *  In real multiplayer every client builds its world from the same seed in its
- *  own process, so eids match across clients. In this single-process harness the
- *  two worlds share bitECS's global component stores, so the second world's eids
- *  are offset by a constant K. We translate eids by K when a frame crosses to
- *  the peer, faithfully modelling the identical-eid-space of real clients. */
-function shiftCmd(cmd: SimInput, delta: number): SimInput {
-  if (delta === 0) return cmd;
-  const c = cmd as SimInput & { eids?: number[]; targetEid?: number; atEid?: number };
-  const out: typeof c = { ...c };
-  if (Array.isArray(c.eids)) out.eids = c.eids.map((e) => e + delta);
-  if (typeof c.targetEid === 'number') out.targetEid = c.targetEid + delta;
-  if (typeof c.atEid === 'number') out.atEid = c.atEid + delta;
-  return out as SimInput;
-}
-
 /** Synchronous, ordered in-memory relay shim mirroring relay/server.mjs. */
 class RelayShim {
   started = false;
   readonly clients = new Map<number, PairedTransport>();
-  /** Additive eid shift from a sender's world to a receiver's world (0 = same). */
-  shift: (fromPid: number, toPid: number) => number = () => 0;
 
   private nextSlot(): number | null {
     for (let id = 1; id <= MAX_SLOTS; id++) if (!this.clients.has(id)) return id;
@@ -109,9 +89,7 @@ class RelayShim {
       case 'turn':
         for (const [pid, t] of this.clients) {
           if (pid === from.playerId) continue;
-          const delta = this.shift(from.playerId!, pid);
-          const cmds = delta ? msg.cmds.map((c) => shiftCmd(c, delta)) : msg.cmds;
-          t.receive({ t: 'turn', playerId: from.playerId!, forTick: msg.forTick, cmds });
+          t.receive({ t: 'turn', playerId: from.playerId!, forTick: msg.forTick, cmds: msg.cmds });
         }
         return;
       case 'checksum':
@@ -231,18 +209,9 @@ function setupMatch(seed = 12345): MatchCtx {
   sessA.start(seed);
   const worldA = capA.world!;
   const worldB = capB.world!;
-  // Constant eid offset between the two worlds' shared bitECS stores. Player 1
-  // (sessA) lives in worldA's space, player 2 (sessB) in worldB's. Both worlds
-  // allocate entities at the same rate (identical command streams), so the
-  // offset stays constant for the whole match.
-  const minEid = (w: SimWorld) => Math.min(...positionQuery(w.ecs));
-  const K = minEid(worldB) - minEid(worldA);
-  relay.shift = (fromPid, toPid) => {
-    const fromA = fromPid === 1;
-    const toA = toPid === 1;
-    if (fromA === toA) return 0;
-    return fromA ? K : -K; // A-space → B-space adds K
-  };
+  // These two worlds live in one process, so their raw bitECS eids are offset.
+  // The relay deliberately does not translate them; MultiplayerSession must
+  // encode command payloads with deterministic per-world NetIds.
   // Grant resources identically at tick 0 so economic commands can take effect
   // while parity is preserved (FOOD=0 WOOD=1 GOLD=2 STONE=3).
   for (const w of [worldA, worldB]) for (const pid of [1, 2]) w.resources[pid].fill(5000);
@@ -532,6 +501,26 @@ describe('multiplayer lobby + transport', () => {
     expect(capB.desync, `B ${capB.desyncInfo}`).toBe(false);
     expect(capA.world!.tick).toBe(capB.world!.tick);
     expect(checksumWorld(capA.world!)).toBe(checksumWorld(capB.world!));
+  });
+
+  it('recovers from a throttled multiplayer timer wake with a bounded catch-up batch', () => {
+    const ctx = setupMatch(778);
+    const startTick = ctx.worldA.tick;
+
+    ctx.sessA.update(SIM.TICK_MS * 40);
+    ctx.sessB.update(SIM.TICK_MS * 40);
+    for (let i = 0; i < 8; i++) {
+      ctx.sessA.update(0);
+      ctx.sessB.update(0);
+    }
+
+    expect(ctx.capA.desync, `A ${ctx.capA.desyncInfo}`).toBe(false);
+    expect(ctx.capB.desync, `B ${ctx.capB.desyncInfo}`).toBe(false);
+    expect(ctx.sessA.state).toBe('playing');
+    expect(ctx.sessB.state).toBe('playing');
+    expect(ctx.worldA.tick).toBe(ctx.worldB.tick);
+    expect(ctx.worldA.tick).toBeGreaterThan(startTick + 20);
+    expect(checksumWorld(ctx.worldA)).toBe(checksumWorld(ctx.worldB));
   });
 
   it('surfaces a relay rejection (room full) via onError instead of hanging', () => {

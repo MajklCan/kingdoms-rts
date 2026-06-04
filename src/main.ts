@@ -5,7 +5,7 @@
  */
 
 import Phaser from 'phaser';
-import { RENDER } from './config';
+import { RENDER, SIM } from './config';
 import { GameScene } from './render/game-scene';
 import type { AudioChannel } from './render/audio/audio-manager';
 import { setLastEvent, updateDebugOverlay, updateResourceBar } from './debug/overlay';
@@ -16,8 +16,9 @@ import { LATE_GAME_TEST_SAVE_ID, parseSavedGame } from './sim/save-load';
 import { TechId, type TechIdValue } from './sim/tech-tree';
 import { normalizeAiDifficulty, type AiDifficulty } from './sim/world';
 import { WebSocketTransport } from './net/transport';
-import { MultiplayerSession, type SessionState } from './net/session';
+import { MultiplayerSession, type MultiplayerSessionDebugSnapshot, type SessionState } from './net/session';
 import type { PlayerSlot } from './net/protocol';
+import type { SimInput } from './sim/world';
 
 const LOCAL_SAVE_KEY = 'kingdoms.manualSave.v1';
 
@@ -136,6 +137,21 @@ bindTitleScreen();
 // ── Multiplayer lobby ───────────────────────────────────────────────────────
 let mpSession: MultiplayerSession | null = null;
 
+type MultiplayerDebugApi = {
+  snapshot(): MultiplayerSessionDebugSnapshot | null;
+  send(input: SimInput): void;
+};
+
+function installMultiplayerDebugApi(): void {
+  (window as typeof window & { __MP__?: MultiplayerDebugApi }).__MP__ = {
+    snapshot: () => mpSession?.debugSnapshot() ?? null,
+    send: (input) => mpSession?.sendCommand(input),
+  };
+  // eslint-disable-next-line no-console
+  console.log('[Kingdoms] window.__MP__ ready. Try: __MP__.snapshot()');
+}
+installMultiplayerDebugApi();
+
 function bindMultiplayer(): void {
   const relayInput = document.getElementById('mp-relay') as HTMLInputElement | null;
   const nameInput = document.getElementById('mp-name') as HTMLInputElement | null;
@@ -225,19 +241,82 @@ function bindMultiplayer(): void {
 }
 bindMultiplayer();
 
-// Drive the lockstep session on its own rAF, independent of the GameScene. The
-// session steps the deterministic world (which exists from match start) and
-// sends/receives turns; it must run even while the scene is still baking
-// textures, otherwise early turn frames would be missed and the peers deadlock.
-// The scene only renders that shared world once it is ready.
-let mpLastTime = performance.now();
-function pumpMultiplayer(now: number): void {
-  const dt = now - mpLastTime;
-  mpLastTime = now;
-  mpSession?.update(dt);
-  requestAnimationFrame(pumpMultiplayer);
+// Drive lockstep independently of Phaser's render rAF. Browsers may pause rAF
+// for hidden/unfocused tabs; lockstep must still emit empty turns or peers wait.
+function startIntervalMultiplayerPump(onTick: (deltaMs: number) => void): void {
+  let last = performance.now();
+  window.setInterval(() => {
+    const now = performance.now();
+    const deltaMs = now - last;
+    last = now;
+    onTick(deltaMs);
+  }, SIM.TICK_MS);
 }
-requestAnimationFrame(pumpMultiplayer);
+
+function startMultiplayerPump(): void {
+  const onTick = (deltaMs: number) => {
+    mpSession?.update(deltaMs);
+  };
+  let fallbackStarted = false;
+  const startFallbackPump = () => {
+    if (fallbackStarted) return;
+    fallbackStarted = true;
+    startIntervalMultiplayerPump(onTick);
+  };
+
+  if (typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+    try {
+      const workerSource = `
+let timer = null;
+let last = 0;
+self.onmessage = (event) => {
+  const intervalMs = Number(event.data && event.data.intervalMs) || 50;
+  if (timer !== null) clearInterval(timer);
+  last = performance.now();
+  timer = setInterval(() => {
+    const now = performance.now();
+    const deltaMs = now - last;
+    last = now;
+    self.postMessage({ deltaMs });
+  }, intervalMs);
+};
+`;
+      const workerUrl = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
+      const worker = new Worker(workerUrl);
+      let workerUrlRevoked = false;
+      let workerReceivedTick = false;
+      const revokeWorkerUrl = () => {
+        if (workerUrlRevoked) return;
+        workerUrlRevoked = true;
+        URL.revokeObjectURL(workerUrl);
+      };
+      worker.onerror = () => {
+        revokeWorkerUrl();
+        worker.terminate();
+        startFallbackPump();
+      };
+      worker.onmessage = (event: MessageEvent<{ deltaMs?: number }>) => {
+        workerReceivedTick = true;
+        revokeWorkerUrl();
+        const deltaMs = Number(event.data?.deltaMs);
+        onTick(Number.isFinite(deltaMs) && deltaMs > 0 ? deltaMs : SIM.TICK_MS);
+      };
+      worker.postMessage({ intervalMs: SIM.TICK_MS });
+      window.setTimeout(() => {
+        if (workerReceivedTick) return;
+        revokeWorkerUrl();
+        worker.terminate();
+        startFallbackPump();
+      }, SIM.TICK_MS * 4);
+      return;
+    } catch {
+      // Fall back to the main-thread timer below.
+    }
+  }
+
+  startFallbackPump();
+}
+startMultiplayerPump();
 
 // ── Game speed toggle ─────────────────────────────────────────────────────
 function bindSpeedToggle(): void {
