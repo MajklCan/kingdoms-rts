@@ -85,7 +85,7 @@ import {
   type CampaignObjectiveDef,
   getCampaignMissionDef,
 } from './campaign';
-import { MapId, generateMap, TileType, type MapData, type MapIdValue } from './map-gen';
+import { MapId, generateMap, TileType, isZborovMudPatch, type MapData, type MapIdValue } from './map-gen';
 import { Pathfinder, type GridPos } from './pathfinding';
 import { Rng } from './rng';
 import {
@@ -182,21 +182,18 @@ const SUDOMER_TOTAL_WAVES = 5;
 const SUDOMER_POP_CAP = 120;
 const SUDOMER_MUD_INFANTRY_SPEED_MULTIPLIER = 0.62;
 const SUDOMER_MUD_CAVALRY_SPEED_MULTIPLIER = 0.34;
-const ZBOROV_REINFORCE_INTERVAL_TICKS = SIM.TICK_HZ * 40;
+const ZBOROV_ENEMY_WAVE_INTERVAL_TICKS = SIM.TICK_HZ * 55;
+const ZBOROV_ENEMY_FIRST_WAVE_TICKS = SIM.TICK_HZ * 70;
+const ZBOROV_ENEMY_WAVE_MIN_SIZE = 3;
+const ZBOROV_ENEMY_WAVE_MAX_SIZE = 8;
+const ZBOROV_ENEMY_WAVE_WAIT_CAP_TICKS = SIM.TICK_HZ * 35;
+const ZBOROV_BASE_DEAD_TREE_COUNT = 18;
+const ZBOROV_AMBIENT_DEAD_TREE_COUNT = 28;
+const ZBOROV_AMBIENT_DEAD_TREE_AMOUNT = 45;
 const ZBOROV_WIRE_SPEED_MULTIPLIER = 0.4;
-// Continuous reinforcement: the enemy is kept at max(floor, player rifles) so it
-// matches the player and never lets them outnumber it (the floor sets minimum
-// difficulty); the player is only topped up to a target when his rifles fall
-// below a trigger, so he can't stockpile a big army.
-const ZBOROV_ENEMY_FLOOR = 12;
-const ZBOROV_ENEMY_REINFORCE_CAP = 10;
-const ZBOROV_PLAYER_REINFORCE_TRIGGER = 7;
-const ZBOROV_PLAYER_REINFORCE_TARGET = 10;
 // Half-width of the playable corridor (must match generateZborovMap); the rest
-// of the map is impassable woods so the assault can't flank around the lines.
+// of the dirt/mud map is blocked so the assault can't flank around the lines.
 const ZBOROV_CORRIDOR_HALF = Math.round(MAP.WIDTH * 0.24);
-// Reserve riflemen thrown forward each time the player takes a trench line.
-const ZBOROV_COUNTERATTACK_SIZE = 9;
 // Arena layout as fractions of MAP.HEIGHT (south/high = player, north/low =
 // enemy). Each wire belt sits just SOUTH of (in front of) its rifle line; the
 // forward machine-gun nests sit just NORTH of the forward belt (behind the
@@ -209,6 +206,8 @@ const ZBOROV_MID_WIRE_FRAC = 0.42;
 const ZBOROV_REAR_LINE_FRAC = 0.27;
 const ZBOROV_REAR_WIRE_FRAC = 0.31;
 const ZBOROV_BUNKER_FRAC = 0.19;
+const ZBOROV_PLAYER_BUNKER_FRAC = 0.81;
+const ZBOROV_PLAYER_LINE_FRAC = 0.70;
 const ZBOROV_MG_OFFSETS = [-13, -4, 4, 13];
 const FORMATION_MODE_FREE = 0;
 const FORMATION_MODE_LINE = 1;
@@ -909,6 +908,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   };
 
   const mirroredSnowSkirmish = selectedMapId === MapId.KRKONOSE_WINTER_CROWN;
+  const floodedBasinSkirmish = selectedMapId === MapId.FLOODED_BASIN;
 
   // ── Player 1 (Bohemia, lower-left) ────────────────────────────────────────
   const p1 = mapData.spawns[1];
@@ -1027,13 +1027,29 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     // ambient resources that expanding feels rewarding. Deterministic via rng.
     const mx = Math.floor(MAP.WIDTH / 2);
     const my = Math.floor(MAP.HEIGHT / 2);
-    // Contested centre gold/stone — worth crossing the river for.
-    safeSpawnResource(ResourceKindId.GOLD, mx - 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-    safeSpawnResource(ResourceKindId.GOLD, mx, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-    safeSpawnResource(ResourceKindId.GOLD, mx + 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-    safeSpawnResource(ResourceKindId.STONE, mx - 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-    safeSpawnResource(ResourceKindId.STONE, mx, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-    safeSpawnResource(ResourceKindId.STONE, mx + 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+    if (floodedBasinSkirmish) {
+      const basinCenterResources: Array<[ResourceKind, number, number, number]> = [
+        [ResourceKindId.GOLD, mx - 2, my - 5, CENTER_GOLD_DEPOSIT_AMOUNT],
+        [ResourceKindId.GOLD, mx - 1, my - 6, CENTER_GOLD_DEPOSIT_AMOUNT],
+        [ResourceKindId.STONE, mx + 1, my - 5, CENTER_STONE_DEPOSIT_AMOUNT],
+        [ResourceKindId.STONE, mx + 2, my - 6, CENTER_STONE_DEPOSIT_AMOUNT],
+        [ResourceKindId.GOLD, mx - 2, my + 5, CENTER_GOLD_DEPOSIT_AMOUNT],
+        [ResourceKindId.GOLD, mx - 1, my + 6, CENTER_GOLD_DEPOSIT_AMOUNT],
+        [ResourceKindId.STONE, mx + 1, my + 5, CENTER_STONE_DEPOSIT_AMOUNT],
+        [ResourceKindId.STONE, mx + 2, my + 6, CENTER_STONE_DEPOSIT_AMOUNT],
+      ];
+      for (const [kind, x, y, amount] of basinCenterResources) {
+        safeSpawnResource(kind, x, y, amount);
+      }
+    } else {
+      // Contested centre gold/stone — worth crossing the river for.
+      safeSpawnResource(ResourceKindId.GOLD, mx - 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
+      safeSpawnResource(ResourceKindId.GOLD, mx, my, CENTER_GOLD_DEPOSIT_AMOUNT);
+      safeSpawnResource(ResourceKindId.GOLD, mx + 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
+      safeSpawnResource(ResourceKindId.STONE, mx - 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+      safeSpawnResource(ResourceKindId.STONE, mx, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+      safeSpawnResource(ResourceKindId.STONE, mx + 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+    }
 
     if (selectedMapId === MapId.BOHEMIAN_BORDER_FOREST) {
       const nwX = Math.round(MAP.WIDTH * 0.22);
@@ -1179,30 +1195,34 @@ function configureBattleOfBilaHora(world: SimWorld): void {
 
 function configureBattleOfZborov(world: SimWorld): void {
   clearBattlefieldForTownlessMission(world);
-  // Bare battlefield — strip any scattered resource nodes (trees/ore) so the
-  // field is nothing but mud and dirt, and nothing blocks unit/bunker placement.
+  // Strip the skirmish map's generic resources; this mission gets explicit rear
+  // economies so the fight stays inside the trench corridor.
   for (const eid of [...resourceQuery(world.ecs)]) removeEntity(world.ecs, eid);
   layZborovWire(world);
-  scatterZborovTrees(world);
 
   world.ages[LOCAL_PLAYER_ID] = createAgeState(AgeId.TOTAL_WAR);
   world.ages[AI_PLAYER_ID] = createAgeState(AgeId.TOTAL_WAR);
   world.researchedTechs[LOCAL_PLAYER_ID] = createAllTechSet();
   world.researchedTechs[AI_PLAYER_ID] = createAllTechSet();
-  world.resources[LOCAL_PLAYER_ID].set([0, 0, 0, 0]);
-  world.resources[AI_PLAYER_ID].set([0, 0, 0, 0]);
+  world.resources[LOCAL_PLAYER_ID].set([260, 320, 420, 260]);
+  world.resources[AI_PLAYER_ID].set([220, 280, 380, 240]);
   world.population[LOCAL_PLAYER_ID].cap = POP_CAP_HARD_LIMIT;
   world.population[AI_PLAYER_ID].cap = POP_CAP_HARD_LIMIT;
 
   const jumpOff = world.map.spawns[LOCAL_PLAYER_ID];
 
-  const bunkerEids = placeZborovBunker(world);
+  placeZborovEconomy(world, AI_PLAYER_ID, ZBOROV_BUNKER_FRAC);
+  placeZborovEconomy(world, LOCAL_PLAYER_ID, ZBOROV_PLAYER_BUNKER_FRAC);
+  const bunkerEids = placeZborovCommandFoundry(world, AI_PLAYER_ID, ZBOROV_BUNKER_FRAC);
+  const playerBaseEids = placeZborovCommandFoundry(world, LOCAL_PLAYER_ID, ZBOROV_PLAYER_BUNKER_FRAC);
   const garrison = spawnZborovGarrison(world);
   setBilaHoraDefensiveStance(world, garrison.all);
-  spawnZborovAssaultForce(world, jumpOff);
+  const playerDefenders = spawnZborovPlayerDefenders(world);
+  setBilaHoraDefensiveStance(world, playerDefenders);
+  seedZborovAmbientDeadTrees(world);
 
-  world.armyRallyPoints[LOCAL_PLAYER_ID] = { x: jumpOff.x, y: jumpOff.y - 6 };
-  world.armyRallyPoints[AI_PLAYER_ID] = null;
+  world.armyRallyPoints[LOCAL_PLAYER_ID] = { x: jumpOff.x, y: Math.round(MAP.HEIGHT * ZBOROV_PLAYER_LINE_FRAC) - 2 };
+  world.armyRallyPoints[AI_PLAYER_ID] = { x: world.map.spawns[AI_PLAYER_ID].x, y: Math.round(MAP.HEIGHT * ZBOROV_REAR_LINE_FRAC) + 3 };
   world.aiPlayers[AI_PLAYER_ID] = null;
   world.campaign = {
     missionId: CampaignMissionId.BATTLE_OF_ZBOROV,
@@ -1217,60 +1237,250 @@ function configureBattleOfZborov(world: SimWorld): void {
       take_trench_2: garrison.line2,
       take_trench_3: garrison.line3,
       take_command_bunker: bunkerEids,
+      hold_legion_command: playerBaseEids,
       zborov_garrison: garrison.all,
+      zborov_player_defenders: playerDefenders,
       zborov_reinforcements: [],
       zborov_enemy_reinforcements: [],
     },
     enemyAiMode: 'defensive',
-    nextReinforcementTick: world.tick + ZBOROV_REINFORCE_INTERVAL_TICKS,
+    nextReinforcementTick: world.tick + ZBOROV_ENEMY_FIRST_WAVE_TICKS,
     zborovLinesTaken: 0,
     zborovForwardY: jumpOff.y,
+    scriptedWaveIndex: 0,
   };
   pushAiEvent(
     world,
     AI_PLAYER_ID,
-    'The Legion goes over the top — bite into each trench line in turn, hold it, and keep your lone mortar alive to crack the machine-gun nests.'
+    'Zborov is now an economy duel. Keep your foundry working, mass gunmen and cannon, and break the trench lines before their trained waves overrun your command post.'
   );
   revealMapForPlayer(world, LOCAL_PLAYER_ID);
 }
 
-function placeZborovBunker(world: SimWorld): number[] {
-  // The lone rear structure on the field — the command bunker the assault must
-  // take. Everything else is rifle lines and machine-gun nests (units).
+function placeZborovCommandFoundry(
+  world: SimWorld,
+  playerId: number,
+  yFrac: number
+): number[] {
   const bunker = placePresetBuildingExact(
     world,
     BuildingDefId.FOUNDRY,
     Math.round(MAP.WIDTH * 0.5),
-    Math.round(MAP.HEIGHT * ZBOROV_BUNKER_FRAC),
-    AI_PLAYER_ID
+    Math.round(MAP.HEIGHT * yFrac),
+    playerId
   );
   return bunker !== null ? [bunker] : [];
 }
 
-function scatterZborovTrees(world: SimWorld): void {
-  // Dot the impassable wooded flanks with real tree sprites so the sealed edges
-  // read as dense woods hemming in the corridor. Purely decorative — those
-  // tiles are already non-walkable; the trees never touch the playable lane.
-  // Spawned after the resource-clear so they persist for the mission.
+function placeZborovEconomy(
+  world: SimWorld,
+  playerId: number,
+  baseYFrac: number
+): number[] {
   const cx = Math.round(MAP.WIDTH * 0.5);
-  const leftEdge = cx - ZBOROV_CORRIDOR_HALF;
-  const rightEdge = cx + ZBOROV_CORRIDOR_HALF;
-  const columns = [
-    leftEdge - 2,
-    leftEdge - 6,
-    leftEdge - 11,
-    rightEdge + 2,
-    rightEdge + 6,
-    rightEdge + 11,
-  ];
-  for (let y = 3; y < MAP.HEIGHT - 3; y += 3) {
-    for (const x of columns) {
-      if (!isTileInMap(x, y)) continue;
-      if (world.map.tiles[y * MAP.WIDTH + x] !== TileType.FOREST) continue;
-      if (findResourceAt(world, x, y, 1.4) !== null) continue;
-      spawnResource(world, ResourceKindId.WOOD, x, y, TREE_RESOURCE_AMOUNT);
+  const baseY = Math.round(MAP.HEIGHT * baseYFrac);
+  const rearDir = playerId === LOCAL_PLAYER_ID ? 1 : -1;
+  const base = { x: cx, y: baseY };
+  clearZborovBaseGround(world, base, 14, 9);
+  seedZborovBaseResources(world, base, rearDir);
+
+  const built: number[] = [];
+  const place = (defId: number, dx: number, dy: number) => {
+    const eid = placePresetBuilding(world, defId, base.x + dx, base.y + dy, playerId);
+    if (eid !== null) built.push(eid);
+  };
+
+  place(BuildingDefId.MILL, -8, rearDir * 3);
+  place(BuildingDefId.FARM, -12, rearDir * 3);
+  place(BuildingDefId.FARM, -9, rearDir * 6);
+  place(BuildingDefId.FARM, -5, rearDir * 6);
+  place(BuildingDefId.LUMBER_CAMP, 11, rearDir * 3);
+  place(BuildingDefId.GOLD_MINE, 4, rearDir * 7);
+  place(BuildingDefId.STONE_QUARRY, 10, rearDir * 7);
+  return built;
+}
+
+function clearZborovBaseGround(
+  world: SimWorld,
+  center: GridPos,
+  halfX: number,
+  halfY: number
+): void {
+  const minX = Math.max(1, Math.round(center.x - halfX));
+  const maxX = Math.min(MAP.WIDTH - 2, Math.round(center.x + halfX));
+  const minY = Math.max(1, Math.round(center.y - halfY));
+  const maxY = Math.min(MAP.HEIGHT - 2, Math.round(center.y + halfY));
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (x < center.x - ZBOROV_CORRIDOR_HALF || x > center.x + ZBOROV_CORRIDOR_HALF) continue;
+      const idx = y * MAP.WIDTH + x;
+      const baseLane = Math.abs(x - center.x) <= 1;
+      const mudPatch = !baseLane && isZborovMudPatch(x, y);
+      world.map.tiles[idx] = mudPatch ? TileType.MUD : TileType.DIRT;
+      world.map.elevation[idx] = mudPatch ? 2 : 3;
+      world.map.walkability[y][x] = 0;
+      world.grid[y][x] = 0;
     }
   }
+
+  for (const eid of [...resourceQuery(world.ecs)]) {
+    if (
+      Position.x[eid] >= minX - 1 &&
+      Position.x[eid] <= maxX + 1 &&
+      Position.y[eid] >= minY - 1 &&
+      Position.y[eid] <= maxY + 1
+    ) {
+      removeEntity(world.ecs, eid);
+    }
+  }
+}
+
+function seedZborovBaseResources(
+  world: SimWorld,
+  base: GridPos,
+  rearDir: number
+): void {
+  seedZborovBaseDeadTrees(world, base, rearDir);
+
+  for (const [dx, dy] of [[3, 9], [4, 9], [5, 9], [4, 10]]) {
+    spawnZborovResource(world, ResourceKindId.GOLD, base.x + dx, base.y + rearDir * dy, LOCAL_GOLD_DEPOSIT_AMOUNT);
+  }
+  for (const [dx, dy] of [[9, 9], [10, 9], [11, 9], [10, 10]]) {
+    spawnZborovResource(world, ResourceKindId.STONE, base.x + dx, base.y + rearDir * dy, LOCAL_STONE_DEPOSIT_AMOUNT);
+  }
+}
+
+function zborovHash01(x: number, y: number, seed: number): number {
+  let h = Math.imul(x + seed, 374761393) ^ Math.imul(y - seed, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
+}
+
+function zborovDeadTreeScore(x: number, y: number): number {
+  const broad = zborovHash01(Math.floor(x / 4), Math.floor(y / 4), 41);
+  const local = zborovHash01(x, y, 97);
+  const scar = Math.sin(x * 0.29 + y * 0.17) * 0.08 + Math.cos(x * 0.13 - y * 0.31) * 0.08;
+  return broad * 0.45 + local * 0.42 + scar + (isZborovMudPatch(x, y) ? 0.04 : 0);
+}
+
+function seedZborovBaseDeadTrees(
+  world: SimWorld,
+  base: GridPos,
+  rearDir: number
+): void {
+  const candidates: Array<GridPos & { score: number }> = [];
+  for (let dy = 3; dy <= 19; dy++) {
+    for (let dx = -14; dx <= 15; dx++) {
+      if (Math.abs(dx) <= 2 && dy <= 9) continue;
+      if (isZborovBaseBuildingReserve(dx, dy)) continue;
+      const x = base.x + dx;
+      const y = base.y + rearDir * dy;
+      if (!isZborovDeadTreeCandidate(world, x, y)) continue;
+      const lumberCampBias = Math.max(0, 1 - Math.hypot(dx - 11, dy - 3) / 24) * 0.12;
+      candidates.push({ x, y, score: zborovDeadTreeScore(x, y) + lumberCampBias });
+    }
+  }
+
+  const selected: GridPos[] = [];
+  for (const candidate of candidates.sort((a, b) => b.score - a.score)) {
+    if (selected.some((spot) => Math.hypot(spot.x - candidate.x, spot.y - candidate.y) < 3.6)) continue;
+    if (!trySpawnZborovDeadTree(world, candidate.x, candidate.y, TREE_RESOURCE_AMOUNT, 3.1)) continue;
+    selected.push(candidate);
+    if (selected.length >= ZBOROV_BASE_DEAD_TREE_COUNT) return;
+  }
+}
+
+function isZborovBaseBuildingReserve(dx: number, dy: number): boolean {
+  const reserved: GridPos[] = [
+    { x: -12, y: 3 },
+    { x: -8, y: 3 },
+    { x: -9, y: 6 },
+    { x: -5, y: 6 },
+    { x: 11, y: 3 },
+    { x: 4, y: 7 },
+    { x: 10, y: 7 },
+  ];
+  return reserved.some((spot) => Math.abs(dx - spot.x) <= 1 && Math.abs(dy - spot.y) <= 1);
+}
+
+function seedZborovAmbientDeadTrees(world: SimWorld): void {
+  const cx = Math.round(MAP.WIDTH * 0.5);
+  const leftX = cx - ZBOROV_CORRIDOR_HALF + 2;
+  const rightX = cx + ZBOROV_CORRIDOR_HALF - 2;
+  const candidates: Array<GridPos & { score: number }> = [];
+
+  for (let y = Math.round(MAP.HEIGHT * 0.24); y <= Math.round(MAP.HEIGHT * 0.74); y++) {
+    for (let x = leftX; x <= rightX; x++) {
+      if (Math.abs(x - cx) <= 2) continue;
+      if (!isZborovDeadTreeCandidate(world, x, y)) continue;
+      candidates.push({ x, y, score: zborovDeadTreeScore(x, y) });
+    }
+  }
+
+  const selected: GridPos[] = [];
+  for (const candidate of candidates.sort((a, b) => b.score - a.score)) {
+    if (selected.some((spot) => Math.hypot(spot.x - candidate.x, spot.y - candidate.y) < 5.1)) continue;
+    if (!trySpawnZborovDeadTree(
+      world,
+      candidate.x,
+      candidate.y,
+      ZBOROV_AMBIENT_DEAD_TREE_AMOUNT,
+      4.4
+    )) {
+      continue;
+    }
+    selected.push(candidate);
+    if (selected.length >= ZBOROV_AMBIENT_DEAD_TREE_COUNT) return;
+  }
+}
+
+function isZborovDeadTreeCandidate(world: SimWorld, x: number, y: number): boolean {
+  if (!isTileInMap(x, y)) return false;
+  if (world.map.walkability[y][x] !== 0) return false;
+  const tile = world.map.tiles[y * MAP.WIDTH + x];
+  return tile === TileType.DIRT || tile === TileType.MUD;
+}
+
+function trySpawnZborovDeadTree(
+  world: SimWorld,
+  x: number,
+  y: number,
+  amount: number,
+  resourceClearance: number
+): boolean {
+  if (!isZborovDeadTreeCandidate(world, x, y)) return false;
+  if (findResourceAt(world, x, y, resourceClearance) !== null) return false;
+  if (findBuildingAt(world, x, y, 1.8) !== null) return false;
+  if (findEntityNear(world, x, y, 1.7) !== null) return false;
+  spawnResource(world, ResourceKindId.WOOD, x, y, amount);
+  return true;
+}
+
+function spawnZborovResource(
+  world: SimWorld,
+  kind: ResourceKind,
+  preferredX: number,
+  preferredY: number,
+  amount: number
+): boolean {
+  const cx = Math.round(preferredX);
+  const cy = Math.round(preferredY);
+  for (let r = 0; r <= 4; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const x = cx + dx;
+        const y = cy + dy;
+        if (!isTileInMap(x, y)) continue;
+        if (world.map.walkability[y][x] !== 0) continue;
+        if (findResourceAt(world, x, y, 0.6) !== null) continue;
+        if (findBuildingAt(world, x, y, 0.9) !== null) continue;
+        spawnResource(world, kind, x, y, amount);
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function zborovMgEmplacements(): GridPos[] {
@@ -1289,7 +1499,7 @@ function layZborovWire(world: SimWorld): void {
   // pockets around each machine-gun nest so the MGs read as dug-in emplacements.
   const cx = Math.round(MAP.WIDTH * 0.5);
   // Span the full playable corridor so the belts run wall-to-wall between the
-  // impassable woods — no open shoulder to walk around them.
+  // impassable dirt/mud flanks — no open shoulder to walk around them.
   const leftX = cx - ZBOROV_CORRIDOR_HALF;
   const rightX = cx + ZBOROV_CORRIDOR_HALF;
 
@@ -1297,7 +1507,6 @@ function layZborovWire(world: SimWorld): void {
     if (!isTileInMap(x, y)) return;
     const idx = y * MAP.WIDTH + x;
     if (isWaterCampaignTile(world.map.tiles[idx])) return; // clip to the dry arena
-    if (world.map.tiles[idx] === TileType.FOREST) return; // never unseal the flank woods
     world.map.tiles[idx] = TileType.BARBED_WIRE;
     world.map.walkability[y][x] = 0; // crossed, not a wall
     world.grid[y][x] = 0;
@@ -1384,17 +1593,19 @@ function spawnZborovGarrison(world: SimWorld): ZborovGarrison {
   return { line1, line2, line3, nestEids, all: [...line1, ...line2, ...line3] };
 }
 
-function spawnZborovAssaultForce(world: SimWorld, jumpOff: GridPos): number[] {
+function spawnZborovPlayerDefenders(world: SimWorld): number[] {
+  const midX = Math.round(MAP.WIDTH * 0.5);
+  const anchor = {
+    x: midX,
+    y: Math.round(MAP.HEIGHT * ZBOROV_PLAYER_LINE_FRAC),
+  };
   const north = { x: 0, y: -1 };
   const across = { x: 1, y: 0 };
   const force: number[] = [];
   const push = (eids: number[]) => force.push(...eids);
 
-  // A lean rifle line leads the clash; a single mortar trails at the rear — the
-  // player's only tool for cracking the machine-gun nests, and the unit they
-  // must screen and keep alive. (Reinforcement waves rebuild the rifle numbers.)
-  push(spawnFormationRow(world, UnitDefId.GUNMAN, jumpOff, north, across, 2.0, 0, LOCAL_PLAYER_ID, 9, 1.1));
-  push(spawnFormationRow(world, UnitDefId.MORTAR, jumpOff, north, across, -1.0, 0, LOCAL_PLAYER_ID, 1, 2.0));
+  push(spawnFormationRow(world, UnitDefId.GUNMAN, anchor, north, across, 0, 0, LOCAL_PLAYER_ID, 10, 1.25));
+  push(spawnFormationRow(world, UnitDefId.MACHINE_GUN, anchor, north, across, -2.2, 0, LOCAL_PLAYER_ID, 1, 1.0));
 
   return force;
 }
@@ -6000,10 +6211,8 @@ function zborovAssaultSystem(world: SimWorld): void {
     campaign.zborovForwardY = world.map.spawns[LOCAL_PLAYER_ID].y;
   }
 
-  // Bite-and-hold. Trench lines are cleared front-to-back. The moment the next
-  // line in sequence is wiped out, mark it taken, advance the player's
-  // reinforcement muster point up to it, and throw ONE measured reserve
-  // counterattack forward — a sharp, finite riposte, never a whole-map charge.
+  // Bite-and-hold objective progress. The enemy garrison stays in its trench
+  // anchors; pressure now comes from units actually trained at the rear foundry.
   const lineKeys = ['take_trench_1', 'take_trench_2', 'take_trench_3'];
   const lineFracs = [
     ZBOROV_FORWARD_LINE_FRAC,
@@ -6015,72 +6224,108 @@ function zborovAssaultSystem(world: SimWorld): void {
     const lineEids = campaign.trackedObjectiveEids[lineKeys[taken]] ?? [];
     if (lineEids.length === 0 || countLiveTrackedEids(world, lineEids) > 0) break;
     completeCampaignObjective(campaign, lineKeys[taken]);
-    // Muster fresh waves just behind the trench we just seized.
     campaign.zborovForwardY = Math.round(MAP.HEIGHT * lineFracs[taken]) + 4;
-    spawnZborovCounterattack(world, campaign);
-    pushAiEvent(world, AI_PLAYER_ID, `Trench line ${taken + 1} has fallen — the reserve counterattacks!`);
+    pushAiEvent(world, AI_PLAYER_ID, `Trench line ${taken + 1} has fallen.`);
     taken += 1;
     campaign.zborovLinesTaken = taken;
   }
 
+  zborovQueueEnemyProduction(world, campaign);
+  zborovMaybeReleaseEnemyWave(world, campaign);
+}
+
+function zborovQueueEnemyProduction(world: SimWorld, campaign: CampaignState): void {
+  const foundries = zborovLiveBuildings(world, AI_PLAYER_ID, BuildingDefId.FOUNDRY);
+  for (const foundry of foundries) {
+    const queue = world.productionQueues.get(foundry) ?? [];
+    if (queue.length >= 2) continue;
+    const waveIndex = campaign.scriptedWaveIndex ?? 0;
+    const preferCannon = (waveIndex + queue.length) % 4 === 3;
+    if (preferCannon && aiQueueUnit(world, foundry, UnitDefId.CANNON)) continue;
+    aiQueueUnit(world, foundry, UnitDefId.GUNMAN);
+  }
+}
+
+function zborovMaybeReleaseEnemyWave(world: SimWorld, campaign: CampaignState): void {
   if (world.tick < campaign.nextReinforcementTick) return;
-  campaign.nextReinforcementTick = world.tick + ZBOROV_REINFORCE_INTERVAL_TICKS;
 
-  const playerRifles = countLiveGunmen(world, LOCAL_PLAYER_ID);
-  const enemyRifles = countLiveGunmen(world, AI_PLAYER_ID);
-
-  // A) Enemy keeps itself at max(floor, player rifles) — matching the player and
-  //    never letting him outnumber it (the floor sets minimum difficulty). Fresh
-  //    companies form at the rear and are thrown forward into the clash.
-  const enemyWave = Math.min(
-    ZBOROV_ENEMY_REINFORCE_CAP,
-    Math.max(ZBOROV_ENEMY_FLOOR, playerRifles) - enemyRifles
-  );
-  if (enemyWave > 0) {
-    const fresh = spawnFormationRow(
-      world, UnitDefId.GUNMAN, world.map.spawns[AI_PLAYER_ID], { x: 0, y: 1 }, { x: 1, y: 0 }, 1.0, 0, AI_PLAYER_ID, enemyWave, 1.1
-    );
-    issueBilaHoraEnemyAdvance(world, fresh, world.map.spawns[LOCAL_PLAYER_ID]);
-    campaign.trackedObjectiveEids.zborov_enemy_reinforcements =
-      (campaign.trackedObjectiveEids.zborov_enemy_reinforcements ?? []).concat(fresh);
+  const candidates = zborovEnemyWaveCandidates(world, campaign);
+  const waitedLongEnough =
+    world.tick - campaign.nextReinforcementTick >= ZBOROV_ENEMY_WAVE_WAIT_CAP_TICKS;
+  if (
+    candidates.length < ZBOROV_ENEMY_WAVE_MIN_SIZE &&
+    !(waitedLongEnough && candidates.length > 0)
+  ) {
+    return;
   }
 
-  // B) The player is reinforced only when his rifle line has fallen below the
-  //    trigger, and only back up to the target floor — never stacking past it.
-  //    Fresh Legionnaires muster at the forward point (which advances as he
-  //    takes trenches) so they arrive where the fighting is, not way at the rear.
-  if (playerRifles < ZBOROV_PLAYER_REINFORCE_TRIGGER) {
-    const topUp = ZBOROV_PLAYER_REINFORCE_TARGET - playerRifles;
-    if (topUp > 0) {
-      const muster = { x: Math.round(MAP.WIDTH * 0.5), y: campaign.zborovForwardY };
-      const fresh = spawnFormationRow(
-        world, UnitDefId.GUNMAN, muster, { x: 0, y: -1 }, { x: 1, y: 0 }, 1.0, 0, LOCAL_PLAYER_ID, topUp, 1.1
-      );
-      campaign.trackedObjectiveEids.zborov_reinforcements =
-        (campaign.trackedObjectiveEids.zborov_reinforcements ?? []).concat(fresh);
-    }
-  }
-}
-
-function spawnZborovCounterattack(world: SimWorld, campaign: CampaignState): void {
-  // One measured reserve company from the rear, sent forward at the player —
-  // fires once per trench taken (the bite-and-hold riposte, not a mass charge).
-  const fresh = spawnFormationRow(
-    world, UnitDefId.GUNMAN, world.map.spawns[AI_PLAYER_ID], { x: 0, y: 1 }, { x: 1, y: 0 }, 1.0, 0, AI_PLAYER_ID, ZBOROV_COUNTERATTACK_SIZE, 1.1
+  const wave = candidates
+    .sort((a, b) => Position.y[b] - Position.y[a] || a - b)
+    .slice(0, ZBOROV_ENEMY_WAVE_MAX_SIZE);
+  const target = zborovCampaignTarget(
+    world,
+    campaign.trackedObjectiveEids.hold_legion_command ?? [],
+    world.map.spawns[LOCAL_PLAYER_ID]
   );
-  issueBilaHoraEnemyAdvance(world, fresh, world.map.spawns[LOCAL_PLAYER_ID]);
-  campaign.trackedObjectiveEids.zborov_enemy_reinforcements =
-    (campaign.trackedObjectiveEids.zborov_enemy_reinforcements ?? []).concat(fresh);
+  issueBilaHoraEnemyAdvance(world, wave, target);
+  campaign.trackedObjectiveEids.zborov_enemy_reinforcements = mergeTrackedEids(
+    campaign.trackedObjectiveEids.zborov_enemy_reinforcements ?? [],
+    wave
+  );
+  campaign.scriptedWaveIndex = (campaign.scriptedWaveIndex ?? 0) + 1;
+  campaign.nextReinforcementTick = world.tick + ZBOROV_ENEMY_WAVE_INTERVAL_TICKS;
+  pushAiEvent(world, AI_PLAYER_ID, `Austro-Hungarian trained wave ${campaign.scriptedWaveIndex} is moving through no-man's-land.`);
 }
 
-function countLiveGunmen(world: SimWorld, playerId: number): number {
-  let n = 0;
+function zborovEnemyWaveCandidates(world: SimWorld, campaign: CampaignState): number[] {
+  const garrison = new Set(campaign.trackedObjectiveEids.zborov_garrison ?? []);
+  const candidates: number[] = [];
   for (const eid of unitQuery(world.ecs)) {
-    if (Owner.player[eid] !== playerId) continue;
+    if (Owner.player[eid] !== AI_PLAYER_ID) continue;
     if (Health.hp[eid] <= 0) continue;
-    if (hasComponent(world.ecs, GunmanTag, eid)) n++;
+    if (garrison.has(eid)) continue;
+    if (hasComponent(world.ecs, VillagerTag, eid)) continue;
+    if (!hasComponent(world.ecs, GunmanTag, eid) && !hasComponent(world.ecs, CannonTag, eid)) continue;
+    if (hasComponent(world.ecs, AttackMoveGoal, eid) && AttackMoveGoal.active[eid] === 1) continue;
+    candidates.push(eid);
   }
-  return n;
+  return candidates;
+}
+
+function zborovLiveBuildings(
+  world: SimWorld,
+  playerId: number,
+  defId: number
+): number[] {
+  return buildingQuery(world.ecs).filter((eid) =>
+    Owner.player[eid] === playerId &&
+    Building.defId[eid] === defId &&
+    Health.hp[eid] > 0 &&
+    !hasComponent(world.ecs, ConstructionSite, eid)
+  );
+}
+
+function zborovCampaignTarget(
+  world: SimWorld,
+  eids: number[],
+  fallback: GridPos
+): GridPos {
+  for (const eid of eids) {
+    if (!isLiveEntity(world, eid)) continue;
+    return { x: Math.round(Position.x[eid]), y: Math.round(Position.y[eid]) };
+  }
+  return fallback;
+}
+
+function mergeTrackedEids(existing: number[], incoming: number[]): number[] {
+  const seen = new Set(existing);
+  const merged = existing.slice();
+  for (const eid of incoming) {
+    if (seen.has(eid)) continue;
+    seen.add(eid);
+    merged.push(eid);
+  }
+  return merged;
 }
 
 function campaignSystem(world: SimWorld): void {
@@ -8097,17 +8342,16 @@ function winConditionSystem(world: SimWorld): void {
     return;
   }
   if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_ZBOROV) {
-    // Trench assault: defeat if the assault force is wiped; victory by taking
-    // the command bunker or clearing every defender from the trenches.
-    const playerArmy = countLiveMilitary(world, LOCAL_PLAYER_ID);
-    const enemyArmy = countLiveMilitary(world, AI_PLAYER_ID);
-    if (playerArmy <= 0 && enemyArmy > 0) {
+    // Economy trench duel: either command foundry falling decides the mission.
+    const playerCommand = world.campaign.trackedObjectiveEids.hold_legion_command ?? [];
+    const playerCommandDown = playerCommand.length > 0 && countLiveTrackedEids(world, playerCommand) === 0;
+    if (playerCommandDown) {
       world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
       return;
     }
     const bunker = world.campaign.trackedObjectiveEids.take_command_bunker ?? [];
     const bunkerDown = bunker.length > 0 && countLiveTrackedEids(world, bunker) === 0;
-    if (bunkerDown || enemyArmy <= 0) {
+    if (bunkerDown) {
       world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
     }
     return;

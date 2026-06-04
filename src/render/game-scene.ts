@@ -231,6 +231,7 @@ import { buildWallVoxels } from './voxel/models/wall';
 import {
   buildTreeVoxels,
   buildSnowTreeVoxels,
+  buildDeadTreeVoxels,
   buildLindenTreeVoxels,
   buildJaggedRockVoxels,
   buildGoldVoxels,
@@ -430,6 +431,7 @@ export class GameScene extends Phaser.Scene {
   private static readonly MORTAR_KEY_PREFIX = 'voxel-mortar-p';
   private static readonly TREE_KEY = 'voxel-tree';
   private static readonly SNOW_TREE_KEY = 'voxel-snow-tree';
+  private static readonly DEAD_TREE_KEY = 'voxel-dead-tree';
   private static readonly LINDEN_TREE_KEY = 'voxel-linden-tree';
   private static readonly JAGGED_ROCK_KEY = 'voxel-jagged-rock';
   private static readonly GOLD_KEY = 'voxel-gold';
@@ -4151,6 +4153,7 @@ export class GameScene extends Phaser.Scene {
 
     this.bakeIfMissing(GameScene.TREE_KEY, buildTreeVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.SNOW_TREE_KEY, buildSnowTreeVoxels, { voxelW: 4 });
+    this.bakeIfMissing(GameScene.DEAD_TREE_KEY, buildDeadTreeVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.LINDEN_TREE_KEY, buildLindenTreeVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.JAGGED_ROCK_KEY, buildJaggedRockVoxels, { voxelW: 4 });
     this.bakeIfMissing(GameScene.GOLD_KEY, buildGoldVoxels, { voxelW: 4 });
@@ -4679,9 +4682,13 @@ export class GameScene extends Phaser.Scene {
   /** Look up the texture key for a resource kind. */
   private resourceTextureKey(eid: number, kind: number): string | null {
     switch (kind) {
-      case ResourceKindId.WOOD: return this.isSnowResourceTile(eid)
-        ? GameScene.SNOW_TREE_KEY
-        : GameScene.TREE_KEY;
+      case ResourceKindId.WOOD:
+        if (this.world.campaign?.missionId === CampaignMissionId.BATTLE_OF_ZBOROV) {
+          return GameScene.DEAD_TREE_KEY;
+        }
+        return this.isSnowResourceTile(eid)
+          ? GameScene.SNOW_TREE_KEY
+          : GameScene.TREE_KEY;
       case ResourceKindId.GOLD: return GameScene.GOLD_KEY;
       case ResourceKindId.STONE: return GameScene.STONE_KEY;
       case ResourceKindId.FOOD: return GameScene.BERRY_KEY;

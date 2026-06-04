@@ -12,13 +12,15 @@ import {
   MortarTag,
   Owner,
   Position,
+  Producer,
   Resource,
   ResourceKindId,
+  ResourceWorksite,
   ScoutCavalryTag,
   SpearmanTag,
   VillagerTag,
 } from './components';
-import { AgeId, BuildingDefId } from './defs';
+import { AgeId, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
 import { CampaignMissionId } from './campaign';
 import { TileType } from './map-gen';
 import { TechId, techStatus } from './tech-tree';
@@ -35,8 +37,7 @@ import {
 const BILA_HORA_WAIT_TEST_TICKS = SIM.TICK_HZ * 15;
 const KUTNA_HORA_FIRST_WAVE_TEST_TICKS = SIM.TICK_HZ * 30;
 const SUDOMER_FIRST_WAVE_TEST_TICKS = SIM.TICK_HZ * 300;
-const ZBOROV_REINFORCE_TEST_INTERVAL = SIM.TICK_HZ * 40;
-const ZBOROV_PLAYER_REINFORCE_TARGET = 10;
+const ZBOROV_ENEMY_FIRST_WAVE_TEST_TICKS = SIM.TICK_HZ * 70;
 
 describe('campaign missions', () => {
   it('sets up Siege of Brno as a Dark Age assault against a built Castle Age city', () => {
@@ -548,19 +549,21 @@ describe('campaign missions', () => {
     });
   });
 
-  it('sets up Battle of Zborov as a Total War rifle clash with a gunmen-and-mortars kit', () => {
+  it('sets up Battle of Zborov as a mirrored economy trench duel', () => {
     const world = createCampaignWorld(720, CampaignMissionId.BATTLE_OF_ZBOROV);
 
     expect(world.campaign?.missionId).toBe(CampaignMissionId.BATTLE_OF_ZBOROV);
     expect(world.ages[LOCAL_PLAYER_ID].current).toBe(AgeId.TOTAL_WAR);
     expect(world.ages[AI_PLAYER_ID].current).toBe(AgeId.TOTAL_WAR);
-    expect(world.campaign?.nextReinforcementTick).toBe(ZBOROV_REINFORCE_TEST_INTERVAL);
+    expect(world.campaign?.nextReinforcementTick).toBe(ZBOROV_ENEMY_FIRST_WAVE_TEST_TICKS);
     expect(world.revealedMapPlayers[LOCAL_PLAYER_ID]).toBe(true);
 
     const playerUnits = unitQuery(world.ecs)
       .filter((eid) => Owner.player[eid] === LOCAL_PLAYER_ID && Health.hp[eid] > 0);
     const enemyUnits = unitQuery(world.ecs)
       .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+    const playerMilitary = playerUnits.filter((eid) => !hasComponent(world.ecs, VillagerTag, eid));
+    const enemyMilitary = enemyUnits.filter((eid) => !hasComponent(world.ecs, VillagerTag, eid));
     const count = (eids: number[], tag: Parameters<typeof hasComponent>[1]) =>
       eids.filter((eid) => hasComponent(world.ecs, tag, eid)).length;
 
@@ -568,36 +571,44 @@ describe('campaign missions', () => {
     expect(world.map.tiles.reduce((n, t) => n + (t === TileType.BARBED_WIRE ? 1 : 0), 0))
       .toBeGreaterThan(MAP.WIDTH);
 
-    // Player fields ONLY a lean rifle line + a single mortar — nothing else.
-    expect(count(playerUnits, GunmanTag)).toBeGreaterThanOrEqual(8);
-    expect(count(playerUnits, MortarTag)).toBe(1);
-    expect(count(playerUnits, MachineGunTag)).toBe(0);
-    expect(count(playerUnits, CannonTag)).toBe(0);
-    expect(count(playerUnits, ScoutCavalryTag)).toBe(0);
-    expect(count(playerUnits, SpearmanTag)).toBe(0);
-    expect(count(playerUnits, ArcherTag)).toBe(0);
-    expect(count(playerUnits, VillagerTag)).toBe(0);
+    // Player fields one gunman line plus one MG; the economy workers come from
+    // prebuilt worksites, not a town center.
+    expect(count(playerMilitary, GunmanTag)).toBeGreaterThanOrEqual(10);
+    expect(count(playerMilitary, MachineGunTag)).toBe(1);
+    expect(count(playerMilitary, MortarTag)).toBe(0);
+    expect(count(playerMilitary, CannonTag)).toBe(0);
+    expect(count(playerMilitary, ScoutCavalryTag)).toBe(0);
+    expect(count(playerMilitary, SpearmanTag)).toBe(0);
+    expect(count(playerMilitary, ArcherTag)).toBe(0);
+    expect(count(playerUnits, VillagerTag)).toBeGreaterThan(0);
 
     // Enemy holds three rifle lines with machine-gun nests forward + rear mortars.
-    expect(count(enemyUnits, GunmanTag)).toBeGreaterThanOrEqual(24);
-    expect(count(enemyUnits, MachineGunTag)).toBeGreaterThanOrEqual(4);
-    expect(count(enemyUnits, MortarTag)).toBeGreaterThanOrEqual(2);
-    expect(count(enemyUnits, CannonTag)).toBe(0);
+    expect(count(enemyMilitary, GunmanTag)).toBeGreaterThanOrEqual(36);
+    expect(count(enemyMilitary, MachineGunTag)).toBeGreaterThanOrEqual(4);
+    expect(count(enemyMilitary, MortarTag)).toBeGreaterThanOrEqual(2);
+    expect(count(enemyMilitary, CannonTag)).toBe(0);
 
-    // No player Town Center; no defense towers anywhere; just the command bunker.
+    // No Town Centers; each side has a command foundry and a live resource base.
     const playerBuildings = buildingQuery(world.ecs)
       .filter((eid) => Owner.player[eid] === LOCAL_PLAYER_ID && Health.hp[eid] > 0);
     expect(playerBuildings.some((eid) => Building.defId[eid] === BuildingDefId.TOWN_CENTER)).toBe(false);
+    expect(playerBuildings.filter((eid) => Building.defId[eid] === BuildingDefId.FOUNDRY).length).toBe(1);
+    expect(playerBuildings.filter((eid) => hasComponent(world.ecs, ResourceWorksite, eid)).length)
+      .toBeGreaterThanOrEqual(6);
     const enemyBuildings = buildingQuery(world.ecs)
       .filter((eid) => Owner.player[eid] === AI_PLAYER_ID && Health.hp[eid] > 0);
+    expect(enemyBuildings.some((eid) => Building.defId[eid] === BuildingDefId.TOWN_CENTER)).toBe(false);
     expect(enemyBuildings.filter((eid) => Building.defId[eid] === BuildingDefId.DEFENSIVE_TOWER).length).toBe(0);
     expect(enemyBuildings.filter((eid) => Building.defId[eid] === BuildingDefId.FOUNDRY).length).toBe(1);
+    expect(enemyBuildings.filter((eid) => hasComponent(world.ecs, ResourceWorksite, eid)).length)
+      .toBeGreaterThanOrEqual(6);
 
     // The MG nests (forward machine-gun units) are the silence objective.
     const nests = world.campaign?.trackedObjectiveEids.silence_mg_nests ?? [];
     expect(nests.length).toBeGreaterThanOrEqual(4);
     expect(nests.every((eid) => hasComponent(world.ecs, MachineGunTag, eid))).toBe(true);
     expect((world.campaign?.trackedObjectiveEids.take_command_bunker ?? []).length).toBe(1);
+    expect((world.campaign?.trackedObjectiveEids.hold_legion_command ?? []).length).toBe(1);
 
     // Bite-and-hold: each of the three trench lines is a tracked capture group,
     // and the assault starts with none taken.
@@ -606,7 +617,21 @@ describe('campaign missions', () => {
     expect((world.campaign?.trackedObjectiveEids.take_trench_3 ?? []).length).toBeGreaterThan(0);
     expect(world.campaign?.zborovLinesTaken).toBe(0);
 
-    // The flanks are sealed woods — there is NOTHING walkable outside the central
+    expect(world.map.tiles).not.toContain(TileType.GRASS);
+    expect(world.map.tiles).not.toContain(TileType.FOREST);
+
+    const deadTrees = resourceQuery(world.ecs)
+      .filter((eid) => Resource.kind[eid] === ResourceKindId.WOOD && Resource.amount[eid] > 0);
+    expect(deadTrees.length).toBeGreaterThanOrEqual(56);
+    const noMansLandTrees = deadTrees.filter((eid) =>
+      Position.y[eid] > MAP.HEIGHT * 0.28 &&
+      Position.y[eid] < MAP.HEIGHT * 0.72
+    );
+    expect(noMansLandTrees.length).toBeGreaterThanOrEqual(18);
+    expect(new Set(deadTrees.map((eid) => Math.floor(Position.y[eid] / 8))).size)
+      .toBeGreaterThanOrEqual(6);
+
+    // The flanks are sealed dirt/mud — there is NOTHING walkable outside the central
     // corridor, so the assault can't simply skirt the lines and rush the bunker.
     // (walkability: 1 = blocked, 0 = walkable.)
     const cx = Math.round(MAP.WIDTH * 0.5);
@@ -624,57 +649,39 @@ describe('campaign missions', () => {
     expect(corridorWalkable).toBeGreaterThan(0); // the corridor itself stays open
   });
 
-  it('maintains Zborov rifle numbers by floor/trigger and never lets the player stack up', () => {
+  it('does not spawn automatic Zborov units and queues enemy production from resources', () => {
     const world = createCampaignWorld(721, CampaignMissionId.BATTLE_OF_ZBOROV);
     world.paused = false;
 
-    const gunmen = (player: number) =>
+    const military = (player: number) =>
       unitQuery(world.ecs).filter((eid) =>
         Owner.player[eid] === player &&
         Health.hp[eid] > 0 &&
-        hasComponent(world.ecs, GunmanTag, eid)
+        !hasComponent(world.ecs, VillagerTag, eid)
       ).length;
-    const forceTick = () => {
-      world.campaign!.nextReinforcementTick = world.tick;
-      step(world);
-    };
 
-    // At spawn the player is above the reinforce trigger and the enemy is above
-    // its floor → a reinforcement tick adds nobody (no stacking, no enemy pile-on).
-    const p0 = gunmen(LOCAL_PLAYER_ID);
-    const e0 = gunmen(AI_PLAYER_ID);
-    forceTick();
-    expect(gunmen(LOCAL_PLAYER_ID)).toBeLessThanOrEqual(p0);
-    expect(gunmen(AI_PLAYER_ID)).toBeLessThanOrEqual(e0);
+    const p0 = military(LOCAL_PLAYER_ID);
+    const e0 = military(AI_PLAYER_ID);
+    world.campaign!.nextReinforcementTick = world.tick;
+    step(world);
 
-    // Deplete the player's rifles below the trigger → next tick tops him back up,
-    // but never past the target floor.
-    const playerGuns = unitQuery(world.ecs).filter((eid) =>
-      Owner.player[eid] === LOCAL_PLAYER_ID && hasComponent(world.ecs, GunmanTag, eid)
+    expect(military(LOCAL_PLAYER_ID)).toBe(p0);
+    expect(military(AI_PLAYER_ID)).toBe(e0);
+    expect(world.campaign?.trackedObjectiveEids.zborov_enemy_reinforcements ?? []).toHaveLength(0);
+
+    const enemyFoundry = buildingQuery(world.ecs).find((eid) =>
+      Owner.player[eid] === AI_PLAYER_ID &&
+      Building.defId[eid] === BuildingDefId.FOUNDRY &&
+      Health.hp[eid] > 0
     );
-    for (const eid of playerGuns.slice(2)) Health.hp[eid] = 0; // leave ~2 alive (< trigger)
-    forceTick();
-    const playerAfter = gunmen(LOCAL_PLAYER_ID);
-    expect(playerAfter).toBeGreaterThan(2);
-    expect(playerAfter).toBeLessThanOrEqual(ZBOROV_PLAYER_REINFORCE_TARGET);
-
-    // Wipe the enemy rifles below the floor → next tick sends a matching wave
-    // that is thrown forward to attack.
-    for (const eid of unitQuery(world.ecs).filter((eid) =>
-      Owner.player[eid] === AI_PLAYER_ID && hasComponent(world.ecs, GunmanTag, eid)
-    )) {
-      Health.hp[eid] = 0;
-    }
-    forceTick();
-    const enemyFresh = world.campaign?.trackedObjectiveEids.zborov_enemy_reinforcements ?? [];
-    expect(enemyFresh.length).toBeGreaterThan(0);
-    expect(enemyFresh.every((eid) => hasComponent(world.ecs, GunmanTag, eid))).toBe(true);
-    expect(enemyFresh.filter((eid) => AttackMoveGoal.active[eid] === 1).length).toBeGreaterThan(0);
+    expect(enemyFoundry).toBeDefined();
+    expect(world.productionQueues.get(enemyFoundry!) ?? []).toContain(UnitDefId.GUNMAN);
   });
 
-  it('advances bite-and-hold: clearing a trench line completes it and triggers ONE measured counterattack, not a whole-map charge', () => {
+  it('advances bite-and-hold without making the trench garrison charge', () => {
     const world = createCampaignWorld(724, CampaignMissionId.BATTLE_OF_ZBOROV);
     world.paused = false;
+    world.campaign!.nextReinforcementTick = Number.MAX_SAFE_INTEGER;
 
     // Garrison riflemen "charging" = attack-moving to a destination deep in the
     // player's half (south). Holding units' attack-move goal is their own
@@ -714,12 +721,47 @@ describe('campaign missions', () => {
     expect(world.campaign?.zborovLinesTaken).toBe(1);
     // The player's reinforcement muster point advances forward (north → smaller y).
     expect(world.campaign?.zborovForwardY ?? 99).toBeLessThan(forwardYBefore);
-    // Exactly one measured reserve company is thrown forward (attack-moving south);
-    // the rear lines do NOT all charge at once.
     const enemyFresh = world.campaign?.trackedObjectiveEids.zborov_enemy_reinforcements ?? [];
-    expect(enemyFresh.length).toBeGreaterThan(enemyReinforceBefore);
-    expect(enemyFresh.some((eid) => AttackMoveGoal.active[eid] === 1)).toBe(true);
+    expect(enemyFresh.length).toBe(enemyReinforceBefore);
     expect(chargingDeep()).toBe(0);
+  });
+
+  it('releases Zborov enemy waves only from units trained at the foundry', () => {
+    const world = createCampaignWorld(725, CampaignMissionId.BATTLE_OF_ZBOROV);
+    world.paused = false;
+    world.resources[AI_PLAYER_ID].set([0, 0, 0, 0]);
+    world.campaign!.nextReinforcementTick = Number.MAX_SAFE_INTEGER;
+
+    const enemyFoundry = buildingQuery(world.ecs).find((eid) =>
+      Owner.player[eid] === AI_PLAYER_ID &&
+      Building.defId[eid] === BuildingDefId.FOUNDRY &&
+      Health.hp[eid] > 0
+    );
+    expect(enemyFoundry).toBeDefined();
+
+    const trainGunmanTicks = UNIT_TABLE[UnitDefId.GUNMAN].trainTimeTicks;
+    for (let i = 0; i < 3; i++) {
+      world.productionQueues.set(enemyFoundry!, [UnitDefId.GUNMAN]);
+      Producer.currentProgress[enemyFoundry!] = trainGunmanTicks - 1;
+      step(world);
+    }
+
+    const garrison = new Set(world.campaign?.trackedObjectiveEids.zborov_garrison ?? []);
+    const trained = unitQuery(world.ecs).filter((eid) =>
+      Owner.player[eid] === AI_PLAYER_ID &&
+      Health.hp[eid] > 0 &&
+      hasComponent(world.ecs, GunmanTag, eid) &&
+      !garrison.has(eid)
+    );
+    expect(trained.length).toBeGreaterThanOrEqual(3);
+    expect(trained.every((eid) => AttackMoveGoal.active[eid] !== 1)).toBe(true);
+
+    world.campaign!.nextReinforcementTick = world.tick;
+    step(world);
+
+    const enemyFresh = world.campaign?.trackedObjectiveEids.zborov_enemy_reinforcements ?? [];
+    expect(enemyFresh.length).toBeGreaterThanOrEqual(3);
+    expect(trained.filter((eid) => AttackMoveGoal.active[eid] === 1).length).toBeGreaterThanOrEqual(3);
   });
 
   it('wins Battle of Zborov by taking the command bunker', () => {
@@ -746,7 +788,7 @@ describe('campaign missions', () => {
     });
   });
 
-  it('loses Battle of Zborov if the assault force is wiped out', () => {
+  it('loses Battle of Zborov when the command foundry falls, not when the starting line is wiped', () => {
     const world = createCampaignWorld(723, CampaignMissionId.BATTLE_OF_ZBOROV);
     world.paused = false;
 
@@ -759,7 +801,12 @@ describe('campaign missions', () => {
       }
     }
     step(world);
+    expect(world.outcome.state).toBe('playing');
 
+    for (const eid of world.campaign?.trackedObjectiveEids.hold_legion_command ?? []) {
+      Health.hp[eid] = 0;
+    }
+    step(world);
     expect(world.outcome).toEqual({
       state: 'victory',
       winnerPlayerId: AI_PLAYER_ID,
