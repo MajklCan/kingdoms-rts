@@ -177,6 +177,7 @@ When in doubt: read `src/sim/world.ts` and `src/render/game-scene.ts`; they're t
 
 ## Workflow expectations
 
+- Before every commit, bump the root package patch version in both `package.json` and `package-lock.json`, unless the user explicitly says not to. The title menu displays this package version together with the git commit, so do not rely on the commit hash alone as the version signal.
 - Plan complex work before coding (planner agent / `EnterPlanMode`).
 - TDD for new sim systems — tests next to source, vitest, target 80%+ on touched code.
 - After non-trivial changes: `npm run typecheck && npm test`.

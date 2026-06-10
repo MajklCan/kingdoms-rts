@@ -1,7 +1,7 @@
 {
   "name": "kingdoms",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "A web-native RTS spanning medieval Bohemia to the 1918 First Czechoslovak Republic. Phaser 4 + Vite + TypeScript + bitECS.",
   "scripts": {
