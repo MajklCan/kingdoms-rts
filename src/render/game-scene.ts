@@ -2894,6 +2894,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   getStatusInfo(): { text: string; progressFrac: number | null } {
+    if (this.multiplayer?.stalled) {
+      const mp = this.multiplayer.debugSnapshot();
+      const missing = mp.lockstep?.missingPlayers ?? [];
+      const suffix = missing.length > 0 ? ` P${missing.join(',P')}` : ' peer';
+      return { text: `waiting for${suffix}`, progressFrac: null };
+    }
     const sel = selectedQuery(this.world.ecs);
     for (const eid of sel) {
       if (hasComponent(this.world.ecs, Gatherer, eid)) {
@@ -3259,7 +3265,7 @@ export class GameScene extends Phaser.Scene {
       this.panToTile(sumX / unitCount, sumY / unitCount);
       return;
     }
-    const spawn = this.world.map.spawns[1];
+    const spawn = this.world.map.spawns[this.perspectivePlayerId];
     if (spawn) this.panToTile(spawn.x, spawn.y);
   }
 
@@ -3910,22 +3916,26 @@ export class GameScene extends Phaser.Scene {
     const fmtCost = (cost: { food: number; wood: number; gold: number; stone: number }) =>
       this.formatCost(cost);
     const canAfford = (cost: { food: number; wood: number; gold: number; stone: number }) =>
-      this.canAffordCost(1, cost);
+      this.canAffordCost(this.perspectivePlayerId, cost);
 
     // Mixed: pick the most useful set while keeping worksite workers autonomous.
-    let hasVillager = false, hasWorksiteWorker = false, hasMilitary = false, hasTc = false;
+    let hasVillager = false, hasMilitary = false, hasTc = false;
     let removableBuildingCount = 0;
     const selectedProducerDefs = new Set<number>();
     const selectedProducerEids: number[] = [];
     const selectedWorksiteEids: number[] = [];
     const selectedMilitaryEids: number[] = [];
     for (const eid of sel) {
-      if (hasComponent(this.world.ecs, VillagerTag, eid)) {
-        if (hasComponent(this.world.ecs, WorksiteWorker, eid)) {
-          hasWorksiteWorker = true;
-        } else {
-          hasVillager = true;
-        }
+      const isOwnedByPerspective =
+        hasComponent(this.world.ecs, Owner, eid) &&
+        Owner.player[eid] === this.perspectivePlayerId;
+      if (!isOwnedByPerspective) continue;
+
+      if (
+        hasComponent(this.world.ecs, VillagerTag, eid) &&
+        !hasComponent(this.world.ecs, WorksiteWorker, eid)
+      ) {
+        hasVillager = true;
       }
       if (
         hasComponent(this.world.ecs, ArcherTag, eid) ||
@@ -3936,22 +3946,20 @@ export class GameScene extends Phaser.Scene {
         hasComponent(this.world.ecs, MachineGunTag, eid)
       ) {
         hasMilitary = true;
-        if (Owner.player[eid] === this.perspectivePlayerId && hasComponent(this.world.ecs, UnitStance, eid)) {
+        if (hasComponent(this.world.ecs, UnitStance, eid)) {
           selectedMilitaryEids.push(eid);
         }
       }
       if (hasComponent(this.world.ecs, TownCenterTag, eid)) hasTc = true;
       if (
         hasComponent(this.world.ecs, Building, eid) &&
-        Owner.player[eid] === this.perspectivePlayerId &&
         Building.defId[eid] !== BuildingDefId.TOWN_CENTER
       ) {
         removableBuildingCount++;
       }
       if (
         hasComponent(this.world.ecs, Producer, eid) &&
-        hasComponent(this.world.ecs, Building, eid) &&
-        Owner.player[eid] === this.perspectivePlayerId
+        hasComponent(this.world.ecs, Building, eid)
       ) {
         selectedProducerDefs.add(Building.defId[eid]);
         selectedProducerEids.push(eid);
@@ -4049,8 +4057,7 @@ export class GameScene extends Phaser.Scene {
 
     if (
       sel.length === 0 ||
-      hasVillager ||
-      (selectedProducerDefs.size === 0 && !hasMilitary && !hasWorksiteWorker)
+      hasVillager
     ) {
       addBuildActions();
     }

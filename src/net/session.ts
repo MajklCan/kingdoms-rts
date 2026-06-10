@@ -236,6 +236,10 @@ export class MultiplayerSession {
     return this.lockstep?.isStalled() ?? false;
   }
 
+  recordClientEvent(event: string, data?: Record<string, unknown>): void {
+    this.recordEvent(`client-${event}`, data);
+  }
+
   debugSnapshot(): MultiplayerSessionDebugSnapshot {
     const now = nowMs();
     const stalled = this.stalled;

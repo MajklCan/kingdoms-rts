@@ -264,6 +264,40 @@ function bindMultiplayer(): void {
 }
 bindMultiplayer();
 
+function bindMultiplayerClientDiagnostics(): void {
+  window.addEventListener('visibilitychange', () => {
+    mpSession?.recordClientEvent('visibility', {
+      visibilityState: document.visibilityState,
+      hidden: document.hidden,
+    });
+  });
+  window.addEventListener('blur', () => {
+    mpSession?.recordClientEvent('window-blur', {
+      visibilityState: document.visibilityState,
+      hidden: document.hidden,
+    });
+  });
+  window.addEventListener('focus', () => {
+    mpSession?.recordClientEvent('window-focus', {
+      visibilityState: document.visibilityState,
+      hidden: document.hidden,
+    });
+  });
+  window.addEventListener('pagehide', () => {
+    mpSession?.recordClientEvent('pagehide', {
+      visibilityState: document.visibilityState,
+      hidden: document.hidden,
+    });
+  });
+  window.addEventListener('pageshow', () => {
+    mpSession?.recordClientEvent('pageshow', {
+      visibilityState: document.visibilityState,
+      hidden: document.hidden,
+    });
+  });
+}
+bindMultiplayerClientDiagnostics();
+
 // Drive lockstep independently of Phaser's render rAF. Browsers may pause rAF
 // for hidden/unfocused tabs; lockstep must still emit empty turns or peers wait.
 function startIntervalMultiplayerPump(onTick: (deltaMs: number) => void): void {
@@ -922,7 +956,8 @@ function downloadTextFile(filename: string, text: string, mimeType: string): voi
 let gameOverShown = false;
 function showGameOver(
   winnerPlayerId: number,
-  _mode: 'conquest'
+  _mode: 'conquest',
+  perspectivePlayerId: number
 ): void {
   if (gameOverShown) return;
   gameOverShown = true;
@@ -930,7 +965,7 @@ function showGameOver(
   const title = document.getElementById('game-over-title');
   const subtitle = document.getElementById('game-over-subtitle');
   if (!modal || !title || !subtitle) return;
-  if (winnerPlayerId === 1) {
+  if (winnerPlayerId === perspectivePlayerId) {
     title.className = 'victory';
     title.textContent = 'VICTORY';
     subtitle.textContent = 'Bohemia stands triumphant. The kingdom endures.';
@@ -940,6 +975,12 @@ function showGameOver(
     subtitle.textContent = 'Bohemia has fallen. The realm is no more.';
   }
   modal.classList.add('show');
+}
+
+function hideGameOver(): void {
+  if (!gameOverShown) return;
+  gameOverShown = false;
+  document.getElementById('game-over')?.classList.remove('show');
 }
 
 // ── Debug overlay toggle (backtick key) ────────────────────────────────────
@@ -1241,8 +1282,9 @@ function techTreePoint(node: { x: number; y: number }): { x: number; y: number }
 
 function renderTechTree(scene: GameScene): void {
   if (!techTreeBoardEl) return;
-  const nodes = scene.getTechTree(1);
-  const sig = nodes
+  const playerId = scene.getPerspectivePlayerId();
+  const nodes = scene.getTechTree(playerId);
+  const sig = `${playerId}|` + nodes
     .map((node) =>
       `${node.id}:${node.status}:${node.affordable ? 1 : 0}:${Math.floor(node.progressFrac * 100)}`
     )
@@ -1302,7 +1344,7 @@ function renderTechTree(scene: GameScene): void {
 
   for (const button of techTreeBoardEl.querySelectorAll<HTMLButtonElement>('[data-tech-id]')) {
     button.addEventListener('click', () => {
-      scene.researchTech(button.dataset.techId as TechIdValue);
+      scene.researchTech(button.dataset.techId as TechIdValue, playerId);
       lastTechTreeSig = '';
       renderTechTree(scene);
     });
@@ -1464,7 +1506,9 @@ function tickOverlay(): void {
     if (bldLine) bldLine.textContent = 'Build mode: ' + scene.getBuildMode();
     const outcome = scene.getOutcome();
     if (outcome.state === 'victory') {
-      showGameOver(outcome.winnerPlayerId, outcome.mode);
+      showGameOver(outcome.winnerPlayerId, outcome.mode, me);
+    } else {
+      hideGameOver();
     }
   }
   requestAnimationFrame(tickOverlay);
