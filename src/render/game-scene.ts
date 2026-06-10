@@ -2279,13 +2279,21 @@ export class GameScene extends Phaser.Scene {
     return this.gameSpeed;
   }
 
+  private blockCheatInMultiplayer(): boolean {
+    if (!this.multiplayer) return false;
+    setLastEvent('cheats disabled in multiplayer');
+    return true;
+  }
+
   cheatRevealMap(playerId = 1): void {
+    if (this.blockCheatInMultiplayer()) return;
     revealMapForPlayer(this.world, playerId);
     this.fogTextureTick = -1;
     setLastEvent('cheat: map revealed');
   }
 
   cheatAddResources(playerId = 1, amount = 500): void {
+    if (this.blockCheatInMultiplayer()) return;
     const bank = this.world.resources[playerId];
     if (!bank) return;
     bank[ResourceKindId.FOOD] += amount;
@@ -2296,6 +2304,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   cheatSpawnCavalryByTownHall(playerId = 1): number | null {
+    if (this.blockCheatInMultiplayer()) return null;
     let townHall: number | null = null;
     for (const eid of townCenterQuery(this.world.ecs)) {
       if (Owner.player[eid] !== playerId) continue;
@@ -2320,6 +2329,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   cheatSpawnMachineGunByTownHall(playerId = 1): number | null {
+    if (this.blockCheatInMultiplayer()) return null;
     let townHall: number | null = null;
     for (const eid of townCenterQuery(this.world.ecs)) {
       if (Owner.player[eid] !== playerId) continue;
@@ -2344,6 +2354,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   cheatSpawnMortarByTownHall(playerId = 1): number | null {
+    if (this.blockCheatInMultiplayer()) return null;
     let townHall: number | null = null;
     for (const eid of townCenterQuery(this.world.ecs)) {
       if (Owner.player[eid] !== playerId) continue;

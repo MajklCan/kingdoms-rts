@@ -96,9 +96,12 @@ function parseCampaignMission(value: string | undefined): CampaignMissionIdValue
   return normalizeCampaignMissionId(value);
 }
 
+let mpSession: MultiplayerSession | null = null;
 type TitleMode = 'root' | 'skirmish' | 'campaign' | 'multiplayer';
+let currentTitleMode: TitleMode = 'root';
 
 function setTitleMode(mode: TitleMode): void {
+  currentTitleMode = mode;
   const modeMenu = document.getElementById('mode-menu');
   const skirmishPanel = document.getElementById('skirmish-panel');
   const campaignPanel = document.getElementById('campaign-panel');
@@ -110,6 +113,7 @@ function setTitleMode(mode: TitleMode): void {
   campaignPanel?.classList.toggle('hidden', mode !== 'campaign');
   multiplayerPanel?.classList.toggle('hidden', mode !== 'multiplayer');
   controls?.classList.toggle('hidden', mode === 'root');
+  updateCheatButtonsDisabled();
 }
 
 function bindTitleScreen(): void {
@@ -151,8 +155,6 @@ function bindTitleScreen(): void {
 bindTitleScreen();
 
 // ── Multiplayer lobby ───────────────────────────────────────────────────────
-let mpSession: MultiplayerSession | null = null;
-
 type MultiplayerDebugApi = {
   snapshot(): MultiplayerSessionDebugSnapshot | null;
   send(input: SimInput): void;
@@ -206,6 +208,7 @@ function bindMultiplayer(): void {
     } else if (state === 'peer-left') setStatus('A player left the match.');
     else if (state === 'desync') setStatus('Desync detected — the match state diverged.');
     else if (state === 'disconnected') setStatus('Disconnected from relay.');
+    updateCheatButtonsDisabled();
   };
 
   connectBtn.addEventListener('click', () => {
@@ -219,6 +222,7 @@ function bindMultiplayer(): void {
     connectBtn.disabled = true;
     lobby.classList.remove('hidden');
     setStatus('Connecting…');
+    updateCheatButtonsDisabled();
 
     const transport = new WebSocketTransport(url);
     mpSession = new MultiplayerSession(transport, room, name, {
@@ -233,6 +237,7 @@ function bindMultiplayer(): void {
         const scene = game.scene.getScene('GameScene') as GameScene | null;
         if (scene) scene.beginMultiplayerMatch(mpSession!, world, localPlayerId);
         hideTitleScreen();
+        updateCheatButtonsDisabled();
       },
       onDesync: (tick, local, peer, peerId) => {
         setLastEvent(`DESYNC at tick ${tick}: local ${local.toString(16)} vs P${peerId} ${peer.toString(16)}`);
@@ -242,6 +247,8 @@ function bindMultiplayer(): void {
         connectBtn.disabled = false;
         startBtn.disabled = false;
         startBtn.textContent = 'Start Match';
+        mpSession = null;
+        updateCheatButtonsDisabled();
       },
     });
   });
@@ -701,6 +708,35 @@ function getGameScene(): GameScene | null {
   return game.scene.getScene('GameScene') as GameScene | null;
 }
 
+function shouldDisableCheatButtons(): boolean {
+  const scene = getGameScene();
+  const sessionState = mpSession?.state;
+  return (
+    currentTitleMode === 'multiplayer' ||
+    scene?.isMultiplayer() === true ||
+    sessionState === 'connecting' ||
+    sessionState === 'lobby' ||
+    sessionState === 'playing'
+  );
+}
+
+function updateCheatButtonsDisabled(): void {
+  const disabled = shouldDisableCheatButtons();
+  for (const button of document.querySelectorAll<HTMLButtonElement>('#save-load-panel .cheat-button')) {
+    button.disabled = disabled;
+    button.title = disabled ? 'Cheats are disabled in multiplayer' : '';
+  }
+}
+
+function runCheatAction(action: () => void): void {
+  if (shouldDisableCheatButtons()) {
+    updateCheatButtonsDisabled();
+    setLastEvent('cheats disabled in multiplayer');
+    return;
+  }
+  action();
+}
+
 // Per-channel volume sliders in the settings panel (slider id → channel + % span).
 const CHANNEL_SLIDERS: ReadonlyArray<{ id: string; channel: AudioChannel; pct: string }> = [
   { id: 'vol-music', channel: 'music', pct: 'pct-music' },
@@ -836,12 +872,17 @@ function bindCheatControls(): void {
   if (!revealBtn || !resourcesBtn || !cavalryBtn || !machineGunBtn || !mortarBtn || !dumpBtn) return;
 
   const getScene = () => game.scene.getScene('GameScene') as GameScene | null;
-  revealBtn.addEventListener('click', () => getScene()?.cheatRevealMap(1));
-  resourcesBtn.addEventListener('click', () => getScene()?.cheatAddResources(1, 500));
-  cavalryBtn.addEventListener('click', () => getScene()?.cheatSpawnCavalryByTownHall(1));
-  machineGunBtn.addEventListener('click', () => getScene()?.cheatSpawnMachineGunByTownHall(1));
-  mortarBtn.addEventListener('click', () => getScene()?.cheatSpawnMortarByTownHall(1));
+  revealBtn.addEventListener('click', () => runCheatAction(() => getScene()?.cheatRevealMap(1)));
+  resourcesBtn.addEventListener('click', () => runCheatAction(() => getScene()?.cheatAddResources(1, 500)));
+  cavalryBtn.addEventListener('click', () => runCheatAction(() => getScene()?.cheatSpawnCavalryByTownHall(1)));
+  machineGunBtn.addEventListener('click', () => runCheatAction(() => getScene()?.cheatSpawnMachineGunByTownHall(1)));
+  mortarBtn.addEventListener('click', () => runCheatAction(() => getScene()?.cheatSpawnMortarByTownHall(1)));
   dumpBtn.addEventListener('click', () => {
+    if (shouldDisableCheatButtons()) {
+      updateCheatButtonsDisabled();
+      setLastEvent('cheats disabled in multiplayer');
+      return;
+    }
     const scene = getScene();
     if (!scene) return;
     const snapshot = scene.createSaveSnapshot('Debug Dump');
@@ -861,6 +902,7 @@ function bindCheatControls(): void {
     );
     setLastEvent(`debug dump downloaded (${snapshot.tick})`);
   });
+  updateCheatButtonsDisabled();
 }
 bindCheatControls();
 
