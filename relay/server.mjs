@@ -2,8 +2,9 @@
  * Kingdoms lockstep relay — a dumb, low-bandwidth message switch.
  *
  * It assigns player slots, coordinates match start (seed agreement), and
- * rebroadcasts turn/checksum frames within a room. It NEVER runs the sim and
- * never inspects command contents. All gameplay logic lives on the clients.
+ * rebroadcasts turn/checksum frames within a room. It NEVER runs the sim; it
+ * only logs bounded command summaries for diagnostics. All gameplay logic
+ * lives on the clients.
  *
  * Wire protocol mirrors src/net/protocol.ts. One WebSocket per client.
  *
@@ -136,6 +137,72 @@ function bump(map, key, delta = 1) {
 function commandTypes(cmds) {
   if (!Array.isArray(cmds) || cmds.length === 0) return [];
   return cmds.map((cmd) => (cmd && typeof cmd.type === 'string' ? cmd.type : typeof cmd));
+}
+
+function safeNumber(value) {
+  return Number.isFinite(value) ? Number(value) : null;
+}
+
+function safePoint(value) {
+  if (!value || typeof value !== 'object') return null;
+  const x = safeNumber(value.x);
+  const y = safeNumber(value.y);
+  if (x === null || y === null) return null;
+  return { x, y };
+}
+
+function summarizeEids(eids) {
+  if (!Array.isArray(eids)) return undefined;
+  return {
+    count: eids.length,
+    first: eids.slice(0, 12).map((eid) => safeNumber(eid)).filter((eid) => eid !== null),
+  };
+}
+
+function summarizeCommand(cmd) {
+  if (!cmd || typeof cmd !== 'object') return { type: typeof cmd };
+  const summary = {
+    type: typeof cmd.type === 'string' ? cmd.type : typeof cmd,
+  };
+  const numericFields = [
+    'playerId',
+    'defId',
+    'x',
+    'y',
+    'atEid',
+    'targetEid',
+    'techId',
+    'stance',
+    'mode',
+    'delta',
+    'count',
+  ];
+  for (const field of numericFields) {
+    if (!(field in cmd)) continue;
+    const value = safeNumber(cmd[field]);
+    if (value !== null) summary[field] = value;
+  }
+  const to = safePoint(cmd.to);
+  if (to) summary.to = to;
+  const eids = summarizeEids(cmd.eids);
+  if (eids) summary.eids = eids;
+  const known = new Set([...numericFields, 'type', 'to', 'eids']);
+  const extraKeys = Object.keys(cmd).filter((key) => !known.has(key)).sort();
+  if (extraKeys.length > 0) summary.extraKeys = extraKeys.slice(0, 8);
+  return summary;
+}
+
+function commandSummaries(cmds) {
+  if (!Array.isArray(cmds) || cmds.length === 0) return [];
+  return cmds.slice(0, 16).map(summarizeCommand);
+}
+
+function commandPayloadBytes(cmds) {
+  try {
+    return Buffer.byteLength(JSON.stringify(cmds));
+  } catch {
+    return null;
+  }
 }
 
 function recordRoomMessage(room, ws, data) {
@@ -434,6 +501,8 @@ wss.on('connection', (ws, req) => {
             forTick,
             cmdCount: cmds.length,
             cmdTypes: commandTypes(cmds),
+            cmds: commandSummaries(cmds),
+            cmdPayloadBytes: commandPayloadBytes(cmds),
             ...roomSummary(room),
           });
         }

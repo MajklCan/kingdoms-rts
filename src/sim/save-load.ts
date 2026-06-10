@@ -154,11 +154,19 @@ export interface SavedGameV1 {
   ages: Array<{ current: number; progress: number; totalTicks: number }>;
   researchedTechs?: TechIdValue[][];
   revealedMapPlayers?: boolean[];
+  humanPlayers?: number[];
+  formationModes?: number[];
+  formationFacings?: number[];
   outcome: MatchOutcome;
   entities: SavedEntityV1[];
   productionQueues: Array<{ eid: number; queue: number[] }>;
   armyRallyPoints?: Array<GridPos | null>;
   paths: Array<{ eid: number; waypoints: GridPos[] }>;
+  movementStuck?: Array<{ eid: number; lastDist: number; waypointX: number; waypointY: number; noProgressTicks: number; cooldownTicks: number; attempts: number }>;
+  formationSpeedCaps?: Array<{ eid: number; speedCap: number }>;
+  cannonWindups?: Array<{ attackerEid: number; targetEid: number; ticksRemaining: number }>;
+  pendingProjectileImpacts?: Array<{ impactTick: number; attackerEid: number; attackerOwner: number; targetEid: number; damage: number }>;
+  pendingCannonImpacts?: Array<{ impactTick: number; attackerEid: number; attackerOwner: number; impactX: number; impactY: number; damage: number }>;
   aiPlayers?: Array<SavedAiPlayerStateV1 | null>;
   visibility?: Array<SavedVisibilityV1 | null>;
   campaign?: SavedCampaignV1 | null;
@@ -170,11 +178,13 @@ export interface SavedAiPlayerStateV1 {
   lastAttackTick: number;
   stageStartedTick: number;
   rallyPoint: GridPos | null;
+  waveUnitEids?: number[];
   lastAttackEventTick: number;
   lastDefenseEventTick: number;
 }
 
 export interface SavedVisibilityV1 {
+  visible?: number[];
   explored: number[];
   lastSeenBuildings: LastSeenBuilding[];
 }
@@ -191,6 +201,8 @@ export interface SavedCampaignV1 {
   nextReinforcementTick: number;
   scriptedWaveIndex?: number;
   scriptedWaveCount?: number;
+  zborovLinesTaken?: number;
+  zborovForwardY?: number;
 }
 
 export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): SavedGameV1 {
@@ -342,6 +354,9 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     ages: world.ages.map((age) => ({ ...age })),
     researchedTechs: world.researchedTechs.map((set) => Array.from(set)),
     revealedMapPlayers: world.revealedMapPlayers.slice(),
+    humanPlayers: [...world.humanPlayers],
+    formationModes: world.formationModes.slice(),
+    formationFacings: world.formationFacings.slice(),
     outcome: { ...world.outcome },
     entities,
     productionQueues: Array.from(world.productionQueues.entries()).map(([eid, queue]) => ({
@@ -353,16 +368,38 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       eid,
       waypoints: waypoints.map((p) => ({ ...p })),
     })),
+    movementStuck: Array.from(world.movementStuck.entries()).map(([eid, state]) => ({
+      eid,
+      lastDist: state.lastDist,
+      waypointX: state.waypointX,
+      waypointY: state.waypointY,
+      noProgressTicks: state.noProgressTicks,
+      cooldownTicks: state.cooldownTicks,
+      attempts: state.attempts,
+    })),
+    formationSpeedCaps: Array.from(world.formationSpeedCaps.entries()).map(([eid, speedCap]) => ({
+      eid,
+      speedCap,
+    })),
+    cannonWindups: Array.from(world.cannonWindups.entries()).map(([attackerEid, windup]) => ({
+      attackerEid,
+      targetEid: windup.targetEid,
+      ticksRemaining: windup.ticksRemaining,
+    })),
+    pendingProjectileImpacts: world.pendingProjectileImpacts.map((impact) => ({ ...impact })),
+    pendingCannonImpacts: world.pendingCannonImpacts.map((impact) => ({ ...impact })),
     aiPlayers: world.aiPlayers.map((state) => state ? {
       plan: state.plan,
       nextAttackTick: state.nextAttackTick,
       lastAttackTick: Number.isFinite(state.lastAttackTick) ? state.lastAttackTick : -1,
       stageStartedTick: state.stageStartedTick,
       rallyPoint: state.rallyPoint ? { ...state.rallyPoint } : null,
+      waveUnitEids: state.waveUnitEids.slice(),
       lastAttackEventTick: Number.isFinite(state.lastAttackEventTick) ? state.lastAttackEventTick : -1,
       lastDefenseEventTick: Number.isFinite(state.lastDefenseEventTick) ? state.lastDefenseEventTick : -1,
     } : null),
     visibility: world.visibility.map((vis) => vis ? {
+      visible: Array.from(vis.visible),
       explored: Array.from(vis.explored),
       lastSeenBuildings: Array.from(vis.lastSeenBuildings.values()).map((snap) => ({ ...snap })),
     } : null),
@@ -381,6 +418,8 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       nextReinforcementTick: world.campaign.nextReinforcementTick,
       scriptedWaveIndex: world.campaign.scriptedWaveIndex,
       scriptedWaveCount: world.campaign.scriptedWaveCount,
+      zborovLinesTaken: world.campaign.zborovLinesTaken,
+      zborovForwardY: world.campaign.zborovForwardY,
     } : null,
   };
 }
@@ -408,7 +447,10 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.aiEvents.length = 0;
   world.soundCues.length = 0;
   world.paused = snapshot.paused;
-  world.humanPlayers = new Set([LOCAL_PLAYER_ID]);
+  world.humanPlayers = new Set(
+    (snapshot.humanPlayers ?? [LOCAL_PLAYER_ID])
+      .filter((playerId) => Number.isInteger(playerId) && playerId > 0)
+  );
   world.aiDifficulty = normalizeAiDifficulty(snapshot.aiDifficulty);
   world.outcome = { ...snapshot.outcome };
   world.campaign = null;
@@ -469,6 +511,18 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   for (let playerId = 0; playerId < world.resources.length; playerId++) {
     world.revealedMapPlayers.push(Boolean(snapshot.revealedMapPlayers?.[playerId]));
   }
+  const fallbackFormationModes = world.formationModes.slice();
+  const savedFormationModes = snapshot.formationModes ?? fallbackFormationModes;
+  world.formationModes.length = 0;
+  for (let i = 0; i < savedFormationModes.length; i++) {
+    world.formationModes.push(savedFormationModes[i] ?? fallbackFormationModes[i] ?? 0);
+  }
+  const fallbackFormationFacings = world.formationFacings.slice();
+  const savedFormationFacings = snapshot.formationFacings ?? fallbackFormationFacings;
+  world.formationFacings.length = 0;
+  for (let i = 0; i < savedFormationFacings.length; i++) {
+    world.formationFacings.push(savedFormationFacings[i] ?? fallbackFormationFacings[i] ?? 0);
+  }
 
   const eidMap = new Map<number, number>();
   let maxRestoredNetId = 0;
@@ -515,7 +569,18 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
       nextReinforcementTick: snapshot.campaign.nextReinforcementTick,
       scriptedWaveIndex: snapshot.campaign.scriptedWaveIndex,
       scriptedWaveCount: snapshot.campaign.scriptedWaveCount,
+      zborovLinesTaken: snapshot.campaign.zborovLinesTaken,
+      zborovForwardY: snapshot.campaign.zborovForwardY,
     };
+  }
+
+  for (let playerId = 0; playerId < world.aiPlayers.length; playerId++) {
+    const ai = world.aiPlayers[playerId];
+    const savedAi = snapshot.aiPlayers?.[playerId];
+    if (!ai || !savedAi?.waveUnitEids) continue;
+    ai.waveUnitEids = savedAi.waveUnitEids
+      .map((eid) => eidMap.get(eid))
+      .filter((eid): eid is number => eid !== undefined);
   }
 
   world.productionQueues.clear();
@@ -537,6 +602,64 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
     const eid = eidMap.get(savedPath.eid);
     if (eid === undefined) continue;
     world.paths.set(eid, savedPath.waypoints.map((p) => ({ ...p })));
+  }
+  for (const saved of snapshot.movementStuck ?? []) {
+    const eid = eidMap.get(saved.eid);
+    if (eid === undefined) continue;
+    world.movementStuck.set(eid, {
+      lastDist: saved.lastDist,
+      waypointX: saved.waypointX,
+      waypointY: saved.waypointY,
+      noProgressTicks: saved.noProgressTicks,
+      cooldownTicks: saved.cooldownTicks,
+      attempts: saved.attempts,
+    });
+  }
+
+  world.formationSpeedCaps.clear();
+  for (const saved of snapshot.formationSpeedCaps ?? []) {
+    const eid = eidMap.get(saved.eid);
+    if (eid === undefined) continue;
+    world.formationSpeedCaps.set(eid, saved.speedCap);
+  }
+
+  world.cannonWindups.clear();
+  for (const saved of snapshot.cannonWindups ?? []) {
+    const attackerEid = eidMap.get(saved.attackerEid);
+    const targetEid = eidMap.get(saved.targetEid);
+    if (attackerEid === undefined || targetEid === undefined) continue;
+    world.cannonWindups.set(attackerEid, {
+      targetEid,
+      ticksRemaining: saved.ticksRemaining,
+    });
+  }
+
+  world.pendingProjectileImpacts.length = 0;
+  for (const saved of snapshot.pendingProjectileImpacts ?? []) {
+    const attackerEid = eidMap.get(saved.attackerEid);
+    const targetEid = eidMap.get(saved.targetEid);
+    if (attackerEid === undefined || targetEid === undefined) continue;
+    world.pendingProjectileImpacts.push({
+      impactTick: saved.impactTick,
+      attackerEid,
+      attackerOwner: saved.attackerOwner,
+      targetEid,
+      damage: saved.damage,
+    });
+  }
+
+  world.pendingCannonImpacts.length = 0;
+  for (const saved of snapshot.pendingCannonImpacts ?? []) {
+    const attackerEid = eidMap.get(saved.attackerEid);
+    if (attackerEid === undefined) continue;
+    world.pendingCannonImpacts.push({
+      impactTick: saved.impactTick,
+      attackerEid,
+      attackerOwner: saved.attackerOwner,
+      impactX: saved.impactX,
+      impactY: saved.impactY,
+      damage: saved.damage,
+    });
   }
 
   restoreVisibility(world, snapshot, eidMap);
@@ -752,6 +875,12 @@ function restoreVisibility(
     for (let i = 0; i < max; i++) {
       vis.explored[i] = saved.explored[i] ? 1 : 0;
     }
+    if (saved.visible) {
+      const visibleMax = Math.min(vis.visible.length, saved.visible.length);
+      for (let i = 0; i < visibleMax; i++) {
+        vis.visible[i] = saved.visible[i] ? 1 : 0;
+      }
+    }
     for (const snap of saved.lastSeenBuildings) {
       const remappedEid = remapEid(snap.eid, eidMap);
       vis.lastSeenBuildings.set(remappedEid, {
@@ -761,5 +890,7 @@ function restoreVisibility(
     }
   }
   world.visibility = next;
-  updatePlayerVisibility(world, LOCAL_PLAYER_ID);
+  for (const playerId of world.humanPlayers) {
+    updatePlayerVisibility(world, playerId);
+  }
 }

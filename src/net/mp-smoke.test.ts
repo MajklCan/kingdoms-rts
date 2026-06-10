@@ -183,6 +183,25 @@ function buildableTileNear(world: SimWorld, cx: number, cy: number): { x: number
   return null;
 }
 
+function buildableTileNearTown(
+  world: SimWorld,
+  pid: number,
+  offsetIndex: number
+): { x: number; y: number } | null {
+  const tc = ownTownCenter(world, pid);
+  if (tc === undefined) return null;
+  const offsets = [
+    { x: -5, y: -5 },
+    { x: 5, y: -5 },
+    { x: -5, y: 5 },
+    { x: 5, y: 5 },
+    { x: 0, y: -7 },
+    { x: 7, y: 0 },
+  ];
+  const offset = offsets[offsetIndex % offsets.length];
+  return buildableTileNear(world, Position.x[tc] + offset.x, Position.y[tc] + offset.y);
+}
+
 interface MatchCtx {
   sessA: MultiplayerSession;
   sessB: MultiplayerSession;
@@ -445,6 +464,42 @@ describe('multiplayer 1v1 — per-command parity matrix', () => {
     expect(worldA.formationModes[2]).toBe(2);
     expect(worldB.formationModes[1]).toBe(1);
     expect(worldB.formationModes[2]).toBe(2);
+  });
+
+  it('asymmetric economy buildings complete and run worksites without desync', () => {
+    const ctx = setupMatch(9553);
+    const plan = [
+      { wait: 47, pid: 2, defId: BuildingDefId.FARM, slot: 0 },
+      { wait: 24, pid: 2, defId: BuildingDefId.FARM, slot: 1 },
+      { wait: 29, pid: 2, defId: BuildingDefId.HOUSE, slot: 2 },
+      { wait: 164, pid: 1, defId: BuildingDefId.FARM, slot: 0 },
+      { wait: 42, pid: 1, defId: BuildingDefId.FARM, slot: 1 },
+      { wait: 52, pid: 1, defId: BuildingDefId.HOUSE, slot: 2 },
+      { wait: 62, pid: 1, defId: BuildingDefId.FARM, slot: 3 },
+    ];
+
+    for (const step of plan) {
+      ctx.pumpN(step.wait);
+      const side = ctx.sides.find(([, , pid]) => pid === step.pid);
+      expect(side).toBeDefined();
+      const [sess, world, pid] = side!;
+      const tile = buildableTileNearTown(world, pid, step.slot);
+      expect(tile, `no build tile for P${pid} slot ${step.slot}`).not.toBeNull();
+      sess.sendCommand({
+        type: 'placeBuilding',
+        defId: step.defId,
+        x: tile!.x,
+        y: tile!.y,
+        playerId: pid,
+      });
+      ctx.pumpN(6);
+      ctx.settle();
+    }
+
+    ctx.pumpN(SIM.TICK_HZ * 45);
+    assertParity(ctx);
+    expect(ownedBuildings(ctx.worldA, 1).some((eid) => Building.defId[eid] === BuildingDefId.FARM)).toBe(true);
+    expect(ownedBuildings(ctx.worldA, 2).some((eid) => Building.defId[eid] === BuildingDefId.FARM)).toBe(true);
   });
 
   it('all commands in one match — no interaction desync + observable effects', () => {

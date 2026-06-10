@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addComponent } from 'bitecs';
 import { MAP } from '../config';
-import { Position, Selected } from './components';
+import { AttackTarget, Position, Selected } from './components';
 import { checksumWorld } from './checksum';
 import {
   createSimWorld,
@@ -10,6 +10,7 @@ import {
   spawnSpearman,
   spawnVillager,
   step,
+  updatePlayerVisibility,
   type SimInput,
   type SimWorld,
 } from './world';
@@ -29,6 +30,25 @@ function findOpenTile(world: SimWorld, startX = 6, startY = 6): { x: number; y: 
 
 function stepN(world: SimWorld, n: number): void {
   for (let i = 0; i < n; i++) step(world);
+}
+
+function expectChecksumChange(mutator: (world: SimWorld) => void): void {
+  const a = createSimWorld(2026);
+  const b = createSimWorld(2026);
+  expect(checksumWorld(a)).toBe(checksumWorld(b));
+  mutator(b);
+  expect(checksumWorld(a)).not.toBe(checksumWorld(b));
+}
+
+function expectChecksumChangeWithUnit(mutator: (world: SimWorld, eid: number) => void): void {
+  const a = createSimWorld(2027);
+  const b = createSimWorld(2027);
+  const spot = findOpenTile(a);
+  spawnSpearman(a, spot.x, spot.y, 1);
+  const eid = spawnSpearman(b, spot.x, spot.y, 1);
+  expect(checksumWorld(a)).toBe(checksumWorld(b));
+  mutator(b, eid);
+  expect(checksumWorld(a)).not.toBe(checksumWorld(b));
 }
 
 describe('determinism', () => {
@@ -89,6 +109,129 @@ describe('determinism', () => {
     stepN(b, 6);
 
     expect(checksumWorld(a)).not.toBe(checksumWorld(b));
+  });
+
+  it('checksum includes delayed auxiliary state that can affect future ticks', () => {
+    expectChecksumChange((world) => {
+      world.formationModes[2] = 2;
+    });
+    expectChecksumChange((world) => {
+      world.formationFacings[2] = 4;
+    });
+    expectChecksumChange((world) => {
+      world.armyRallyPoints[2] = { x: 12, y: 18 };
+    });
+    expectChecksumChange((world) => {
+      world.humanPlayers.add(2);
+      world.revealedMapPlayers[2] = true;
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.movementStuck.set(eid, {
+        lastDist: 2.5,
+        waypointX: 10,
+        waypointY: 11,
+        noProgressTicks: 3,
+        cooldownTicks: 1,
+        attempts: 2,
+      });
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.formationSpeedCaps.set(eid, 0.75);
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.cannonWindups.set(eid, {
+        targetEid: eid,
+        ticksRemaining: 5,
+      });
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.pendingProjectileImpacts.push({
+        impactTick: world.tick + 3,
+        attackerEid: eid,
+        attackerOwner: 1,
+        targetEid: eid,
+        damage: 4,
+      });
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.pendingCannonImpacts.push({
+        impactTick: world.tick + 4,
+        attackerEid: eid,
+        attackerOwner: 1,
+        impactX: 14,
+        impactY: 15,
+        damage: 8,
+      });
+    });
+  });
+
+  it('snapshot preserves checksummed auxiliary state', () => {
+    const world = createSimWorld(909);
+    world.paused = false;
+    world.humanPlayers = new Set([1, 2]);
+    world.formationModes[2] = 2;
+    world.formationFacings[2] = 5;
+    world.armyRallyPoints[2] = { x: 22, y: 23 };
+    world.revealedMapPlayers[2] = true;
+
+    const spot = findOpenTile(world);
+    const p1Unit = spawnSpearman(world, spot.x, spot.y, 1);
+    const p2Unit = spawnSpearman(world, spot.x + 3, spot.y, 2);
+    world.movementStuck.set(p2Unit, {
+      lastDist: 1.5,
+      waypointX: spot.x + 5,
+      waypointY: spot.y,
+      noProgressTicks: 2,
+      cooldownTicks: 1,
+      attempts: 1,
+    });
+    world.formationSpeedCaps.set(p2Unit, 0.9);
+    world.cannonWindups.set(p2Unit, { targetEid: p1Unit, ticksRemaining: 4 });
+    world.pendingProjectileImpacts.push({
+      impactTick: world.tick + 2,
+      attackerEid: p2Unit,
+      attackerOwner: 2,
+      targetEid: p1Unit,
+      damage: 3,
+    });
+    world.pendingCannonImpacts.push({
+      impactTick: world.tick + 3,
+      attackerEid: p2Unit,
+      attackerOwner: 2,
+      impactX: Position.x[p1Unit],
+      impactY: Position.y[p1Unit],
+      damage: 5,
+    });
+    if (world.aiPlayers[2]) {
+      world.aiPlayers[2].waveUnitEids = [p2Unit];
+    }
+    updatePlayerVisibility(world, 1);
+    updatePlayerVisibility(world, 2);
+
+    const snapshot = serializeSimWorld(world, 'aux-state');
+    const restored = createSimWorld(1);
+    loadSimWorldSnapshot(restored, snapshot);
+    restored.paused = false;
+
+    expect(checksumWorld(restored)).toBe(checksumWorld(world));
+  });
+
+  it('human player 2 combat uses player 2 visibility when validating targets', () => {
+    const world = createSimWorld(808);
+    world.paused = false;
+    world.humanPlayers = new Set([1, 2]);
+
+    const p2Spot = findOpenTile(world);
+    const p1Spot = findOpenTile(world, p2Spot.x + 30, p2Spot.y + 20);
+    const p2Unit = spawnSpearman(world, p2Spot.x, p2Spot.y, 2);
+    const hiddenP1Unit = spawnSpearman(world, p1Spot.x, p1Spot.y, 1);
+
+    AttackTarget.targetEid[p2Unit] = hiddenP1Unit;
+    AttackTarget.retainGoal[p2Unit] = 1;
+
+    step(world);
+
+    expect(AttackTarget.targetEid[p2Unit]).toBe(-1);
   });
 });
 

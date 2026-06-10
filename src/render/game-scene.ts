@@ -472,6 +472,18 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
+  private static isTextEntryTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+  }
+
+  private static isTextEntryActive(): boolean {
+    if (typeof document === 'undefined') return false;
+    return GameScene.isTextEntryTarget(document.activeElement);
+  }
+
   preload(): void {
     // Queue all SFX + music so they're decoded before create(). Render-only.
     AudioManager.queueLoad(this.load, SFX_KEYS);
@@ -531,8 +543,6 @@ export class GameScene extends Phaser.Scene {
     } else if (this.isCannonInspectionMode()) {
       this.createCannonInspectionSheet();
     }
-    this.input.keyboard?.createCursorKeys();
-
     this.input.mouse?.disableContextMenu();
     this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
       this.onPointerDown(pointer);
@@ -557,70 +567,77 @@ export class GameScene extends Phaser.Scene {
     this.dragGfx = this.add.graphics();
     this.dragGfx.setDepth(20000);
 
-    this.input.keyboard?.on('keydown-B', () => {
+    const onHotkey = (eventName: string, handler: (ev: KeyboardEvent) => void): void => {
+      this.input.keyboard?.on(eventName, (ev: KeyboardEvent) => {
+        if (GameScene.isTextEntryTarget(ev.target)) return;
+        handler(ev);
+      });
+    };
+
+    onHotkey('keydown-B', () => {
       this.awaitingBuildKind = true;
       this.buildMode = 'none';
       setLastEvent('build: M farm · I mill · L wood · C stone · other buildings unlock through research');
     });
-    this.input.keyboard?.on('keydown-H', () => {
+    onHotkey('keydown-H', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('HOUSE', 'build HOUSE — left-click to place, right-click to cancel');
       } else {
         this.setSelectedUnitStance(UnitStanceId.HOLD_POSITION);
       }
     });
-    this.input.keyboard?.on('keydown-M', () => {
+    onHotkey('keydown-M', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('FARM', 'build FARM — left-click to place');
       }
     });
-    this.input.keyboard?.on('keydown-I', () => {
+    onHotkey('keydown-I', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('MILL', 'build MILL — left-click to place');
       }
     });
-    this.input.keyboard?.on('keydown-L', () => {
+    onHotkey('keydown-L', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('LUMBER_CAMP', 'build LUMBER HUT — left-click near trees');
       }
     });
-    this.input.keyboard?.on('keydown-G', () => {
+    onHotkey('keydown-G', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('GOLD_MINE', 'build GOLD MINE — left-click near gold');
       }
     });
-    this.input.keyboard?.on('keydown-C', () => {
+    onHotkey('keydown-C', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('STONE_QUARRY', 'build STONE QUARRY — left-click near stone');
       }
     });
-    this.input.keyboard?.on('keydown-R', () => {
+    onHotkey('keydown-R', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('BARRACKS', 'build BARRACKS — left-click to place');
       }
     });
-    this.input.keyboard?.on('keydown-A', () => {
+    onHotkey('keydown-A', () => {
       if (this.awaitingBuildKind) {
         this.awaitingBuildKind = false;
         setLastEvent('archers train at barracks — no separate range');
       }
     });
-    this.input.keyboard?.on('keydown-T', () => {
+    onHotkey('keydown-T', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('STABLE', 'build STABLE — left-click to place');
       }
     });
-    this.input.keyboard?.on('keydown-F', () => {
+    onHotkey('keydown-F', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('FOUNDRY', 'build FOUNDRY — left-click to place');
       }
     });
-    this.input.keyboard?.on('keydown-Y', () => {
+    onHotkey('keydown-Y', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('DEFENSIVE_TOWER', 'build DEFENSIVE TOWER — left-click to place');
       }
     });
-    this.input.keyboard?.on('keydown-ESC', () => {
+    onHotkey('keydown-ESC', () => {
       if (this.buildMode !== 'none' || this.awaitingBuildKind || this.armyRallyMode) {
         this.buildMode = 'none';
         this.armyRallyMode = false;
@@ -629,10 +646,10 @@ export class GameScene extends Phaser.Scene {
         setLastEvent('placement cancelled');
       }
     });
-    this.input.keyboard?.on('keydown-Q', () => this.onTrainHotkey(0));
-    this.input.keyboard?.on('keydown-E', () => this.onSecondaryActionHotkey());
-    this.input.keyboard?.on('keydown-V', () => this.startArmyRallyMode());
-    this.input.keyboard?.on('keydown-DELETE', () => this.removeSelectedBuildings());
+    onHotkey('keydown-Q', () => this.onTrainHotkey(0));
+    onHotkey('keydown-E', () => this.onSecondaryActionHotkey());
+    onHotkey('keydown-V', () => this.startArmyRallyMode());
+    onHotkey('keydown-DELETE', () => this.removeSelectedBuildings());
 
     // Zoom: mouse wheel scales by event deltaY (Mac trackpad pinch sends many
     // small events per gesture; we scale-then-clamp so gestures feel smooth
@@ -652,18 +669,18 @@ export class GameScene extends Phaser.Scene {
         this.applyZoom(delta, pointer.worldX, pointer.worldY);
       }
     );
-    this.input.keyboard?.on('keydown-PLUS', () => this.applyZoom(GameScene.ZOOM_KEY_STEP));
-    this.input.keyboard?.on('keydown-EQUALS', () => this.applyZoom(GameScene.ZOOM_KEY_STEP));
-    this.input.keyboard?.on('keydown-MINUS', () => this.applyZoom(-GameScene.ZOOM_KEY_STEP));
-    this.input.keyboard?.on('keydown-F1', (ev: KeyboardEvent) => {
+    onHotkey('keydown-PLUS', () => this.applyZoom(GameScene.ZOOM_KEY_STEP));
+    onHotkey('keydown-EQUALS', () => this.applyZoom(GameScene.ZOOM_KEY_STEP));
+    onHotkey('keydown-MINUS', () => this.applyZoom(-GameScene.ZOOM_KEY_STEP));
+    onHotkey('keydown-F1', (ev: KeyboardEvent) => {
       ev.preventDefault();
       this.selectAllVillagers();
     });
-    this.input.keyboard?.on('keydown-F2', (ev: KeyboardEvent) => {
+    onHotkey('keydown-F2', (ev: KeyboardEvent) => {
       ev.preventDefault();
       this.selectAllMilitary();
     });
-    this.input.keyboard?.on('keydown-X', () => this.toggleGameSpeed());
+    onHotkey('keydown-X', () => this.toggleGameSpeed());
 
     this.installDebugWindowApi();
 
@@ -701,9 +718,11 @@ export class GameScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     const speed = 6;
-    const keys = this.input.keyboard?.addKeys('W,A,S,D') as
-      | Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
-      | undefined;
+    const keys = GameScene.isTextEntryActive()
+      ? undefined
+      : this.input.keyboard?.addKeys('W,A,S,D', false) as
+        | Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>
+        | undefined;
     if (keys) {
       if (keys.W.isDown) cam.scrollY -= speed;
       if (keys.S.isDown) cam.scrollY += speed;
@@ -1699,7 +1718,7 @@ export class GameScene extends Phaser.Scene {
 
   private hasSelectedAttackCommandSource(): boolean {
     for (const eid of selectedQuery(this.world.ecs)) {
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       if (this.canEntityAttack(eid)) return true;
     }
     return false;
@@ -1726,7 +1745,7 @@ export class GameScene extends Phaser.Scene {
 
   private drawGhost(): void {
     this.ghostGfx.clear();
-    const rally = this.world.armyRallyPoints[1];
+    const rally = this.world.armyRallyPoints[this.perspectivePlayerId];
     if (rally) {
       this.drawRallyMarker(rally, 0x4ecdc4, 0.9);
     }
@@ -2015,7 +2034,7 @@ export class GameScene extends Phaser.Scene {
       this.isDragging = false;
 
       // Attack-move modifier: A held → attackMove the clicked tile.
-      const aKey = this.input.keyboard?.addKey('A');
+      const aKey = this.input.keyboard?.addKey('A', false);
       if (aKey?.isDown) {
         this.lastLeftUnitClick = null;
         if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return;
@@ -2385,7 +2404,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startArmyRallyMode(): void {
-    if (this.countOwnedArmyProducers(1) === 0) {
+    if (this.countOwnedArmyProducers(this.perspectivePlayerId) === 0) {
       setLastEvent('army rally needs an army building');
       return;
     }
@@ -2483,7 +2502,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onAdvanceAgeHotkey(): void {
-    const techId = this.nextAgeTechId(1);
+    const techId = this.nextAgeTechId(this.perspectivePlayerId);
     if (!techId) {
       setLastEvent('maximum age reached');
       return;
@@ -2502,7 +2521,7 @@ export class GameScene extends Phaser.Scene {
     const sel = selectedQuery(this.world.ecs);
     for (const eid of sel) {
       if (!hasComponent(this.world.ecs, Producer, eid)) continue;
-      if (Owner.player[eid] !== 1) continue; // only the local player
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       // Pick the first trainable unit listed on this building's def.
       const buildingDefId = Building.defId[eid];
       const buildingDef = BUILDING_TABLE[buildingDefId];
@@ -2532,7 +2551,7 @@ export class GameScene extends Phaser.Scene {
       }
       const unitDef = UNIT_TABLE[unitDefId];
       if (!unitDef) return false;
-      if (!isUnitUnlocked(this.world, 1, unitDefId)) {
+      if (!isUnitUnlocked(this.world, this.perspectivePlayerId, unitDefId)) {
         if (!quiet) setLastEvent(`${unitDef.name} is locked`);
         return false;
       }
@@ -2649,7 +2668,7 @@ export class GameScene extends Phaser.Scene {
     for (const eid of sel) {
       if (!hasComponent(this.world.ecs, Producer, eid)) continue;
       if (!hasComponent(this.world.ecs, Building, eid)) continue;
-      if (Owner.player[eid] !== 1) continue;
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
       const playerId = Owner.player[eid];
       const buildingDef = BUILDING_TABLE[Building.defId[eid]];
       if (
@@ -3974,9 +3993,11 @@ export class GameScene extends Phaser.Scene {
     const addTrainAction = (unitDefId: number, key: string, glyph: string) => {
       const unit = UNIT_TABLE[unitDefId];
       if (!unit) return;
-      if (!isUnitUnlocked(this.world, 1, unitDefId)) return;
+      if (!isUnitUnlocked(this.world, this.perspectivePlayerId, unitDefId)) return;
       const affordable = canAfford(unit.cost);
-      const hasPopRoom = unitDefId === UnitDefId.VILLAGER || this.hasPopulationRoomForUnit(1, unitDefId);
+      const hasPopRoom =
+        unitDefId === UnitDefId.VILLAGER ||
+        this.hasPopulationRoomForUnit(this.perspectivePlayerId, unitDefId);
       const enabled = affordable && hasPopRoom;
       actions.push({
         id: `train-unit-${unitDefId}`,
@@ -4023,10 +4044,12 @@ export class GameScene extends Phaser.Scene {
       addBuildActions();
     }
     if (hasTc) {
-      const nextAgeTechId = this.nextAgeTechId(1);
+      const nextAgeTechId = this.nextAgeTechId(this.perspectivePlayerId);
       const nextAgeDef = getAgeDef((this.world.ages[this.perspectivePlayerId]?.current ?? AgeId.DARK) + 1);
       const nextAgeTech = nextAgeTechId ? techDef(nextAgeTechId) : null;
-      const status = nextAgeTechId ? techStatus(this.world, 1, nextAgeTechId) : 'locked';
+      const status = nextAgeTechId
+        ? techStatus(this.world, this.perspectivePlayerId, nextAgeTechId)
+        : 'locked';
       if (nextAgeTech && nextAgeDef) {
         const available = status === 'available';
         const affordable = canAfford(nextAgeTech.cost);
@@ -4054,9 +4077,9 @@ export class GameScene extends Phaser.Scene {
       addTrainAction(UnitDefId.GUNMAN, 'Q', '•');
       addTrainAction(UnitDefId.CANNON, 'E', '●');
     }
-    const ownedArmyProducerCount = this.countOwnedArmyProducers(1);
+    const ownedArmyProducerCount = this.countOwnedArmyProducers(this.perspectivePlayerId);
     if (ownedArmyProducerCount > 0) {
-      const rally = this.world.armyRallyPoints[1];
+      const rally = this.world.armyRallyPoints[this.perspectivePlayerId];
       actions.push({
         id: 'set-army-rally',
         label: 'Army Rally Point',

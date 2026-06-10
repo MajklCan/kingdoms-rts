@@ -20,6 +20,11 @@ import { MultiplayerSession, type MultiplayerSessionDebugSnapshot, type SessionS
 import type { PlayerSlot } from './net/protocol';
 import type { SimInput } from './sim/world';
 
+declare const __APP_VERSION__: string;
+declare const __GIT_COMMIT__: string;
+declare const __GIT_BRANCH__: string;
+declare const __GIT_DIRTY__: boolean;
+
 const LOCAL_SAVE_KEY = 'kingdoms.manualSave.v1';
 
 /** Default relay URL: localhost in dev, the deployed Coolify relay otherwise.
@@ -56,6 +61,17 @@ const config: Phaser.Types.Core.GameConfig = {
 const game = new Phaser.Game(config);
 
 // ── Title screen → unpause sim ─────────────────────────────────────────────
+function bindBuildInfo(): void {
+  const buildEl = document.getElementById('build-info');
+  if (!buildEl) return;
+  const commit = __GIT_COMMIT__ && __GIT_COMMIT__ !== 'unknown'
+    ? `${__GIT_COMMIT__}${__GIT_DIRTY__ ? '+dirty' : ''}`
+    : 'unknown';
+  buildEl.textContent = `v${__APP_VERSION__} · ${commit}`;
+  buildEl.title = `Version ${__APP_VERSION__} · ${__GIT_BRANCH__} · ${commit}`;
+}
+bindBuildInfo();
+
 function hideTitleScreen(): void {
   document.getElementById('title-screen')?.classList.add('hidden');
 }
@@ -886,6 +902,7 @@ function showGameOver(
 
 // ── Debug overlay toggle (backtick key) ────────────────────────────────────
 window.addEventListener('keydown', (ev) => {
+  if (isTextEntryTarget(ev.target)) return;
   if (ev.key === '`' || ev.key === '~') {
     const dbg = document.getElementById('debug-overlay');
     dbg?.classList.toggle('hidden');

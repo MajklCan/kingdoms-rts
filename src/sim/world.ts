@@ -263,6 +263,24 @@ function isResourceTerrainTile(tile: number): boolean {
   );
 }
 
+function deterministicEidKey(world: SimWorld, eid: number): number {
+  return hasComponent(world.ecs, NetId, eid) ? NetId.value[eid] : eid;
+}
+
+function compareDeterministicEids(world: SimWorld, a: number, b: number): number {
+  const ak = deterministicEidKey(world, a);
+  const bk = deterministicEidKey(world, b);
+  return ak - bk || a - b;
+}
+
+function sortedEids(world: SimWorld, eids: readonly number[]): number[] {
+  return [...eids].sort((a, b) => compareDeterministicEids(world, a, b));
+}
+
+function compareGridPos(a: GridPos, b: GridPos): number {
+  return a.y - b.y || a.x - b.x;
+}
+
 const UNIT_SEPARATION_RADIUS = 0.42;
 const WORKER_SEPARATION_RADIUS = 0.58;
 const UNIT_SEPARATION_MAX_NUDGE = 0.08;
@@ -797,7 +815,7 @@ function recalculatePlayerPopCap(world: SimWorld, playerId: number): void {
   const pop = world.population[playerId];
   if (!pop) return;
   let cap = 0;
-  for (const eid of buildingQuery(world.ecs)) {
+  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
     if (Owner.player[eid] !== playerId) continue;
     if (hasComponent(world.ecs, ConstructionSite, eid)) continue;
     cap += getBuildingPopProvided(world, playerId, Building.defId[eid]);
@@ -4854,7 +4872,7 @@ function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
 }
 
 function applyRemoveSelectedBuildings(world: SimWorld, playerId: number): void {
-  for (const eid of selectedQuery(world.ecs)) {
+  for (const eid of sortedEids(world, selectedQuery(world.ecs))) {
     if (!isRemovableBuilding(world, eid, playerId)) continue;
     markWorksiteWorkersDead(world, eid);
     addComponent(world.ecs, DeadTag, eid);
@@ -5021,7 +5039,7 @@ function applyCancelProduction(world: SimWorld, atEid: number): void {
  *       (0.5s handoff) → WALKING_TO (if resource alive) or IDLE
  */
 function gatheringSystem(world: SimWorld): void {
-  const ents = gathererQuery(world.ecs);
+  const ents = sortedEids(world, gathererQuery(world.ecs));
   for (const eid of ents) {
     const state = Gatherer.state[eid];
     switch (state) {
@@ -5053,7 +5071,7 @@ function gatheringSystem(world: SimWorld): void {
 // ────────────────────────────────────────────────────────────────────────────
 
 function constructionSystem(world: SimWorld): void {
-  const sites = foundationQuery(world.ecs);
+  const sites = sortedEids(world, foundationQuery(world.ecs));
   for (const siteEid of sites) {
     const total = Math.max(1, ConstructionSite.totalTicks[siteEid]);
     ConstructionSite.progress[siteEid] += 1;
@@ -5123,7 +5141,7 @@ function attachBuildingCombat(world: SimWorld, eid: number, def: BuildingDef): v
 // ────────────────────────────────────────────────────────────────────────────
 
 function resourceWorksiteSystem(world: SimWorld): void {
-  const sites = resourceWorksiteQuery(world.ecs);
+  const sites = sortedEids(world, resourceWorksiteQuery(world.ecs));
   for (const siteEid of sites) {
     if (hasComponent(world.ecs, ConstructionSite, siteEid)) continue;
     if (Health.hp[siteEid] <= 0) continue;
@@ -5166,7 +5184,7 @@ function worksiteUsesResourceNodes(def: BuildingDef): boolean {
 
 function runFarmWorksite(world: SimWorld, siteEid: number, def: BuildingDef): void {
   const workTicks = farmWorkCycleTicks(world, siteEid, def);
-  for (const worker of worksiteWorkerQuery(world.ecs)) {
+  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
@@ -5263,7 +5281,7 @@ function runSelfProducingWorksite(
 
 function assignSelfProducingWorksiteWorkers(world: SimWorld, siteEid: number): number {
   let activeWorkers = 0;
-  for (const worker of worksiteWorkerQuery(world.ecs)) {
+  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
@@ -5346,7 +5364,7 @@ function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | null {
 
 function countWorksiteWorkers(world: SimWorld, siteEid: number): number {
   let count = 0;
-  for (const worker of worksiteWorkerQuery(world.ecs)) {
+  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     count++;
@@ -5381,7 +5399,7 @@ function assignWorksiteHarvestOrders(
   radius: number
 ): void {
   const claimedTargets = countClaimedWorksiteResourceTargets(world, siteEid, kind);
-  for (const worker of worksiteWorkerQuery(world.ecs)) {
+  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     if (ResourceCarry.amount[worker] > 0) {
@@ -5438,7 +5456,7 @@ function countClaimedWorksiteResourceTargets(
   kind: ResourceKind
 ): Map<number, number> {
   const claimed = new Map<number, number>();
-  for (const worker of worksiteWorkerQuery(world.ecs)) {
+  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     if (ResourceCarry.amount[worker] > 0) continue;
@@ -5496,7 +5514,7 @@ function forestRegrowthSystem(world: SimWorld): void {
 // ────────────────────────────────────────────────────────────────────────────
 
 function productionSystem(world: SimWorld): void {
-  const ents = producerQuery(world.ecs);
+  const ents = sortedEids(world, producerQuery(world.ecs));
   for (const eid of ents) {
     const queue = world.productionQueues.get(eid);
     if (!queue || queue.length === 0) {
@@ -5626,6 +5644,7 @@ interface TargetScore {
   priority: number;
   distance: number;
   hpFrac: number;
+  order: number;
   eid: number;
 }
 
@@ -5639,7 +5658,7 @@ function findBestAutoTarget(
     ? aggro + ATTACK_RANGE_TOLERANCE
     : Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
   let best: TargetScore | null = null;
-  for (const target of damageableQuery(world.ecs)) {
+  for (const target of sortedEids(world, damageableQuery(world.ecs))) {
     if (!isValidHostileTarget(world, attacker, target)) continue;
     if (!targetAllowed(target)) continue;
     const distance = distanceToAttackTarget(world, attacker, target);
@@ -5659,10 +5678,13 @@ function isValidHostileTarget(world: SimWorld, attacker: number, target: number)
   if (Owner.player[target] === Owner.player[attacker]) return false;
   if (Owner.player[target] === 0) return false;
   if (!hasComponent(world.ecs, Health, target) || Health.hp[target] <= 0) return false;
-  if (Owner.player[attacker] === LOCAL_PLAYER_ID) {
-    return isEntityVisibleTo(world, LOCAL_PLAYER_ID, target);
-  }
-  return true;
+  return isTargetVisibleToAttackerOwner(world, attacker, target);
+}
+
+function isTargetVisibleToAttackerOwner(world: SimWorld, attacker: number, target: number): boolean {
+  const attackerOwner = Owner.player[attacker];
+  if (!world.humanPlayers.has(attackerOwner)) return true;
+  return isEntityVisibleTo(world, attackerOwner, target);
 }
 
 function targetScore(
@@ -5690,6 +5712,7 @@ function targetScore(
     priority,
     distance,
     hpFrac: Health.hp[target] / hpMax,
+    order: deterministicEidKey(world, target),
     eid: target,
   };
 }
@@ -5698,6 +5721,7 @@ function compareTargetScore(a: TargetScore, b: TargetScore): number {
   if (a.priority !== b.priority) return a.priority - b.priority;
   if (Math.abs(a.distance - b.distance) > 0.001) return a.distance - b.distance;
   if (Math.abs(a.hpFrac - b.hpFrac) > 0.001) return a.hpFrac - b.hpFrac;
+  if (a.order !== b.order) return a.order - b.order;
   return a.eid - b.eid;
 }
 
@@ -5755,7 +5779,7 @@ function canHoldPositionMoveToTarget(world: SimWorld, eid: number, target: numbe
 }
 
 function targetingSystem(world: SimWorld): void {
-  const ents = combatQuery(world.ecs);
+  const ents = sortedEids(world, combatQuery(world.ecs));
   for (const eid of ents) {
     if (Health.hp[eid] <= 0) continue;
     const cur = AttackTarget.targetEid[eid];
@@ -5859,7 +5883,7 @@ function targetingSystem(world: SimWorld): void {
 }
 
 function combatSystem(world: SimWorld): void {
-  const ents = combatQuery(world.ecs);
+  const ents = sortedEids(world, combatQuery(world.ecs));
   for (const eid of ents) {
     if (Cooldown.ticksRemaining[eid] > 0) {
       Cooldown.ticksRemaining[eid] -= 1;
@@ -5880,7 +5904,7 @@ function combatSystem(world: SimWorld): void {
       world.paths.delete(eid);
       continue;
     }
-    if (Owner.player[eid] === LOCAL_PLAYER_ID && !isEntityVisibleTo(world, LOCAL_PLAYER_ID, target)) {
+    if (!isTargetVisibleToAttackerOwner(world, eid, target)) {
       AttackTarget.targetEid[eid] = -1;
       world.paths.delete(eid);
       continue;
@@ -6045,9 +6069,7 @@ function processCannonWindup(world: SimWorld, attacker: number): boolean {
 function isCannonWindupTargetValid(world: SimWorld, attacker: number, target: number): boolean {
   if (target < 0) return false;
   if (!hasComponent(world.ecs, Health, target) || Health.hp[target] <= 0) return false;
-  if (Owner.player[attacker] === LOCAL_PLAYER_ID && !isEntityVisibleTo(world, LOCAL_PLAYER_ID, target)) {
-    return false;
-  }
+  if (!isTargetVisibleToAttackerOwner(world, attacker, target)) return false;
   return distanceToAttackTarget(world, attacker, target) <=
     Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
 }
@@ -6189,7 +6211,7 @@ function cannonImpactSystem(world: SimWorld): void {
 
 function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): void {
   pushSoundCue(world, 'cannon_impact', impact.impactX, impact.impactY, impact.attackerOwner);
-  for (const building of buildingQuery(world.ecs)) {
+  for (const building of sortedEids(world, buildingQuery(world.ecs))) {
     if (!isValidCannonBuildingVictim(world, impact.attackerOwner, building)) continue;
     if (distToBuildingEdge(world, impact.impactX, impact.impactY, building) > CANNON_BUILDING_DIRECT_HIT_RADIUS) {
       continue;
@@ -6201,7 +6223,7 @@ function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): 
     retaliateWhenEngaged(world, building, impact.attackerEid);
   }
 
-  for (const victim of unitQuery(world.ecs)) {
+  for (const victim of sortedEids(world, unitQuery(world.ecs))) {
     if (!isValidCannonSplashVictim(world, impact.attackerOwner, victim)) continue;
     const distance = Math.hypot(Position.x[victim] - impact.impactX, Position.y[victim] - impact.impactY);
     if (distance > CANNON_SPLASH_MAX_RADIUS) continue;
@@ -6329,7 +6351,7 @@ function computeAttackDamage(world: SimWorld, attacker: number, target: number):
 }
 
 function deathSystem(world: SimWorld): void {
-  const ents = damageableQuery(world.ecs);
+  const ents = sortedEids(world, damageableQuery(world.ecs));
   for (const eid of ents) {
     if (Health.hp[eid] <= 0 && !hasComponent(world.ecs, DeadTag, eid)) {
       addComponent(world.ecs, DeadTag, eid);
@@ -6346,7 +6368,7 @@ function deathSystem(world: SimWorld): void {
 }
 
 function cleanupSystem(world: SimWorld): void {
-  const dead = deadQuery(world.ecs);
+  const dead = sortedEids(world, deadQuery(world.ecs));
   for (const eid of dead) {
     let recalculatePopFor: number | null = null;
     // Update population counters.
@@ -6396,7 +6418,7 @@ function cleanupSystem(world: SimWorld): void {
     // Clear any attack targets pointing at us — AND drop the path that was
     // chasing us. Without this, attackers keep walking to the deceased's last
     // tile (the "targeting a previous position" bug).
-    const attackers = combatQuery(world.ecs);
+    const attackers = sortedEids(world, combatQuery(world.ecs));
     for (const a of attackers) {
       if (AttackTarget.targetEid[a] === eid) {
         AttackTarget.targetEid[a] = -1;
@@ -6406,7 +6428,7 @@ function cleanupSystem(world: SimWorld): void {
     }
     world.cannonWindups.delete(eid);
     // Clear gatherer targets pointing at us (resource depleted, etc.).
-    const gatherers = gathererQuery(world.ecs);
+    const gatherers = sortedEids(world, gathererQuery(world.ecs));
     for (const g of gatherers) {
       if (Gatherer.targetEid[g] === eid) {
         Gatherer.state[g] = GathererStateId.IDLE;
@@ -6417,7 +6439,7 @@ function cleanupSystem(world: SimWorld): void {
     }
     // Clear builders' BuildOrder pointing at us.
     if (hasComponent(world.ecs, Building, eid)) {
-      const allMovable = movableQuery(world.ecs);
+      const allMovable = sortedEids(world, movableQuery(world.ecs));
       for (const m of allMovable) {
         if (
           hasComponent(world.ecs, BuildOrder, m) &&
@@ -6438,7 +6460,7 @@ function cleanupSystem(world: SimWorld): void {
 
 function markWorksiteWorkersDead(world: SimWorld, siteEid: number): void {
   if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return;
-  for (const worker of worksiteWorkerQuery(world.ecs)) {
+  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     addComponent(world.ecs, DeadTag, worker);
     Gatherer.targetEid[worker] = -1;
@@ -8753,7 +8775,7 @@ function tryFallbackWorksiteDeposit(world: SimWorld, worker: number): boolean {
  * with their carry and bounce them back to the resource (if it still exists) or IDLE.
  */
 function dropoffSystem(world: SimWorld): void {
-  const ents = gathererQuery(world.ecs);
+  const ents = sortedEids(world, gathererQuery(world.ecs));
   for (const eid of ents) {
     if (Gatherer.state[eid] !== GathererStateId.DEPOSITING) continue;
     if (Gatherer.cooldown[eid] > 0) {
@@ -8837,7 +8859,7 @@ function routeWorksiteWorkerToResource(
  */
 function movementSystem(world: SimWorld): void {
   const dt = 1 / SIM.TICK_HZ;
-  const ents = movableQuery(world.ecs);
+  const ents = sortedEids(world, movableQuery(world.ecs));
   for (const eid of ents) {
     // Snapshot pre-step position so the render layer can interpolate.
     if (hasComponent(world.ecs, PrevPosition, eid)) {
@@ -9075,7 +9097,7 @@ function repathAroundStuckDestination(
       }
     }
   }
-  candidates.sort((a, b) => a.score - b.score);
+  candidates.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
 
   for (const candidate of candidates) {
     const nextPath = world.pathfinder.findPath(from, candidate.tile);
@@ -9118,7 +9140,7 @@ function pathHasUsableFirstStep(world: SimWorld, eid: number, path: GridPos[]): 
 }
 
 function unitSeparationSystem(world: SimWorld): void {
-  const ents = Array.from(unitQuery(world.ecs)).filter((eid) => Health.hp[eid] > 0);
+  const ents = sortedEids(world, unitQuery(world.ecs)).filter((eid) => Health.hp[eid] > 0);
   for (let pass = 0; pass < UNIT_SEPARATION_PASSES; pass++) {
     for (let i = 0; i < ents.length; i++) {
       const a = ents[i];
@@ -9133,7 +9155,7 @@ function unitSeparationSystem(world: SimWorld): void {
 
         const overlapDist = dist;
         if (dist < 0.001) {
-          const angle = deterministicPairAngle(a, b);
+          const angle = deterministicPairAngle(world, a, b);
           dx = Math.cos(angle);
           dy = Math.sin(angle);
           dist = 1;
@@ -9187,8 +9209,10 @@ function isEconomicWorker(world: SimWorld, eid: number): boolean {
     hasComponent(world.ecs, VillagerTag, eid);
 }
 
-function deterministicPairAngle(a: number, b: number): number {
-  const hash = Math.imul(a + 1, 73856093) ^ Math.imul(b + 1, 19349663);
+function deterministicPairAngle(world: SimWorld, a: number, b: number): number {
+  const ak = deterministicEidKey(world, a);
+  const bk = deterministicEidKey(world, b);
+  const hash = Math.imul(ak + 1, 73856093) ^ Math.imul(bk + 1, 19349663);
   return ((hash >>> 0) / 0xffffffff) * Math.PI * 2;
 }
 
@@ -9312,7 +9336,7 @@ function resourceApproachCandidates(
       let vy = ty - Position.y[target];
       let len = Math.hypot(vx, vy);
       if (len < 0.001) {
-        const angle = deterministicPairAngle(eid, target);
+        const angle = deterministicPairAngle(world, eid, target);
         vx = Math.cos(angle);
         vy = Math.sin(angle);
         len = 1;
@@ -9334,7 +9358,7 @@ function resourceApproachCandidates(
     }
   }
 
-  out.sort((a, b) => a.score - b.score);
+  out.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
   return out;
 }
 
@@ -9348,7 +9372,7 @@ function workerResourceContactSlotPenalty(
   if (!hasComponent(world.ecs, VillagerTag, eid)) return 0;
   const owner = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : -1;
   let penalty = 0;
-  for (const other of unitQuery(world.ecs)) {
+  for (const other of sortedEids(world, unitQuery(world.ecs))) {
     if (other === eid) continue;
     if (Health.hp[other] <= 0) continue;
     if (!hasComponent(world.ecs, VillagerTag, other)) continue;
@@ -9410,7 +9434,7 @@ function routeToNearestReachableResource(
       dist: Math.hypot(Position.x[target] - originX, Position.y[target] - originY),
     }))
     .filter((candidate) => candidate.dist <= maxRange)
-    .sort((a, b) => a.dist - b.dist);
+    .sort((a, b) => a.dist - b.dist || compareDeterministicEids(world, a.target, b.target));
 
   for (const { target } of candidates) {
     if (avoidTargets.has(target)) continue;
@@ -9491,7 +9515,7 @@ function farmWorkPatchCandidates(
     });
   }
 
-  candidates.sort((a, b) => a.score - b.score);
+  candidates.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
   return candidates;
 }
 
@@ -9569,7 +9593,7 @@ function buildingApproachCandidates(
     }
   }
 
-  out.sort((a, b) => a.score - b.score);
+  out.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
   return out;
 }
 
@@ -9577,7 +9601,7 @@ function workerContactCrowdPenalty(world: SimWorld, eid: number, x: number, y: n
   let penalty = 0;
   const owner = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : -1;
   const requesterIsVillager = hasComponent(world.ecs, VillagerTag, eid);
-  for (const other of unitQuery(world.ecs)) {
+  for (const other of sortedEids(world, unitQuery(world.ecs))) {
     if (other === eid) continue;
     if (Health.hp[other] <= 0) continue;
     if (owner >= 0 && Owner.player[other] !== owner) continue;
@@ -9639,12 +9663,16 @@ export function findBuildingAt(
   y: number,
   radius = 0.7
 ): number | null {
-  const ents = buildingQuery(world.ecs);
+  const ents = sortedEids(world, buildingQuery(world.ecs));
   let bestEid: number | null = null;
   let bestDist = radius;
   for (const eid of ents) {
     const d = distToBuildingEdge(world, x, y, eid);
-    if (d < bestDist) {
+    if (
+      d < bestDist ||
+      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
+        compareDeterministicEids(world, eid, bestEid) < 0)
+    ) {
       bestDist = d;
       bestEid = eid;
     }
@@ -9659,12 +9687,16 @@ export function findResourceAt(
   y: number,
   radius = 0.6
 ): number | null {
-  const ents = resourceQuery(world.ecs);
+  const ents = sortedEids(world, resourceQuery(world.ecs));
   let bestEid: number | null = null;
   let bestDist = radius;
   for (const eid of ents) {
     const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    if (d < bestDist) {
+    if (
+      d < bestDist ||
+      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
+        compareDeterministicEids(world, eid, bestEid) < 0)
+    ) {
       bestDist = d;
       bestEid = eid;
     }
@@ -9680,14 +9712,18 @@ export function findNearestResource(
   kind: ResourceKind,
   maxRange: number
 ): number | null {
-  const ents = resourceQuery(world.ecs);
+  const ents = sortedEids(world, resourceQuery(world.ecs));
   let bestEid: number | null = null;
   let bestDist = maxRange;
   for (const eid of ents) {
     if (Resource.kind[eid] !== kind) continue;
     if (Resource.amount[eid] <= 0) continue;
     const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    if (d < bestDist) {
+    if (
+      d < bestDist ||
+      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
+        compareDeterministicEids(world, eid, bestEid) < 0)
+    ) {
       bestDist = d;
       bestEid = eid;
     }
@@ -9699,14 +9735,18 @@ function findNearestDropOffEid(world: SimWorld, eid: number): number | null {
   const player = Owner.player[eid];
   const carryKind = ResourceCarry.kind[eid] as ResourceKind;
   const mask = 1 << carryKind;
-  const ents = dropOffQuery(world.ecs);
+  const ents = sortedEids(world, dropOffQuery(world.ecs));
   let best: number | null = null;
   let bestDist = Infinity;
   for (const cand of ents) {
     if (Owner.player[cand] !== player) continue;
     if ((DropOff.acceptsMask[cand] & mask) === 0) continue;
     const d = distToBuildingEdge(world, Position.x[eid], Position.y[eid], cand);
-    if (d < bestDist) {
+    if (
+      d < bestDist ||
+      (best !== null && Math.abs(d - bestDist) < 0.000001 &&
+        compareDeterministicEids(world, cand, best) < 0)
+    ) {
       bestDist = d;
       best = cand;
     }
