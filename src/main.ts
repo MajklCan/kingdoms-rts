@@ -829,11 +829,13 @@ function bindCheatControls(): void {
     const scene = getScene();
     if (!scene) return;
     const snapshot = scene.createSaveSnapshot('Debug Dump');
-    const gameApi = (window as unknown as {
+    const debugApi = window as unknown as {
       __GAME__?: { debugDump?: () => Record<string, unknown> };
-    }).__GAME__;
+      __MP__?: { snapshot?: () => MultiplayerSessionDebugSnapshot | null };
+    };
     const payload = {
-      debug: gameApi?.debugDump?.() ?? null,
+      debug: debugApi.__GAME__?.debugDump?.() ?? null,
+      mp: debugApi.__MP__?.snapshot?.() ?? null,
       save: snapshot,
     };
     downloadTextFile(

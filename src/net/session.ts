@@ -26,7 +26,7 @@ import {
   type PlayerSlot,
   type ServerMessage,
 } from './protocol';
-import type { Transport } from './transport';
+import type { Transport, TransportCloseInfo } from './transport';
 
 export type SessionState =
   | 'connecting'
@@ -66,6 +66,15 @@ interface ChecksumCompareDebug {
   match: boolean;
 }
 
+export interface MultiplayerSessionEventDebug {
+  atMs: number;
+  wallTime: string;
+  event: string;
+  state: SessionState;
+  worldTick: number | null;
+  data?: Record<string, unknown>;
+}
+
 export interface MultiplayerSessionDebugSnapshot {
   state: SessionState;
   localPlayerId: number;
@@ -83,6 +92,9 @@ export interface MultiplayerSessionDebugSnapshot {
   lastStepAtMs: number;
   lastDeltaMs: number;
   lastBoundedDeltaMs: number;
+  stalled: boolean;
+  stalledForMs: number;
+  lastProgressAgeMs: number | null;
   lastSentTurn: TurnDebug | null;
   lastReceivedTurn: TurnDebug | null;
   lastSentChecksum: ChecksumDebug | null;
@@ -90,11 +102,14 @@ export interface MultiplayerSessionDebugSnapshot {
   lastChecksumCompare: ChecksumCompareDebug | null;
   pendingPeerChecksums: Array<{ tick: number; peerId: number; hash: number }>;
   lockstep: ReturnType<Lockstep['debugSnapshot']> | null;
+  eventLog: MultiplayerSessionEventDebug[];
 }
 
 /** Largest timer delta we honour, so a throttled tab can catch up without
  *  requesting an unbounded burst of lockstep packets on return. */
 const MAX_UPDATE_DELTA_MS = SIM.TICK_MS * 40;
+const EVENT_LOG_LIMIT = 300;
+const STALL_REPEAT_LOG_MS = 2000;
 
 function nowMs(): number {
   return globalThis.performance?.now?.() ?? Date.now();
@@ -125,6 +140,10 @@ export class MultiplayerSession {
   private lastSentChecksum: ChecksumDebug | null = null;
   private lastReceivedChecksum: ChecksumDebug | null = null;
   private lastChecksumCompare: ChecksumCompareDebug | null = null;
+  private readonly eventLog: MultiplayerSessionEventDebug[] = [];
+  private lastStalled = false;
+  private stalledSinceMs = 0;
+  private lastStallLogAtMs = 0;
 
   constructor(
     private readonly transport: Transport,
@@ -133,15 +152,21 @@ export class MultiplayerSession {
     private readonly cb: SessionCallbacks = {}
   ) {
     transport.onOpen(() => {
+      this.recordEvent('transport-open', { room: this.room, name: this.name });
       transport.send({ t: 'join', v: PROTOCOL_VERSION, room: this.room, name: this.name });
+      this.recordEvent('join-sent', { room: this.room, protocol: PROTOCOL_VERSION });
     });
     transport.onMessage((msg) => this.handle(msg));
-    transport.onClose(() => this.setState('disconnected'));
+    transport.onClose((info) => {
+      this.recordEvent('transport-close', infoToDebug(info));
+      this.setState('disconnected');
+    });
   }
 
   /** Host-only: start the match with a seed (defaults to a time-free random). */
   start(seed: number): void {
     if (!this.isHost) return;
+    this.recordEvent('start-sent', { seed });
     this.transport.send({ t: 'start', seed });
   }
 
@@ -149,7 +174,9 @@ export class MultiplayerSession {
    *  future tick and applied identically on every client. */
   sendCommand(input: SimInput): void {
     if (!this.world) return;
-    this.lockstep?.enqueueLocal(this.encodeInputForWire(input));
+    const encoded = this.encodeInputForWire(input);
+    this.recordEvent('command-enqueued', inputDebug(encoded));
+    this.lockstep?.enqueueLocal(encoded);
   }
 
   /** Drive from the multiplayer pump with the real elapsed delta (ms). Advances the
@@ -170,15 +197,34 @@ export class MultiplayerSession {
       const pkt = this.lockstep.nextSendPacket();
       this.sentTurns++;
       this.lastSentTurn = { playerId: this.localPlayerId, forTick: pkt.forTick, cmdCount: pkt.cmds.length };
+      if (pkt.cmds.length > 0 || pkt.forTick % CHECKSUM_INTERVAL_TICKS === 0) {
+        this.recordEvent(pkt.cmds.length > 0 ? 'turn-sent-command' : 'turn-sent-checkpoint', {
+          forTick: pkt.forTick,
+          cmdCount: pkt.cmds.length,
+          cmdTypes: pkt.cmds.map((cmd) => cmd.type),
+          sentTurns: this.sentTurns,
+        });
+      }
       this.transport.send({ t: 'turn', forTick: pkt.forTick, cmds: pkt.cmds });
     }
 
-    for (const ready of this.lockstep.drainReadyTicks()) {
+    const readyTicks = this.lockstep.drainReadyTicks();
+    for (const ready of readyTicks) {
       for (const input of ready.inputs) this.world.inputs.push(this.decodeInputFromWire(input));
       step(this.world);
       this.lastStepAtMs = nowMs();
       this.maybeChecksum(ready.tick + 1); // tick just completed
     }
+    if (readyTicks.length > 0 && (readyTicks.some((tick) => tick.inputs.length > 0) || this.world.tick % CHECKSUM_INTERVAL_TICKS === 0)) {
+      this.recordEvent('step-batch', {
+        count: readyTicks.length,
+        firstTick: readyTicks[0]?.tick,
+        lastTick: readyTicks[readyTicks.length - 1]?.tick,
+        inputCount: readyTicks.reduce((sum, tick) => sum + tick.inputs.length, 0),
+        worldTick: this.world.tick,
+      });
+    }
+    this.updateStallDiagnostics();
   }
 
   interpolationMs(now = nowMs()): number {
@@ -191,6 +237,8 @@ export class MultiplayerSession {
   }
 
   debugSnapshot(): MultiplayerSessionDebugSnapshot {
+    const now = nowMs();
+    const stalled = this.stalled;
     return {
       state: this.state,
       localPlayerId: this.localPlayerId,
@@ -208,6 +256,9 @@ export class MultiplayerSession {
       lastStepAtMs: Math.round(this.lastStepAtMs),
       lastDeltaMs: Math.round(this.lastDeltaMs * 100) / 100,
       lastBoundedDeltaMs: Math.round(this.lastBoundedDeltaMs * 100) / 100,
+      stalled,
+      stalledForMs: stalled && this.stalledSinceMs > 0 ? Math.max(0, Math.round(now - this.stalledSinceMs)) : 0,
+      lastProgressAgeMs: this.lastStepAtMs > 0 ? Math.max(0, Math.round(now - this.lastStepAtMs)) : null,
       lastSentTurn: this.lastSentTurn ? { ...this.lastSentTurn } : null,
       lastReceivedTurn: this.lastReceivedTurn ? { ...this.lastReceivedTurn } : null,
       lastSentChecksum: this.lastSentChecksum ? { ...this.lastSentChecksum } : null,
@@ -219,6 +270,10 @@ export class MultiplayerSession {
         hash: pending.hash,
       })),
       lockstep: this.lockstep?.debugSnapshot() ?? null,
+      eventLog: this.eventLog.map((event) => ({
+        ...event,
+        data: event.data ? { ...event.data } : undefined,
+      })),
     };
   }
 
@@ -228,6 +283,7 @@ export class MultiplayerSession {
     this.localChecksums.set(tick, hash);
     this.sentChecksums++;
     this.lastSentChecksum = { playerId: this.localPlayerId, tick, hash };
+    this.recordEvent('checksum-sent', { tick, hash, sentChecksums: this.sentChecksums });
     this.transport.send({ t: 'checksum', tick, hash });
     const pending = this.pendingPeerChecksums.get(tick);
     if (pending) {
@@ -238,6 +294,12 @@ export class MultiplayerSession {
 
   private compareChecksum(tick: number, local: number, peer: number, peerId: number): void {
     this.lastChecksumCompare = { tick, localHash: local, peerHash: peer, peerId, match: local === peer };
+    this.recordEvent(local === peer ? 'checksum-match' : 'checksum-mismatch', {
+      tick,
+      peerId,
+      localHash: local,
+      peerHash: peer,
+    });
     if (local !== peer) {
       // eslint-disable-next-line no-console
       console.warn('[Kingdoms MP] desync', this.debugSnapshot());
@@ -252,30 +314,55 @@ export class MultiplayerSession {
         this.localPlayerId = msg.playerId;
         this.isHost = msg.isHost;
         this.players = msg.players;
+        this.recordEvent('joined', {
+          room: msg.room,
+          playerId: msg.playerId,
+          isHost: msg.isHost,
+          players: msg.players.map((p) => p.playerId),
+        });
         this.setState('lobby');
         this.cb.onRoster?.(this.players, this.localPlayerId, this.isHost);
         return;
       case 'roster':
         this.players = msg.players;
+        this.recordEvent('roster', { players: msg.players.map((p) => p.playerId) });
         this.cb.onRoster?.(this.players, this.localPlayerId, this.isHost);
         return;
       case 'start':
+        this.recordEvent('start-received', { seed: msg.seed, players: msg.players.map((p) => p.playerId) });
         this.beginMatch(msg.seed, msg.players);
         return;
       case 'turn':
         this.receivedTurns++;
         this.lastReceivedTurn = { playerId: msg.playerId, forTick: msg.forTick, cmdCount: msg.cmds.length };
+        if (msg.cmds.length > 0 || msg.forTick % CHECKSUM_INTERVAL_TICKS === 0) {
+          this.recordEvent(msg.cmds.length > 0 ? 'turn-received-command' : 'turn-received-checkpoint', {
+            playerId: msg.playerId,
+            forTick: msg.forTick,
+            cmdCount: msg.cmds.length,
+            cmdTypes: msg.cmds.map((cmd) => cmd.type),
+            receivedTurns: this.receivedTurns,
+          });
+        }
         this.lockstep?.receivePeerTurn(msg.playerId, msg.forTick, msg.cmds);
         return;
       case 'checksum':
         this.receivedChecksums++;
         this.lastReceivedChecksum = { playerId: msg.playerId, tick: msg.tick, hash: msg.hash };
+        this.recordEvent('checksum-received', {
+          playerId: msg.playerId,
+          tick: msg.tick,
+          hash: msg.hash,
+          receivedChecksums: this.receivedChecksums,
+        });
         this.handlePeerChecksum(msg.playerId, msg.tick, msg.hash);
         return;
       case 'peer-left':
+        this.recordEvent('peer-left', { playerId: msg.playerId });
         this.setState('peer-left');
         return;
       case 'error':
+        this.recordEvent('relay-error', { message: msg.message });
         this.cb.onError?.(msg.message);
         this.setState('disconnected');
         return;
@@ -319,8 +406,12 @@ export class MultiplayerSession {
     this.lastSentChecksum = null;
     this.lastReceivedChecksum = null;
     this.lastChecksumCompare = null;
+    this.lastStalled = false;
+    this.stalledSinceMs = 0;
+    this.lastStallLogAtMs = 0;
 
     this.setState('playing');
+    this.recordEvent('match-start', { seed, localPlayerId: this.localPlayerId, players: players.map((p) => p.playerId) });
     this.cb.onMatchStart?.(world, this.localPlayerId);
   }
 
@@ -392,7 +483,92 @@ export class MultiplayerSession {
 
   private setState(state: SessionState): void {
     if (this.state === state) return;
+    const previous = this.state;
     this.state = state;
+    this.recordEvent('state-change', { from: previous, to: state });
     this.cb.onStateChange?.(state);
   }
+
+  private updateStallDiagnostics(): void {
+    if (!this.lockstep) return;
+    const stalled = this.lockstep.isStalled();
+    const now = nowMs();
+    if (stalled && !this.lastStalled) {
+      this.stalledSinceMs = now;
+      this.lastStallLogAtMs = now;
+      this.recordEvent('stall-begin', {
+        blockedTick: this.lockstep.debugSnapshot().blockedTick,
+        missingPlayers: this.lockstep.debugSnapshot().missingPlayers,
+      });
+    } else if (!stalled && this.lastStalled) {
+      this.recordEvent('stall-end', {
+        durationMs: Math.round(now - this.stalledSinceMs),
+        worldTick: this.world?.tick ?? null,
+      });
+      this.stalledSinceMs = 0;
+      this.lastStallLogAtMs = 0;
+    } else if (stalled && now - this.lastStallLogAtMs >= STALL_REPEAT_LOG_MS) {
+      const snapshot = this.lockstep.debugSnapshot();
+      this.lastStallLogAtMs = now;
+      this.recordEvent('stall-still-waiting', {
+        durationMs: Math.round(now - this.stalledSinceMs),
+        blockedTick: snapshot.blockedTick,
+        missingPlayers: snapshot.missingPlayers,
+        lastSentTurn: this.lastSentTurn,
+        lastReceivedTurn: this.lastReceivedTurn,
+      });
+    }
+    this.lastStalled = stalled;
+  }
+
+  private recordEvent(event: string, data?: Record<string, unknown>): void {
+    const entry: MultiplayerSessionEventDebug = {
+      atMs: Math.round(nowMs()),
+      wallTime: new Date().toISOString(),
+      event,
+      state: this.state,
+      worldTick: this.world?.tick ?? null,
+      data,
+    };
+    this.eventLog.push(entry);
+    while (this.eventLog.length > EVENT_LOG_LIMIT) this.eventLog.shift();
+
+    if (
+      typeof window !== 'undefined' &&
+      (
+        event.includes('error') ||
+        event.includes('mismatch') ||
+        event.includes('stall') ||
+        event === 'state-change' ||
+        event === 'match-start' ||
+        event === 'transport-close' ||
+        event === 'peer-left'
+      )
+    ) {
+      const level = event.includes('error') || event.includes('mismatch') ? 'warn' : 'info';
+      // eslint-disable-next-line no-console
+      console[level]('[Kingdoms MP]', event, data ?? {});
+    }
+  }
+}
+
+function infoToDebug(info?: TransportCloseInfo): Record<string, unknown> {
+  return {
+    type: info?.type ?? 'unknown',
+    code: info?.code ?? null,
+    reason: info?.reason ?? '',
+    wasClean: info?.wasClean ?? null,
+  };
+}
+
+function inputDebug(input: SimInput): Record<string, unknown> {
+  const out: Record<string, unknown> = { type: input.type };
+  if ('playerId' in input) out.playerId = input.playerId;
+  if ('eids' in input) out.eidCount = input.eids.length;
+  if ('targetEid' in input) out.targetEid = input.targetEid;
+  if ('atEid' in input) out.atEid = input.atEid;
+  if ('defId' in input) out.defId = input.defId;
+  if ('techId' in input) out.techId = input.techId;
+  if ('to' in input) out.to = input.to;
+  return out;
 }

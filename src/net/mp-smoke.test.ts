@@ -30,7 +30,7 @@ import {
 import { Building, Owner, Position, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
 import { BuildingDefId } from '@sim/defs';
 import { MultiplayerSession, type SessionCallbacks } from './session';
-import type { Transport } from './transport';
+import type { Transport, TransportCloseInfo } from './transport';
 import {
   CHECKSUM_INTERVAL_TICKS,
   PROTOCOL_VERSION,
@@ -104,7 +104,7 @@ class PairedTransport implements Transport {
   name: string | null = null;
   private msgCb: ((msg: ServerMessage) => void) | null = null;
   private openCb: (() => void) | null = null;
-  private closeCb: (() => void) | null = null;
+  private closeCb: ((info?: TransportCloseInfo) => void) | null = null;
   constructor(private readonly relay: RelayShim) {}
   send(msg: ClientMessage): void {
     if (msg.t === 'join') this.name = msg.name;
@@ -116,11 +116,11 @@ class PairedTransport implements Transport {
   onOpen(cb: () => void): void {
     this.openCb = cb;
   }
-  onClose(cb: () => void): void {
+  onClose(cb: (info?: TransportCloseInfo) => void): void {
     this.closeCb = cb;
   }
   close(): void {
-    this.closeCb?.();
+    this.closeCb?.({ type: 'manual' });
   }
   receive(msg: ServerMessage): void {
     this.msgCb?.(msg);
