@@ -147,7 +147,7 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.CASTLE_AGE,
     name: 'Castle Age',
-    description: 'Advance into Castle Age and unlock gold mining, stables, and knights.',
+    description: 'Advance into Castle Age and unlock gold mining, stables, and scouts.',
     cost: { food: 0, wood: 750, gold: 0, stone: 500 },
     path: 'age',
     icon: 'castle',
@@ -157,7 +157,19 @@ export const TECH_TREE: TechDef[] = [
       [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS],
       [TechId.LUMBER_CREWS, TechId.MINING_CREWS],
     ],
-    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Knights'],
+    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Scouts'],
+  },
+  {
+    id: TechId.KNIGHTS,
+    name: 'Knights',
+    description: 'Unlocks heavy mounted knights from the stable.',
+    cost: { food: 0, wood: 300, gold: 650, stone: 250 },
+    path: 'castle',
+    icon: 'knight',
+    x: 69.5,
+    y: 54,
+    requiresAge: AgeId.CASTLE,
+    unlocks: ['Knights'],
   },
   {
     id: TechId.MILLS,
@@ -336,7 +348,9 @@ export function isUnitUnlocked(
     case UnitDefId.ARCHER:
       return hasTech(world, playerId, TechId.ARCHERS);
     case UnitDefId.SCOUT_CAVALRY:
-      return (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE;
+      return isBuildingUnlocked(world, playerId, BuildingDefId.STABLE);
+    case UnitDefId.KNIGHT:
+      return hasTech(world, playerId, TechId.KNIGHTS);
     case UnitDefId.GUNMAN:
     case UnitDefId.CANNON:
       return (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.GUNPOWDER;

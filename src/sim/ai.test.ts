@@ -267,7 +267,7 @@ describe('enemy AI', () => {
     expect(Math.hypot(Position.x[lumber] - spawn.x, Position.y[lumber] - spawn.y)).toBeGreaterThan(4);
   });
 
-  it('hard AI replaces depleted lumber huts near remote wood', () => {
+  it('hard AI replaces depleted lumber huts near remote wood when a unit is nearby', () => {
     const world = createSimWorld(213, { aiDifficulty: 'hard' });
     world.paused = false;
     world.resources[AI_PLAYER_ID].set([0, 1000, 0, 0]);
@@ -285,6 +285,8 @@ describe('enemy AI', () => {
       (x, y) => Math.hypot(x - oldSpot.x, y - oldSpot.y) > 42.5
     );
     const wood = spawnResource(world, ResourceKindId.WOOD, woodTile.x, woodTile.y, 100);
+    const escortTile = findOpenTileAtRange(world, woodTile.x, woodTile.y, 1, 2);
+    spawnSpearman(world, escortTile.x, escortTile.y, AI_PLAYER_ID);
     const before = countAiBuildings(world, BuildingDefId.LUMBER_CAMP);
 
     for (let i = 0; i < 5; i++) step(world);
@@ -348,7 +350,7 @@ describe('enemy AI', () => {
 
     expect(world.productionQueues.get(barracks)).toContain(UnitDefId.SPEARMAN);
     expect(world.productionQueues.get(barracks)).toContain(UnitDefId.ARCHER);
-    expect(world.productionQueues.get(stable)).toContain(UnitDefId.SCOUT_CAVALRY);
+    expect(world.productionQueues.get(stable)).toContain(UnitDefId.KNIGHT);
   });
 
   it('pulls nearby military into defense when its base is threatened', () => {

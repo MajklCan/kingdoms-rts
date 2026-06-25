@@ -174,7 +174,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x6f4a26,
     isDropOff: false,
     dropOffMask: 0,
-    trains: ['SCOUT_CAVALRY'],
+    trains: ['SCOUT_CAVALRY', 'KNIGHT'],
   },
   {
     id: 'LUMBER_CAMP',
@@ -306,6 +306,7 @@ export const UnitDefId = {
   CANNON: 6,
   MACHINE_GUN: 7,
   MORTAR: 8,
+  KNIGHT: 9,
 } as const;
 
 export type UnitDefIdValue = (typeof UnitDefId)[keyof typeof UnitDefId];
@@ -349,7 +350,7 @@ export const UNIT_TABLE: UnitDef[] = [
   },
   {
     id: 'SCOUT_CAVALRY',
-    name: 'Scout Cavalry',
+    name: 'Scout',
     hp: 60,
     cost: { food: 80, wood: 0, gold: 40, stone: 0 },
     trainTimeTicks: Math.round(SIM.TICK_HZ * 28),
@@ -391,6 +392,15 @@ export const UNIT_TABLE: UnitDef[] = [
     trainTimeTicks: Math.round(SIM.TICK_HZ * 42),
     popCost: 2,
     trainAt: 'TOTAL_WAR_DEPOT',
+  },
+  {
+    id: 'KNIGHT',
+    name: 'Knight',
+    hp: 115,
+    cost: { food: 90, wood: 0, gold: 150, stone: 0 },
+    trainTimeTicks: Math.round(SIM.TICK_HZ * 36),
+    popCost: 2,
+    trainAt: 'STABLE',
   },
 ];
 

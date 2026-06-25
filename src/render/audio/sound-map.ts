@@ -152,7 +152,14 @@ export function combatSound(
   if (phase === 'windup') return null;
 
   // Melee.
-  if (range <= 1 && (attackerKind === UnitDefId.SPEARMAN || attackerKind === UnitDefId.SCOUT_CAVALRY)) {
+  if (
+    range <= 1 &&
+    (
+      attackerKind === UnitDefId.SPEARMAN ||
+      attackerKind === UnitDefId.SCOUT_CAVALRY ||
+      attackerKind === UnitDefId.KNIGHT
+    )
+  ) {
     return { key: 'sword_clash', minIntervalMs: 70, volume: 0.55 };
   }
   // Ranged.

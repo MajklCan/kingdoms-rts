@@ -23,6 +23,7 @@ import {
   CannonTag,
   GunmanTag,
   Health,
+  KnightTag,
   MachineGunDeployment,
   MachineGunTag,
   MortarTag,
@@ -61,6 +62,7 @@ import {
 import { CampaignMissionId, type CampaignMissionIdValue } from '../sim/campaign';
 import {
   buildingQuery,
+  canPlaceBuildingAt,
   clearSelection,
   createSimWorld,
   findEntityNear,
@@ -186,6 +188,15 @@ import {
   type ScoutCavalryAnim,
   type ScoutCavalryFacing,
 } from './voxel/models/dark-scout-cavalry';
+import {
+  KNIGHT_ANIMS,
+  KNIGHT_BAKE_BOUNDS,
+  KNIGHT_FACINGS,
+  KNIGHT_FRAME_COUNTS,
+  buildKnightVoxels,
+  type KnightAnim,
+  type KnightFacing,
+} from './voxel/models/dark-knight';
 import {
   GUNMAN_ANIMS,
   GUNMAN_BAKE_BOUNDS,
@@ -363,6 +374,7 @@ export class GameScene extends Phaser.Scene {
   } | null = null;
   private buildMode: BuildMode = 'none';
   private armyRallyMode = false;
+  private attackGroundMode = false;
   /** Awaiting a building hotkey after B keypress. */
   private awaitingBuildKind = false;
   public fps = 0;
@@ -376,6 +388,7 @@ export class GameScene extends Phaser.Scene {
   private activeProjectiles: AttackProjectile[] = [];
   private minimapCombatAlerts: MinimapCombatAlert[] = [];
   private scoutFacing = new Map<number, ScoutCavalryFacing>();
+  private knightFacing = new Map<number, KnightFacing>();
   private archerFacing = new Map<number, ArcherFacing>();
   private spearmanFacing = new Map<number, SpearmanFacing>();
   private gunmanFacing = new Map<number, GunmanFacing>();
@@ -443,6 +456,7 @@ export class GameScene extends Phaser.Scene {
   private static readonly ARCHER_KEY_PREFIX = 'voxel-archer-p';
   private static readonly SPEARMAN_KEY_PREFIX = 'voxel-spearman-p';
   private static readonly SCOUT_CAVALRY_KEY_PREFIX = 'voxel-scout-cavalry-p';
+  private static readonly KNIGHT_KEY_PREFIX = 'voxel-knight-p';
   private static readonly GUNMAN_KEY_PREFIX = 'voxel-gunman-p';
   private static readonly CANNON_KEY_PREFIX = 'voxel-cannon-p';
   private static readonly MACHINE_GUN_KEY_PREFIX = 'voxel-machine-gun-p';
@@ -534,6 +548,8 @@ export class GameScene extends Phaser.Scene {
     this.panToLocalTownCenter();
     if (this.isScoutCavalryInspectionMode()) {
       this.createScoutCavalryInspectionSheet();
+    } else if (this.isKnightInspectionMode()) {
+      this.createKnightInspectionSheet();
     } else if (this.isVillagerInspectionMode()) {
       this.createVillagerInspectionSheet();
     } else if (this.isArcherInspectionMode()) {
@@ -577,6 +593,7 @@ export class GameScene extends Phaser.Scene {
     onHotkey('keydown-B', () => {
       this.awaitingBuildKind = true;
       this.buildMode = 'none';
+      this.attackGroundMode = false;
       setLastEvent('build: M farm · I mill · L wood · C stone · other buildings unlock through research');
     });
     onHotkey('keydown-H', () => {
@@ -604,6 +621,8 @@ export class GameScene extends Phaser.Scene {
     onHotkey('keydown-G', () => {
       if (this.awaitingBuildKind) {
         this.startBuildMode('GOLD_MINE', 'build GOLD MINE — left-click near gold');
+      } else {
+        this.startAttackGroundMode();
       }
     });
     onHotkey('keydown-C', () => {
@@ -638,9 +657,10 @@ export class GameScene extends Phaser.Scene {
       }
     });
     onHotkey('keydown-ESC', () => {
-      if (this.buildMode !== 'none' || this.awaitingBuildKind || this.armyRallyMode) {
+      if (this.buildMode !== 'none' || this.awaitingBuildKind || this.armyRallyMode || this.attackGroundMode) {
         this.buildMode = 'none';
         this.armyRallyMode = false;
+        this.attackGroundMode = false;
         this.awaitingBuildKind = false;
         this.ghostGfx.clear();
         setLastEvent('placement cancelled');
@@ -649,6 +669,7 @@ export class GameScene extends Phaser.Scene {
     onHotkey('keydown-Q', () => this.onTrainHotkey(0));
     onHotkey('keydown-E', () => this.onSecondaryActionHotkey());
     onHotkey('keydown-V', () => this.startArmyRallyMode());
+    onHotkey('keydown-S', () => this.dispatch({ type: 'stopSelected' }));
     onHotkey('keydown-DELETE', () => this.removeSelectedBuildings());
 
     // Zoom: mouse wheel scales by event deltaY (Mac trackpad pinch sends many
@@ -1064,6 +1085,7 @@ export class GameScene extends Phaser.Scene {
         sprite.destroy();
         this.unitSprites.delete(eid);
         this.scoutFacing.delete(eid);
+        this.knightFacing.delete(eid);
         this.archerFacing.delete(eid);
         this.spearmanFacing.delete(eid);
         this.gunmanFacing.delete(eid);
@@ -1085,6 +1107,7 @@ export class GameScene extends Phaser.Scene {
       this.noteCombatForAdaptiveAudio(event);
       if (
         event.attackerKind === UnitDefId.SCOUT_CAVALRY ||
+        event.attackerKind === UnitDefId.KNIGHT ||
         event.attackerKind === UnitDefId.ARCHER ||
         event.attackerKind === UnitDefId.SPEARMAN ||
         event.attackerKind === UnitDefId.GUNMAN ||
@@ -1134,7 +1157,7 @@ export class GameScene extends Phaser.Scene {
     const attackerPlayer = hasComponent(this.world.ecs, Owner, event.attackerEid)
       ? Owner.player[event.attackerEid]
       : 0;
-    const targetPlayer = hasComponent(this.world.ecs, Owner, event.targetEid)
+    const targetPlayer = event.targetEid >= 0 && hasComponent(this.world.ecs, Owner, event.targetEid)
       ? Owner.player[event.targetEid]
       : 0;
     if (attackerPlayer !== this.perspectivePlayerId && targetPlayer !== this.perspectivePlayerId) return;
@@ -1303,7 +1326,7 @@ export class GameScene extends Phaser.Scene {
     const attackerPlayer = hasComponent(this.world.ecs, Owner, event.attackerEid)
       ? Owner.player[event.attackerEid]
       : 0;
-    const targetPlayer = hasComponent(this.world.ecs, Owner, event.targetEid)
+    const targetPlayer = event.targetEid >= 0 && hasComponent(this.world.ecs, Owner, event.targetEid)
       ? Owner.player[event.targetEid]
       : 0;
     if (attackerPlayer === this.perspectivePlayerId || targetPlayer === this.perspectivePlayerId) {
@@ -1383,6 +1406,7 @@ export class GameScene extends Phaser.Scene {
     if (hasComponent(this.world.ecs, SpearmanTag, eid)) return 'soldier_1';
     if (hasComponent(this.world.ecs, ArcherTag, eid)) return 'soldier_2';
     if (hasComponent(this.world.ecs, ScoutCavalryTag, eid)) return 'soldier_3';
+    if (hasComponent(this.world.ecs, KnightTag, eid)) return 'soldier_3';
     if (hasComponent(this.world.ecs, GunmanTag, eid)) return 'soldier_1';
     if (hasComponent(this.world.ecs, CannonTag, eid)) return 'soldier_2';
     if (hasComponent(this.world.ecs, MachineGunTag, eid)) return 'soldier_3';
@@ -1467,7 +1491,7 @@ export class GameScene extends Phaser.Scene {
         : kind === 'mortar'
           ? -34
           : -28;
-    const targetOffsetY = hasComponent(this.world.ecs, Building, event.targetEid)
+    const targetOffsetY = event.targetEid >= 0 && hasComponent(this.world.ecs, Building, event.targetEid)
       ? -42
       : kind === 'cannon' || kind === 'mortar'
         ? -16
@@ -1605,7 +1629,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawAttackCursorIndicator(): void {
-    if (this.buildMode !== 'none' || this.armyRallyMode || this.input.activePointer.rightButtonDown()) {
+    if (
+      this.buildMode !== 'none' ||
+      this.armyRallyMode ||
+      this.attackGroundMode ||
+      this.input.activePointer.rightButtonDown()
+    ) {
       return;
     }
     if (!this.hasSelectedAttackCommandSource()) {
@@ -1773,12 +1802,8 @@ export class GameScene extends Phaser.Scene {
     const w = halfW * def.footprint.w;
     const h = halfH * def.footprint.h;
 
-    // Validity: tile must be free and player must be able to afford.
-    const tileBlocked = this.isBuildFootprintBlocked(def, tx, ty);
-    const hasNearbyResource =
-      def.harvestKind === undefined ||
-      def.requiresNearbyResource === false ||
-      this.hasNearbyResource(tx, ty, def.harvestKind, def.harvestRadius ?? 6);
+    // Validity mirrors sim-side command acceptance.
+    const placeable = canPlaceBuildingAt(this.world, def, tx, ty, this.perspectivePlayerId);
     const bank = this.world.resources[this.perspectivePlayerId];
     const canAffordBuild =
       bank[0] >= def.cost.food &&
@@ -1786,7 +1811,7 @@ export class GameScene extends Phaser.Scene {
       bank[2] >= def.cost.gold &&
       bank[3] >= def.cost.stone;
     const unlocked = isBuildingUnlocked(this.world, this.perspectivePlayerId, defId);
-    const valid = unlocked && !tileBlocked && canAffordBuild && hasNearbyResource;
+    const valid = unlocked && placeable && canAffordBuild;
 
     const ghostColor = valid ? def.color : 0xff4757;
     this.ghostGfx.fillStyle(ghostColor, 0.4);
@@ -1865,6 +1890,9 @@ export class GameScene extends Phaser.Scene {
         case 'attackMoveSelected':
           net = { type: 'cmdAttackMove', playerId: pid, eids, to: input.to };
           break;
+        case 'attackGroundSelected':
+          net = { type: 'cmdAttackGround', playerId: pid, eids, to: input.to };
+          break;
         case 'toggleSelectedUnitStance':
           net = { type: 'cmdToggleStance', playerId: pid, eids };
           break;
@@ -1882,6 +1910,12 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'reformSelectedFormation':
           net = { type: 'cmdReformFormation', playerId: pid, eids };
+          break;
+        case 'splitSelectedFormation':
+          net = { type: 'cmdSplitFormation', playerId: pid, eids };
+          break;
+        case 'toggleFormationLock':
+          net = { type: 'cmdToggleFormationLock', playerId: pid };
           break;
         default:
           net = input; // placeBuilding/trainUnit/researchTech/etc. already carry playerId
@@ -1960,6 +1994,27 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    if (this.attackGroundMode) {
+      if (pointer.rightButtonDown()) {
+        this.attackGroundMode = false;
+        this.ghostGfx.clear();
+        setLastEvent('attack-ground cancelled');
+        return;
+      }
+      if (pointer.leftButtonDown()) {
+        if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) {
+          setLastEvent(`attack-ground outside map (${tx},${ty})`);
+          return;
+        }
+        this.dispatch({ type: 'attackGroundSelected', to: { x: tx, y: ty } });
+        this.barkAttack();
+        setLastEvent(`attack-ground -> (${tx},${ty})`);
+        this.attackGroundMode = false;
+        this.ghostGfx.clear();
+        return;
+      }
+    }
+
     // Build mode: left-click places (if valid), right-click cancels.
     if (this.buildMode !== 'none') {
       if (pointer.rightButtonDown()) {
@@ -1970,11 +2025,29 @@ export class GameScene extends Phaser.Scene {
       }
       if (pointer.leftButtonDown()) {
         const defId = BUILD_MODE_TO_DEF[this.buildMode];
+        const def = BUILDING_TABLE[defId];
+        if (!def) return;
         if (!isBuildingUnlocked(this.world, this.perspectivePlayerId, defId)) {
-          setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.buildMode} is locked`);
+          setLastEvent(`${def?.name ?? this.buildMode} is locked`);
           this.playUi(SFX_ERROR);
           this.buildMode = 'none';
           this.ghostGfx.clear();
+          return;
+        }
+        const bank = this.world.resources[this.perspectivePlayerId];
+        const canAffordBuild =
+          bank[0] >= def.cost.food &&
+          bank[1] >= def.cost.wood &&
+          bank[2] >= def.cost.gold &&
+          bank[3] >= def.cost.stone;
+        if (!canAffordBuild) {
+          setLastEvent(`not enough resources for ${def.name}`);
+          this.playUi(SFX_ERROR);
+          return;
+        }
+        if (!canPlaceBuildingAt(this.world, def, tx, ty, this.perspectivePlayerId)) {
+          setLastEvent(`${def.name} must be near your buildings or units`);
+          this.playUi(SFX_ERROR);
           return;
         }
         this.dispatch({
@@ -2405,6 +2478,7 @@ export class GameScene extends Phaser.Scene {
     const def = BUILDING_TABLE[defId];
     this.awaitingBuildKind = false;
     this.armyRallyMode = false;
+    this.attackGroundMode = false;
     if (!isBuildingUnlocked(this.world, this.perspectivePlayerId, defId)) {
       this.buildMode = 'none';
       setLastEvent(`${def?.name ?? mode} is locked`);
@@ -2421,8 +2495,31 @@ export class GameScene extends Phaser.Scene {
     }
     this.buildMode = 'none';
     this.awaitingBuildKind = false;
+    this.attackGroundMode = false;
     this.armyRallyMode = true;
     setLastEvent('army rally — click map');
+  }
+
+  private startAttackGroundMode(): void {
+    if (!this.hasSelectedAttackGroundSource()) {
+      setLastEvent('attack-ground needs cannon or mortar');
+      return;
+    }
+    this.buildMode = 'none';
+    this.awaitingBuildKind = false;
+    this.armyRallyMode = false;
+    this.attackGroundMode = true;
+    setLastEvent('attack-ground — click map');
+  }
+
+  private hasSelectedAttackGroundSource(): boolean {
+    for (const eid of selectedQuery(this.world.ecs)) {
+      if (Owner.player[eid] !== this.perspectivePlayerId) continue;
+      if (hasComponent(this.world.ecs, CannonTag, eid) || hasComponent(this.world.ecs, MortarTag, eid)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private canAffordCost(
@@ -2613,6 +2710,18 @@ export class GameScene extends Phaser.Scene {
     setLastEvent(`formation facing: ${this.formationFacingLabel(nextFacing)}`);
   }
 
+  private splitFormation(): void {
+    const military = this.selectedPlayerStanceUnits();
+    if (military.length <= 1) return;
+    this.dispatch({ type: 'splitSelectedFormation' });
+    setLastEvent('formation split');
+  }
+
+  private toggleFormationLock(): void {
+    this.dispatch({ type: 'toggleFormationLock' });
+    setLastEvent(this.perspectiveFormationLocked() ? 'formation unlocked' : 'formation locked');
+  }
+
   /** This client's own formation shape (host=1, guest=2 perspective). */
   private perspectiveFormationMode(): number {
     return this.world.formationModes[this.perspectivePlayerId] ?? 0;
@@ -2623,9 +2732,13 @@ export class GameScene extends Phaser.Scene {
     return this.world.formationFacings[this.perspectivePlayerId] ?? 0;
   }
 
+  private perspectiveFormationLocked(): boolean {
+    return (this.world.formationLocks[this.perspectivePlayerId] ?? 1) !== 0;
+  }
+
   private clampFormationMode(mode: number): number {
     if (!Number.isFinite(mode)) return 0;
-    return Math.max(0, Math.min(2, Math.trunc(mode)));
+    return Math.max(0, Math.min(5, Math.trunc(mode)));
   }
 
   private normalizeFormationFacing(facing: number): number {
@@ -2636,6 +2749,9 @@ export class GameScene extends Phaser.Scene {
     switch (this.clampFormationMode(mode)) {
       case 1: return 'line';
       case 2: return 'compact';
+      case 3: return 'box';
+      case 4: return 'staggered';
+      case 5: return 'column';
       default: return 'free';
     }
   }
@@ -3060,6 +3176,7 @@ export class GameScene extends Phaser.Scene {
     this.resourceSprites.clear();
     this.mapFeatureSprites.clear();
     this.scoutFacing.clear();
+    this.knightFacing.clear();
     this.archerFacing.clear();
     this.spearmanFacing.clear();
     this.gunmanFacing.clear();
@@ -3186,22 +3303,6 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  private isBuildFootprintBlocked(def: BuildingDef, x: number, y: number): boolean {
-    const x0 = x - Math.floor(def.footprint.w / 2);
-    const y0 = y - Math.floor(def.footprint.h / 2);
-    for (let dy = 0; dy < def.footprint.h; dy++) {
-      for (let dx = 0; dx < def.footprint.w; dx++) {
-        const tx = x0 + dx;
-        const ty = y0 + dy;
-        if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return true;
-        if (this.world.map.walkability[ty][tx] !== 0) return true;
-        if (findResourceAt(this.world, tx, ty, 0.6) !== null) return true;
-        if (findBuildingAtRender(this.world, tx, ty, 0.01) !== null) return true;
-      }
-    }
-    return false;
-  }
-
   /**
    * Convert a Phaser pointer to a tile coord, compensating for the elevation
    * of the tile under the pointer. The terrain bake lifts each tile by
@@ -3271,7 +3372,13 @@ export class GameScene extends Phaser.Scene {
 
   private isScoutCavalryInspectionMode(): boolean {
     if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('inspect') === 'scout-cavalry';
+    const inspect = new URLSearchParams(window.location.search).get('inspect');
+    return inspect === 'scout-cavalry' || inspect === 'scout';
+  }
+
+  private isKnightInspectionMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('inspect') === 'knight';
   }
 
   private isVillagerInspectionMode(): boolean {
@@ -3319,7 +3426,7 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0)
       .setScrollFactor(0);
     this.add
-      .text(24, 18, 'Scout Cavalry Sprite Draft', {
+      .text(24, 18, 'Scout Sprite Draft', {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '20px',
         color: '#f1d58a',
@@ -3385,6 +3492,25 @@ export class GameScene extends Phaser.Scene {
           .setScrollFactor(0);
       }
     }
+  }
+
+  private createKnightInspectionSheet(): void {
+    this.createCombatUnitInspectionSheet({
+      title: 'Knight Sprite Draft',
+      subtitle: '8 facings / armored mounted idle, movement, and lance attack frames',
+      facings: KNIGHT_FACINGS,
+      rows: [
+        { label: 'idle', anim: 'idle', frame: 0 },
+        { label: 'move 0', anim: 'move', frame: 0 },
+        { label: 'move 1', anim: 'move', frame: 1 },
+        { label: 'attack 0', anim: 'attack', frame: 0 },
+        { label: 'attack 1', anim: 'attack', frame: 1 },
+      ],
+      textureKey: (facing, anim, frame) =>
+        GameScene.knightTextureKey(1, facing as KnightFacing, anim as KnightAnim, frame),
+      originY: 0.73,
+      scale: 1.45,
+    });
   }
 
   private createVillagerInspectionSheet(): void {
@@ -3709,6 +3835,7 @@ export class GameScene extends Phaser.Scene {
       | 'archer'
       | 'spearman'
       | 'scoutCavalry'
+      | 'knight'
       | 'gunman'
       | 'cannon'
       | 'machineGun'
@@ -3753,6 +3880,7 @@ export class GameScene extends Phaser.Scene {
       else if (hasComponent(this.world.ecs, ArcherTag, eid)) k = 'archer';
       else if (hasComponent(this.world.ecs, SpearmanTag, eid)) k = 'spearman';
       else if (hasComponent(this.world.ecs, ScoutCavalryTag, eid)) k = 'scoutCavalry';
+      else if (hasComponent(this.world.ecs, KnightTag, eid)) k = 'knight';
       else if (hasComponent(this.world.ecs, GunmanTag, eid)) k = 'gunman';
       else if (hasComponent(this.world.ecs, CannonTag, eid)) k = 'cannon';
       else if (hasComponent(this.world.ecs, MachineGunTag, eid)) k = 'machineGun';
@@ -3790,7 +3918,8 @@ export class GameScene extends Phaser.Scene {
       villager: 'Villager',
       archer: 'Archer',
       spearman: 'Pikeman',
-      scoutCavalry: 'Scout Cavalry',
+      scoutCavalry: 'Scout',
+      knight: 'Knight',
       gunman: 'Gunman',
       cannon: 'Field Cannon',
       machineGun: 'Machine Gun',
@@ -3815,6 +3944,7 @@ export class GameScene extends Phaser.Scene {
       archer: '🏹',
       spearman: '♜',
       scoutCavalry: '♞',
+      knight: '♘',
       gunman: '•',
       cannon: '●',
       machineGun: '▰',
@@ -3841,6 +3971,7 @@ export class GameScene extends Phaser.Scene {
       kind === 'archer' ||
       kind === 'spearman' ||
       kind === 'scoutCavalry' ||
+      kind === 'knight' ||
       kind === 'gunman' ||
       kind === 'cannon' ||
       kind === 'machineGun' ||
@@ -3941,6 +4072,7 @@ export class GameScene extends Phaser.Scene {
         hasComponent(this.world.ecs, ArcherTag, eid) ||
         hasComponent(this.world.ecs, SpearmanTag, eid) ||
         hasComponent(this.world.ecs, ScoutCavalryTag, eid) ||
+        hasComponent(this.world.ecs, KnightTag, eid) ||
         hasComponent(this.world.ecs, GunmanTag, eid) ||
         hasComponent(this.world.ecs, CannonTag, eid) ||
         hasComponent(this.world.ecs, MachineGunTag, eid)
@@ -4090,6 +4222,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (selectedProducerDefs.has(BuildingDefId.STABLE)) {
       addTrainAction(UnitDefId.SCOUT_CAVALRY, 'Q', '♞');
+      addTrainAction(UnitDefId.KNIGHT, 'E', '♘');
     }
     if (selectedProducerDefs.has(BuildingDefId.FOUNDRY)) {
       addTrainAction(UnitDefId.GUNMAN, 'Q', '•');
@@ -4131,7 +4264,20 @@ export class GameScene extends Phaser.Scene {
       const allAutoDefending = selectedMilitaryEids.length > 0 && holdCount === 0;
       const stanceMeta = allHolding || allAutoDefending ? 'Active' : 'Mixed';
       const formationMode = this.clampFormationMode(this.perspectiveFormationMode());
+      const formationLocked = this.perspectiveFormationLocked();
       const facingLabel = `Face ${this.formationFacingLabel()}`;
+      if (this.hasSelectedAttackGroundSource()) {
+        actions.push({
+          id: 'attack-ground',
+          label: 'Attack Ground',
+          key: 'G',
+          glyph: '◎',
+          enabled: true,
+          kind: 'command',
+          meta: this.attackGroundMode ? 'Click map' : 'Siege fire',
+          active: this.attackGroundMode,
+        });
+      }
       actions.push({
         id: 'stance-hold-position',
         label: 'Hold Position',
@@ -4183,6 +4329,55 @@ export class GameScene extends Phaser.Scene {
         active: formationMode === 2,
       });
       actions.push({
+        id: 'formation-box',
+        label: 'Box Formation',
+        key: '',
+        glyph: '□',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationMode === 3 ? 'Active' : 'Protect center',
+        active: formationMode === 3,
+      });
+      actions.push({
+        id: 'formation-staggered',
+        label: 'Staggered Formation',
+        key: '',
+        glyph: '∷',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationMode === 4 ? 'Active' : 'Anti-splash',
+        active: formationMode === 4,
+      });
+      actions.push({
+        id: 'formation-column',
+        label: 'Column Formation',
+        key: '',
+        glyph: '⋮',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationMode === 5 ? 'Active' : 'Narrow move',
+        active: formationMode === 5,
+      });
+      actions.push({
+        id: 'formation-split',
+        label: 'Split Formation',
+        key: '',
+        glyph: '⇔',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: 'Dodge splash',
+      });
+      actions.push({
+        id: 'formation-lock',
+        label: 'Formation Lock',
+        key: '',
+        glyph: formationLocked ? '🔒' : '↯',
+        enabled: selectedMilitaryEids.length > 1,
+        kind: 'command',
+        meta: formationLocked ? 'Slowest speed' : 'Free speed',
+        active: formationLocked,
+      });
+      actions.push({
         id: 'formation-rotate-ccw',
         label: 'Rotate CCW',
         key: '',
@@ -4225,11 +4420,17 @@ export class GameScene extends Phaser.Scene {
       case 'build-defensive-tower': this.startBuildMode('DEFENSIVE_TOWER', 'build DEFENSIVE TOWER — click to place'); return;
       case 'set-army-rally': this.startArmyRallyMode(); return;
       case 'remove-building': this.removeSelectedBuildings(); return;
+      case 'attack-ground': this.startAttackGroundMode(); return;
       case 'stance-hold-position': this.setSelectedUnitStance(UnitStanceId.HOLD_POSITION); return;
       case 'stance-auto-defend': this.setSelectedUnitStance(UnitStanceId.AUTO_DEFEND); return;
       case 'formation-free': this.setFormationMode(0); return;
       case 'formation-line': this.setFormationMode(1); return;
       case 'formation-compact': this.setFormationMode(2); return;
+      case 'formation-box': this.setFormationMode(3); return;
+      case 'formation-staggered': this.setFormationMode(4); return;
+      case 'formation-column': this.setFormationMode(5); return;
+      case 'formation-split': this.splitFormation(); return;
+      case 'formation-lock': this.toggleFormationLock(); return;
       case 'formation-rotate-ccw': this.rotateFormation(-1); return;
       case 'formation-rotate-cw': this.rotateFormation(1); return;
       case 'stop': this.dispatch({ type: 'stopSelected' }); return;
@@ -4296,6 +4497,17 @@ export class GameScene extends Phaser.Scene {
               GameScene.scoutCavalryTextureKey(p, facing, anim, frame),
               () => buildScoutCavalryVoxels(teamColor, { facing, anim, frame }),
               { voxelW: 4, bounds: SCOUT_CAVALRY_BAKE_BOUNDS }
+            );
+          }
+        }
+      }
+      for (const facing of KNIGHT_FACINGS) {
+        for (const anim of KNIGHT_ANIMS) {
+          for (let frame = 0; frame < KNIGHT_FRAME_COUNTS[anim]; frame++) {
+            this.bakeIfMissing(
+              GameScene.knightTextureKey(p, facing, anim, frame),
+              () => buildKnightVoxels(teamColor, { facing, anim, frame }),
+              { voxelW: 4, bounds: KNIGHT_BAKE_BOUNDS }
             );
           }
         }
@@ -4377,6 +4589,15 @@ export class GameScene extends Phaser.Scene {
     frame: number
   ): string {
     return `${GameScene.SCOUT_CAVALRY_KEY_PREFIX}${playerId}-${facing}-${anim}-${frame}`;
+  }
+
+  private static knightTextureKey(
+    playerId: number,
+    facing: KnightFacing,
+    anim: KnightAnim,
+    frame: number
+  ): string {
+    return `${GameScene.KNIGHT_KEY_PREFIX}${playerId}-${facing}-${anim}-${frame}`;
   }
 
   private static gunmanTextureKey(
@@ -4581,6 +4802,8 @@ export class GameScene extends Phaser.Scene {
         return this.spearmanTextureKeyForUnit(eid, playerId);
       case UnitDefId.SCOUT_CAVALRY:
         return this.scoutCavalryTextureKeyForUnit(eid, playerId);
+      case UnitDefId.KNIGHT:
+        return this.knightTextureKeyForUnit(eid, playerId);
       case UnitDefId.GUNMAN:
         return this.gunmanTextureKeyForUnit(eid, playerId);
       case UnitDefId.CANNON:
@@ -4596,7 +4819,7 @@ export class GameScene extends Phaser.Scene {
 
   private unitSpriteOriginY(eid: number): number {
     const kind = UnitKind.kind[eid];
-    if (kind === UnitDefId.SCOUT_CAVALRY || kind === UnitDefId.VILLAGER) return 0.73;
+    if (kind === UnitDefId.SCOUT_CAVALRY || kind === UnitDefId.KNIGHT || kind === UnitDefId.VILLAGER) return 0.73;
     if (kind === UnitDefId.ARCHER || kind === UnitDefId.SPEARMAN) return 0.7;
     if (kind === UnitDefId.GUNMAN) return 0.7;
     if (kind === UnitDefId.CANNON) return GameScene.CANNON_UNIT_ORIGIN_Y;
@@ -4677,6 +4900,22 @@ export class GameScene extends Phaser.Scene {
       frame = age < GameScene.COMBAT_ATTACK_ANIM_TICKS / 2 ? 0 : 1;
     }
     return GameScene.scoutCavalryTextureKey(playerId, facing, anim, frame);
+  }
+
+  private knightTextureKeyForUnit(eid: number, playerId: number): string {
+    const moving = this.isUnitMoving(eid);
+    const facing = this.knightFacingForUnit(eid, moving);
+    const attackUntil = this.unitAttackUntilTick.get(eid) ?? -1;
+    const anim: KnightAnim =
+      attackUntil > this.world.tick ? 'attack' : moving ? 'move' : 'idle';
+    let frame = 0;
+    if (anim === 'move') {
+      frame = Math.floor(this.world.tick / 5) % KNIGHT_FRAME_COUNTS.move;
+    } else if (anim === 'attack') {
+      const age = GameScene.COMBAT_ATTACK_ANIM_TICKS - (attackUntil - this.world.tick);
+      frame = age < GameScene.COMBAT_ATTACK_ANIM_TICKS / 2 ? 0 : 1;
+    }
+    return GameScene.knightTextureKey(playerId, facing, anim, frame);
   }
 
   private archerTextureKeyForUnit(eid: number, playerId: number): string {
@@ -4785,6 +5024,11 @@ export class GameScene extends Phaser.Scene {
     return facing as ScoutCavalryFacing;
   }
 
+  private knightFacingForUnit(eid: number, moving: boolean): KnightFacing {
+    const facing = this.combatFacingForUnit(eid, moving, this.knightFacing);
+    return facing as KnightFacing;
+  }
+
   private archerFacingForUnit(eid: number, moving: boolean): ArcherFacing {
     const facing = this.combatFacingForUnit(eid, moving, this.archerFacing);
     return facing as ArcherFacing;
@@ -4847,7 +5091,8 @@ export class GameScene extends Phaser.Scene {
     if (hasComponent(this.world.ecs, VillagerTag, eid)) return 'villager';
     if (hasComponent(this.world.ecs, ArcherTag, eid)) return 'archer';
     if (hasComponent(this.world.ecs, SpearmanTag, eid)) return 'spearman';
-    if (hasComponent(this.world.ecs, ScoutCavalryTag, eid)) return 'scout cavalry';
+    if (hasComponent(this.world.ecs, ScoutCavalryTag, eid)) return 'scout';
+    if (hasComponent(this.world.ecs, KnightTag, eid)) return 'knight';
     if (hasComponent(this.world.ecs, GunmanTag, eid)) return 'gunman';
     if (hasComponent(this.world.ecs, CannonTag, eid)) return 'field cannon';
     if (hasComponent(this.world.ecs, MachineGunTag, eid)) return 'machine gun';
@@ -4877,15 +5122,6 @@ export class GameScene extends Phaser.Scene {
 
   private formatRange(range: number): string {
     return Number.isInteger(range) ? String(range) : range.toFixed(1);
-  }
-
-  private hasNearbyResource(x: number, y: number, kind: number, radius: number): boolean {
-    for (const eid of resourceQuery(this.world.ecs)) {
-      if (Resource.kind[eid] !== kind) continue;
-      if (Resource.amount[eid] <= 0) continue;
-      if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) return true;
-    }
-    return false;
   }
 
   /** Look up the texture key for a resource kind. */
@@ -4957,42 +5193,4 @@ function facingFromVector(dx: number, dy: number): ScoutCavalryFacing {
   const normalized = angle < 0 ? angle + Math.PI * 2 : angle;
   const index = Math.round(normalized / (Math.PI / 4)) % SCOUT_CAVALRY_FACINGS.length;
   return SCOUT_CAVALRY_FACINGS[index];
-}
-
-/** Local mirror of findBuildingAt so render doesn't pull a sim helper unnecessarily. */
-function findBuildingAtRender(
-  world: SimWorld,
-  x: number,
-  y: number,
-  radius: number
-): number | null {
-  const ents = buildingQuery(world.ecs);
-  let best: number | null = null;
-  let bestDist = radius;
-  for (const eid of ents) {
-    const d = distToBuildingFootprintRender(x, y, eid);
-    if (d < bestDist) {
-      bestDist = d;
-      best = eid;
-    }
-  }
-  return best;
-}
-
-function distToBuildingFootprintRender(
-  x: number,
-  y: number,
-  eid: number
-): number {
-  const def = BUILDING_TABLE[Building.defId[eid]];
-  if (!def) return Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-  const x0 = Math.round(Position.x[eid]) - Math.floor(def.footprint.w / 2);
-  const y0 = Math.round(Position.y[eid]) - Math.floor(def.footprint.h / 2);
-  const minX = x0 - 0.5;
-  const maxX = x0 + def.footprint.w - 0.5;
-  const minY = y0 - 0.5;
-  const maxY = y0 + def.footprint.h - 0.5;
-  const dx = x < minX ? minX - x : x > maxX ? x - maxX : 0;
-  const dy = y < minY ? minY - y : y > maxY ? y - maxY : 0;
-  return Math.hypot(dx, dy);
 }

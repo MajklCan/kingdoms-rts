@@ -147,8 +147,23 @@ function stepUntilCannonFire(
   throw new Error('Cannon did not fire');
 }
 
+function stepUntilProjectileFire(
+  world: SimWorld,
+  attacker: number,
+  maxTicks = 40
+): SimWorld['combatEvents'][number] {
+  for (let i = 0; i < maxTicks; i++) {
+    step(world);
+    const event = [...world.combatEvents]
+      .reverse()
+      .find((combatEvent) => combatEvent.attackerEid === attacker && (combatEvent.projectileTicks ?? 0) > 0);
+    if (event) return event;
+  }
+  throw new Error('Projectile did not fire');
+}
+
 describe('combat engagement and formations', () => {
-  it('keeps the pikeman, scout cavalry, and archer counter triangle sharp', () => {
+  it('keeps the pikeman, scout, and archer counter triangle sharp', () => {
     {
       const world = createSimWorld(140);
       world.paused = false;
@@ -189,8 +204,7 @@ describe('combat engagement and formations', () => {
       AttackTarget.retainGoal[archer] = 1;
       const hpBefore = Health.hp[pikeman];
 
-      step(world);
-      const shot = world.combatEvents.find((event) => event.attackerEid === archer);
+      const shot = stepUntilProjectileFire(world, archer);
       stepN(world, shot?.projectileTicks ?? 0);
 
       expect(Health.hp[pikeman]).toBe(hpBefore - 7);
@@ -211,10 +225,8 @@ describe('combat engagement and formations', () => {
     AttackTarget.retainGoal[attacker] = 1;
     const hpBefore = Health.hp[defender];
 
-    step(world);
-
     expect(Health.hp[defender]).toBe(hpBefore);
-    const shot = world.combatEvents.find((event) => event.attackerEid === attacker);
+    const shot = stepUntilProjectileFire(world, attacker);
     expect(shot?.projectileTicks).toBeGreaterThan(0);
 
     stepN(world, shot?.projectileTicks ?? 0);
@@ -320,7 +332,7 @@ describe('combat engagement and formations', () => {
 
     expect(UnitStance.stance[archer]).toBe(UnitStanceId.AUTO_DEFEND);
     expect(UnitStance.stance[spearman]).toBe(UnitStanceId.AUTO_DEFEND);
-    expect(world.formationModes[1]).toBe(2);
+    expect(world.formationModes[1]).toBe(5);
 
     world.inputs.push({ type: 'setSelectedUnitStance', stance: UnitStanceId.HOLD_POSITION });
     world.inputs.push({ type: 'setFormationMode', mode: -99 });
@@ -637,10 +649,8 @@ describe('combat engagement and formations', () => {
     AttackTarget.retainGoal[gunman] = 1;
     const targetHpBefore = Health.hp[target];
 
-    step(world);
-
     expect(Health.hp[target]).toBe(targetHpBefore);
-    const shot = world.combatEvents.find((event) => event.attackerEid === gunman);
+    const shot = stepUntilProjectileFire(world, gunman);
     expect(shot?.projectileTicks).toBeGreaterThan(0);
 
     stepN(world, shot?.projectileTicks ?? 0);
@@ -658,8 +668,7 @@ describe('combat engagement and formations', () => {
     AttackTarget.targetEid[attacker] = defender;
     AttackTarget.retainGoal[attacker] = 1;
 
-    step(world);
-    const shot = world.combatEvents.find((event) => event.attackerEid === attacker);
+    const shot = stepUntilProjectileFire(world, attacker);
     expect(shot?.projectileTicks).toBeGreaterThan(0);
 
     stepN(world, shot?.projectileTicks ?? 0);
@@ -678,8 +687,7 @@ describe('combat engagement and formations', () => {
     AttackTarget.targetEid[attacker] = machineGun;
     AttackTarget.retainGoal[attacker] = 1;
 
-    step(world);
-    const shot = world.combatEvents.find((event) => event.attackerEid === attacker);
+    const shot = stepUntilProjectileFire(world, attacker);
     expect(shot?.projectileTicks).toBeGreaterThan(0);
 
     stepN(world, shot?.projectileTicks ?? 0);
@@ -777,5 +785,126 @@ describe('combat engagement and formations', () => {
 
     expect(world.formationSpeedCaps.get(scout)).toBe(Speed.value[archer]);
     expect(world.formationSpeedCaps.has(archer)).toBe(false);
+  });
+
+  it('cancels ranged aim when the attacker receives a move order before release', () => {
+    const world = createSimWorld(148);
+    world.paused = false;
+    clearSelection(world);
+    const spot = findOpenTile(world);
+    const archer = spawnArcher(world, spot.x, spot.y, 1);
+    spawnSpearman(world, spot.x + 4, spot.y, 2);
+
+    step(world);
+    expect(world.rangedAttackWindups.has(archer)).toBe(true);
+
+    setSelected(world, archer, true);
+    world.inputs.push({ type: 'moveSelected', to: { x: spot.x + 2, y: spot.y + 2 } });
+    step(world);
+
+    expect(world.rangedAttackWindups.has(archer)).toBe(false);
+    expect(world.pendingProjectileImpacts.some((impact) => impact.attackerEid === archer)).toBe(false);
+  });
+
+  it('lets units dodge arrows after release by leaving the projectile impact point', () => {
+    const world = createSimWorld(149);
+    world.paused = false;
+    const spot = findOpenTile(world);
+    const archer = spawnArcher(world, spot.x, spot.y, 1);
+    const target = spawnSpearman(world, spot.x + 4, spot.y, 2);
+    Speed.value[target] = 0;
+    Cooldown.ticksRemaining[target] = 999;
+    AttackTarget.targetEid[archer] = target;
+    AttackTarget.retainGoal[archer] = 1;
+    const hpBefore = Health.hp[target];
+
+    let shot: SimWorld['combatEvents'][number] | undefined;
+    for (let i = 0; i < 20; i++) {
+      step(world);
+      shot = world.combatEvents.find((event) => event.attackerEid === archer && event.projectileTicks);
+      if (shot) break;
+    }
+    expect(shot?.projectileTicks).toBeGreaterThan(0);
+    Position.x[target] = (shot?.toX ?? Position.x[target]) + 1.1;
+    Position.y[target] = shot?.toY ?? Position.y[target];
+
+    stepN(world, shot?.projectileTicks ?? 0);
+
+    expect(Health.hp[target]).toBe(hpBefore);
+  });
+
+  it('fires siege attack-ground at a map point and applies splash on impact', () => {
+    const world = createSimWorld(150);
+    world.paused = false;
+    clearSelection(world);
+    const spot = findOpenTile(world);
+    const cannon = spawnCannon(world, spot.x, spot.y, 1);
+    const target = spawnSpearman(world, spot.x + 4, spot.y, 2);
+    Speed.value[target] = 0;
+    Cooldown.ticksRemaining[target] = 999;
+    setSelected(world, cannon, true);
+    const hpBefore = Health.hp[target];
+
+    world.inputs.push({ type: 'attackGroundSelected', to: { x: spot.x + 4, y: spot.y } });
+    const shot = stepUntilCannonFire(world, cannon);
+    expect(shot.targetEid).toBe(-1);
+    expect(shot.phase).toBe('fire');
+
+    stepN(world, shot.projectileTicks ?? 0);
+
+    expect(Health.hp[target]).toBeLessThan(hpBefore);
+  });
+
+  it('spreads staggered formation destinations wider than compact formation', () => {
+    const compactWorld = createSimWorld(151);
+    compactWorld.paused = false;
+    const compactSpot = findWideFormationTile(compactWorld);
+    const compactUnits = selectedSpearmanLine(compactWorld, compactSpot, 12);
+    compactWorld.formationModes[1] = 2;
+    compactWorld.inputs.push({ type: 'moveSelected', to: { x: compactSpot.x + 12, y: compactSpot.y } });
+    step(compactWorld);
+
+    const staggeredWorld = createSimWorld(151);
+    staggeredWorld.paused = false;
+    const staggeredSpot = findWideFormationTile(staggeredWorld);
+    const staggeredUnits = selectedSpearmanLine(staggeredWorld, staggeredSpot, 12);
+    staggeredWorld.formationModes[1] = 4;
+    staggeredWorld.inputs.push({ type: 'moveSelected', to: { x: staggeredSpot.x + 12, y: staggeredSpot.y } });
+    step(staggeredWorld);
+
+    expect(destinationYSpan(staggeredWorld, staggeredUnits)).toBeGreaterThan(
+      destinationYSpan(compactWorld, compactUnits)
+    );
+  });
+
+  it('splits selected formations into two lateral groups', () => {
+    const world = createSimWorld(152);
+    world.paused = false;
+    const spot = findWideFormationTile(world);
+    const units = selectedSpearmanLine(world, spot, 8);
+
+    world.inputs.push({ type: 'splitSelectedFormation' });
+    step(world);
+
+    expect(destinationXSpan(world, units)).toBeGreaterThan(3);
+  });
+
+  it('formation lock toggle lets faster units move without the slowest speed cap', () => {
+    const world = createSimWorld(153);
+    world.paused = false;
+    clearSelection(world);
+    const spot = findFormationTile(world);
+    const scout = spawnScoutCavalry(world, spot.x, spot.y, 1);
+    const archer = spawnArcher(world, spot.x, spot.y + 1, 1);
+
+    setSelected(world, scout, true);
+    setSelected(world, archer, true);
+    world.inputs.push({ type: 'toggleFormationLock' });
+    world.inputs.push({ type: 'setFormationMode', mode: 1 });
+    world.inputs.push({ type: 'moveSelected', to: { x: spot.x + 10, y: spot.y } });
+    step(world);
+
+    expect(world.formationLocks[1]).toBe(0);
+    expect(world.formationSpeedCaps.size).toBe(0);
   });
 });

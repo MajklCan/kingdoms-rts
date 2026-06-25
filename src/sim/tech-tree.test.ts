@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
 import { Owner, Producer, ResourceKindId, ResourceWorksite, UnitKind } from './components';
-import { AGE_TABLE, AgeId, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
+import { AGE_TABLE, AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
 import {
   buildingQuery,
+  canPlaceBuildingAt,
   createSimWorld,
   findBuildingAt,
   findResourceAt,
@@ -32,7 +33,21 @@ function countPlayerBuildings(world: SimWorld, playerId: number): number {
   return count;
 }
 
-function findOpenBuildingTile(world: SimWorld, footprint = 1): { x: number; y: number } {
+function findOpenBuildingTile(
+  world: SimWorld,
+  footprint = 1,
+  placementDefId?: number
+): { x: number; y: number } {
+  if (placementDefId !== undefined) {
+    const def = BUILDING_TABLE[placementDefId];
+    for (let y = 6; y < MAP.HEIGHT - 8; y++) {
+      for (let x = 6; x < MAP.WIDTH - 8; x++) {
+        if (canPlaceBuildingAt(world, def, x, y, 1)) return { x, y };
+      }
+    }
+    throw new Error('No open player building tile found');
+  }
+
   for (let y = 6; y < MAP.HEIGHT - 8; y++) {
     for (let x = 6; x < MAP.WIDTH - 8; x++) {
       let open = true;
@@ -107,7 +122,9 @@ describe('technology tree', () => {
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.GOLD_MINE)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.STABLE)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.MILL)).toBe(true);
+    expect(UNIT_TABLE[UnitDefId.SCOUT_CAVALRY].name).toBe('Scout');
     expect(isUnitUnlocked(castle, 1, UnitDefId.SCOUT_CAVALRY)).toBe(true);
+    expect(isUnitUnlocked(castle, 1, UnitDefId.KNIGHT)).toBe(false);
 
     const gunpowder = createSimWorld(509, { startingAge: AgeId.GUNPOWDER });
 
@@ -136,7 +153,7 @@ describe('technology tree', () => {
     const world = createSimWorld(502);
     world.paused = false;
     world.resources[1].set([0, 2000, 0, 2000]);
-    const spot = findOpenBuildingTile(world, 2);
+    const spot = findOpenBuildingTile(world, 2, BuildingDefId.BARRACKS);
     const before = countPlayerBuildings(world, 1);
 
     world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.BARRACKS, x: spot.x, y: spot.y, playerId: 1 });
@@ -171,7 +188,7 @@ describe('technology tree', () => {
     expect(getWorksiteWorkerSlots(world, stone)).toBe(3);
   });
 
-  it('allows Castle Age after either complete early path, then folds gold and cavalry into the age unlock', () => {
+  it('allows Castle Age after either complete early path, then unlocks stables and scouts with knights as research', () => {
     const military = createSimWorld(504);
     military.researchedTechs[1].add(TechId.BARRACKS_PIKEMEN);
     expect(techStatus(military, 1, TechId.CASTLE_AGE)).toBe('locked');
@@ -186,11 +203,15 @@ describe('technology tree', () => {
     expect(techStatus(economy, 1, TechId.CASTLE_AGE)).toBe('available');
 
     expect(TECH_TREE.some((tech) => tech.id === TechId.GOLD_MINES)).toBe(false);
-    expect(TECH_TREE.some((tech) => tech.id === TechId.KNIGHTS)).toBe(false);
+    expect(TECH_TREE.some((tech) => tech.id === TechId.KNIGHTS)).toBe(true);
     economy.ages[1].current = AgeId.CASTLE;
     expect(isBuildingUnlocked(economy, 1, BuildingDefId.GOLD_MINE)).toBe(true);
     expect(isBuildingUnlocked(economy, 1, BuildingDefId.STABLE)).toBe(true);
     expect(isUnitUnlocked(economy, 1, UnitDefId.SCOUT_CAVALRY)).toBe(true);
+    expect(isUnitUnlocked(economy, 1, UnitDefId.KNIGHT)).toBe(false);
+    expect(techStatus(economy, 1, TechId.KNIGHTS)).toBe('available');
+    economy.researchedTechs[1].add(TechId.KNIGHTS);
+    expect(isUnitUnlocked(economy, 1, UnitDefId.KNIGHT)).toBe(true);
   });
 
   it('upgrades houses through an independent housing path', () => {
@@ -284,6 +305,33 @@ describe('technology tree', () => {
     expect(isBuildingUnlocked(world, 1, BuildingDefId.FOUNDRY)).toBe(true);
     expect(isUnitUnlocked(world, 1, UnitDefId.GUNMAN)).toBe(true);
     expect(isUnitUnlocked(world, 1, UnitDefId.CANNON)).toBe(true);
+  });
+
+  it('trains scouts from stables immediately and gates knights behind Knights research', () => {
+    const world = createSimWorld(516);
+    world.paused = false;
+    world.ages[1].current = AgeId.CASTLE;
+    world.resources[1].set([1000, 1000, 1000, 1000]);
+    world.population[1].cap = 20;
+    const spot = findOpenBuildingTile(world, 2);
+    const stable = spawnCompletedBuilding(world, BuildingDefId.STABLE, spot.x, spot.y, 1);
+
+    world.inputs.push(
+      { type: 'trainUnit', atEid: stable, defId: UnitDefId.SCOUT_CAVALRY },
+      { type: 'trainUnit', atEid: stable, defId: UnitDefId.KNIGHT }
+    );
+    step(world);
+
+    expect(world.productionQueues.get(stable)).toEqual([UnitDefId.SCOUT_CAVALRY]);
+
+    world.researchedTechs[1].add(TechId.KNIGHTS);
+    world.inputs.push({ type: 'trainUnit', atEid: stable, defId: UnitDefId.KNIGHT });
+    step(world);
+
+    expect(world.productionQueues.get(stable)).toEqual([
+      UnitDefId.SCOUT_CAVALRY,
+      UnitDefId.KNIGHT,
+    ]);
   });
 
   it('trains gunmen and field cannons from a completed foundry', () => {

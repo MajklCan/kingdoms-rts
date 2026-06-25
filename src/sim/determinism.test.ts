@@ -141,8 +141,21 @@ describe('determinism', () => {
     expectChecksumChangeWithUnit((world, eid) => {
       world.cannonWindups.set(eid, {
         targetEid: eid,
+        targetX: Position.x[eid],
+        targetY: Position.y[eid],
         ticksRemaining: 5,
+        attackGround: 0,
       });
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.rangedAttackWindups.set(eid, {
+        targetEid: eid,
+        ticksRemaining: 3,
+        range: 5,
+      });
+    });
+    expectChecksumChangeWithUnit((world, eid) => {
+      world.attackGroundOrders.set(eid, { x: Math.round(Position.x[eid]) + 4, y: Math.round(Position.y[eid]) });
     });
     expectChecksumChangeWithUnit((world, eid) => {
       world.pendingProjectileImpacts.push({
@@ -150,6 +163,9 @@ describe('determinism', () => {
         attackerEid: eid,
         attackerOwner: 1,
         targetEid: eid,
+        impactX: Position.x[eid],
+        impactY: Position.y[eid],
+        hitRadius: 0.5,
         damage: 4,
       });
     });
@@ -171,6 +187,7 @@ describe('determinism', () => {
     world.humanPlayers = new Set([1, 2]);
     world.formationModes[2] = 2;
     world.formationFacings[2] = 5;
+    world.formationLocks[2] = 0;
     world.armyRallyPoints[2] = { x: 22, y: 23 };
     world.revealedMapPlayers[2] = true;
 
@@ -186,12 +203,27 @@ describe('determinism', () => {
       attempts: 1,
     });
     world.formationSpeedCaps.set(p2Unit, 0.9);
-    world.cannonWindups.set(p2Unit, { targetEid: p1Unit, ticksRemaining: 4 });
+    world.cannonWindups.set(p2Unit, {
+      targetEid: p1Unit,
+      targetX: Position.x[p1Unit],
+      targetY: Position.y[p1Unit],
+      ticksRemaining: 4,
+      attackGround: 0,
+    });
+    world.rangedAttackWindups.set(p2Unit, {
+      targetEid: p1Unit,
+      ticksRemaining: 2,
+      range: 5,
+    });
+    world.attackGroundOrders.set(p2Unit, { x: Position.x[p1Unit], y: Position.y[p1Unit] });
     world.pendingProjectileImpacts.push({
       impactTick: world.tick + 2,
       attackerEid: p2Unit,
       attackerOwner: 2,
       targetEid: p1Unit,
+      impactX: Position.x[p1Unit],
+      impactY: Position.y[p1Unit],
+      hitRadius: 0.5,
       damage: 3,
     });
     world.pendingCannonImpacts.push({

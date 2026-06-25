@@ -87,7 +87,7 @@ When adding a new animated unit, verify the selection ring sits under the feet i
 
 ## Visual Inspection
 
-Every new directional unit should get a zoomed inspection route similar to scout cavalry:
+Every new directional unit should get a zoomed inspection route similar to the scout:
 
 ```txt
 http://localhost:5173/?inspect=scout-cavalry

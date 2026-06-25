@@ -80,6 +80,7 @@ export const UnitKindId = {
   CANNON: 6,
   MACHINE_GUN: 7,
   MORTAR: 8,
+  KNIGHT: 9,
 } as const;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -268,8 +269,11 @@ export const ArcherTag = defineComponent();
 /** Tag — entity is a Spearman unit. */
 export const SpearmanTag = defineComponent();
 
-/** Tag — entity is a Scout Cavalry unit. */
+/** Tag — entity is a Scout unit. */
 export const ScoutCavalryTag = defineComponent();
+
+/** Tag — entity is a Knight unit. */
+export const KnightTag = defineComponent();
 
 /** Tag — entity is a Gunpowder Age gunman unit. */
 export const GunmanTag = defineComponent();

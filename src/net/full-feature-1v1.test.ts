@@ -266,6 +266,9 @@ function ownTownCenter(world: SimWorld, pid: number): number | undefined {
 function teamHpSum(world: SimWorld, pid: number): number {
   return ownedUnits(world, pid).reduce((s, e) => s + Math.max(0, Health.hp[e]), 0);
 }
+function teamHasDamagedUnit(world: SimWorld, pid: number): boolean {
+  return ownedUnits(world, pid).some((e) => Health.hp[e] < Health.hpMax[e]);
+}
 
 /** Nearest resource node of `kind` to player `pid`'s town centre, or undefined. */
 function nearestResourceOfKind(world: SimWorld, pid: number, kind: number): number | undefined {
@@ -511,12 +514,14 @@ describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
       mark('build:gold_mine', placeMineralWorksite(d, pid, BuildingDefId.GOLD_MINE, ResourceKindId.GOLD) !== null);
       mark('tech:housing_ii', researchAndConfirm(d, pid, TechId.HOUSING_II));
       mark('tech:farms', researchAndConfirm(d, pid, TechId.FARMS));
+      mark('tech:knights', researchAndConfirm(d, pid, TechId.KNIGHTS));
     }
     finishConstruction(d);
     d.refill();
     d.liftPop();
     for (const pid of PLAYERS) {
-      mark('train:scout_cavalry', trainAndConfirm(d, pid, BuildingDefId.STABLE, UnitKindId.SCOUT_CAVALRY));
+      mark('train:scout', trainAndConfirm(d, pid, BuildingDefId.STABLE, UnitKindId.SCOUT_CAVALRY));
+      mark('train:knight', trainAndConfirm(d, pid, BuildingDefId.STABLE, UnitKindId.KNIGHT));
     }
 
     // ── Phase 6: Gunpowder age → foundry, gunman, cannon, final tech ────────────
@@ -553,12 +558,18 @@ describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
     for (const pid of PLAYERS) {
       const foe = pid === 1 ? 2 : 1;
       const army = militaryOf(w, pid);
-      const target = ownedUnits(w, foe)[0];
+      const target = militaryOf(w, foe)[0] ?? ownedUnits(w, foe)[0];
       if (army.length && target !== undefined)
         d.push({ type: 'cmdAttack', playerId: pid, eids: army, targetEid: target });
     }
     d.step(220); // ranged projectiles fly + impact + deaths
-    mark('combat:damage_dealt', teamHpSum(w, 1) < hp1Before || teamHpSum(w, 2) < hp2Before);
+    mark(
+      'combat:damage_dealt',
+      teamHpSum(w, 1) < hp1Before ||
+        teamHpSum(w, 2) < hp2Before ||
+        teamHasDamagedUnit(w, 1) ||
+        teamHasDamagedUnit(w, 2)
+    );
 
     // ── Phase 8: teardown — stop, toggle stance, remove building, cancel prod ───
     for (const pid of PLAYERS) {

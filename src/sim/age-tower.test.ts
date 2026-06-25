@@ -36,6 +36,21 @@ function stepN(world: SimWorld, ticks: number): void {
   for (let i = 0; i < ticks; i++) step(world);
 }
 
+function stepUntilProjectileFire(
+  world: SimWorld,
+  attacker: number,
+  maxTicks = 40
+): SimWorld['combatEvents'][number] {
+  for (let i = 0; i < maxTicks; i++) {
+    step(world);
+    const event = [...world.combatEvents]
+      .reverse()
+      .find((combatEvent) => combatEvent.attackerEid === attacker && (combatEvent.projectileTicks ?? 0) > 0);
+    if (event) return event;
+  }
+  throw new Error('Projectile did not fire');
+}
+
 describe('age progression and towers', () => {
   it('sets defensive tower hp to 750', () => {
     expect(BUILDING_TABLE[BuildingDefId.DEFENSIVE_TOWER].hp).toBe(750);
@@ -76,11 +91,10 @@ describe('age progression and towers', () => {
     Cooldown.ticksRemaining[target] = 999;
     const hpBefore = Health.hp[target];
 
-    step(world);
+    const shot = stepUntilProjectileFire(world, tower);
 
     expect(hasComponent(world.ecs, Health, tower)).toBe(true);
     expect(Health.hp[target]).toBe(hpBefore);
-    const shot = world.combatEvents.find((event) => event.attackerEid === tower);
     expect(shot?.projectileTicks).toBeGreaterThan(0);
 
     stepN(world, shot?.projectileTicks ?? 0);

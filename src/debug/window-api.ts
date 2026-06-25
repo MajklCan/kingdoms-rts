@@ -81,7 +81,7 @@ export interface WindowGameApi {
   /** Deprecated no-op: villagers are spawned by specialist resource buildings. */
   trainVillager(): void;
   /** Train a unit def at the first selected producer that can make it. */
-  trainUnit(defName: 'ARCHER' | 'SPEARMAN' | 'SCOUT_CAVALRY' | 'GUNMAN' | 'CANNON'): void;
+  trainUnit(defName: 'ARCHER' | 'SPEARMAN' | 'SCOUT_CAVALRY' | 'KNIGHT' | 'GUNMAN' | 'CANNON'): void;
   /** Player population state. */
   pop(playerId?: number): { current: number; cap: number };
   /** Player resource bank. */

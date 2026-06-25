@@ -1,5 +1,5 @@
 /**
- * Dark Age scout cavalry. This model is authored as a compact horse-and-rider
+ * Dark Age scout. This model is authored as a compact horse-and-rider
  * voxel rig, then posed for 8 facings and idle / move / attack frames.
  *
  * The local rig uses forward/side coordinates so the horse head, tail, legs,
@@ -40,10 +40,11 @@ export const SCOUT_CAVALRY_BAKE_BOUNDS: NonNullable<VoxelBakeOptions['bounds']> 
   maxZ: 20,
 };
 
-interface ScoutCavalryPose {
+export interface ScoutCavalryPose {
   facing?: ScoutCavalryFacing;
   anim?: ScoutCavalryAnim;
   frame?: number;
+  variant?: 'scout' | 'knight';
 }
 
 const FACING_VECTOR: Record<ScoutCavalryFacing, { fx: number; fy: number }> = {
@@ -119,6 +120,15 @@ export function buildScoutCavalryVoxels(teamColor: number, pose: ScoutCavalryPos
 
   const moveStride = anim === 'move' ? (frame % 2 === 0 ? 1 : -1) : 0;
   const attackLean = anim === 'attack' ? frame + 1 : 0;
+  const isKnight = pose.variant === 'knight';
+  const horseBody = isKnight ? P.HORSE_DARK : P.HORSE_BAY;
+  const horseShadow = isKnight ? P.MANE : P.HORSE_DARK;
+  const legColor = isKnight ? P.HORSE_DARK : P.HORSE_BAY;
+  const saddleColor = isKnight ? P.MAIL_D : teamColor;
+  const tackColor = isKnight ? P.STEEL : P.LEATHER_D;
+  const riderBody = isKnight ? P.MAIL : P.LEATHER;
+  const riderDark = isKnight ? P.MAIL_D : P.LEATHER_D;
+  const helmetColor = isKnight ? P.STEEL : P.LEATHER_D;
 
   // Horse legs. Alternate diagonals for the two movement frames; attack braces
   // the front pair so the thrust reads even in a small sprite.
@@ -137,28 +147,39 @@ export function buildScoutCavalryVoxels(teamColor: number, pose: ScoutCavalryPos
     put(footF, leg.s, footZ, P.BOOTS);
     put(kneeF, leg.s, 1, P.HORSE_DARK);
     put(leg.f, leg.s, 2, P.HORSE_DARK);
-    put(leg.f, leg.s, 3, P.HORSE_BAY);
+    put(leg.f, leg.s, 3, legColor);
   }
 
   // Horse body, chest, neck, head, mane, and tail.
-  box(-3, -1, 4, 2, 1, 6, P.HORSE_BAY);
-  box(-2, -1, 7, 1, 1, 7, P.HORSE_BAY);
-  box(2, -1, 5, 3, 1, 7, P.HORSE_BAY);
-  box(3, 0, 7, 4, 0, 10, P.HORSE_BAY);
-  box(4, -1, 9, 5, 0, 11, P.HORSE_BAY);
-  put(6, 0, 9, P.HORSE_BAY);
-  put(5, -1, 12, P.HORSE_DARK);
-  put(5, 0, 12, P.HORSE_DARK);
+  box(-3, -1, 4, 2, 1, 6, horseBody);
+  box(-2, -1, 7, 1, 1, 7, horseBody);
+  box(2, -1, 5, 3, 1, 7, horseBody);
+  box(3, 0, 7, 4, 0, 10, horseBody);
+  box(4, -1, 9, 5, 0, 11, horseBody);
+  put(6, 0, 9, horseBody);
+  put(5, -1, 12, horseShadow);
+  put(5, 0, 12, horseShadow);
   put(6, 0, 10, P.IRON);
   for (let z = 7; z <= 11; z++) put(3, 1, z, P.MANE);
   line(-4, 0, 6, -5, 0, 3, P.MANE);
 
   // Saddle, team blanket, and tack.
-  box(-1, -1, 8, 2, 1, 8, teamColor);
-  box(-1, -1, 7, 2, -1, 8, P.LEATHER_D);
+  box(-1, -1, 8, 2, 1, 8, saddleColor);
+  box(-1, -1, 7, 2, -1, 8, tackColor);
   put(0, -1, 9, P.LEATHER);
   put(1, -1, 9, P.LEATHER);
-  line(1, -1, 9, 4, -1, 9, P.LEATHER_D);
+  line(1, -1, 9, 4, -1, 9, tackColor);
+  if (isKnight) {
+    box(-3, -1, 7, 2, 1, 7, P.MAIL_D);
+    box(-2, -1, 8, 1, 1, 8, P.MAIL);
+    put(3, -1, 8, P.MAIL_D);
+    put(3, 0, 8, P.MAIL_D);
+    put(4, -1, 12, P.STEEL);
+    put(4, 0, 12, P.STEEL);
+    put(-1, 1, 9, teamColor);
+    put(0, 1, 9, teamColor);
+    put(1, 1, 9, teamColor);
+  }
 
   // Rider legs.
   put(-1, -1, 9, P.LEATHER_D);
@@ -168,41 +189,48 @@ export function buildScoutCavalryVoxels(teamColor: number, pose: ScoutCavalryPos
 
   // Rider torso and head. Attack poses lean into the horse's forward axis.
   const riderF = attackLean > 0 ? 1 : 0;
-  box(riderF, -1, 10, riderF + 1, 0, 13, P.LEATHER);
+  box(riderF, -1, 10, riderF + 1, 0, 13, riderBody);
   put(riderF, -1, 11, teamColor);
   put(riderF + 1, -1, 11, teamColor);
   put(riderF, -1, 12, teamColor);
   put(riderF + 1, -1, 12, teamColor);
   put(riderF, 0, 13, P.MAIL_D);
   put(riderF + 1, 0, 13, P.MAIL_D);
-  put(riderF + 1, 0, 14, P.SKIN);
-  put(riderF + 1, -1, 14, P.SKIN);
+  put(riderF + 1, 0, 14, isKnight ? P.MAIL : P.SKIN);
+  put(riderF + 1, -1, 14, isKnight ? P.MAIL : P.SKIN);
   put(riderF + 1, 0, 15, P.SKIN);
   put(riderF + 1, -1, 15, P.SKIN);
-  put(riderF + 1, 0, 16, P.LEATHER_D);
-  put(riderF + 1, -1, 16, P.LEATHER_D);
-  put(riderF + 1, 0, 17, P.LEATHER_D);
+  put(riderF + 1, 0, 16, helmetColor);
+  put(riderF + 1, -1, 16, helmetColor);
+  put(riderF + 1, 0, 17, helmetColor);
+  if (isKnight) {
+    put(riderF, 1, 12, teamColor);
+    put(riderF, 1, 13, P.STEEL);
+    put(riderF + 1, 1, 12, teamColor);
+    put(riderF + 1, 1, 13, P.STEEL);
+    put(riderF + 1, 0, 18, P.STEEL);
+  }
 
   // Arms and weapon. Idle/move carries the light lance upright; attack extends
   // it forward with a steel tip for the fighting sprite.
   if (anim === 'attack') {
-    line(riderF + 1, -1, 12, riderF + 3, -1, 10, P.LEATHER);
+    line(riderF + 1, -1, 12, riderF + 3, -1, 10, riderDark);
     put(riderF + 3, -1, 10, P.SKIN);
-    const tipF = frame % 2 === 0 ? 7 : 9;
+    const tipF = frame % 2 === 0 ? (isKnight ? 8 : 7) : (isKnight ? 10 : 9);
     line(riderF + 2, -1, 10, tipF, -1, 8, P.WOOD_L);
     put(tipF, -1, 8, P.STEEL);
     put(tipF + 1, -1, 8, P.STEEL);
     put(tipF, -1, 9, P.STEEL);
-    put(riderF - 1, 1, 11, P.LEATHER);
+    put(riderF - 1, 1, 11, riderDark);
     put(riderF - 1, 1, 12, P.SKIN);
   } else {
-    put(riderF - 1, 1, 11, P.LEATHER);
+    put(riderF - 1, 1, 11, riderDark);
     put(riderF - 1, 1, 12, P.SKIN);
-    put(riderF + 2, -1, 11, P.LEATHER);
+    put(riderF + 2, -1, 11, riderDark);
     put(riderF + 2, -1, 12, P.SKIN);
-    line(riderF + 2, -2, 10, riderF + 3, -2, 18, P.WOOD_L);
-    put(riderF + 3, -2, 19, P.STEEL);
-    put(riderF + 3, -2, 20, P.STEEL);
+    line(riderF + 2, -2, 10, riderF + 3, -2, isKnight ? 20 : 18, P.WOOD_L);
+    put(riderF + 3, -2, isKnight ? 21 : 19, P.STEEL);
+    put(riderF + 3, -2, isKnight ? 22 : 20, P.STEEL);
   }
 
   return Array.from(cells.values());

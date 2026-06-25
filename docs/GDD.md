@@ -116,7 +116,7 @@
 | # | Age | Era | Unlocks |
 |---|-----|-----|---------|
 | 1 | **Dark Age** | ~900-1100 | villagers, scout cav, house, farm, barracks, lumber camp, mining camp, mill |
-| 2 | **Feudal Age** | ~1100-1300 | archery range, stable, blacksmith, market, watch tower, palisade walls, militia → man-at-arms, archer, skirmisher, scout cavalry → light cavalry |
+| 2 | **Feudal Age** | ~1100-1300 | archery range, stable, blacksmith, market, watch tower, palisade walls, militia → man-at-arms, archer, skirmisher, scout → light cavalry |
 | 3 | **Castle Age** | ~1300-1400 | castle, university, monastery, monk, knight, crossbowman, pikeman, stone walls |
 | 4 | **Imperial Age** | ~1400-1500 (Hussite era) | trebuchet, hand cannon, Hussite Wagon, paladin, champion, arbalester, halberdier, hussar, wonder, gunpowder tech |
 | 5 | **Gunpowder Age** | ~1500-1700 (Renaissance / Thirty Years' War) | pike-and-shot infantry, musketeer, demi-cannon, bastion fort, manufactory, bourse (market upgrade), pikemen retired |

@@ -39,6 +39,7 @@ import {
   Gatherer,
   GunmanTag,
   Health,
+  KnightTag,
   MachineGunDeployment,
   MachineGunTag,
   MilitiaTag,
@@ -174,6 +175,7 @@ export function checksumWorld(world: SimWorld): number {
   }
   hashNumberArray(h, world.formationModes);
   hashNumberArray(h, world.formationFacings);
+  hashNumberArray(h, world.formationLocks);
   h.u32(world.armyRallyPoints.length);
   for (const point of world.armyRallyPoints) {
     h.bit(point !== null);
@@ -257,6 +259,7 @@ export function checksumWorld(world: SimWorld): number {
     h.bit(hasComponent(ecs, ArcherTag, eid));
     h.bit(hasComponent(ecs, SpearmanTag, eid));
     h.bit(hasComponent(ecs, ScoutCavalryTag, eid));
+    h.bit(hasComponent(ecs, KnightTag, eid));
     h.bit(hasComponent(ecs, GunmanTag, eid));
     h.bit(hasComponent(ecs, CannonTag, eid));
     h.bit(hasComponent(ecs, MortarTag, eid));
@@ -366,7 +369,19 @@ export function checksumWorld(world: SimWorld): number {
   });
   hashEntityMap(h, world.cannonWindups, canon, (windup) => {
     h.u32(canon(windup.targetEid));
+    h.f32(windup.targetX);
+    h.f32(windup.targetY);
     h.u32(windup.ticksRemaining);
+    h.u32(windup.attackGround);
+  });
+  hashEntityMap(h, world.rangedAttackWindups, canon, (windup) => {
+    h.u32(canon(windup.targetEid));
+    h.u32(windup.ticksRemaining);
+    h.f32(windup.range);
+  });
+  hashEntityMap(h, world.attackGroundOrders, canon, (order) => {
+    h.f32(order.x);
+    h.f32(order.y);
   });
 
   h.u32(world.pendingProjectileImpacts.length);
@@ -375,6 +390,9 @@ export function checksumWorld(world: SimWorld): number {
     h.u32(canon(impact.attackerEid));
     h.u32(impact.attackerOwner);
     h.u32(canon(impact.targetEid));
+    h.f32(impact.impactX);
+    h.f32(impact.impactY);
+    h.f32(impact.hitRadius);
     h.u32(impact.damage);
   }
   h.u32(world.pendingCannonImpacts.length);

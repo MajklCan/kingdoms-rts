@@ -60,6 +60,7 @@ describe('sound-map', () => {
   it('picks the right fire sound per attacker', () => {
     expect(combatSound(UnitDefId.SPEARMAN, 1, undefined, false)?.key).toBe('sword_clash');
     expect(combatSound(UnitDefId.SCOUT_CAVALRY, 1, undefined, false)?.key).toBe('sword_clash');
+    expect(combatSound(UnitDefId.KNIGHT, 1, undefined, false)?.key).toBe('sword_clash');
     expect(combatSound(UnitDefId.ARCHER, 5, undefined, false)?.key).toBe('bow_shot');
     expect(combatSound(UnitDefId.GUNMAN, 5, undefined, false)?.key).toBe('gun_shot');
     expect(combatSound(UnitDefId.MACHINE_GUN, 5, undefined, false)?.key).toBe('gun_shot');
@@ -80,12 +81,14 @@ describe('sound-map', () => {
     // Melee units only clash adjacent; at range 2 nothing matches → null.
     expect(combatSound(UnitDefId.SPEARMAN, 2, undefined, false)).toBeNull();
     expect(combatSound(UnitDefId.SCOUT_CAVALRY, 2, undefined, false)).toBeNull();
+    expect(combatSound(UnitDefId.KNIGHT, 2, undefined, false)).toBeNull();
   });
 
   it('only ever returns SFX keys that exist in SFX_KEYS', () => {
     const cases: Array<[number, number, 'windup' | 'fire' | undefined, boolean]> = [
       [UnitDefId.SPEARMAN, 1, undefined, false],
       [UnitDefId.SCOUT_CAVALRY, 1, undefined, false],
+      [UnitDefId.KNIGHT, 1, undefined, false],
       [UnitDefId.ARCHER, 5, undefined, false],
       [UnitDefId.GUNMAN, 5, undefined, false],
       [UnitDefId.MACHINE_GUN, 5, undefined, false],

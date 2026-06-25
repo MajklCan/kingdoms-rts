@@ -19,6 +19,7 @@ import {
   Gatherer,
   GunmanTag,
   Health,
+  KnightTag,
   MachineGunDeployment,
   MachineGunTag,
   MilitiaTag,
@@ -102,6 +103,7 @@ export interface SavedEntityV1 {
   archer?: true;
   spearman?: true;
   scoutCavalry?: true;
+  knight?: true;
   gunman?: true;
   cannon?: true;
   machineGun?: true;
@@ -157,6 +159,7 @@ export interface SavedGameV1 {
   humanPlayers?: number[];
   formationModes?: number[];
   formationFacings?: number[];
+  formationLocks?: number[];
   outcome: MatchOutcome;
   entities: SavedEntityV1[];
   productionQueues: Array<{ eid: number; queue: number[] }>;
@@ -164,8 +167,10 @@ export interface SavedGameV1 {
   paths: Array<{ eid: number; waypoints: GridPos[] }>;
   movementStuck?: Array<{ eid: number; lastDist: number; waypointX: number; waypointY: number; noProgressTicks: number; cooldownTicks: number; attempts: number }>;
   formationSpeedCaps?: Array<{ eid: number; speedCap: number }>;
-  cannonWindups?: Array<{ attackerEid: number; targetEid: number; ticksRemaining: number }>;
-  pendingProjectileImpacts?: Array<{ impactTick: number; attackerEid: number; attackerOwner: number; targetEid: number; damage: number }>;
+  cannonWindups?: Array<{ attackerEid: number; targetEid: number; targetX?: number; targetY?: number; ticksRemaining: number; attackGround?: number }>;
+  rangedAttackWindups?: Array<{ attackerEid: number; targetEid: number; ticksRemaining: number; range: number }>;
+  attackGroundOrders?: Array<{ attackerEid: number; x: number; y: number }>;
+  pendingProjectileImpacts?: Array<{ impactTick: number; attackerEid: number; attackerOwner: number; targetEid: number; impactX?: number; impactY?: number; hitRadius?: number; damage: number }>;
   pendingCannonImpacts?: Array<{ impactTick: number; attackerEid: number; attackerOwner: number; impactX: number; impactY: number; damage: number }>;
   aiPlayers?: Array<SavedAiPlayerStateV1 | null>;
   visibility?: Array<SavedVisibilityV1 | null>;
@@ -229,6 +234,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     if (hasComponent(world.ecs, ArcherTag, eid)) entity.archer = true;
     if (hasComponent(world.ecs, SpearmanTag, eid)) entity.spearman = true;
     if (hasComponent(world.ecs, ScoutCavalryTag, eid)) entity.scoutCavalry = true;
+    if (hasComponent(world.ecs, KnightTag, eid)) entity.knight = true;
     if (hasComponent(world.ecs, GunmanTag, eid)) entity.gunman = true;
     if (hasComponent(world.ecs, CannonTag, eid)) entity.cannon = true;
     if (hasComponent(world.ecs, MachineGunTag, eid)) entity.machineGun = true;
@@ -357,6 +363,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     humanPlayers: [...world.humanPlayers],
     formationModes: world.formationModes.slice(),
     formationFacings: world.formationFacings.slice(),
+    formationLocks: world.formationLocks.slice(),
     outcome: { ...world.outcome },
     entities,
     productionQueues: Array.from(world.productionQueues.entries()).map(([eid, queue]) => ({
@@ -384,7 +391,21 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     cannonWindups: Array.from(world.cannonWindups.entries()).map(([attackerEid, windup]) => ({
       attackerEid,
       targetEid: windup.targetEid,
+      targetX: windup.targetX,
+      targetY: windup.targetY,
       ticksRemaining: windup.ticksRemaining,
+      attackGround: windup.attackGround,
+    })),
+    rangedAttackWindups: Array.from(world.rangedAttackWindups.entries()).map(([attackerEid, windup]) => ({
+      attackerEid,
+      targetEid: windup.targetEid,
+      ticksRemaining: windup.ticksRemaining,
+      range: windup.range,
+    })),
+    attackGroundOrders: Array.from(world.attackGroundOrders.entries()).map(([attackerEid, order]) => ({
+      attackerEid,
+      x: order.x,
+      y: order.y,
     })),
     pendingProjectileImpacts: world.pendingProjectileImpacts.map((impact) => ({ ...impact })),
     pendingCannonImpacts: world.pendingCannonImpacts.map((impact) => ({ ...impact })),
@@ -442,6 +463,8 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.inputs.length = 0;
   world.combatEvents.length = 0;
   world.cannonWindups.clear();
+  world.rangedAttackWindups.clear();
+  world.attackGroundOrders.clear();
   world.pendingProjectileImpacts.length = 0;
   world.pendingCannonImpacts.length = 0;
   world.aiEvents.length = 0;
@@ -522,6 +545,12 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.formationFacings.length = 0;
   for (let i = 0; i < savedFormationFacings.length; i++) {
     world.formationFacings.push(savedFormationFacings[i] ?? fallbackFormationFacings[i] ?? 0);
+  }
+  const fallbackFormationLocks = world.formationLocks.slice();
+  const savedFormationLocks = snapshot.formationLocks ?? fallbackFormationLocks;
+  world.formationLocks.length = 0;
+  for (let i = 0; i < savedFormationLocks.length; i++) {
+    world.formationLocks.push(savedFormationLocks[i] ?? fallbackFormationLocks[i] ?? 1);
   }
 
   const eidMap = new Map<number, number>();
@@ -626,12 +655,34 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.cannonWindups.clear();
   for (const saved of snapshot.cannonWindups ?? []) {
     const attackerEid = eidMap.get(saved.attackerEid);
-    const targetEid = eidMap.get(saved.targetEid);
+    const targetEid = saved.targetEid < 0 ? -1 : eidMap.get(saved.targetEid);
     if (attackerEid === undefined || targetEid === undefined) continue;
     world.cannonWindups.set(attackerEid, {
       targetEid,
+      targetX: saved.targetX ?? (targetEid >= 0 ? Position.x[targetEid] : Position.x[attackerEid]),
+      targetY: saved.targetY ?? (targetEid >= 0 ? Position.y[targetEid] : Position.y[attackerEid]),
       ticksRemaining: saved.ticksRemaining,
+      attackGround: saved.attackGround ?? 0,
     });
+  }
+
+  world.rangedAttackWindups.clear();
+  for (const saved of snapshot.rangedAttackWindups ?? []) {
+    const attackerEid = eidMap.get(saved.attackerEid);
+    const targetEid = eidMap.get(saved.targetEid);
+    if (attackerEid === undefined || targetEid === undefined) continue;
+    world.rangedAttackWindups.set(attackerEid, {
+      targetEid,
+      ticksRemaining: saved.ticksRemaining,
+      range: saved.range,
+    });
+  }
+
+  world.attackGroundOrders.clear();
+  for (const saved of snapshot.attackGroundOrders ?? []) {
+    const attackerEid = eidMap.get(saved.attackerEid);
+    if (attackerEid === undefined) continue;
+    world.attackGroundOrders.set(attackerEid, { x: saved.x, y: saved.y });
   }
 
   world.pendingProjectileImpacts.length = 0;
@@ -644,6 +695,9 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
       attackerEid,
       attackerOwner: saved.attackerOwner,
       targetEid,
+      impactX: saved.impactX ?? Position.x[targetEid],
+      impactY: saved.impactY ?? Position.y[targetEid],
+      hitRadius: saved.hitRadius ?? 0.6,
       damage: saved.damage,
     });
   }
@@ -695,6 +749,7 @@ function isSavedMilitaryEntity(saved: SavedEntityV1): boolean {
     saved.archer ||
       saved.spearman ||
       saved.scoutCavalry ||
+      saved.knight ||
       saved.gunman ||
       saved.cannon ||
       saved.machineGun ||
@@ -736,6 +791,7 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
   if (saved.archer) addComponent(ecs, ArcherTag, eid);
   if (saved.spearman) addComponent(ecs, SpearmanTag, eid);
   if (saved.scoutCavalry) addComponent(ecs, ScoutCavalryTag, eid);
+  if (saved.knight) addComponent(ecs, KnightTag, eid);
   if (saved.gunman) addComponent(ecs, GunmanTag, eid);
   if (saved.cannon) addComponent(ecs, CannonTag, eid);
   if (saved.machineGun) addComponent(ecs, MachineGunTag, eid);

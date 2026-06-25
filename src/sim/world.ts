@@ -33,6 +33,7 @@ import {
   GathererStateId,
   GunmanTag,
   Health,
+  KnightTag,
   MachineGunDeployment,
   MachineGunTag,
   MortarTag,
@@ -213,13 +214,24 @@ const ZBOROV_MG_OFFSETS = [-13, -4, 4, 13];
 const FORMATION_MODE_FREE = 0;
 const FORMATION_MODE_LINE = 1;
 const FORMATION_MODE_COMPACT = 2;
+const FORMATION_MODE_BOX = 3;
+const FORMATION_MODE_STAGGERED = 4;
+const FORMATION_MODE_COLUMN = 5;
 const FORMATION_MODE_MIN = FORMATION_MODE_FREE;
-const FORMATION_MODE_MAX = FORMATION_MODE_COMPACT;
+const FORMATION_MODE_MAX = FORMATION_MODE_COLUMN;
 const FORMATION_MODE_DEFAULT = FORMATION_MODE_FREE;
 const FORMATION_FACING_STEPS = 8;
 const FORMATION_FACING_DEFAULT = 0;
 const FORMATION_MAX_COLUMNS = 12;
 const ATTACK_RANGE_TOLERANCE = 0.5;
+const ARCHER_AIM_TICKS = Math.round(SIM.TICK_HZ * 0.18);
+const GUNMAN_AIM_TICKS = Math.round(SIM.TICK_HZ * 0.28);
+const TOWER_AIM_TICKS = Math.round(SIM.TICK_HZ * 0.2);
+const ARROW_HIT_RADIUS = 0.48;
+const BULLET_HIT_RADIUS = 0.72;
+const TOWER_PROJECTILE_HIT_RADIUS = 0.6;
+const CANNON_MIN_RANGE = 1.35;
+const MORTAR_MIN_RANGE = 2.6;
 const CANNON_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 0.9);
 const CANNON_SPLASH_FULL_DAMAGE_RADIUS = 0.48;
 const CANNON_SPLASH_MAX_RADIUS = 2.6;
@@ -302,6 +314,8 @@ const WORKER_CONTACT_UNIT_PENALTY = 8;
 const WORKER_CONTACT_PATH_PENALTY = 5;
 const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
 const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
+export const BUILD_PLACEMENT_BUILDING_RADIUS = 12;
+export const BUILD_PLACEMENT_UNIT_RADIUS = 4;
 
 export type SimInput =
   // ── Selection-relative commands (local single-player UX). These read the
@@ -318,8 +332,11 @@ export type SimInput =
   | { type: 'adjustFormationMode'; delta: number }
   | { type: 'rotateSelectedFormation'; delta: number }
   | { type: 'reformSelectedFormation' }
+  | { type: 'splitSelectedFormation' }
+  | { type: 'toggleFormationLock' }
   | { type: 'attackSelected'; targetEid: number }
   | { type: 'attackMoveSelected'; to: GridPos }
+  | { type: 'attackGroundSelected'; to: GridPos }
   // ── Self-describing commands. Inside the sim these eids are local raw bitECS
   //    ids. MultiplayerSession converts them to deterministic NetIds before
   //    putting commands on the wire, then decodes them back before applyInput().
@@ -335,6 +352,9 @@ export type SimInput =
   | { type: 'cmdAdjustFormationMode'; playerId: number; eids: number[]; delta: number }
   | { type: 'cmdRotateFormation'; playerId: number; eids: number[]; delta: number }
   | { type: 'cmdReformFormation'; playerId: number; eids: number[] }
+  | { type: 'cmdSplitFormation'; playerId: number; eids: number[] }
+  | { type: 'cmdToggleFormationLock'; playerId: number }
+  | { type: 'cmdAttackGround'; playerId: number; eids: number[]; to: GridPos }
   // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
@@ -432,7 +452,16 @@ export interface SoundCue {
 
 interface CannonWindup {
   targetEid: number;
+  targetX: number;
+  targetY: number;
   ticksRemaining: number;
+  attackGround: number;
+}
+
+interface RangedAttackWindup {
+  targetEid: number;
+  ticksRemaining: number;
+  range: number;
 }
 
 interface PendingCannonImpact {
@@ -449,6 +478,9 @@ interface PendingProjectileImpact {
   attackerEid: number;
   attackerOwner: number;
   targetEid: number;
+  impactX: number;
+  impactY: number;
+  hitRadius: number;
   damage: number;
 }
 
@@ -676,6 +708,8 @@ export interface SimWorld {
    * Indexed by playerId.
    */
   formationFacings: number[];
+  /** Per-player formation lock. Locked groups preserve shape by capping to the slowest unit. */
+  formationLocks: number[];
   pathfinder: Pathfinder;
   /** Static map grid (0 walkable, 1+ blocked). */
   grid: number[][];
@@ -710,6 +744,8 @@ export interface SimWorld {
   combatEvents: CombatEvent[];
   /** Projectile attacks apply damage on impact rather than at fire time. */
   cannonWindups: Map<number, CannonWindup>;
+  rangedAttackWindups: Map<number, RangedAttackWindup>;
+  attackGroundOrders: Map<number, GridPos>;
   pendingProjectileImpacts: PendingProjectileImpact[];
   pendingCannonImpacts: PendingCannonImpact[];
   /** Players controlled by a human. Always includes LOCAL_PLAYER_ID. In a
@@ -894,6 +930,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     formationSpeedCaps: new Map(),
     formationModes: new Array(MAX_PLAYERS).fill(FORMATION_MODE_DEFAULT),
     formationFacings: new Array(MAX_PLAYERS).fill(FORMATION_FACING_DEFAULT),
+    formationLocks: new Array(MAX_PLAYERS).fill(1),
     pathfinder,
     grid,
     resources,
@@ -908,6 +945,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     campaign: null,
     combatEvents: [],
     cannonWindups: new Map(),
+    rangedAttackWindups: new Map(),
+    attackGroundOrders: new Map(),
     pendingProjectileImpacts: [],
     pendingCannonImpacts: [],
     humanPlayers: new Set([LOCAL_PLAYER_ID]),
@@ -2839,6 +2878,7 @@ function spawnPresetUnitAt(
   if (defId === UnitDefId.ARCHER) return spawnArcher(world, x, y, playerId);
   if (defId === UnitDefId.SPEARMAN) return spawnSpearman(world, x, y, playerId);
   if (defId === UnitDefId.SCOUT_CAVALRY) return spawnScoutCavalry(world, x, y, playerId);
+  if (defId === UnitDefId.KNIGHT) return spawnKnight(world, x, y, playerId);
   if (defId === UnitDefId.GUNMAN) return spawnGunman(world, x, y, playerId);
   if (defId === UnitDefId.CANNON) return spawnCannon(world, x, y, playerId);
   if (defId === UnitDefId.MACHINE_GUN) return spawnMachineGun(world, x, y, playerId);
@@ -3099,7 +3139,7 @@ export function spawnSpearman(
   return eid;
 }
 
-/** Spawn a Scout Cavalry at tile (x,y) owned by playerId. */
+/** Spawn a Scout at tile (x,y) owned by playerId. */
 export function spawnScoutCavalry(
   world: SimWorld,
   x: number,
@@ -3146,6 +3186,56 @@ export function spawnScoutCavalry(
   UnitStance.anchorY[eid] = y;
   Cooldown.ticksRemaining[eid] = 0;
   world.population[playerId].current += 1;
+  return eid;
+}
+
+/** Spawn a Knight at tile (x,y) owned by playerId. */
+export function spawnKnight(
+  world: SimWorld,
+  x: number,
+  y: number,
+  playerId: number
+): number {
+  const { ecs } = world;
+  const eid = addSimEntity(world);
+  addComponent(ecs, Position, eid);
+  addComponent(ecs, Velocity, eid);
+  addComponent(ecs, Speed, eid);
+  addComponent(ecs, UnitKind, eid);
+  addComponent(ecs, PopulationCost, eid);
+  addComponent(ecs, Owner, eid);
+  addComponent(ecs, KnightTag, eid);
+  addComponent(ecs, Health, eid);
+  addComponent(ecs, Combat, eid);
+  addComponent(ecs, AttackTarget, eid);
+  addComponent(ecs, AttackMoveGoal, eid);
+  addComponent(ecs, UnitStance, eid);
+  addComponent(ecs, Cooldown, eid);
+  addComponent(ecs, PrevPosition, eid);
+  Position.x[eid] = x;
+  Position.y[eid] = y;
+  PrevPosition.x[eid] = x;
+  PrevPosition.y[eid] = y;
+  Velocity.x[eid] = 0;
+  Velocity.y[eid] = 0;
+  Speed.value[eid] = 2.95;
+  UnitKind.kind[eid] = UnitKindId.KNIGHT;
+  PopulationCost.value[eid] = 2;
+  Owner.player[eid] = playerId;
+  Health.hp[eid] = 115;
+  Health.hpMax[eid] = 115;
+  Health.armor[eid] = 2;
+  Combat.atk[eid] = 12;
+  Combat.range[eid] = 1;
+  Combat.attackSpeedTicks[eid] = 26;
+  Combat.aggroRadius[eid] = 7;
+  AttackTarget.targetEid[eid] = -1;
+  AttackTarget.retainGoal[eid] = 0;
+  UnitStance.stance[eid] = UnitStanceId.AUTO_DEFEND;
+  UnitStance.anchorX[eid] = x;
+  UnitStance.anchorY[eid] = y;
+  Cooldown.ticksRemaining[eid] = 0;
+  world.population[playerId].current += 2;
   return eid;
 }
 
@@ -4110,11 +4200,20 @@ function applyInput(world: SimWorld, input: SimInput): void {
     case 'reformSelectedFormation':
       applyReformSelectedFormation(world);
       return;
+    case 'splitSelectedFormation':
+      applySplitSelectedFormation(world);
+      return;
+    case 'toggleFormationLock':
+      applyToggleFormationLock(world, LOCAL_PLAYER_ID);
+      return;
     case 'attackSelected':
       applyAttackSelected(world, input.targetEid);
       return;
     case 'attackMoveSelected':
       applyAttackMoveSelected(world, input.to);
+      return;
+    case 'attackGroundSelected':
+      applyAttackGroundSelected(world, input.to);
       return;
     case 'cmdMove':
       applyMoveCommand(world, input.playerId, input.eids, input.to);
@@ -4160,6 +4259,15 @@ function applyInput(world: SimWorld, input: SimInput): void {
       return;
     case 'cmdReformFormation':
       applyReformFormationCommand(world, input.playerId, input.eids);
+      return;
+    case 'cmdSplitFormation':
+      applySplitFormationCommand(world, input.playerId, input.eids);
+      return;
+    case 'cmdToggleFormationLock':
+      applyToggleFormationLock(world, input.playerId);
+      return;
+    case 'cmdAttackGround':
+      applyAttackGroundCommand(world, input.playerId, input.eids, input.to);
       return;
     case 'trainUnit':
       if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
@@ -4331,6 +4439,8 @@ function clearCombatOrders(world: SimWorld, eid: number): void {
     // new aggro acquire. Keep it as-is.
   }
   world.cannonWindups.delete(eid);
+  world.rangedAttackWindups.delete(eid);
+  world.attackGroundOrders.delete(eid);
   clearFormationSpeedCap(world, eid);
 }
 
@@ -4356,9 +4466,9 @@ function setUnitHoldAnchor(world: SimWorld, eid: number, x = Position.x[eid], y 
   UnitStance.anchorY[eid] = y;
 }
 
-function applyFormationSpeedCap(world: SimWorld, eids: number[]): void {
+function applyFormationSpeedCap(world: SimWorld, eids: number[], locked = true): void {
   for (const eid of eids) clearFormationSpeedCap(world, eid);
-  if (eids.length <= 1) return;
+  if (!locked || eids.length <= 1) return;
   let speedCap = Infinity;
   for (const eid of eids) {
     if (!hasComponent(world.ecs, Speed, eid)) continue;
@@ -4406,9 +4516,42 @@ function applyAttackCommand(
       AttackMoveGoal.active[eid] = 0;
     }
     world.cannonWindups.delete(eid);
+    world.rangedAttackWindups.delete(eid);
+    world.attackGroundOrders.delete(eid);
     clearFormationSpeedCap(world, eid);
     clearWorkOrders(world, eid);
     if (inRange) world.paths.delete(eid);
+  }
+}
+
+function applyAttackGroundSelected(world: SimWorld, to: GridPos): void {
+  applyAttackGroundCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
+}
+
+function applyAttackGroundCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  to: GridPos
+): void {
+  if (!isTileInMap(Math.round(to.x), Math.round(to.y))) return;
+  for (const eid of ownedCommandableEids(world, playerId, eids)) {
+    if (!usesSiegeWindup(world, eid)) continue;
+    if (!hasComponent(world.ecs, Combat, eid)) continue;
+    if (!isMovableEntity(world, eid)) continue;
+    world.attackGroundOrders.set(eid, { x: Math.round(to.x), y: Math.round(to.y) });
+    AttackTarget.targetEid[eid] = -1;
+    AttackTarget.retainGoal[eid] = 0;
+    if (hasComponent(world.ecs, AttackMoveGoal, eid)) AttackMoveGoal.active[eid] = 0;
+    world.cannonWindups.delete(eid);
+    world.rangedAttackWindups.delete(eid);
+    clearFormationSpeedCap(world, eid);
+    clearWorkOrders(world, eid);
+    if (!isGroundPointInAttackRange(world, eid, to.x, to.y)) {
+      pathTo(world, eid, to.x, to.y);
+    } else {
+      world.paths.delete(eid);
+    }
   }
 }
 
@@ -4437,6 +4580,8 @@ function applyAttackMoveCommand(
     AttackTarget.targetEid[eid] = -1;
     AttackTarget.retainGoal[eid] = 0;
     world.cannonWindups.delete(eid);
+    world.rangedAttackWindups.delete(eid);
+    world.attackGroundOrders.delete(eid);
     // Store the real attack-move destination so the unit can resume walking
     // toward it after killing whatever they engage along the way.
     if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
@@ -4449,7 +4594,7 @@ function applyAttackMoveCommand(
     ordered.push(eid);
   }
   if (formationModeUsesSlots(mode)) {
-    applyFormationSpeedCap(world, ordered);
+    applyFormationSpeedCap(world, ordered, playerFormationLocked(world, playerId));
   }
 }
 
@@ -4481,7 +4626,7 @@ function applyMoveCommand(
     ordered.push(eid);
   }
   if (formationModeUsesSlots(mode)) {
-    applyFormationSpeedCap(world, ordered);
+    applyFormationSpeedCap(world, ordered, playerFormationLocked(world, playerId));
   }
 }
 
@@ -4516,7 +4661,7 @@ function applyReformFormationCommand(world: SimWorld, playerId: number, eids: nu
     setUnitHoldAnchor(world, eid, dest.x, dest.y);
     ordered.push(eid);
   }
-  applyFormationSpeedCap(world, ordered);
+  applyFormationSpeedCap(world, ordered, playerFormationLocked(world, playerId));
 }
 
 function applySetArmyRallyPoint(
@@ -4608,7 +4753,10 @@ function formationDestinations(
     const col = i % columns;
     const rowStart = row * columns;
     const rowSize = Math.min(columns, sorted.length - rowStart);
-    const sideOffset = (col - (rowSize - 1) / 2) * spacing;
+    let sideOffset = (col - (rowSize - 1) / 2) * spacing;
+    if (mode === FORMATION_MODE_STAGGERED && row % 2 === 1) {
+      sideOffset += spacing * 0.5;
+    }
     const forwardOffset = ((rowCount - 1) / 2 - row) * spacing;
     const desired = {
       x: Math.round(to.x + dirX * forwardOffset + sideX * sideOffset),
@@ -4638,6 +4786,10 @@ export function playerFormationFacing(world: SimWorld, playerId: number): number
   return normalizeFormationFacing(world.formationFacings[playerId] ?? FORMATION_FACING_DEFAULT);
 }
 
+export function playerFormationLocked(world: SimWorld, playerId: number): boolean {
+  return (world.formationLocks[playerId] ?? 1) !== 0;
+}
+
 function formationModeUsesSlots(mode: number): boolean {
   return clampFormationMode(mode) !== FORMATION_MODE_FREE;
 }
@@ -4659,6 +4811,12 @@ function formationFacingVector(facing: number): { x: number; y: number } {
 function formationColumnCount(count: number, mode: number): number {
   const maxColumns = Math.min(FORMATION_MAX_COLUMNS, count);
   if (count <= 2) return count;
+  if (mode === FORMATION_MODE_COLUMN) return Math.min(2, count);
+  if (mode === FORMATION_MODE_BOX) return Math.max(2, Math.min(maxColumns, Math.ceil(Math.sqrt(count))));
+  if (mode === FORMATION_MODE_STAGGERED) return Math.max(
+    2,
+    Math.min(maxColumns, count <= 10 ? count : Math.ceil(count / 2))
+  );
   const lineColumns = Math.max(
     2,
     Math.min(maxColumns, count <= 10 ? count : Math.ceil(count / 2))
@@ -4675,12 +4833,15 @@ function formationSpacing(mode: number): number {
   switch (mode) {
     case FORMATION_MODE_LINE: return 1.45;
     case FORMATION_MODE_COMPACT: return 1.04;
+    case FORMATION_MODE_BOX: return 1.18;
+    case FORMATION_MODE_STAGGERED: return 1.9;
+    case FORMATION_MODE_COLUMN: return 1.08;
     default: return 1.2;
   }
 }
 
 function formationRank(world: SimWorld, eid: number): number {
-  if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return 0;
+  if (hasComponent(world.ecs, ScoutCavalryTag, eid) || hasComponent(world.ecs, KnightTag, eid)) return 0;
   if (hasComponent(world.ecs, SpearmanTag, eid)) return 1;
   if (hasComponent(world.ecs, VillagerTag, eid)) return 2;
   if (hasComponent(world.ecs, ArcherTag, eid)) return 3;
@@ -4860,6 +5021,55 @@ function applyRotateFormationCommand(
   applyReformFormationCommand(world, playerId, eids);
 }
 
+function applySplitSelectedFormation(world: SimWorld): void {
+  applySplitFormationCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
+}
+
+function applySplitFormationCommand(world: SimWorld, playerId: number, eids: number[]): void {
+  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
+    hasComponent(world.ecs, UnitStance, eid) && isMovableEntity(world, eid)
+  );
+  if (units.length <= 1) return;
+  const center = formationCenter(units);
+  const facing = formationFacingVector(playerFormationFacing(world, playerId));
+  const side = { x: -facing.y, y: facing.x };
+  const sorted = sortedEids(world, units);
+  const left: number[] = [];
+  const right: number[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    (i % 2 === 0 ? left : right).push(sorted[i]);
+  }
+  const splitDistance = Math.max(2.2, Math.min(4.5, Math.sqrt(units.length) * 1.25));
+  const issueHalf = (half: number[], dir: number): number[] => {
+    const ordered: number[] = [];
+    const target = {
+      x: Math.round(center.x + side.x * splitDistance * dir),
+      y: Math.round(center.y + side.y * splitDistance * dir),
+    };
+    for (const { eid, dest } of formationDestinations(
+      world,
+      half,
+      target,
+      FORMATION_MODE_LINE,
+      facing
+    )) {
+      if (!pathTo(world, eid, dest.x, dest.y)) continue;
+      clearCombatOrders(world, eid);
+      clearWorkOrders(world, eid);
+      setUnitHoldAnchor(world, eid, dest.x, dest.y);
+      ordered.push(eid);
+    }
+    return ordered;
+  };
+  const moved = [...issueHalf(left, -1), ...issueHalf(right, 1)];
+  applyFormationSpeedCap(world, moved, playerFormationLocked(world, playerId));
+}
+
+function applyToggleFormationLock(world: SimWorld, playerId: number): void {
+  if (playerId <= 0 || playerId >= world.formationLocks.length) return;
+  world.formationLocks[playerId] = playerFormationLocked(world, playerId) ? 0 : 1;
+}
+
 function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
   if (!hasComponent(world.ecs, AttackTarget, eid)) return;
   if (AttackTarget.targetEid[eid] < 0) return;
@@ -4869,6 +5079,7 @@ function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
   AttackTarget.retainGoal[eid] = 0;
   world.paths.delete(eid);
   world.cannonWindups.delete(eid);
+  world.rangedAttackWindups.delete(eid);
 }
 
 function applyRemoveSelectedBuildings(world: SimWorld, playerId: number): void {
@@ -4912,17 +5123,18 @@ function applyPlaceBuilding(
   if (!bank || !canAfford(bank, def.cost)) return;
   if (!isBuildingUnlocked(world, playerId, defId)) return;
 
-  if (!canPlaceBuildingAt(world, def, x, y)) return;
+  if (!canPlaceBuildingAt(world, def, x, y, playerId)) return;
 
   spend(bank, def.cost);
   spawnFoundation(world, defId, x, y, playerId);
 }
 
-function canPlaceBuildingAt(
+export function canPlaceBuildingAt(
   world: SimWorld,
   def: BuildingDef,
   x: number,
-  y: number
+  y: number,
+  playerId?: number
 ): boolean {
   if (
     worksiteUsesResourceNodes(def) &&
@@ -4951,7 +5163,44 @@ function canPlaceBuildingAt(
       if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;
     }
   }
+  if (
+    playerId !== undefined &&
+    !isBuildingPlacementWithinOwnedInfluence(world, def, x, y, playerId)
+  ) {
+    return false;
+  }
   return true;
+}
+
+function isBuildingPlacementWithinOwnedInfluence(
+  world: SimWorld,
+  def: BuildingDef,
+  x: number,
+  y: number,
+  playerId: number
+): boolean {
+  const rect = buildingFootprintRectForDef(def, x, y);
+
+  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
+    if (Owner.player[eid] !== playerId) continue;
+    if (Health.hp[eid] <= 0) continue;
+    if (hasComponent(world.ecs, ConstructionSite, eid)) continue;
+    const ownedDef = getBuildingDef(Building.defId[eid]);
+    if (!ownedDef) continue;
+    if (rectDistance(rect, buildingFootprintRect(eid, ownedDef)) <= BUILD_PLACEMENT_BUILDING_RADIUS) {
+      return true;
+    }
+  }
+
+  for (const eid of sortedEids(world, unitQuery(world.ecs))) {
+    if (Owner.player[eid] !== playerId) continue;
+    if (Health.hp[eid] <= 0) continue;
+    if (pointToRectDistance(Position.x[eid], Position.y[eid], rect) <= BUILD_PLACEMENT_UNIT_RADIUS) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function applyTrainUnit(
@@ -5586,6 +5835,10 @@ function productionSystem(world: SimWorld): void {
           spawnedEid = spawnScoutCavalry(world, spot.x, spot.y, Owner.player[eid]);
           break;
         }
+        if (trainingDefId === UnitDefId.KNIGHT) {
+          spawnedEid = spawnKnight(world, spot.x, spot.y, Owner.player[eid]);
+          break;
+        }
         if (trainingDefId === UnitDefId.GUNMAN) {
           spawnedEid = spawnGunman(world, spot.x, spot.y, Owner.player[eid]);
           break;
@@ -5782,6 +6035,12 @@ function targetingSystem(world: SimWorld): void {
   const ents = sortedEids(world, combatQuery(world.ecs));
   for (const eid of ents) {
     if (Health.hp[eid] <= 0) continue;
+    if (world.rangedAttackWindups.has(eid)) continue;
+    if (world.attackGroundOrders.has(eid)) {
+      AttackTarget.targetEid[eid] = -1;
+      AttackTarget.retainGoal[eid] = 0;
+      continue;
+    }
     const cur = AttackTarget.targetEid[eid];
     const aggro = Combat.aggroRadius[eid];
     const holdPosition = isHoldPositionStance(world, eid);
@@ -5889,10 +6148,16 @@ function combatSystem(world: SimWorld): void {
       Cooldown.ticksRemaining[eid] -= 1;
     }
     if (Health.hp[eid] <= 0) continue;
+    if (processRangedAttackWindup(world, eid)) {
+      continue;
+    }
     if (usesSiegeWindup(world, eid) && processCannonWindup(world, eid)) {
       continue;
     }
     if (hasComponent(world.ecs, MachineGunTag, eid) && !processMachineGunDeployment(world, eid)) {
+      continue;
+    }
+    if (processAttackGroundOrder(world, eid)) {
       continue;
     }
     const target = AttackTarget.targetEid[eid];
@@ -5914,6 +6179,10 @@ function combatSystem(world: SimWorld): void {
     // units beside a 3×3 TC are correctly "in range" instead of permanently
     // out-of-range against the centre.
     const dist = distanceToAttackTarget(world, eid, target);
+    if (dist < minimumAttackRange(world, eid)) {
+      if (AttackTarget.retainGoal[eid] !== 1) AttackTarget.targetEid[eid] = -1;
+      continue;
+    }
     if (dist > range + ATTACK_RANGE_TOLERANCE) {
       if (isMovableEntity(world, eid)) {
         const holdRestricted =
@@ -5940,11 +6209,11 @@ function combatSystem(world: SimWorld): void {
     clearFormationSpeedCap(world, eid);
     if (Cooldown.ticksRemaining[eid] > 0) continue;
     if (usesSiegeWindup(world, eid)) {
-      startCannonWindup(world, eid, target, range);
+      startCannonWindup(world, eid, target, Position.x[target], Position.y[target], range, false);
       continue;
     }
     if (usesProjectileAttack(world, eid)) {
-      fireProjectileAttack(world, eid, target, range);
+      startOrFireProjectileAttack(world, eid, target, range);
       continue;
     }
     applyAttackDamage(world, eid, target, computeAttackDamage(world, eid, target));
@@ -5972,6 +6241,108 @@ function usesProjectileAttack(world: SimWorld, attacker: number): boolean {
       hasComponent(world.ecs, MachineGunTag, attacker) ||
       hasComponent(world.ecs, Building, attacker)
     );
+}
+
+function projectileAimTicks(world: SimWorld, attacker: number): number {
+  if (hasComponent(world.ecs, ArcherTag, attacker)) return ARCHER_AIM_TICKS;
+  if (hasComponent(world.ecs, GunmanTag, attacker)) return GUNMAN_AIM_TICKS;
+  if (hasComponent(world.ecs, Building, attacker)) return TOWER_AIM_TICKS;
+  return 0;
+}
+
+function projectileHitRadius(world: SimWorld, attacker: number): number {
+  if (hasComponent(world.ecs, GunmanTag, attacker) || hasComponent(world.ecs, MachineGunTag, attacker)) {
+    return BULLET_HIT_RADIUS;
+  }
+  if (hasComponent(world.ecs, Building, attacker)) return TOWER_PROJECTILE_HIT_RADIUS;
+  return ARROW_HIT_RADIUS;
+}
+
+function processRangedAttackWindup(world: SimWorld, attacker: number): boolean {
+  const windup = world.rangedAttackWindups.get(attacker);
+  if (!windup) return false;
+  const target = windup.targetEid;
+  if (
+    world.paths.has(attacker) ||
+    !hasComponent(world.ecs, Health, target) ||
+    Health.hp[target] <= 0 ||
+    !isTargetVisibleToAttackerOwner(world, attacker, target) ||
+    distanceToAttackTarget(world, attacker, target) >
+      windup.range + ATTACK_RANGE_TOLERANCE ||
+    distanceToAttackTarget(world, attacker, target) < minimumAttackRange(world, attacker)
+  ) {
+    world.rangedAttackWindups.delete(attacker);
+    return true;
+  }
+
+  world.paths.delete(attacker);
+  clearFormationSpeedCap(world, attacker);
+  windup.ticksRemaining -= 1;
+  if (windup.ticksRemaining > 0) return true;
+
+  world.rangedAttackWindups.delete(attacker);
+  fireProjectileAttack(world, attacker, target, windup.range);
+  return true;
+}
+
+function startOrFireProjectileAttack(
+  world: SimWorld,
+  attacker: number,
+  target: number,
+  range: number
+): void {
+  const aimTicks = projectileAimTicks(world, attacker);
+  if (aimTicks <= 0) {
+    fireProjectileAttack(world, attacker, target, range);
+    return;
+  }
+  world.rangedAttackWindups.set(attacker, {
+    targetEid: target,
+    ticksRemaining: aimTicks,
+    range,
+  });
+  world.paths.delete(attacker);
+  clearFormationSpeedCap(world, attacker);
+}
+
+function minimumAttackRange(world: SimWorld, eid: number): number {
+  if (hasComponent(world.ecs, MortarTag, eid)) return MORTAR_MIN_RANGE;
+  if (hasComponent(world.ecs, CannonTag, eid)) return CANNON_MIN_RANGE;
+  return 0;
+}
+
+function isGroundPointInAttackRange(world: SimWorld, eid: number, x: number, y: number): boolean {
+  const dist = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
+  return dist <= Combat.range[eid] + ATTACK_RANGE_TOLERANCE &&
+    dist >= minimumAttackRange(world, eid);
+}
+
+function processAttackGroundOrder(world: SimWorld, attacker: number): boolean {
+  const order = world.attackGroundOrders.get(attacker);
+  if (!order) return false;
+  if (!usesSiegeWindup(world, attacker)) {
+    world.attackGroundOrders.delete(attacker);
+    return false;
+  }
+  if (Cooldown.ticksRemaining[attacker] > 0) return true;
+  const groundDist = Math.hypot(Position.x[attacker] - order.x, Position.y[attacker] - order.y);
+  if (groundDist < minimumAttackRange(world, attacker)) {
+    world.attackGroundOrders.delete(attacker);
+    world.paths.delete(attacker);
+    return true;
+  }
+  if (!isGroundPointInAttackRange(world, attacker, order.x, order.y)) {
+    if (!world.paths.has(attacker)) {
+      if (!pathTo(world, attacker, order.x, order.y)) {
+        world.attackGroundOrders.delete(attacker);
+      }
+    }
+    return true;
+  }
+  world.paths.delete(attacker);
+  clearFormationSpeedCap(world, attacker);
+  startCannonWindup(world, attacker, -1, order.x, order.y, Combat.range[attacker], true);
+  return true;
 }
 
 function processMachineGunDeployment(world: SimWorld, eid: number): boolean {
@@ -6029,6 +6400,9 @@ function fireProjectileAttack(
     attackerEid: attacker,
     attackerOwner: Owner.player[attacker],
     targetEid: target,
+    impactX: Position.x[target],
+    impactY: Position.y[target],
+    hitRadius: projectileHitRadius(world, attacker),
     damage: computeAttackDamage(world, attacker, target),
   });
   Cooldown.ticksRemaining[attacker] = Combat.attackSpeedTicks[attacker];
@@ -6051,7 +6425,7 @@ function processCannonWindup(world: SimWorld, attacker: number): boolean {
   const windup = world.cannonWindups.get(attacker);
   if (!windup) return false;
   const target = windup.targetEid;
-  if (!isCannonWindupTargetValid(world, attacker, target)) {
+  if (!isCannonWindupTargetValid(world, attacker, windup)) {
     world.cannonWindups.delete(attacker);
     return true;
   }
@@ -6062,16 +6436,21 @@ function processCannonWindup(world: SimWorld, attacker: number): boolean {
   if (windup.ticksRemaining > 0) return true;
 
   world.cannonWindups.delete(attacker);
-  fireCannonShot(world, attacker, target);
+  fireCannonShot(world, attacker, target, windup.targetX, windup.targetY);
   return true;
 }
 
-function isCannonWindupTargetValid(world: SimWorld, attacker: number, target: number): boolean {
+function isCannonWindupTargetValid(world: SimWorld, attacker: number, windup: CannonWindup): boolean {
+  const target = windup.targetEid;
+  if (windup.attackGround === 1) {
+    return isGroundPointInAttackRange(world, attacker, windup.targetX, windup.targetY);
+  }
   if (target < 0) return false;
   if (!hasComponent(world.ecs, Health, target) || Health.hp[target] <= 0) return false;
   if (!isTargetVisibleToAttackerOwner(world, attacker, target)) return false;
   return distanceToAttackTarget(world, attacker, target) <=
-    Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
+    Combat.range[attacker] + ATTACK_RANGE_TOLERANCE &&
+    distanceToAttackTarget(world, attacker, target) >= minimumAttackRange(world, attacker);
 }
 
 /** Cannons and mortars share the wind-up → splash-impact pipeline. */
@@ -6082,12 +6461,23 @@ function usesSiegeWindup(world: SimWorld, eid: number): boolean {
   );
 }
 
-function startCannonWindup(world: SimWorld, attacker: number, target: number, range: number): void {
+function startCannonWindup(
+  world: SimWorld,
+  attacker: number,
+  target: number,
+  targetX: number,
+  targetY: number,
+  range: number,
+  attackGround: boolean
+): void {
   const isMortar = hasComponent(world.ecs, MortarTag, attacker);
   const windupTicks = isMortar ? MORTAR_WINDUP_TICKS : CANNON_WINDUP_TICKS;
   world.cannonWindups.set(attacker, {
     targetEid: target,
+    targetX,
+    targetY,
     ticksRemaining: windupTicks,
+    attackGround: attackGround ? 1 : 0,
   });
   world.combatEvents.push({
     type: 'attack',
@@ -6098,16 +6488,22 @@ function startCannonWindup(world: SimWorld, attacker: number, target: number, ra
     range,
     fromX: Position.x[attacker],
     fromY: Position.y[attacker],
-    toX: Position.x[target],
-    toY: Position.y[target],
+    toX: targetX,
+    toY: targetY,
     phase: 'windup',
     windupTicks,
   });
 }
 
-function fireCannonShot(world: SimWorld, attacker: number, target: number): void {
+function fireCannonShot(
+  world: SimWorld,
+  attacker: number,
+  target: number,
+  targetX: number,
+  targetY: number
+): void {
   const isMortar = hasComponent(world.ecs, MortarTag, attacker);
-  const dist = Math.hypot(Position.x[attacker] - Position.x[target], Position.y[attacker] - Position.y[target]);
+  const dist = Math.hypot(Position.x[attacker] - targetX, Position.y[attacker] - targetY);
   const projectileTicks = isMortar
     ? mortarProjectileTravelTicks(dist)
     : cannonProjectileTravelTicks(dist);
@@ -6115,8 +6511,8 @@ function fireCannonShot(world: SimWorld, attacker: number, target: number): void
     impactTick: world.tick + projectileTicks,
     attackerEid: attacker,
     attackerOwner: Owner.player[attacker],
-    impactX: Position.x[target],
-    impactY: Position.y[target],
+    impactX: targetX,
+    impactY: targetY,
     damage: Combat.atk[attacker],
   });
   Cooldown.ticksRemaining[attacker] = Combat.attackSpeedTicks[attacker];
@@ -6129,8 +6525,8 @@ function fireCannonShot(world: SimWorld, attacker: number, target: number): void
     range: Combat.range[attacker],
     fromX: Position.x[attacker],
     fromY: Position.y[attacker],
-    toX: Position.x[target],
-    toY: Position.y[target],
+    toX: targetX,
+    toY: targetY,
     phase: 'fire',
     projectileTicks,
   });
@@ -6189,6 +6585,14 @@ function applyProjectileImpactDamage(world: SimWorld, impact: PendingProjectileI
     !hasComponent(world.ecs, Owner, impact.targetEid) ||
     Owner.player[impact.targetEid] === impact.attackerOwner ||
     Owner.player[impact.targetEid] === 0
+  ) {
+    return;
+  }
+  if (
+    Math.hypot(
+      Position.x[impact.targetEid] - impact.impactX,
+      Position.y[impact.targetEid] - impact.impactY
+    ) > impact.hitRadius
   ) {
     return;
   }
@@ -6313,9 +6717,9 @@ function computeAttackDamage(world: SimWorld, attacker: number, target: number):
   let bonus = 0;
   if (
     hasComponent(world.ecs, SpearmanTag, attacker) &&
-    hasComponent(world.ecs, ScoutCavalryTag, target)
+    (hasComponent(world.ecs, ScoutCavalryTag, target) || hasComponent(world.ecs, KnightTag, target))
   ) {
-    bonus += 13;
+    bonus += hasComponent(world.ecs, KnightTag, target) ? 16 : 13;
   }
   if (
     hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
@@ -6346,6 +6750,30 @@ function computeAttackDamage(world: SimWorld, attacker: number, target: number):
     hasComponent(world.ecs, MortarTag, target)
   ) {
     bonus += 10;
+  }
+  if (
+    hasComponent(world.ecs, KnightTag, attacker) &&
+    hasComponent(world.ecs, ArcherTag, target)
+  ) {
+    bonus += 4;
+  }
+  if (
+    hasComponent(world.ecs, KnightTag, attacker) &&
+    hasComponent(world.ecs, CannonTag, target)
+  ) {
+    bonus += 8;
+  }
+  if (
+    hasComponent(world.ecs, KnightTag, attacker) &&
+    hasComponent(world.ecs, MachineGunTag, target)
+  ) {
+    bonus += 6;
+  }
+  if (
+    hasComponent(world.ecs, KnightTag, attacker) &&
+    hasComponent(world.ecs, MortarTag, target)
+  ) {
+    bonus += 8;
   }
   return Math.max(1, Combat.atk[attacker] + bonus - Health.armor[target]);
 }
@@ -6425,8 +6853,14 @@ function cleanupSystem(world: SimWorld): void {
         world.paths.delete(a);
         clearFormationSpeedCap(world, a);
       }
+      const windup = world.rangedAttackWindups.get(a);
+      if (windup?.targetEid === eid) world.rangedAttackWindups.delete(a);
+      const cannonWindup = world.cannonWindups.get(a);
+      if (cannonWindup?.targetEid === eid) world.cannonWindups.delete(a);
     }
     world.cannonWindups.delete(eid);
+    world.rangedAttackWindups.delete(eid);
+    world.attackGroundOrders.delete(eid);
     // Clear gatherer targets pointing at us (resource depleted, etc.).
     const gatherers = sortedEids(world, gathererQuery(world.ecs));
     for (const g of gatherers) {
@@ -7005,11 +7439,21 @@ interface AiSnapshot {
   mySpearmen: number[];
   myArchers: number[];
   myScouts: number[];
+  myKnights: number[];
   myGunmen: number[];
   myCannons: number[];
   enemyBuildings: number[];
   enemyMilitary: number[];
 }
+
+type AiArmyCounts = {
+  spearmen: number;
+  archers: number;
+  scouts: number;
+  knights: number;
+  gunmen: number;
+  cannons: number;
+};
 
 function aiPlayerTick(world: SimWorld, playerId: number): void {
   const bank = world.resources[playerId];
@@ -7076,6 +7520,7 @@ function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot | null
   const mySpearmen: number[] = [];
   const myArchers: number[] = [];
   const myScouts: number[] = [];
+  const myKnights: number[] = [];
   const myGunmen: number[] = [];
   const myCannons: number[] = [];
   const enemyMilitary: number[] = [];
@@ -7087,6 +7532,7 @@ function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot | null
       if (hasComponent(world.ecs, SpearmanTag, eid)) mySpearmen.push(eid);
       else if (hasComponent(world.ecs, ArcherTag, eid)) myArchers.push(eid);
       else if (hasComponent(world.ecs, ScoutCavalryTag, eid)) myScouts.push(eid);
+      else if (hasComponent(world.ecs, KnightTag, eid)) myKnights.push(eid);
       else if (hasComponent(world.ecs, GunmanTag, eid)) myGunmen.push(eid);
       else if (hasComponent(world.ecs, CannonTag, eid)) myCannons.push(eid);
     } else if (Owner.player[eid] === LOCAL_PLAYER_ID) {
@@ -7101,6 +7547,7 @@ function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot | null
     mySpearmen,
     myArchers,
     myScouts,
+    myKnights,
     myGunmen,
     myCannons,
     enemyBuildings,
@@ -7215,7 +7662,7 @@ function aiTrainableUnitsForProducer(world: SimWorld, playerId: number, producer
     defId === BuildingDefId.BARRACKS
       ? [UnitDefId.SPEARMAN, UnitDefId.ARCHER]
       : defId === BuildingDefId.STABLE
-        ? [UnitDefId.SCOUT_CAVALRY]
+        ? [UnitDefId.SCOUT_CAVALRY, UnitDefId.KNIGHT]
         : defId === BuildingDefId.FOUNDRY
           ? [UnitDefId.GUNMAN, UnitDefId.CANNON]
           : [];
@@ -7498,6 +7945,8 @@ function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot
   const hasLumber = aiHasAnyBuilding(snapshot, BuildingDefId.LUMBER_CAMP);
   const hasStone = aiHasAnyBuilding(snapshot, BuildingDefId.STONE_QUARRY);
   const hasBarracks = aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS);
+  const hasStable = aiHasAnyBuilding(snapshot, BuildingDefId.STABLE);
+  const hasGold = aiHasAnyBuilding(snapshot, BuildingDefId.GOLD_MINE);
   const houseCount = countAiBuildings(snapshot, BuildingDefId.HOUSE);
   const pop = world.population[playerId];
   const capPressure = pop
@@ -7532,6 +7981,9 @@ function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot
   }
   if (hasTech(world, playerId, TechId.FARMS) && farmCount >= 5) {
     if (aiTryResearchTech(world, playerId, TechId.FARMS_II)) return;
+  }
+  if (hasStable && hasGold && !hasTech(world, playerId, TechId.KNIGHTS)) {
+    if (aiTryResearchTech(world, playerId, TechId.KNIGHTS)) return;
   }
   if (
     hasTech(world, playerId, TechId.HOUSING_I) &&
@@ -7833,6 +8285,7 @@ function aiTrainArmy(world: SimWorld, playerId: number, snapshot: AiSnapshot): v
     queued.spearmen +
     queued.archers +
     queued.scouts +
+    queued.knights +
     queued.gunmen +
     queued.cannons;
   if (armyCount >= aiSettings(world).maxArmyUnits) return;
@@ -7858,8 +8311,14 @@ function aiTrainArmy(world: SimWorld, playerId: number, snapshot: AiSnapshot): v
       } else if (archerNeed > 0 && aiQueueUnit(world, producerEid, UnitDefId.ARCHER)) {
         queued.archers++;
       }
-    } else if (defId === BuildingDefId.STABLE && snapshot.myScouts.length + queued.scouts < desired.scouts) {
-      if (aiQueueUnit(world, producerEid, UnitDefId.SCOUT_CAVALRY)) queued.scouts++;
+    } else if (defId === BuildingDefId.STABLE) {
+      const knightNeed = desired.knights - (snapshot.myKnights.length + queued.knights);
+      const scoutNeed = desired.scouts - (snapshot.myScouts.length + queued.scouts);
+      if (knightNeed > 0 && aiQueueUnit(world, producerEid, UnitDefId.KNIGHT)) {
+        queued.knights++;
+      } else if (scoutNeed > 0 && aiQueueUnit(world, producerEid, UnitDefId.SCOUT_CAVALRY)) {
+        queued.scouts++;
+      }
     } else if (defId === BuildingDefId.FOUNDRY && snapshot.myCannons.length + queued.cannons < desired.cannons) {
       if (aiQueueUnit(world, producerEid, UnitDefId.CANNON)) queued.cannons++;
     } else if (defId === BuildingDefId.FOUNDRY && snapshot.myGunmen.length + queued.gunmen < desired.gunmen) {
@@ -7877,6 +8336,7 @@ function aiTrainHardArmy(world: SimWorld, playerId: number, snapshot: AiSnapshot
     queued.spearmen +
     queued.archers +
     queued.scouts +
+    queued.knights +
     queued.gunmen +
     queued.cannons;
   const settings = aiSettings(world);
@@ -7909,8 +8369,8 @@ function aiHardUnitCandidateOrder(
   playerId: number,
   producerEid: number,
   snapshot: AiSnapshot,
-  queued: { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number },
-  desired: { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number }
+  queued: AiArmyCounts,
+  desired: AiArmyCounts
 ): number[] {
   return aiTrainableUnitsForProducer(world, playerId, producerEid)
     .sort((a, b) =>
@@ -7923,8 +8383,8 @@ function aiHardUnitScore(
   world: SimWorld,
   unitDefId: number,
   snapshot: AiSnapshot,
-  queued: { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number },
-  desired: { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number }
+  queued: AiArmyCounts,
+  desired: AiArmyCounts
 ): number {
   if (unitDefId === UnitDefId.SPEARMAN) {
     const current = snapshot.mySpearmen.length + queued.spearmen;
@@ -7937,6 +8397,11 @@ function aiHardUnitScore(
   if (unitDefId === UnitDefId.SCOUT_CAVALRY) {
     const current = snapshot.myScouts.length + queued.scouts;
     return (desired.scouts - current) * 100 + 18 - current;
+  }
+  if (unitDefId === UnitDefId.KNIGHT) {
+    const current = snapshot.myKnights.length + queued.knights;
+    const enemyArchers = snapshot.enemyMilitary.filter((eid) => hasComponent(world.ecs, ArcherTag, eid)).length;
+    return (desired.knights - current) * 100 + Math.min(24, enemyArchers * 2) - current * 2;
   }
   if (unitDefId === UnitDefId.GUNMAN) {
     const current = snapshot.myGunmen.length + queued.gunmen;
@@ -7953,12 +8418,13 @@ function aiHardUnitScore(
 }
 
 function aiIncrementQueuedArmyCount(
-  queued: { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number },
+  queued: AiArmyCounts,
   unitDefId: number
 ): void {
   if (unitDefId === UnitDefId.SPEARMAN) queued.spearmen++;
   else if (unitDefId === UnitDefId.ARCHER) queued.archers++;
   else if (unitDefId === UnitDefId.SCOUT_CAVALRY) queued.scouts++;
+  else if (unitDefId === UnitDefId.KNIGHT) queued.knights++;
   else if (unitDefId === UnitDefId.GUNMAN) queued.gunmen++;
   else if (unitDefId === UnitDefId.CANNON) queued.cannons++;
 }
@@ -7966,8 +8432,8 @@ function aiIncrementQueuedArmyCount(
 function aiQueuedUnitCounts(
   world: SimWorld,
   buildings: number[]
-): { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number } {
-  const counts = { spearmen: 0, archers: 0, scouts: 0, gunmen: 0, cannons: 0 };
+): AiArmyCounts {
+  const counts = { spearmen: 0, archers: 0, scouts: 0, knights: 0, gunmen: 0, cannons: 0 };
   for (const eid of buildings) {
     const queue = world.productionQueues.get(eid);
     if (!queue) continue;
@@ -7975,6 +8441,7 @@ function aiQueuedUnitCounts(
       if (defId === UnitDefId.SPEARMAN) counts.spearmen++;
       else if (defId === UnitDefId.ARCHER) counts.archers++;
       else if (defId === UnitDefId.SCOUT_CAVALRY) counts.scouts++;
+      else if (defId === UnitDefId.KNIGHT) counts.knights++;
       else if (defId === UnitDefId.GUNMAN) counts.gunmen++;
       else if (defId === UnitDefId.CANNON) counts.cannons++;
     }
@@ -7986,7 +8453,7 @@ function aiDesiredArmyMix(
   world: SimWorld,
   playerId: number,
   snapshot: AiSnapshot
-): { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number } {
+): AiArmyCounts {
   const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const settings = aiSettings(world);
   const baseTargetArmy = Math.min(
@@ -8001,25 +8468,35 @@ function aiDesiredArmyMix(
     : 0;
   const targetArmy = Math.max(baseTargetArmy, playerPressureTarget);
   let scouts = age >= AgeId.CASTLE ? Math.min(5, Math.max(2, Math.floor(targetArmy * 0.2))) : 0;
+  let knights = 0;
   let gunmen = 0;
   let cannons = 0;
+  if (hasTech(world, playerId, TechId.KNIGHTS)) {
+    knights = Math.min(4, Math.max(1, Math.floor(targetArmy * 0.12)));
+    scouts = Math.min(3, Math.max(1, Math.floor(targetArmy * 0.1)));
+  }
   if (age >= AgeId.GUNPOWDER) {
     cannons = Math.min(4, Math.max(2, Math.floor(targetArmy * 0.12)));
     gunmen = Math.min(8, Math.max(4, Math.floor(targetArmy * 0.24)));
-    scouts = Math.min(5, Math.max(2, Math.floor(targetArmy * 0.16)));
+    scouts = hasTech(world, playerId, TechId.KNIGHTS)
+      ? Math.min(3, Math.max(1, Math.floor(targetArmy * 0.08)))
+      : Math.min(5, Math.max(2, Math.floor(targetArmy * 0.16)));
   }
-  const infantrySlots = Math.max(4, targetArmy - scouts - gunmen - cannons);
+  const infantrySlots = Math.max(4, targetArmy - scouts - knights - gunmen - cannons);
   let spearmen = Math.ceil(infantrySlots / 2);
   let archers = Math.floor(infantrySlots / 2);
   const enemySpears = snapshot.enemyMilitary.filter((eid) => hasComponent(world.ecs, SpearmanTag, eid)).length;
   const enemyArchers = snapshot.enemyMilitary.filter((eid) => hasComponent(world.ecs, ArcherTag, eid)).length;
-  const enemyScouts = snapshot.enemyMilitary.filter((eid) => hasComponent(world.ecs, ScoutCavalryTag, eid)).length;
+  const enemyScouts = snapshot.enemyMilitary.filter((eid) =>
+    hasComponent(world.ecs, ScoutCavalryTag, eid) || hasComponent(world.ecs, KnightTag, eid)
+  ).length;
   const enemyCannons = snapshot.enemyMilitary.filter((eid) => hasComponent(world.ecs, CannonTag, eid)).length;
   if (enemyScouts > enemySpears + 1) spearmen += 3;
   if (enemySpears > enemyArchers + 1) archers += 3;
   if (scouts > 0 && enemyArchers > enemySpears) scouts += 2;
+  if (knights > 0 && enemyArchers > enemySpears) knights += 1;
   if (enemyCannons > 0) scouts += 2;
-  return { spearmen, archers, scouts, gunmen, cannons };
+  return { spearmen, archers, scouts, knights, gunmen, cannons };
 }
 
 function aiMaybeAdvanceAge(
@@ -8447,7 +8924,7 @@ function aiFindBuildingSpot(
         const x = cx + dx;
         const y = cy + dy;
         if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
-        if (!canPlaceBuildingAt(world, def, x, y)) continue;
+        if (!canPlaceBuildingAt(world, def, x, y, playerId)) continue;
         if (hasEnemyEntityNear(world, x, y, playerId, 8)) continue;
         const score = aiBuildingPlacementScore(world, def, x, y, nearX, nearY, playerId);
         if (score < bestScore) {
@@ -8912,7 +9389,7 @@ function movementTerrainSpeedMultiplier(world: SimWorld, eid: number): number {
   // machine-gun nests.
   if (tile === TileType.BARBED_WIRE) return ZBOROV_WIRE_SPEED_MULTIPLIER;
   if (tile !== TileType.MUD) return 1;
-  return hasComponent(world.ecs, ScoutCavalryTag, eid)
+  return hasComponent(world.ecs, ScoutCavalryTag, eid) || hasComponent(world.ecs, KnightTag, eid)
     ? SUDOMER_MUD_CAVALRY_SPEED_MULTIPLIER
     : SUDOMER_MUD_INFANTRY_SPEED_MULTIPLIER;
 }
@@ -9650,6 +10127,55 @@ function buildingFootprintRect(
     minY: tileY0 - 0.5,
     maxY: tileY0 + def.footprint.h - 0.5,
   };
+}
+
+function buildingFootprintRectForDef(
+  def: BuildingDef,
+  x: number,
+  y: number
+): {
+  tileX0: number;
+  tileY0: number;
+  tileX1: number;
+  tileY1: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  const tileX0 = Math.round(x) - Math.floor(def.footprint.w / 2);
+  const tileY0 = Math.round(y) - Math.floor(def.footprint.h / 2);
+  const tileX1 = tileX0 + def.footprint.w - 1;
+  const tileY1 = tileY0 + def.footprint.h - 1;
+  return {
+    tileX0,
+    tileY0,
+    tileX1,
+    tileY1,
+    minX: tileX0 - 0.5,
+    maxX: tileX0 + def.footprint.w - 0.5,
+    minY: tileY0 - 0.5,
+    maxY: tileY0 + def.footprint.h - 0.5,
+  };
+}
+
+function rectDistance(
+  a: { minX: number; maxX: number; minY: number; maxY: number },
+  b: { minX: number; maxX: number; minY: number; maxY: number }
+): number {
+  const dx = a.maxX < b.minX ? b.minX - a.maxX : b.maxX < a.minX ? a.minX - b.maxX : 0;
+  const dy = a.maxY < b.minY ? b.minY - a.maxY : b.maxY < a.minY ? a.minY - b.maxY : 0;
+  return Math.hypot(dx, dy);
+}
+
+function pointToRectDistance(
+  x: number,
+  y: number,
+  rect: { minX: number; maxX: number; minY: number; maxY: number }
+): number {
+  const dx = x < rect.minX ? rect.minX - x : x > rect.maxX ? x - rect.maxX : 0;
+  const dy = y < rect.minY ? rect.minY - y : y > rect.maxY ? y - rect.maxY : 0;
+  return Math.hypot(dx, dy);
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -434,13 +434,17 @@ export class MultiplayerSession {
       case 'cmdStop':
       case 'cmdToggleStance':
       case 'cmdAttackMove':
+      case 'cmdAttackGround':
       case 'cmdRemoveBuildings':
       case 'cmdSetStance':
       case 'cmdSetFormationMode':
       case 'cmdAdjustFormationMode':
       case 'cmdRotateFormation':
       case 'cmdReformFormation':
+      case 'cmdSplitFormation':
         return { ...input, eids: eidsToNetIds(input.eids) };
+      case 'cmdToggleFormationLock':
+        return input;
       case 'cmdAttack':
         return { ...input, eids: eidsToNetIds(input.eids), targetEid: eidToNetId(input.targetEid) };
       case 'trainUnit':
@@ -467,13 +471,17 @@ export class MultiplayerSession {
       case 'cmdStop':
       case 'cmdToggleStance':
       case 'cmdAttackMove':
+      case 'cmdAttackGround':
       case 'cmdRemoveBuildings':
       case 'cmdSetStance':
       case 'cmdSetFormationMode':
       case 'cmdAdjustFormationMode':
       case 'cmdRotateFormation':
       case 'cmdReformFormation':
+      case 'cmdSplitFormation':
         return { ...input, eids: netIdsToEids(input.eids) };
+      case 'cmdToggleFormationLock':
+        return input;
       case 'cmdAttack':
         return { ...input, eids: netIdsToEids(input.eids), targetEid: netIdToEid(input.targetEid) };
       case 'trainUnit':
