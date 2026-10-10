@@ -147,7 +147,7 @@ import {
   type VoiceBarkType,
 } from './audio/sound-map';
 import { bakeVoxelTexture } from './voxel/voxel-render';
-import { bakeTerrain } from './voxel/terrain';
+import { bakeTerrain, STYLE2_TERRAIN_ASSETS } from './voxel/terrain';
 import { buildDarkTcVoxels } from './voxel/models/dark-tc';
 import { buildDarkHouseVoxels } from './voxel/models/dark-house';
 import { buildDarkFarmVoxels } from './voxel/models/dark-farm';
@@ -572,6 +572,9 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     // Queue all SFX + music so they're decoded before create(). Render-only.
     for (const asset of STYLE2_BUILDING_ASSETS) {
+      this.load.image(asset.key, asset.path);
+    }
+    for (const asset of STYLE2_TERRAIN_ASSETS) {
       this.load.image(asset.key, asset.path);
     }
     AudioManager.queueLoad(this.load, SFX_KEYS);

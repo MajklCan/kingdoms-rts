@@ -10,8 +10,31 @@ import { ISO, MAP } from '../../config';
 //  bake size. Adjust TILE rendering scale here so the whole world stays in
 //  proportion when we change the bake resolution.)
 import { PALETTE as P } from './palette';
-import { TileType, type MapData } from '../../sim/map-gen';
+import { TileType, type MapData, type TileTypeValue } from '../../sim/map-gen';
 import { tileToScreen } from '../iso';
+
+interface TerrainSpriteAsset {
+  key: string;
+  path: string;
+}
+
+const STYLE2_TERRAIN_GROUPS = {
+  grass: ['grass-0', 'grass-1', 'grass-2', 'grass-3', 'grass-4', 'grass-5'],
+  dirt: ['dirt-0', 'dirt-1', 'dirt-2', 'dirt-3', 'dirt-4', 'dirt-5'],
+  sand: ['sand-0', 'sand-1', 'sand-2', 'sand-3', 'sand-4', 'sand-5'],
+} as const;
+
+const STYLE2_TERRAIN_PREFIX = 'style2-terrain';
+const STYLE2_TERRAIN_ORIGIN_Y = 0.42;
+
+export const STYLE2_TERRAIN_ASSETS: TerrainSpriteAsset[] = Object.values(
+  STYLE2_TERRAIN_GROUPS
+).flatMap((names) =>
+  names.map((name) => ({
+    key: `${STYLE2_TERRAIN_PREFIX}-${name}`,
+    path: `/assets/terrain/style2/${name}.png`,
+  }))
+);
 
 /**
  * Top, right-face, left-face colours for each tile type. The 3-tone iso shading
@@ -73,8 +96,17 @@ export function bakeTerrain(
   const offX = -minSx + PAD;
   const offY = -minSy + PAD;
 
-  const g = scene.add.graphics();
-  g.setVisible(false);
+  const KEY = 'terrain-bake';
+  if (scene.textures.exists(KEY)) {
+    scene.textures.remove(KEY);
+  }
+  const texture = scene.textures.createCanvas(KEY, w, h);
+  if (!texture) {
+    throw new Error('Failed to create terrain canvas texture');
+  }
+  const ctx = texture.getContext();
+  ctx.clearRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = false;
 
   // Sort tiles back-to-front (painter's algorithm). For iso, back tiles are
   // lower x+y; paint them first.
@@ -89,67 +121,43 @@ export function bakeTerrain(
   for (const { x, y } of tileOrder) {
     const c = tileToScreen(x, y);
     const idx = y * MAP.WIDTH + x;
-    const tileType = map.tiles[idx];
+    const tileType = map.tiles[idx] as TileTypeValue;
     const e = map.elevation[idx];
     const colors = TILE_COLORS[tileType] ?? TILE_COLORS[TileType.GRASS];
     const sx = c.x + offX;
     const sy = c.y + offY - e * VPER;
     const sideH = e * VPER;
+    const stampKey = style2TerrainKey(scene, tileType, x, y);
 
     // Side faces only if elevation > 0 — draw the SE (right) and SW (left)
     // verticals so the diamond looks raised.
     if (sideH > 0) {
-      // Right side parallelogram.
-      g.fillStyle(colors.right, 1);
-      g.beginPath();
-      g.moveTo(sx + halfW, sy);
-      g.lineTo(sx + halfW, sy + sideH);
-      g.lineTo(sx, sy + halfH + sideH);
-      g.lineTo(sx, sy + halfH);
-      g.closePath();
-      g.fillPath();
-      // Left side.
-      g.fillStyle(colors.left, 1);
-      g.beginPath();
-      g.moveTo(sx - halfW, sy);
-      g.lineTo(sx - halfW, sy + sideH);
-      g.lineTo(sx, sy + halfH + sideH);
-      g.lineTo(sx, sy + halfH);
-      g.closePath();
-      g.fillPath();
+      drawTerrainSideFaces(ctx, sx, sy, halfW, halfH, sideH, colors.right, colors.left);
     }
 
-    // Top diamond. Slight per-tile variation by hashing position for nicer
-    // texture (no big flat colour fields).
-    const variance = ((x * 13 + y * 7) % 7 - 3) * 2;
-    const topColor = jitter(colors.top, variance);
-    g.fillStyle(topColor, 1);
-    g.beginPath();
-    g.moveTo(sx, sy - halfH);
-    g.lineTo(sx + halfW, sy);
-    g.lineTo(sx, sy + halfH);
-    g.lineTo(sx - halfW, sy);
-    g.closePath();
-    g.fillPath();
-    // Hairline tile edge — thin and dark, helps readability.
-    g.lineStyle(1, 0x000000, 0.15);
-    g.strokePath();
+    if (stampKey) {
+      drawTerrainStamp(scene, ctx, stampKey, sx, sy);
+    } else {
+      // Top diamond. Slight per-tile variation by hashing position for nicer
+      // texture (no big flat colour fields).
+      const variance = ((x * 13 + y * 7) % 7 - 3) * 2;
+      const topColor = jitter(colors.top, variance);
+      drawDiamond(ctx, sx, sy, halfW, halfH, topColor);
+    }
 
     if (tileType === TileType.BRIDGE) {
-      drawBridgeDetail(g, sx, sy, halfW, halfH);
+      drawBridgeDetail(ctx, sx, sy, halfW, halfH);
     }
 
     // Water animated highlight overlay (foam) — static for now, just a couple of
     // brighter pixels to suggest reflection.
     if (tileType === TileType.WATER_SHALLOW) {
-      g.fillStyle(P.WATER_FOAM, 0.35);
-      g.fillCircle(sx + 4, sy - 2, 2);
+      fillCircle(ctx, sx + 4, sy - 2, 2, P.WATER_FOAM, 0.35);
     }
 
     if (tileType === TileType.MUD) {
-      g.fillStyle(0x2f2b19, 0.18);
-      g.fillCircle(sx - 5, sy + 1, 2);
-      g.fillCircle(sx + 6, sy - 2, 1);
+      fillCircle(ctx, sx - 5, sy + 1, 2, 0x2f2b19, 0.18);
+      fillCircle(ctx, sx + 6, sy - 2, 1, 0x2f2b19, 0.18);
     }
 
     if (tileType === TileType.BARBED_WIRE) {
@@ -163,61 +171,50 @@ export function bakeTerrain(
       const lx = halfW * 0.13;  // lateral (perpendicular) step
       const ly = -halfH * 0.13;
       const strand = (lane: number, color: number) => {
-        g.lineStyle(1, color, 0.8);
-        g.beginPath();
         const N = 6;
+        const points: Array<[number, number]> = [];
         for (let i = 0; i <= N; i++) {
           const t = (i / N) * 2 - 1; // -1..1 along the belt
           const lat = lane + (i % 2 === 0 ? 1 : -1) * (1 + jit(i));
           const xx = sx + ex * t + lx * lat;
           const yy = sy + ey * t + ly * lat;
-          if (i === 0) g.moveTo(xx, yy); else g.lineTo(xx, yy);
+          points.push([xx, yy]);
         }
-        g.strokePath();
+        strokeLine(ctx, points, color, 0.8);
       };
       strand(-1.1 + jit(1), 0x7c7565);
       strand(1.2 + jit(2), 0x9a9384);
       // A few short barbs poking off the wire at jittered points.
-      g.lineStyle(1, 0xb0a994, 0.8);
       for (let i = 1; i <= 3; i++) {
         const t = (i / 4) * 2 - 1 + jit(i) * 0.3;
         const bx = sx + ex * t + lx * jit(i + 3) * 2;
         const by = sy + ey * t + ly * jit(i + 3) * 2;
-        g.beginPath();
-        g.moveTo(bx - lx * 1.6, by - ly * 1.6);
-        g.lineTo(bx + lx * 1.6, by + ly * 1.6);
-        g.strokePath();
+        strokeLine(ctx, [
+          [bx - lx * 1.6, by - ly * 1.6],
+          [bx + lx * 1.6, by + ly * 1.6],
+        ], 0xb0a994, 0.8);
       }
     }
 
     if (tileType === TileType.SNOW || tileType === TileType.SNOW_FOREST) {
-      g.fillStyle(0xffffff, 0.22);
-      g.fillCircle(sx - 7, sy - 1, 1);
-      g.fillCircle(sx + 5, sy + 2, 1);
+      fillCircle(ctx, sx - 7, sy - 1, 1, 0xffffff, 0.22);
+      fillCircle(ctx, sx + 5, sy + 2, 1, 0xffffff, 0.22);
     }
 
     if (tileType === TileType.ICE) {
-      g.lineStyle(1, 0xe9fbff, 0.30);
-      g.beginPath();
-      g.moveTo(sx - halfW * 0.42, sy + halfH * 0.05);
-      g.lineTo(sx + halfW * 0.32, sy - halfH * 0.18);
-      g.strokePath();
-      g.lineStyle(1, 0x4f8aa0, 0.18);
-      g.beginPath();
-      g.moveTo(sx - halfW * 0.15, sy + halfH * 0.28);
-      g.lineTo(sx + halfW * 0.48, sy + halfH * 0.03);
-      g.strokePath();
+      strokeLine(ctx, [
+        [sx - halfW * 0.42, sy + halfH * 0.05],
+        [sx + halfW * 0.32, sy - halfH * 0.18],
+      ], 0xe9fbff, 0.30);
+      strokeLine(ctx, [
+        [sx - halfW * 0.15, sy + halfH * 0.28],
+        [sx + halfW * 0.48, sy + halfH * 0.03],
+      ], 0x4f8aa0, 0.18);
     }
   }
 
   // Origin tile highlight removed in voxel terrain — natural ground reads fine.
-
-  const KEY = 'terrain-bake';
-  if (scene.textures.exists(KEY)) {
-    scene.textures.remove(KEY);
-  }
-  g.generateTexture(KEY, w, h);
-  g.destroy();
+  texture.refresh();
 
   const sprite = scene.add.sprite(0, 0, KEY);
   // Position so terrain origin lines up with worldContainer's 0,0.
@@ -239,33 +236,169 @@ function clamp(v: number): number {
   return Math.max(0, Math.min(255, v));
 }
 
+function style2TerrainKey(
+  scene: Phaser.Scene,
+  tileType: TileTypeValue,
+  x: number,
+  y: number
+): string | null {
+  const hash = Math.abs((x * 73856093) ^ (y * 19349663));
+  let variants: readonly string[] | null = null;
+  if (tileType === TileType.GRASS || tileType === TileType.FOREST) {
+    variants = STYLE2_TERRAIN_GROUPS.grass;
+  } else if (tileType === TileType.DIRT) {
+    variants = STYLE2_TERRAIN_GROUPS.dirt;
+  } else if (tileType === TileType.SAND) {
+    variants = STYLE2_TERRAIN_GROUPS.sand;
+  }
+  if (!variants) return null;
+
+  const key = `${STYLE2_TERRAIN_PREFIX}-${variants[hash % variants.length]}`;
+  return scene.textures.exists(key) ? key : null;
+}
+
+function drawTerrainStamp(
+  scene: Phaser.Scene,
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  sx: number,
+  sy: number
+): void {
+  const source = scene.textures.get(key).getSourceImage() as CanvasImageSource & {
+    width: number;
+    height: number;
+  };
+  const dx = Math.round(sx - source.width / 2);
+  const dy = Math.round(sy - source.height * STYLE2_TERRAIN_ORIGIN_Y);
+  ctx.drawImage(source, dx, dy);
+}
+
+function drawTerrainSideFaces(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  halfW: number,
+  halfH: number,
+  sideH: number,
+  rightColor: number,
+  leftColor: number
+): void {
+  fillPolygon(ctx, [
+    [sx + halfW, sy],
+    [sx + halfW, sy + sideH],
+    [sx, sy + halfH + sideH],
+    [sx, sy + halfH],
+  ], rightColor);
+  fillPolygon(ctx, [
+    [sx - halfW, sy],
+    [sx - halfW, sy + sideH],
+    [sx, sy + halfH + sideH],
+    [sx, sy + halfH],
+  ], leftColor);
+}
+
+function drawDiamond(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  halfW: number,
+  halfH: number,
+  color: number
+): void {
+  const points: Array<[number, number]> = [
+    [sx, sy - halfH],
+    [sx + halfW, sy],
+    [sx, sy + halfH],
+    [sx - halfW, sy],
+  ];
+  fillPolygon(ctx, points, color);
+  strokeLine(ctx, [...points, points[0]], 0x000000, 0.15);
+}
+
 function drawBridgeDetail(
-  g: Phaser.GameObjects.Graphics,
+  ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   halfW: number,
   halfH: number
 ): void {
-  g.lineStyle(1, P.WOOD_D, 0.45);
   for (let i = -1; i <= 1; i++) {
     const ox = i * halfW * 0.25;
     const topY = sy - halfH + Math.abs(ox) * (halfH / halfW);
     const bottomY = sy + halfH - Math.abs(ox) * (halfH / halfW);
-    g.beginPath();
-    g.moveTo(sx + ox, topY);
-    g.lineTo(sx + ox, bottomY);
-    g.strokePath();
+    strokeLine(ctx, [[sx + ox, topY], [sx + ox, bottomY]], P.WOOD_D, 0.45);
   }
 
-  g.lineStyle(2, P.WOOD_DOOR, 0.55);
-  g.beginPath();
-  g.moveTo(sx - halfW * 0.72, sy - halfH * 0.18);
-  g.lineTo(sx, sy - halfH * 0.92);
-  g.lineTo(sx + halfW * 0.72, sy - halfH * 0.18);
-  g.strokePath();
-  g.beginPath();
-  g.moveTo(sx - halfW * 0.72, sy + halfH * 0.18);
-  g.lineTo(sx, sy + halfH * 0.92);
-  g.lineTo(sx + halfW * 0.72, sy + halfH * 0.18);
-  g.strokePath();
+  strokeLine(ctx, [
+    [sx - halfW * 0.72, sy - halfH * 0.18],
+    [sx, sy - halfH * 0.92],
+    [sx + halfW * 0.72, sy - halfH * 0.18],
+  ], P.WOOD_DOOR, 0.55, 2);
+  strokeLine(ctx, [
+    [sx - halfW * 0.72, sy + halfH * 0.18],
+    [sx, sy + halfH * 0.92],
+    [sx + halfW * 0.72, sy + halfH * 0.18],
+  ], P.WOOD_DOOR, 0.55, 2);
+}
+
+function fillPolygon(
+  ctx: CanvasRenderingContext2D,
+  points: Array<[number, number]>,
+  color: number,
+  alpha = 1
+): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = colorToCss(color);
+  ctx.beginPath();
+  const [first, ...rest] = points;
+  ctx.moveTo(first[0], first[1]);
+  for (const point of rest) {
+    ctx.lineTo(point[0], point[1]);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function fillCircle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  color: number,
+  alpha = 1
+): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = colorToCss(color);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function strokeLine(
+  ctx: CanvasRenderingContext2D,
+  points: Array<[number, number]>,
+  color: number,
+  alpha = 1,
+  lineWidth = 1
+): void {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = colorToCss(color);
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i][0], points[i][1]);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function colorToCss(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
 }
