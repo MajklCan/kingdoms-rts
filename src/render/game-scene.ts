@@ -321,77 +321,6 @@ interface ActionGridAction {
   disabledReason?: string;
 }
 
-interface BuildingSpriteAsset {
-  defId: number;
-  key: string;
-  path: string;
-  originY: number;
-  scale: number;
-}
-
-const STYLE2_BUILDING_ASSETS: BuildingSpriteAsset[] = [
-  {
-    defId: BuildingDefId.TOWN_CENTER,
-    key: 'style2-building-town-center',
-    path: '/assets/buildings/style2/town-center.png',
-    originY: 0.72,
-    scale: 0.29,
-  },
-  {
-    defId: BuildingDefId.HOUSE,
-    key: 'style2-building-house',
-    path: '/assets/buildings/style2/house.png',
-    originY: 0.88,
-    scale: 0.22,
-  },
-  {
-    defId: BuildingDefId.FARM,
-    key: 'style2-building-farm',
-    path: '/assets/buildings/style2/farm.png',
-    originY: 0.54,
-    scale: 0.21,
-  },
-  {
-    defId: BuildingDefId.MILL,
-    key: 'style2-building-mill',
-    path: '/assets/buildings/style2/mill.png',
-    originY: 0.77,
-    scale: 0.22,
-  },
-  {
-    defId: BuildingDefId.LUMBER_CAMP,
-    key: 'style2-building-lumber-camp',
-    path: '/assets/buildings/style2/lumber-camp.png',
-    originY: 0.73,
-    scale: 0.18,
-  },
-  {
-    defId: BuildingDefId.BARRACKS,
-    key: 'style2-building-barracks',
-    path: '/assets/buildings/style2/barracks.png',
-    originY: 0.73,
-    scale: 0.23,
-  },
-  {
-    defId: BuildingDefId.STABLE,
-    key: 'style2-building-stable',
-    path: '/assets/buildings/style2/stable.png',
-    originY: 0.76,
-    scale: 0.22,
-  },
-  {
-    defId: BuildingDefId.DEFENSIVE_TOWER,
-    key: 'style2-building-defensive-tower',
-    path: '/assets/buildings/style2/defensive-tower.png',
-    originY: 0.81,
-    scale: 0.23,
-  },
-];
-
-const STYLE2_BUILDING_ASSET_BY_DEF = new Map(
-  STYLE2_BUILDING_ASSETS.map((asset) => [asset.defId, asset])
-);
-
 export class GameScene extends Phaser.Scene {
   private world!: SimWorld;
   private audio!: AudioManager;
@@ -571,9 +500,6 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     // Queue all SFX + music so they're decoded before create(). Render-only.
-    for (const asset of STYLE2_BUILDING_ASSETS) {
-      this.load.image(asset.key, asset.path);
-    }
     AudioManager.queueLoad(this.load, SFX_KEYS);
     AudioManager.queueLoadMusic(this.load, [...MUSIC_KEYS, ...AMBIENCE_KEYS]);
     AudioManager.queueLoadVoices(this.load, VOICE_KEYS);
@@ -868,7 +794,6 @@ export class GameScene extends Phaser.Scene {
       const isFoundation = hasComponent(this.world.ecs, ConstructionSite, eid);
       const key = this.buildingTextureKeyForEntity(eid, defId, player);
       const originY = this.buildingSpriteOriginY(defId, player);
-      const scale = this.buildingSpriteScale(defId);
       if (!key || !this.textures.exists(key)) continue;
 
       seenEids.add(eid);
@@ -883,7 +808,6 @@ export class GameScene extends Phaser.Scene {
         sprite.setOrigin(0.5, originY);
       }
       sprite.setPosition(c.x, c.y);
-      sprite.setScale(scale);
       sprite.clearTint();
       sprite.setAlpha(isFoundation ? 0.5 : 1.0);
       sprite.setDepth(c.y);
@@ -1036,7 +960,6 @@ export class GameScene extends Phaser.Scene {
         : { x: snap.x, y: snap.y };
       const screen = this.tileToScreenElev(anchor.x, anchor.y);
       const originY = this.buildingSpriteOriginY(snap.defId, snap.owner, snap.age);
-      const scale = this.buildingSpriteScale(snap.defId);
       let sprite = this.lastSeenBuildingSprites.get(snap.eid);
       if (!sprite) {
         sprite = this.add.sprite(screen.x, screen.y, key);
@@ -1048,7 +971,6 @@ export class GameScene extends Phaser.Scene {
         sprite.setOrigin(0.5, originY);
       }
       sprite.setPosition(screen.x, screen.y);
-      sprite.setScale(scale);
       sprite.setDepth(screen.y - 1);
       sprite.setAlpha(snap.isFoundation ? 0.28 : 0.5);
       sprite.setTint(0x8d93a0);
@@ -4799,38 +4721,33 @@ export class GameScene extends Phaser.Scene {
   ): string | null {
     switch (defId) {
       case BuildingDefId.TOWN_CENTER: {
-        const style2 = STYLE2_BUILDING_ASSET_BY_DEF.get(defId);
-        if (style2) return style2.key;
         if (age >= AgeId.GUNPOWDER) return GameScene.GUNPOWDER_TC_KEY_PREFIX + playerId;
         return age >= AgeId.CASTLE
           ? GameScene.CASTLE_TC_KEY_PREFIX + playerId
           : GameScene.DARK_TC_KEY_PREFIX + playerId;
       }
       case BuildingDefId.HOUSE:
+        return GameScene.HOUSE_KEY;
       case BuildingDefId.FARM:
+        return GameScene.FARM_KEY;
       case BuildingDefId.MILL:
+        return GameScene.MILL_KEY;
       case BuildingDefId.LUMBER_CAMP:
-      case BuildingDefId.BARRACKS:
-      case BuildingDefId.STABLE:
-      case BuildingDefId.DEFENSIVE_TOWER: {
-        const style2 = STYLE2_BUILDING_ASSET_BY_DEF.get(defId);
-        if (style2) return style2.key;
-        if (defId === BuildingDefId.HOUSE) return GameScene.HOUSE_KEY;
-        if (defId === BuildingDefId.FARM) return GameScene.FARM_KEY;
-        if (defId === BuildingDefId.MILL) return GameScene.MILL_KEY;
-        if (defId === BuildingDefId.LUMBER_CAMP) return GameScene.LUMBER_CAMP_KEY;
-        if (defId === BuildingDefId.BARRACKS) return GameScene.BARRACKS_KEY;
-        if (defId === BuildingDefId.STABLE) return GameScene.STABLE_KEY;
-        return GameScene.DEFENSIVE_TOWER_KEY_PREFIX + playerId;
-      }
+        return GameScene.LUMBER_CAMP_KEY;
       case BuildingDefId.GOLD_MINE:
         return GameScene.GOLD_MINE_KEY;
       case BuildingDefId.STONE_QUARRY:
         return GameScene.STONE_QUARRY_KEY;
+      case BuildingDefId.BARRACKS:
+        return GameScene.BARRACKS_KEY;
       case BuildingDefId.ARCHERY_RANGE:
         return GameScene.ARCHERY_RANGE_KEY;
+      case BuildingDefId.STABLE:
+        return GameScene.STABLE_KEY;
       case BuildingDefId.FOUNDRY:
         return GameScene.FOUNDRY_KEY;
+      case BuildingDefId.DEFENSIVE_TOWER:
+        return GameScene.DEFENSIVE_TOWER_KEY_PREFIX + playerId;
       case BuildingDefId.WALL:
         return GameScene.WALL_X_KEY;
       default:
@@ -4839,8 +4756,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildingSpriteOriginY(defId: number, playerId: number, ageOverride?: number): number {
-    const style2 = STYLE2_BUILDING_ASSET_BY_DEF.get(defId);
-    if (style2) return style2.originY;
     switch (defId) {
       case BuildingDefId.TOWN_CENTER: {
         const age = ageOverride ?? this.world.ages[playerId]?.current ?? AgeId.DARK;
@@ -4874,10 +4789,6 @@ export class GameScene extends Phaser.Scene {
       default:
         return 0.66;
     }
-  }
-
-  private buildingSpriteScale(defId: number): number {
-    return STYLE2_BUILDING_ASSET_BY_DEF.get(defId)?.scale ?? 1;
   }
 
   /** Look up the texture key for a unit eid. */
