@@ -33,15 +33,7 @@ import {
   spawnWorksiteWorker,
 } from '../systems/worksites';
 import { spawnCompletedBuilding } from './buildings';
-import {
-  spawnArcher,
-  spawnCannon,
-  spawnGunman,
-  spawnMachineGun,
-  spawnMortar,
-  spawnScoutCavalry,
-  spawnSpearman,
-} from './units';
+import { spawnMilitaryUnitByDefId } from './units';
 
 export function createLateGameTestWorld(): SimWorld {
   const world = createSimWorld(4242);
@@ -251,14 +243,7 @@ export function spawnPresetUnitAt(
   y: number,
   playerId: number
 ): number | null {
-  if (defId === UnitDefId.ARCHER) return spawnArcher(world, x, y, playerId);
-  if (defId === UnitDefId.SPEARMAN) return spawnSpearman(world, x, y, playerId);
-  if (defId === UnitDefId.SCOUT_CAVALRY) return spawnScoutCavalry(world, x, y, playerId);
-  if (defId === UnitDefId.GUNMAN) return spawnGunman(world, x, y, playerId);
-  if (defId === UnitDefId.CANNON) return spawnCannon(world, x, y, playerId);
-  if (defId === UnitDefId.MACHINE_GUN) return spawnMachineGun(world, x, y, playerId);
-  if (defId === UnitDefId.MORTAR) return spawnMortar(world, x, y, playerId);
-  return null;
+  return spawnMilitaryUnitByDefId(world, defId, x, y, playerId);
 }
 
 export function findPresetUnitSpot(

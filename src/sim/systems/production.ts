@@ -22,16 +22,7 @@ import { pathTo } from '../core/navigation';
 import { countQueuedPopCost } from '../core/population';
 import { producerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import {
-  spawnArcher,
-  spawnCannon,
-  spawnGunman,
-  spawnMachineGun,
-  spawnMortar,
-  spawnScoutCavalry,
-  spawnSpearman,
-  spawnVillager,
-} from '../factories/units';
+import { spawnMilitaryUnitByDefId, spawnVillager } from '../factories/units';
 import { isMovableEntity } from '../input/formation';
 import {
   countQueuedWorksiteWorkers,
@@ -175,32 +166,9 @@ export function productionSystem(world: SimWorld): void {
           spawnedEid = spawnVillager(world, spot.x, spot.y, Owner.player[eid]);
           break;
         }
-        if (trainingDefId === UnitDefId.ARCHER) {
-          spawnedEid = spawnArcher(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.SPEARMAN) {
-          spawnedEid = spawnSpearman(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.SCOUT_CAVALRY) {
-          spawnedEid = spawnScoutCavalry(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.GUNMAN) {
-          spawnedEid = spawnGunman(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.CANNON) {
-          spawnedEid = spawnCannon(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.MACHINE_GUN) {
-          spawnedEid = spawnMachineGun(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.MORTAR) {
-          spawnedEid = spawnMortar(world, spot.x, spot.y, Owner.player[eid]);
+        const military = spawnMilitaryUnitByDefId(world, trainingDefId, spot.x, spot.y, Owner.player[eid]);
+        if (military !== null) {
+          spawnedEid = military;
           break;
         }
       }
