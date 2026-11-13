@@ -9,6 +9,7 @@ import { type BuildingDef, BuildingDefId, canAfford, getBuildingDef, spend } fro
 import { isBuildingUnlocked } from '../tech-tree';
 import { sortedEids } from '../core/entities';
 import { findBuildingAt, findNearestResource, findResourceAt } from '../core/lookup';
+import type { ResourceProbe } from '../core/placement-probe';
 import { selectedQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnFoundation } from '../factories/buildings';
@@ -67,23 +68,25 @@ export function applyPlaceBuilding(
   spawnFoundation(world, defId, x, y, playerId);
 }
 
+/**
+ * Footprint free and, for resource worksites, a node in reach. `probe` (for
+ * batches of queries in one tick, like the AI's spot search) gives the same
+ * answer from an index instead of scanning every resource node.
+ */
 export function canPlaceBuildingAt(
   world: SimWorld,
   def: BuildingDef,
   x: number,
-  y: number
+  y: number,
+  probe?: ResourceProbe
 ): boolean {
-  if (
-    worksiteUsesResourceNodes(def) &&
-    findNearestResource(
-      world,
-      x,
-      y,
-      def.harvestKind as ResourceKind,
-      def.harvestRadius ?? 6
-    ) === null
-  ) {
-    return false;
+  if (worksiteUsesResourceNodes(def)) {
+    const kind = def.harvestKind as ResourceKind;
+    const radius = def.harvestRadius ?? 6;
+    const inReach = probe
+      ? probe.nearestDistance(x, y, kind, radius) !== null
+      : findNearestResource(world, x, y, kind, radius) !== null;
+    if (!inReach) return false;
   }
 
   const fw = def.footprint.w;
@@ -96,7 +99,7 @@ export function canPlaceBuildingAt(
       const ty = y0 + dy;
       if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
       if (world.map.walkability[ty][tx] !== 0) return false;
-      if (findResourceAt(world, tx, ty, 0.6) !== null) return false;
+      if (probe ? probe.hasResourceAt(tx, ty, 0.6) : findResourceAt(world, tx, ty, 0.6) !== null) return false;
       if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;
     }
   }

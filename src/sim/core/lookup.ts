@@ -12,7 +12,7 @@ import {
   type ResourceKind,
   UnitKind,
 } from '../components';
-import { compareDeterministicEids, sortedEids } from './entities';
+import { compareDeterministicEids } from './entities';
 import { distToBuildingEdge } from './grid';
 import { buildingQuery, positionQuery, resourceQuery, townCenterQuery } from './queries';
 import type { SimWorld } from './types';
@@ -31,6 +31,22 @@ export function hasMapFeatureAt(world: SimWorld, x: number, y: number, radius: n
   return false;
 }
 
+/**
+ * Nearest-wins with exact ties going to the lower deterministic key: the
+ * same pick as scanning in sortedEids order with a strict `<`, but without
+ * sorting every node on every call (these lookups run per candidate tile).
+ */
+function isCloser(
+  world: SimWorld,
+  d: number,
+  eid: number,
+  bestDist: number,
+  bestEid: number | null
+): boolean {
+  if (d < bestDist) return true;
+  return d === bestDist && bestEid !== null && compareDeterministicEids(world, eid, bestEid) < 0;
+}
+
 /** Find the building entity (any) at or near (x, y). Used for placement checks. */
 export function findBuildingAt(
   world: SimWorld,
@@ -38,16 +54,11 @@ export function findBuildingAt(
   y: number,
   radius = 0.7
 ): number | null {
-  const ents = sortedEids(world, buildingQuery(world.ecs));
   let bestEid: number | null = null;
   let bestDist = radius;
-  for (const eid of ents) {
+  for (const eid of buildingQuery(world.ecs)) {
     const d = distToBuildingEdge(world, x, y, eid);
-    if (
-      d < bestDist ||
-      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, eid, bestEid) < 0)
-    ) {
+    if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;
     }
@@ -62,16 +73,11 @@ export function findResourceAt(
   y: number,
   radius = 0.6
 ): number | null {
-  const ents = sortedEids(world, resourceQuery(world.ecs));
   let bestEid: number | null = null;
   let bestDist = radius;
-  for (const eid of ents) {
+  for (const eid of resourceQuery(world.ecs)) {
     const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    if (
-      d < bestDist ||
-      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, eid, bestEid) < 0)
-    ) {
+    if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;
     }
@@ -87,18 +93,13 @@ export function findNearestResource(
   kind: ResourceKind,
   maxRange: number
 ): number | null {
-  const ents = sortedEids(world, resourceQuery(world.ecs));
   let bestEid: number | null = null;
   let bestDist = maxRange;
-  for (const eid of ents) {
+  for (const eid of resourceQuery(world.ecs)) {
     if (Resource.kind[eid] !== kind) continue;
     if (Resource.amount[eid] <= 0) continue;
     const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    if (
-      d < bestDist ||
-      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, eid, bestEid) < 0)
-    ) {
+    if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;
     }
