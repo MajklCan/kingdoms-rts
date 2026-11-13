@@ -39,6 +39,7 @@ const SOUNDS = [
   // --- Economy (gather cues from sim) ---
   { id: 'chop_wood',      text: 'Single axe blade biting into wood, sharp crisp high-pitched chop, dry crack and splinter of timber, light hatchet thwack, NO bass, no deep thud, no rumble, no boom, no music', dur: 0.5, infl: 0.6 },
   { id: 'mine_stone',     text: 'Pickaxe striking stone and ore, sharp rocky clink with small debris, close-up, no music', dur: 0.6, infl: 0.4 },
+  { id: 'forage',         text: 'Farmer gathering crops and berries by hand, soft rustle of leaves and stalks with a light pluck and a small scoop of soil, close-up, gentle, dry, no music', dur: 0.6, infl: 0.5 },
 
   // --- Building / production lifecycle (cues from sim) ---
   { id: 'build_complete', text: 'Construction finished, satisfying wooden thud and short bright confirmation chime, medieval, no music', dur: 1.0, infl: 0.3 },
