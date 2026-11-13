@@ -43,7 +43,7 @@ Pre-input visibility → drain `world.inputs` → ai → ageProgression → prod
 
 ### Data flow
 
-Input (DOM/Phaser) → `world.inputs.push(...)` → consumed by `applyInput` switch during `step()`. Render layer drains `world.combatEvents` / `world.aiEvents` (append-only per tick). Sim never reads them back.
+Input (DOM/Phaser) → `world.inputs.push(...)` → consumed by `applyInput` switch during `step()`. Render layer drains `world.combatEvents` / `world.aiEvents` / `world.gameEvents` (append-only per tick; `gameEvents` is the typed HUD feed: unit trained, building complete or lost, research, age). Sim never reads them back. `world.matchStats` holds exact per-player counters for the game-over screen: write-only, excluded from the checksum, saved.
 
 ## Repo layout
 
@@ -76,6 +76,7 @@ src/
     checksum-ledger.ts per-tick local vs peer checksum pairing
     protocol.ts        message types + validated decodeServer; transport.ts WebSocket
   render/
+    ui-api.ts          typed API the DOM HUD reads through src/ui/game-bridge.ts (selection, queue, alerts, stats, endMatch)
     game-scene.ts      ~4k lines — GameScene, draw fns, texture bake registry
     iso.ts             tileToScreen / screenToTile (64×32 diamond, VPER=4)
     voxel/
@@ -147,7 +148,7 @@ Scripts in `scripts/` (`gen-minimal.mjs`, `gen-tc-v2.mjs`, `gen-voxel-tc.mjs`) e
 
 ## Save / load
 
-- `SAVE_VERSION=1`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points.
+- `SAVE_VERSION=2`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats. v1 saves migrate with zeroed stats (`migrateSavedGame`).
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 
