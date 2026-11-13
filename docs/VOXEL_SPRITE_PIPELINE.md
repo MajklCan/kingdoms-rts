@@ -6,9 +6,9 @@ Kingdoms currently builds custom unit sprites directly from TypeScript voxel mod
 
 1. Author a model function in `src/render/voxel/models/<unit>.ts`.
 2. Return a `Voxel[]`, where each voxel is `{ x, y, z, color }`.
-3. Register every needed pose in `GameScene.bakeAllTextures()`.
-4. `bakeVoxelTexture()` projects the voxels into a Phaser texture at scene boot.
-5. `GameScene.unitTextureKey()` chooses the texture per entity at render time.
+3. Register the model in `VOXEL_UNIT_MODELS` and `VOXEL_UNIT_BAKE_ORDER` (`src/render/sprites/voxel-models.ts`).
+4. `bakeVoxelTextures()` (`src/render/sprites/voxel-bake.ts`) bakes every pose into a Phaser texture at scene boot.
+5. `VoxelSpriteSource` resolves the texture per entity at render time, behind the sprite registry (`src/render/sprites/sprite-registry.ts`). Pre-rendered atlas sprites override it per entry, see `docs/SPRITE_ATLAS.md`.
 
 Canonical animated unit examples:
 
@@ -44,20 +44,17 @@ Prefer a small local rig rather than duplicating 8 hand-written models. Scout ca
 
 ## Baking
 
-Register all variants in `GameScene.bakeAllTextures()`:
+Add one entry to `VOXEL_UNIT_MODELS` in `src/render/sprites/voxel-models.ts` and its id to `VOXEL_UNIT_BAKE_ORDER`. `bakeVoxelTextures()` then bakes every player x facing x anim x frame:
 
 ```ts
-for (const facing of UNIT_FACINGS) {
-  for (const anim of UNIT_ANIMS) {
-    for (let frame = 0; frame < UNIT_FRAME_COUNTS[anim]; frame++) {
-      this.bakeIfMissing(
-        unitTextureKey(playerId, facing, anim, frame),
-        () => buildUnitVoxels(teamColor, { facing, anim, frame }),
-        { voxelW: 4, bounds: UNIT_BAKE_BOUNDS }
-      );
-    }
-  }
-}
+[UnitDefId.MY_UNIT]: {
+  keyPrefix: 'voxel-my-unit-p',          // key: voxel-my-unit-p1-SE-move-0
+  anims: UNIT_ANIMS,
+  frameCounts: UNIT_FRAME_COUNTS,
+  bounds: UNIT_BAKE_BOUNDS,
+  originY: 0.7,                           // feet on the tile anchor
+  build: (color, pose) => buildUnitVoxels(color, pose),
+},
 ```
 
 Use fixed `bounds` when animation frames change footprint, especially attacks with extended weapons. Without fixed bounds, the texture size changes between frames and sprites can appear to slide.
