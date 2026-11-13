@@ -88,8 +88,12 @@ type BakeBounds = NonNullable<VoxelBakeOptions['bounds']>;
 /** Players that get team-coloured bakes (1 = host / human, 2 = AI / guest). */
 export const VOXEL_TEAM_PLAYERS = [1, 2] as const;
 
-/** On-screen scale applied to every voxel unit sprite. */
-export const VOXEL_UNIT_SCALE = 0.8;
+/**
+ * On-screen scale applied to every voxel unit sprite. 0.72 puts a villager at
+ * about 22 px, close to a Blender door (0.52 tile, about 20 px at 1x), so units
+ * sit at the scale of the pre-rendered buildings.
+ */
+export const VOXEL_UNIT_SCALE = 0.72;
 
 export const VOXEL_KEYS = {
   DARK_TC_PREFIX: 'voxel-dark-tc-p',

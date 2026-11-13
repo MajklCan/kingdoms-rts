@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgeId, BUILDING_TABLE, BuildingDefId, UnitDefId } from '@sim/defs';
 import { ResourceKindId } from '@sim/components';
+import { MapFeatureKind } from '@sim/map-gen';
 import manifestJson from '../../../public/assets/sprites/manifest.json';
 import { ArtCatalog } from './art-catalog';
 import { AtlasSpriteSource } from './atlas-sprite-source';
@@ -71,6 +72,13 @@ describe('AtlasSpriteSource (shipped manifest)', () => {
     const full = source.resource({ kind: ResourceKindId.GOLD, x: 0, y: 0, remaining: 1 });
     const low = source.resource({ kind: ResourceKindId.GOLD, x: 0, y: 0, remaining: 0.1 });
     expect(full?.frame).not.toBe(low?.frame);
+  });
+
+  it('scales the rock spire boulder with the footprint', () => {
+    const small = source.mapFeature({ kind: MapFeatureKind.ROCK_SPIRE, size: 2, x: 0, y: 0 });
+    const big = source.mapFeature({ kind: MapFeatureKind.ROCK_SPIRE, size: 4, x: 0, y: 0 });
+    expect(small?.anchor).toBe('footprint');
+    expect(big!.scale).toBeCloseTo(small!.scale * 2);
   });
 
   it('leaves units to the voxel fallback', () => {

@@ -79,7 +79,8 @@ export class ResourceRenderer {
       if (!ref) continue;
       const id = `${feature.kind}:${feature.x},${feature.y}:${feature.size ?? 1}`;
       const c = this.featureScreenPosition(feature);
-      const p = spriteAnchorPoint(ref.anchor, c);
+      // Footprint-anchored art sits on the bottom corner of the whole footprint.
+      const p = spriteAnchorPoint(ref.anchor, c, size, size);
       const view = this.features.show(id, ref, p.x, p.y);
       view.setDepth(c.y - 1);
       view.setTintOrClear(this.isFeatureVisible(feature) ? null : FOG_DIM_TINT);

@@ -8,7 +8,7 @@ Kingdoms currently builds custom unit sprites directly from TypeScript voxel mod
 2. Return a `Voxel[]`, where each voxel is `{ x, y, z, color }`.
 3. Register the model in `VOXEL_UNIT_MODELS` and `VOXEL_UNIT_BAKE_ORDER` (`src/render/sprites/voxel-models.ts`).
 4. `bakeVoxelTextures()` (`src/render/sprites/voxel-bake.ts`) bakes every pose into a Phaser texture at scene boot.
-5. `VoxelSpriteSource` resolves the texture per entity at render time, behind the sprite registry (`src/render/sprites/sprite-registry.ts`). Pre-rendered atlas sprites override it per entry, see `docs/SPRITE_ATLAS.md`.
+5. `VoxelSpriteSource` resolves the texture per entity at render time, behind the sprite registry (`src/render/sprites/sprite-registry.ts`). Pre-rendered Blender atlas sprites override it per query, see `docs/SPRITE_ATLAS.md`.
 
 Canonical animated unit examples:
 

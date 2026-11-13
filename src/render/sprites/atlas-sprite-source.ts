@@ -1,9 +1,9 @@
 /**
  * Sprite source backed by the Blender atlases (via {@link ArtCatalog}).
  * Answers buildings (per era, construction stage, farm stage, wall shape),
- * rubble, resources (species, snow / dead trees, depletion looks), stumps and
- * the linden landmark. Units and rock spires have no atlas art: null, so the
- * registry falls back to voxels.
+ * rubble, resources (species, snow / dead trees, depletion looks), stumps, the
+ * linden landmark and rock spires (a scaled boulder until they get art).
+ * Units have no atlas art: null, so the registry falls back to voxels.
  */
 
 import { AgeId, BUILDING_TABLE, BuildingDefId } from '@sim/defs';
@@ -35,6 +35,8 @@ const PILE_ASSETS: Readonly<Record<number, string>> = {
 
 /** The linden landmark is a bigger, older linden. */
 const LINDEN_LANDMARK_SCALE = 1.35;
+/** Rock spire scale per footprint tile (the boulder frame covers one tile). */
+const ROCK_SPIRE_SCALE = 1.15;
 
 export class AtlasSpriteSource implements SpriteSource {
   private readonly cache = new Map<string, SpriteRef>();
@@ -103,9 +105,16 @@ export class AtlasSpriteSource implements SpriteSource {
   }
 
   mapFeature(query: MapFeatureSpriteQuery): SpriteRef | null {
-    if (query.kind !== MapFeatureKind.LINDEN_TREE) return null;
-    const frame = this.art.frame('resource.tree', 'linden');
-    return frame ? this.ref(frame, -1, LINDEN_LANDMARK_SCALE) : null;
+    if (query.kind === MapFeatureKind.LINDEN_TREE) {
+      const frame = this.art.frame('resource.tree', 'linden');
+      return frame ? this.ref(frame, -1, LINDEN_LANDMARK_SCALE) : null;
+    }
+    if (query.kind === MapFeatureKind.ROCK_SPIRE) {
+      // No spire art yet: the big boulder blown up to the spire's footprint.
+      const frame = this.art.frame('decor.rocks', 'boulder');
+      return frame ? this.ref(frame, -1, Math.max(1, query.size) * ROCK_SPIRE_SCALE) : null;
+    }
+    return null;
   }
 
   private treeFrame(query: ResourceSpriteQuery): ArtFrame | null {

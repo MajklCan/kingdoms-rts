@@ -35,6 +35,13 @@ $BLENDER -b --factory-startup -P scripts/blender/render_all.py -- --families bui
 # pack only (after renders exist), optionally 256 colour quantized
 python3 scripts/pack_sprites.py [--quantize]
 
+# fresh checkout: the raw renders are gitignored and the packer repacks every
+# family from them, so rebuild them from the packed atlases first, then
+# re-render only what changed (--only merges records) and pack
+python3 scripts/unpack_sprites.py
+$BLENDER -b --factory-startup -P scripts/blender/render_all.py -- --families buildings --only wall_dark --no-pack
+python3 scripts/pack_sprites.py
+
 # contact sheet from the packed output
 python3 scripts/contact_sheet.py
 ```
@@ -90,12 +97,13 @@ own frames (terrain).
   with alpha (strength baked in, about 0.6 max). Draw all shadows on a ground
   layer above terrain and below all objects. The colour frame has no ground
   shadow in it, only self-shadowing.
-- **Team colour**: separate frame `<frame>__mask`, same size and anchor, white
-  with alpha = team coverage. In the colour frame team parts are neutral light
-  grey. Tint by multiplying the colour frame's luminance with the player
-  colour where the mask is set (the contact sheet uses
-  `rgb = mix(rgb, playerColor * luma * 1.25, maskAlpha)`), or draw the mask
-  with a multiply/tint blend on top.
+- **Team colour**: separate frame `<frame>__mask`, same size and anchor, alpha
+  = team coverage. In the colour frame team parts are neutral light grey. The
+  renderer writes a white mask; the packer replaces its RGB with the colour
+  frame's luma * 1.25, so the engine only tints the mask with the player
+  colour and draws it over the frame with normal blending, which gives
+  `rgb = mix(rgb, playerColor * luma * 1.25, maskAlpha)` (the contact sheet
+  formula).
 - **Sizes**: doors are about 0.52 tile high (villager height), a villager is
   about 0.3 tile wide.
 
@@ -204,6 +212,9 @@ working reference of tiles, transitions and cliffs.
 3. Render it with `--only`, then `python3 scripts/contact_sheet.py` and look at
    it at game scale before committing.
 
+How the game consumes all of this (layers, anchors, fog, terrain bake): see
+[SPRITE_ATLAS.md](SPRITE_ATLAS.md).
+
 ## Known weak spots
 
 - Elevation is subtle: a 4 px step reads as a line, there are no slope sprites.
@@ -212,5 +223,7 @@ working reference of tiles, transitions and cliffs.
 - Tree and bush crowns are displaced spheres; close up they look soft, at game
   scale they read fine.
 - Bridges are flat plank tiles without railings.
+- No rock spire (map feature) sprite yet; the game scales up the boulder, which
+  reads soft and low on 4x4 spires.
 - Renders are not bit-identical between runs (GPU sampling and denoising),
   so re-rendering changes PNG bytes slightly.
