@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
 import { Owner, Producer, ResourceKindId, ResourceWorksite, UnitKind } from './components';
-import { AGE_TABLE, AgeId, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
+import { AGE_TABLE, AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
 import {
   buildingQuery,
   createSimWorld,
@@ -22,6 +22,7 @@ import {
   isBuildingUnlocked,
   isUnitUnlocked,
   techStatus,
+  type TechStateWorld,
 } from './tech-tree';
 
 function countPlayerBuildings(world: SimWorld, playerId: number): number {
@@ -369,5 +370,37 @@ describe('technology tree', () => {
     const path = world.paths.get(spearman!);
     expect(path).toBeDefined();
     expect(path?.at(-1)).toEqual(rally);
+  });
+
+  it('can research every tech and train every unlocked unit by the Gunpowder Age', () => {
+    const state: TechStateWorld = {
+      researchedTechs: [createStartingTechSet(), createStartingTechSet()],
+      ages: [
+        { current: AgeId.DARK, progress: -1, totalTicks: 0 },
+        { current: AgeId.DARK, progress: -1, totalTicks: 0 },
+      ],
+    };
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const tech of TECH_TREE) {
+        if (techStatus(state, 1, tech.id) !== 'available') continue;
+        if (tech.id === TechId.CASTLE_AGE) state.ages[1].current = AgeId.CASTLE;
+        else if (tech.id === TechId.GUNPOWDER_AGE) state.ages[1].current = AgeId.GUNPOWDER;
+        else state.researchedTechs[1].add(tech.id);
+        changed = true;
+      }
+    }
+    for (const tech of TECH_TREE) expect(techStatus(state, 1, tech.id), tech.id).toBe('researched');
+    expect(state.ages[1].current).toBe(AgeId.GUNPOWDER);
+
+    const trainable = new Set<string>();
+    BUILDING_TABLE.forEach((building, defId) => {
+      if (isBuildingUnlocked(state, 1, defId)) for (const unit of building.trains) trainable.add(unit);
+    });
+    const untrainable = UNIT_TABLE.filter(
+      (unit, defId) => isUnitUnlocked(state, 1, defId) && !trainable.has(unit.id)
+    ).map((unit) => unit.id);
+    // Known gap: the worksite economy has no villager production.
+    expect(untrainable).toEqual(['VILLAGER']);
   });
 });

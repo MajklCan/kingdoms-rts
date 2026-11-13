@@ -147,7 +147,7 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.CASTLE_AGE,
     name: 'Castle Age',
-    description: 'Advance into Castle Age and unlock gold mining, stables, and knights.',
+    description: 'Advance into Castle Age and unlock gold mining, stables, and scout cavalry.',
     cost: { food: 0, wood: 750, gold: 0, stone: 500 },
     path: 'age',
     icon: 'castle',
@@ -157,7 +157,7 @@ export const TECH_TREE: TechDef[] = [
       [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS],
       [TechId.LUMBER_CREWS, TechId.MINING_CREWS],
     ],
-    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Knights', 'Stone Walls'],
+    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Scout Cavalry', 'Stone Walls'],
   },
   {
     id: TechId.MILLS,
