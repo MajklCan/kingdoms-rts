@@ -4,9 +4,11 @@
  *
  *   v1  original format
  *   v2  + matchStats (per-player match statistics)
+ *   v3  + mapSeed (uint32 seed the map was generated from)
  */
 
 import type { MapFeature } from '../map-gen';
+import { legacyMapSeed, normalizeMapSeed } from '../core/map-seed';
 import type {
   AiDifficulty,
   AiPlayerState,
@@ -18,7 +20,7 @@ import type {
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const LATE_GAME_TEST_SAVE_ID = 'late-game-test';
 
 export interface SavedMapV1 {
@@ -81,7 +83,7 @@ export interface SavedEntityV1 {
   dead?: true;
 }
 
-/** v1 layout. Only read by migrateSavedGame(); new saves are SavedGame (v2). */
+/** v1 layout. Only read by migrateSavedGame(); new saves are SavedGame (v3). */
 export interface SavedGameV1 {
   version: 1;
   label: string;
@@ -125,8 +127,14 @@ export interface SavedGameV2 extends Omit<SavedGameV1, 'version'> {
   matchStats: PlayerMatchStats[];
 }
 
+export interface SavedGameV3 extends Omit<SavedGameV2, 'version'> {
+  version: 3;
+  /** uint32 seed the map was generated from (cosmetic, see core/map-seed.ts). */
+  mapSeed: number;
+}
+
 /** The current save format. */
-export type SavedGame = SavedGameV2;
+export type SavedGame = SavedGameV3;
 
 export interface SavedAiPlayerStateV1 {
   plan: AiPlayerState['plan'];
@@ -207,29 +215,47 @@ export function sanitizeSavedMatchStats(raw: unknown, players: number): PlayerMa
 /**
  * Bring any supported save up to the current format. v1 predates match
  * statistics; nothing in it lets us reconstruct them, so they start at zero
- * (peak population at the population saved). Returns null for unknown versions.
+ * (peak population at the population saved). v1 and v2 predate the stored map
+ * seed; it is derived from the map bytes instead (stable for that save).
+ * Returns null for unknown versions.
  */
-export function migrateSavedGame(save: SavedGameV1 | SavedGameV2): SavedGame | null {
+export function migrateSavedGame(save: SavedGameV1 | SavedGameV2 | SavedGameV3): SavedGame | null {
   const players = Array.isArray(save.resources) ? save.resources.length : 0;
+  if (save.version === 3) {
+    return {
+      ...save,
+      matchStats: sanitizeSavedMatchStats(save.matchStats, players),
+      mapSeed: typeof save.mapSeed === 'number' ? normalizeMapSeed(save.mapSeed) : seedFromMap(save),
+    };
+  }
   if (save.version === 2) {
-    return { ...save, matchStats: sanitizeSavedMatchStats(save.matchStats, players) };
+    return {
+      ...save,
+      version: 3,
+      matchStats: sanitizeSavedMatchStats(save.matchStats, players),
+      mapSeed: seedFromMap(save),
+    };
   }
   if (save.version === 1) {
     const matchStats = sanitizeSavedMatchStats([], players).map((stats, playerId) => ({
       ...stats,
       peakPopulation: count(save.population?.[playerId]?.current),
     }));
-    return { ...save, version: 2, matchStats };
+    return { ...save, version: 3, matchStats, mapSeed: seedFromMap(save) };
   }
   return null;
 }
 
+function seedFromMap(save: { map?: Partial<SavedMapV1> }): number {
+  return legacyMapSeed(save.map?.tiles ?? [], save.map?.elevation ?? []);
+}
+
 export function parseSavedGame(text: string): SavedGame | null {
   try {
-    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2>;
-    if (parsed.version !== 1 && parsed.version !== SAVE_VERSION) return null;
+    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2 | SavedGameV3>;
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== SAVE_VERSION) return null;
     if (!Array.isArray(parsed.entities) || !parsed.map) return null;
-    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2);
+    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2 | SavedGameV3);
   } catch {
     return null;
   }

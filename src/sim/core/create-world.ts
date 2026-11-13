@@ -30,6 +30,7 @@ import {
 } from './constants';
 import { findSpawnSpot } from './grid';
 import { createMatchStats, resetMatchStats } from './match-stats';
+import { normalizeMapSeed } from './map-seed';
 import { findBuildingAt, findResourceAt, hasMapFeatureAt } from './lookup';
 import type { AgeState, CreateSimWorldOptions, PopState, SimWorld } from './types';
 
@@ -180,6 +181,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     soundCues: [],
     gameEvents: [],
     killingBlows: new Map(),
+    mapSeed: normalizeMapSeed(seed),
     matchStats: createMatchStats(),
     paused: true,
     map: mapData,

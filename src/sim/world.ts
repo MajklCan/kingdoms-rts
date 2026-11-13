@@ -69,6 +69,7 @@ export {
 export { createSimWorld } from './core/create-world';
 export { findIdleVillagers, isIdleVillager } from './core/idle-villagers';
 export { clonePlayerStats, emptyPlayerStats } from './core/match-stats';
+export { getMapSeed, legacyMapSeed, normalizeMapSeed } from './core/map-seed';
 export {
   isSelectionRelativeInput,
   selectedCommandableEids,

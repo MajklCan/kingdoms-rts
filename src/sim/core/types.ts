@@ -345,6 +345,12 @@ export interface SimWorld {
    * death system, never read by gameplay, not saved and not checksummed.
    */
   killingBlows: Map<number, number>;
+  /**
+   * uint32 seed the map was generated from (saved since SAVE_VERSION 3; older
+   * saves derive one from the map bytes). Cosmetic only: no system reads it,
+   * not checksummed. See core/map-seed.ts.
+   */
+  mapSeed: number;
   /** Per-player match statistics, indexed by playerId. Write-only for the sim. */
   matchStats: PlayerMatchStats[];
   /** When true, step() is a no-op (title screen, pause menu). */

@@ -202,6 +202,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     formationFacings: world.formationFacings.slice(),
     outcome: { ...world.outcome },
     matchStats: world.matchStats.map((stats) => ({ ...stats, gathered: [...stats.gathered] })),
+    mapSeed: world.mapSeed,
     entities,
     productionQueues: Array.from(world.productionQueues.entries()).map(([eid, queue]) => ({
       eid,
