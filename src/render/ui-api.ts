@@ -28,6 +28,7 @@ import {
   Resource,
   ResourceKindId,
   UnitKind,
+  UnitKindId,
 } from '@sim/components';
 import { UNIT_TABLE, getAgeDef, type CostTuple } from '@sim/defs';
 import {
@@ -326,7 +327,7 @@ export class UiApi {
   /**
    * What a click on the battlefield tile under the pointer would mean, so the
    * UI can pick a cursor: an armed placement (accepted or refused), the army
-   * rally pick, a visible enemy, an explored resource or one of our
+   * rally pick, a visible enemy, an explored resource (villagers selected) or one of our
    * unfinished buildings. Read-only; mirrors PointerController's priorities.
    */
   pointerHoverKind(): PointerHoverKind {
@@ -350,7 +351,7 @@ export class UiApi {
       if (isEnemyOf(world, eid, me)) return this.deps.commands.selectedCommandableCount() > 0 ? 'attack' : 'default';
       if (this.ownerOf(eid) === me && hasComponent(world.ecs, ConstructionSite, eid)) return 'build';
     }
-    const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
+    const resourceEid = this.selectionHasOwnVillager() ? findResourceAt(world, tileX, tileY, 0.7) : null;
     if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
       const kind = Resource.kind[resourceEid];
       if (kind === ResourceKindId.WOOD) return 'gather-wood';
@@ -358,6 +359,15 @@ export class UiApi {
       return 'gather-mine';
     }
     return this.selectionIsOwnArmyProducers() ? 'rally' : 'default';
+  }
+
+  private selectionHasOwnVillager(): boolean {
+    const ecs = this.ctx.world.ecs;
+    for (const eid of selectedQuery(ecs)) {
+      if (!hasComponent(ecs, UnitKind, eid) || UnitKind.kind[eid] !== UnitKindId.VILLAGER) continue;
+      if (this.ownerOf(eid) === this.ctx.perspectivePlayerId) return true;
+    }
+    return false;
   }
 
   private selectionIsOwnArmyProducers(): boolean {

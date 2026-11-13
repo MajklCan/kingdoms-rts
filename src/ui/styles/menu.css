@@ -7,7 +7,10 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-menu);
+  /* clip, not hidden: the oversized drifting backdrop must not make the root
+     a scroll container, or focusing a control scrolls the whole stage away. */
   overflow: hidden;
+  overflow: clip;
   background: #0a0d12;
   color: #e9e3d4;
   font-family: var(--font-body);
