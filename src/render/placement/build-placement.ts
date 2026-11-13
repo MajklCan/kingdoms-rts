@@ -31,6 +31,8 @@ import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, isInsideMap, spriteAnchorPoint } from '../world-projection';
 
 const GHOST_ALPHA = 0.6;
+/** Multiplicative tints on the ghost sprite: green = can build here, red = can't. */
+const GHOST_VALID_TINT = 0xa8f0a0;
 const GHOST_INVALID_TINT = 0xff6b6b;
 
 export type BuildMode =
@@ -42,6 +44,7 @@ export type BuildMode =
   | 'GOLD_MINE'
   | 'STONE_QUARRY'
   | 'BARRACKS'
+  | 'ARCHERY_RANGE'
   | 'STABLE'
   | 'FOUNDRY'
   | 'DEFENSIVE_TOWER'
@@ -55,6 +58,7 @@ export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   GOLD_MINE: BuildingDefId.GOLD_MINE,
   STONE_QUARRY: BuildingDefId.STONE_QUARRY,
   BARRACKS: BuildingDefId.BARRACKS,
+  ARCHERY_RANGE: BuildingDefId.ARCHERY_RANGE,
   STABLE: BuildingDefId.STABLE,
   FOUNDRY: BuildingDefId.FOUNDRY,
   DEFENSIVE_TOWER: BuildingDefId.DEFENSIVE_TOWER,
@@ -71,6 +75,8 @@ export class BuildPlacement {
   private ghostRef: SpriteRef | null = null;
   /** WALL mode: first click of a line, waiting for the end tile. */
   private wallStart: { x: number; y: number } | null = null;
+  /** The anchor was just pressed: releasing elsewhere finishes the line (drag). */
+  private wallDragArmed = false;
 
   constructor(
     private readonly ctx: SceneContext,
@@ -127,6 +133,7 @@ export class BuildPlacement {
   reset(): void {
     this.mode = 'none';
     this.wallStart = null;
+    this.wallDragArmed = false;
     this.armyRallyMode = false;
     this.awaitingBuildKind = false;
     this.clear();
@@ -187,7 +194,18 @@ export class BuildPlacement {
     return false;
   }
 
-  /** WALL mode: the first click anchors the line, the second sends it. */
+  /**
+   * Pointer released. In WALL mode a drag from the anchor tile sends the line
+   * on release; releasing on the anchor itself keeps the two-click flow.
+   */
+  handlePointerUp(tx: number, ty: number): boolean {
+    if (this.mode !== 'WALL' || !this.wallStart || !this.wallDragArmed) return false;
+    this.wallDragArmed = false;
+    if (!isInsideMap(tx, ty) || (tx === this.wallStart.x && ty === this.wallStart.y)) return false;
+    return this.handleWallClick(tx, ty);
+  }
+
+  /** WALL mode: the first click anchors the line, the second (or a drag release) sends it. */
   private handleWallClick(tx: number, ty: number): boolean {
     const playerId = this.ctx.perspectivePlayerId;
     if (!isInsideMap(tx, ty)) return true;
@@ -201,7 +219,8 @@ export class BuildPlacement {
     }
     if (!this.wallStart) {
       this.wallStart = { x: tx, y: ty };
-      setLastEvent(`wall from (${tx},${ty}) - click the end tile`);
+      this.wallDragArmed = true;
+      setLastEvent(`wall from (${tx},${ty}) - drag or click the end tile`);
       return true;
     }
     const { x: x0, y: y0 } = this.wallStart;
@@ -343,8 +362,7 @@ export class BuildPlacement {
     const p = spriteAnchorPoint(ref.anchor, c, w, h);
     sprite.setPosition(p.x, p.y);
     sprite.setAlpha(GHOST_ALPHA);
-    if (valid) sprite.clearTint();
-    else sprite.setTint(GHOST_INVALID_TINT);
+    sprite.setTint(valid ? GHOST_VALID_TINT : GHOST_INVALID_TINT);
     sprite.setVisible(true);
     return true;
   }

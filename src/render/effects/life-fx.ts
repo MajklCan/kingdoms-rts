@@ -10,6 +10,7 @@
  * a still flame).
  */
 
+import { getMapSeed } from '@sim/world';
 import type { BuildingRenderer } from '../entities/building-renderer';
 import type { ResourceHit, ResourceRenderer } from '../entities/resource-renderer';
 import { ForestLife } from './forest-life';
@@ -47,7 +48,7 @@ export class LifeFx {
 
   /** New world: reseed from the map and read its climate. */
   reset(climate: WildClimate): void {
-    this.rng.reseed(mapLifeSeed(this.host.ctx.world.map.tiles));
+    this.rng.reseed(mapLifeSeed(getMapSeed(this.host.ctx.world)));
     this.units.clear();
     this.forest.reset(climate.snow);
     this.wild.reset(climate);

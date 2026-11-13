@@ -34,11 +34,11 @@ describe('LifeRng', () => {
 });
 
 describe('mapLifeSeed', () => {
-  it('is stable for a map and differs between maps', () => {
-    const a = Uint8Array.from({ length: 400 }, (_, i) => i % 5);
-    const b = Uint8Array.from({ length: 400 }, (_, i) => (i * 3) % 7);
-    expect(mapLifeSeed(a)).toBe(mapLifeSeed(Uint8Array.from(a)));
-    expect(mapLifeSeed(a)).not.toBe(mapLifeSeed(b));
+  it('is stable for a map seed, differs between seeds and from the seed itself', () => {
+    expect(mapLifeSeed(1234)).toBe(mapLifeSeed(1234));
+    expect(mapLifeSeed(1234)).not.toBe(mapLifeSeed(1235));
+    expect(mapLifeSeed(1234)).not.toBe(1234);
+    expect(Number.isInteger(mapLifeSeed(0xffffffff)) && mapLifeSeed(0xffffffff) >= 0).toBe(true);
   });
 });
 

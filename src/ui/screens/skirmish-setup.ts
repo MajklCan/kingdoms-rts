@@ -16,12 +16,15 @@ import { backButton, registerMenuScreen } from './menu-shell';
 
 const PREFS_KEY = 'kingdoms.skirmishSetup.v1';
 
+/** Ages a skirmish may start in. Total War stays sim scaffolding: it is not
+ *  playable yet, so the setup screen never offers it. */
+export const SKIRMISH_STARTING_AGES: readonly AgeIdValue[] = [AgeId.DARK, AgeId.CASTLE, AgeId.GUNPOWDER];
+
+/** Form or stored value to a starting age; anything else (old Total War
+ *  prefs included) falls back to Dark. */
 export function parseStartingAge(value: string | undefined): AgeIdValue {
   const parsed = Number(value);
-  if (parsed === AgeId.CASTLE) return AgeId.CASTLE;
-  if (parsed === AgeId.GUNPOWDER) return AgeId.GUNPOWDER;
-  if (parsed === AgeId.TOTAL_WAR) return AgeId.TOTAL_WAR;
-  return AgeId.DARK;
+  return SKIRMISH_STARTING_AGES.find((age) => age === parsed) ?? AgeId.DARK;
 }
 
 export function parseStartingMap(value: string | undefined): MapIdValue {
@@ -108,6 +111,7 @@ export function bindSkirmishSetup(): void {
 
   const ages = h('div', { class: 'seg seg-wrap', role: 'radiogroup', 'aria-label': 'Starting age' });
   for (const age of AGE_TABLE) {
+    if (!SKIRMISH_STARTING_AGES.includes(age.id)) continue;
     ages.append(radio('skirmish-age', String(age.id), age.name.replace(/ Age$/, ''), age.id === prefs.age));
   }
 

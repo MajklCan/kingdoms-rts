@@ -17,8 +17,35 @@ export function compareDeterministicEids(world: SimWorld, a: number, b: number):
   return ak - bk || a - b;
 }
 
+/** Packing (key, eid) into one double keeps the order exact while both fit. */
+const EID_SPAN = 0x100000;
+const MAX_PACKED_KEY = 0xffffffff;
+let packScratch = new Float64Array(256);
+
+/**
+ * `eids` in deterministic order (NetId, then raw eid), as a new array.
+ * Hot: some systems call this per candidate tile, so instead of a comparator
+ * that looks up NetId on every comparison it reads each key once, packs
+ * (key, eid) into a double and runs the native numeric sort. Same order as
+ * {@link compareDeterministicEids}; falls back to it if a value cannot pack.
+ */
 export function sortedEids(world: SimWorld, eids: readonly number[]): number[] {
-  return [...eids].sort((a, b) => compareDeterministicEids(world, a, b));
+  const n = eids.length;
+  if (n < 2) return n === 0 ? [] : [eids[0]];
+  if (packScratch.length < n) packScratch = new Float64Array(Math.max(n, packScratch.length * 2));
+  const packed = packScratch.subarray(0, n);
+  for (let i = 0; i < n; i++) {
+    const eid = eids[i];
+    const key = deterministicEidKey(world, eid);
+    if (eid < 0 || eid >= EID_SPAN || key < 0 || key > MAX_PACKED_KEY) {
+      return [...eids].sort((a, b) => compareDeterministicEids(world, a, b));
+    }
+    packed[i] = key * EID_SPAN + eid;
+  }
+  packed.sort();
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) out[i] = packed[i] % EID_SPAN;
+  return out;
 }
 
 export function compareGridPos(a: GridPos, b: GridPos): number {

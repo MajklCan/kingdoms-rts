@@ -47,14 +47,16 @@ export class LifeRng {
   }
 }
 
-/** Seed for a map: a hash of its tiles, so every peer sees the same life. */
-export function mapLifeSeed(tiles: ArrayLike<number>): number {
-  let h = 2166136261;
-  for (let i = 0; i < tiles.length; i += 7) {
-    h ^= tiles[i];
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
+/**
+ * Life RNG seed from the world's map seed (`getMapSeed`), mixed so it does
+ * not track the terrain dressing that reads the same seed. Every peer and
+ * every reload of the match sees the same life.
+ */
+export function mapLifeSeed(mapSeed: number): number {
+  let h = Math.imul((mapSeed >>> 0) ^ 0x11fe5eed, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 /** Where pooled images go: the painter-sorted entity layer or a plain container. */

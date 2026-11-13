@@ -95,6 +95,7 @@ export function populationRoomForUnitCount(
 
 export function isArmyProducerDefId(defId: number): boolean {
   return defId === BuildingDefId.BARRACKS ||
+    defId === BuildingDefId.ARCHERY_RANGE ||
     defId === BuildingDefId.STABLE ||
     defId === BuildingDefId.FOUNDRY;
 }
