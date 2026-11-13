@@ -31,6 +31,7 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 - Fixed **20 Hz** tick (`SIM.TICK_HZ` in `src/config.ts`). All durations in defs = `Math.round(SIM.TICK_HZ * seconds)`.
 - Single RNG: `world.rng` (Mulberry32, `src/sim/rng.ts`). Never call `Math.random()` in sim. AI tie-breaks, map-gen, forest regrowth route through it.
+- World creation: the scattered berry bushes are the last rng draws in `createSimWorld`. Add new creation-time draws after them so existing maps keep their layout.
 - Tests may monkey-patch `world.rng.int` / `world.rng.next` for determinism (see `forest-regrowth.test.ts`).
 - `step(world)` is pure fn of `(world, inputs)` → same world + same inputs → same next state.
 - **Note:** RNG state is NOT persisted by `serializeSimWorld` currently. Replays from seed work; mid-game save/load won't reproduce future RNG draws.
