@@ -16,7 +16,7 @@ export const TileType = {
   SNOW_FOREST: 10,
   ICE: 11,
   PACKED_SNOW: 12,
-  BARBED_WIRE: 13, // walkable WW1 wire entanglement — bogs units to a crawl
+  BARBED_WIRE: 13, // walkable WW1 wire entanglement - bogs units to a crawl
 } as const;
 
 export type TileTypeValue = (typeof TileType)[keyof typeof TileType];
@@ -56,9 +56,9 @@ export interface MapDef {
 }
 
 export interface MapData {
-  /** tiles[y][x] — TileType. */
+  /** tiles[y][x] - TileType. */
   tiles: Uint8Array;
-  /** elevation[y][x] — 0..7. */
+  /** elevation[y][x] - 0..7. */
   elevation: Uint8Array;
   /** Set of indices (y*W + x) where bridges should be spawned. */
   bridgePositions: Array<{ x: number; y: number }>;

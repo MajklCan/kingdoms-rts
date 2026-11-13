@@ -42,7 +42,7 @@ export function generateZborovMap(): MapData {
   }
 
   rebuildWalkability(map);
-  // Seal the dirt/mud flanks — impassable, so the fight stays in the corridor.
+  // Seal the dirt/mud flanks - impassable, so the fight stays in the corridor.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (x < leftEdge || x > rightEdge) map.walkability[y][x] = 1;

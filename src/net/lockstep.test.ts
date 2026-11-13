@@ -47,7 +47,7 @@ describe('lockstep scheduler', () => {
     const a = new Lockstep(1, [2], 3);
     const b = new Lockstep(2, [1], 3);
     // First iteration: warm-up ticks 0,1,2 are ready, and the first packet
-    // targets tick 3 — delivered with zero latency here, so tick 3 too.
+    // targets tick 3 - delivered with zero latency here, so tick 3 too.
     const pa = a.nextSendPacket();
     const pb = b.nextSendPacket();
     b.receivePeerTurn(1, pa.forTick, pa.cmds);
@@ -90,11 +90,11 @@ describe('lockstep scheduler', () => {
       dropped.push(pb); // withhold from A
     }
     const beforeExec = a.currentExecTick;
-    expect(a.drainReadyTicks()).toEqual([]); // stalled — no B packets
+    expect(a.drainReadyTicks()).toEqual([]); // stalled - no B packets
     expect(a.isStalled()).toBe(true);
     expect(a.currentExecTick).toBe(beforeExec);
 
-    // Deliver the withheld packets — A catches up over the 3 stalled ticks.
+    // Deliver the withheld packets - A catches up over the 3 stalled ticks.
     for (const p of dropped) a.receivePeerTurn(2, p.forTick, p.cmds);
     const caughtUp = a.drainReadyTicks();
     expect(caughtUp.length).toBe(3);

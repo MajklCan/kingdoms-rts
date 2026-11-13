@@ -91,7 +91,7 @@ function movementTerrainSpeedMultiplier(world: SimWorld, eid: number): number {
   const ty = Math.round(Position.y[eid]);
   if (!isTileInMap(tx, ty)) return 1;
   const tile = world.map.tiles[ty * MAP.WIDTH + tx];
-  // Barbed wire bogs any unit to a crawl — the WW1 kill-zone in front of the
+  // Barbed wire bogs any unit to a crawl - the WW1 kill-zone in front of the
   // machine-gun nests.
   if (tile === TileType.BARBED_WIRE) return ZBOROV_WIRE_SPEED_MULTIPLIER;
   if (tile !== TileType.MUD) return 1;

@@ -481,13 +481,13 @@ export function refreshBridgePositions(map: MapData): void {
   }
 }
 
-/** Helper for the render layer — get tile type at (x, y). */
+/** Helper for the render layer - get tile type at (x, y). */
 export function getTile(map: MapData, x: number, y: number): number {
   if (x < 0 || y < 0 || x >= W || y >= H) return TileType.GRASS;
   return map.tiles[y * W + x];
 }
 
-/** Helper — get elevation at (x, y). */
+/** Helper - get elevation at (x, y). */
 export function getElevation(map: MapData, x: number, y: number): number {
   if (x < 0 || y < 0 || x >= W || y >= H) return 3;
   return map.elevation[y * W + x];

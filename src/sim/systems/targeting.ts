@@ -252,7 +252,7 @@ export function targetingSystem(world: SimWorld): void {
       hasComponent(world.ecs, AttackMoveGoal, eid) &&
       AttackMoveGoal.active[eid] === 1
     ) {
-      // No enemy in aggro range — resume marching toward the attack-move
+      // No enemy in aggro range - resume marching toward the attack-move
       // destination. Once we arrive (path empty), we clear active in
       // movement / above on next eval.
       const gx = AttackMoveGoal.x[eid];

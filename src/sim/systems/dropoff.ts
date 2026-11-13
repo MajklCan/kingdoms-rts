@@ -51,7 +51,7 @@ export function dropoffSystem(world: SimWorld): void {
     if (routeWorksiteWorkerAfterDropoff(world, eid, carryKind)) continue;
 
     // Decide next state: stick with the same resource kind, but only if a
-    // node exists within a reasonable radius of the drop-off — not across
+    // node exists within a reasonable radius of the drop-off - not across
     // the map. Stops post-deposit villagers from wandering into enemy
     // territory.
     if (!routeToNearestReachableResource(world, eid, carryKind, 15)) {

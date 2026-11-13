@@ -9,7 +9,7 @@
 
 import type { SimInput } from '@sim/world';
 
-/** Protocol version — bump on any breaking wire-format change. */
+/** Protocol version - bump on any breaking wire-format change. */
 export const PROTOCOL_VERSION = 1;
 
 /** Ticks of input delay: a command issued now executes this many ticks later

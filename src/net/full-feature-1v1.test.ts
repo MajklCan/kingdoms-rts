@@ -1,5 +1,5 @@
 /**
- * Full-feature 1v1 — exhaustive deterministic playthrough + desync oracle.
+ * Full-feature 1v1 - exhaustive deterministic playthrough + desync oracle.
  *
  * Plays a COMPLETE two-player match in one deterministic sim world (P1 = local
  * human, P2 = the "strategist" opponent), walking the entire feature tree and
@@ -16,7 +16,7 @@
  *
  * Desync oracle (the lockstep invariant): the EXACT input timeline is recorded,
  * then replayed into a SECOND world that is a faithful clone of a real second MP
- * client — same seed, and (by resetting bitECS's global eid cursor + zeroing the
+ * client - same seed, and (by resetting bitECS's global eid cursor + zeroing the
  * shared component stores before building it) the SAME eid space with clean slots.
  * Identical inputs must then reproduce a byte-identical (eid-canonical) checksum at
  * every recorded checkpoint across the whole match; any divergence fails the test
@@ -26,7 +26,7 @@
  * covered separately by mp-smoke.test.ts.
  *
  * Two buildings (ARCHERY_RANGE, WALL) are gated `false` in isBuildingUnlocked and
- * are intentionally NOT placeable via the command path — asserted as such.
+ * are intentionally NOT placeable via the command path - asserted as such.
  */
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
@@ -36,7 +36,7 @@ import * as bitecsNs from 'bitecs';
 /** bitECS 0.3.40 exports resetGlobals (resets the process-global entity cursor +
  *  removed/recycled lists) but omits it from its .d.ts; reach it through the
  *  namespace. Used to give the replay world the SAME eid space as the primary one
- *  (offset 0), so the desync oracle is a true clone — not an eid-shifted copy that
+ *  (offset 0), so the desync oracle is a true clone - not an eid-shifted copy that
  *  could spuriously diverge on any eid-sensitive code path. */
 const resetBitecsGlobals = (bitecsNs as unknown as { resetGlobals: () => void }).resetGlobals;
 import { checksumWorld } from '@sim/checksum';
@@ -89,7 +89,7 @@ import {
  *  stores still hold the primary run's stale values; bitECS addComponent does NOT
  *  zero them, so lazily-initialised fields (e.g. PrevPosition, set only by the
  *  movement system) would otherwise leak across. Zeroing them makes the replay a
- *  clean clone — exactly the fresh-process state a real second client starts from. */
+ *  clean clone - exactly the fresh-process state a real second client starts from. */
 const CHECKSUMMED_COMPONENTS = [
   AttackMoveGoal, AttackTarget, BuildOrder, Building, Combat, ConstructionSite,
   Cooldown, DropOff, Gatherer, Health, MachineGunDeployment, Owner, PathTarget,
@@ -112,7 +112,7 @@ import { TechId } from '@sim/tech-tree';
 // ───────────────────────────── op-log driver ─────────────────────────────
 // Drives one deterministic world while recording an exact, replayable op timeline
 // (inputs + symmetric "match-setting" mutations + tick boundaries). Replaying the
-// log into a fresh world must reproduce identical state — that is the desync proof.
+// log into a fresh world must reproduce identical state - that is the desync proof.
 
 type Op =
   | { t: 'cmd'; cmd: SimInput }
@@ -202,7 +202,7 @@ function replayAndDiff(
   // Faithful clone: reset the global eid cursor + zero the shared component stores
   // so the replay world reuses the primary world's exact eid space (offset 0) with
   // clean slots. This models a real second client (separate process, identical eids
-  // from the same seed) — eliminating the in-process eid-OFFSET artifacts (float
+  // from the same seed) - eliminating the in-process eid-OFFSET artifacts (float
   // accumulation order, canonical-rank shifts) that are NOT real desyncs.
   resetBitecsGlobals();
   zeroComponentStores();
@@ -385,7 +385,7 @@ function researchAndConfirm(d: Driver, pid: number, techId: string): boolean {
 }
 
 /** Advance BOTH players to `expected` age at once, then wait once for the timed
- *  progress — far fewer ticks than advancing them sequentially. */
+ *  progress - far fewer ticks than advancing them sequentially. */
 function advanceBothAges(d: Driver, expected: number, maxTicks = 1400): boolean {
   for (const pid of PLAYERS) d.push({ type: 'advanceAge', playerId: pid });
   for (let i = 0; i < maxTicks; i += 10) {
@@ -409,7 +409,7 @@ function finishConstruction(d: Driver, maxTicks = 1200): void {
 
 const PLAYERS = [1, 2] as const;
 
-describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
+describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
   it('both players walk the entire feature tree; replay stays byte-identical (no desync)', () => {
     const SEED = 24681;
     const d = new Driver(SEED);
@@ -424,7 +424,7 @@ describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
     d.step(8); // settle initial spawn
     d.refill();
 
-    // ── Phase 1: Dark economy — gather every resource onto its node ─────────────
+    // ── Phase 1: Dark economy - gather every resource onto its node ─────────────
     for (const pid of PLAYERS) {
       const villagers = unitsOfKind(w, pid, UnitKindId.VILLAGER).slice(0, 3);
       resourceQuery(w.ecs)
@@ -535,7 +535,7 @@ describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
       mark('train:cannon', trainAndConfirm(d, pid, BuildingDefId.FOUNDRY, UnitKindId.CANNON));
     }
 
-    // ── Phase 7: combat — both armies march to mid-map and fight ────────────────
+    // ── Phase 7: combat - both armies march to mid-map and fight ────────────────
     d.refill();
     d.liftPop();
     const cx = Math.floor(MAP.WIDTH / 2);
@@ -560,7 +560,7 @@ describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
     d.step(220); // ranged projectiles fly + impact + deaths
     mark('combat:damage_dealt', teamHpSum(w, 1) < hp1Before || teamHpSum(w, 2) < hp2Before);
 
-    // ── Phase 8: teardown — stop, toggle stance, remove building, cancel prod ───
+    // ── Phase 8: teardown - stop, toggle stance, remove building, cancel prod ───
     for (const pid of PLAYERS) {
       const survivors = militaryOf(w, pid).slice(0, 4);
       if (survivors.length) {
@@ -596,10 +596,10 @@ describe('full-feature 1v1 — exhaustive deterministic playthrough', () => {
     expect(failed, `uncovered/failed features: ${failed.join(', ')}`).toEqual([]);
     expect(Object.keys(cov).length, 'coverage breadth').toBeGreaterThanOrEqual(35);
 
-    // ── Verdict 2: desync oracle — independent replay is byte-identical per tick ─
+    // ── Verdict 2: desync oracle - independent replay is byte-identical per tick ─
     // Identical inputs replayed into a freshly-created world must reproduce the
     // exact same eid-canonical checksum at EVERY checkpoint across the ENTIRE match
-    // — economy, building, tech, ages, training, formations, combat, and teardown.
+    // - economy, building, tech, ages, training, formations, combat, and teardown.
     // That is the lockstep determinism invariant: same seed + same inputs ⇒ same
     // state on both clients ⇒ no desync.
     PRIMARY_SNAPS = d.snaps;

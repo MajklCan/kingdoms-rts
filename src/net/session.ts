@@ -1,5 +1,5 @@
 /**
- * MultiplayerSession — glue between the relay transport, the lockstep scheduler,
+ * MultiplayerSession - glue between the relay transport, the lockstep scheduler,
  * and the deterministic sim. It is the sole driver of tick advancement while a
  * networked match is in progress (the free-running render accumulator must NOT
  * step the sim in multiplayer; it only renders + interpolates).

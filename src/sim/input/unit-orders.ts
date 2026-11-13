@@ -51,7 +51,7 @@ export function clearCombatOrders(world: SimWorld, eid: number): void {
     AttackMoveGoal.active[eid] = 0;
   }
   if (hasComponent(world.ecs, Cooldown, eid)) {
-    // Don't zero the cooldown — that would let units fire instantly on a
+    // Don't zero the cooldown - that would let units fire instantly on a
     // new aggro acquire. Keep it as-is.
   }
   world.cannonWindups.delete(eid);

@@ -97,7 +97,7 @@ export function cleanupSystem(world: SimWorld): void {
       }
       markWorksiteWorkersDead(world, eid);
     }
-    // Clear any attack targets pointing at us — AND drop the path that was
+    // Clear any attack targets pointing at us - AND drop the path that was
     // chasing us. Without this, attackers keep walking to the deceased's last
     // tile (the "targeting a previous position" bug).
     const attackers = sortedEids(world, combatQuery(world.ecs));

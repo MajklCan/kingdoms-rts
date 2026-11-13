@@ -25,7 +25,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     }
   }
 
-  // 2. Elevation bumps — scattered hills + a couple of depressions.
+  // 2. Elevation bumps - scattered hills + a couple of depressions.
   // Positions scale to map size so map gen works at 32×32 or 64×64+.
   const sx = (frac: number) => Math.round(frac * W);
   const sy = (frac: number) => Math.round(frac * H);
@@ -52,7 +52,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     }
   }
 
-  // 3. River — a meandering path from one edge to another.
+  // 3. River - a meandering path from one edge to another.
   // Start near upper-middle, end near lower-middle, with sinusoidal wobble.
   const riverStartX = Math.floor(W / 2) + Math.floor((rng.next() - 0.5) * (W * 0.2));
   const riverEndX = Math.floor(W / 2) + Math.floor((rng.next() - 0.5) * (W * 0.2));
@@ -84,7 +84,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     }
   }
 
-  // 4. Sand fringe — any GRASS tile adjacent to WATER becomes SAND.
+  // 4. Sand fringe - any GRASS tile adjacent to WATER becomes SAND.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (get(x, y) !== TileType.GRASS) continue;
@@ -104,7 +104,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     }
   }
 
-  // 5. Forest patches — scattered FOREST tile clusters, with denser edge
+  // 5. Forest patches - scattered FOREST tile clusters, with denser edge
   // forests so map boundaries do not feel stripped after early harvesting.
   const forestSeeds = [
     { cx: sx(0.08), cy: sy(0.10), r: 7 },
@@ -140,7 +140,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     }
   }
 
-  // 7. Bridges — find spots every ~10 rows where the river is narrow and
+  // 7. Bridges - find spots every ~10 rows where the river is narrow and
   // surrounded by walkable land on both sides. With a larger map we want
   // more bridges so movement isn't strangled.
   const bridgeStep = Math.max(8, Math.floor(H / 8));
@@ -190,7 +190,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     walkability.push(row);
   }
 
-  // 9. Player spawns — left side (player 1) and right side (player 2). Adjust
+  // 9. Player spawns - left side (player 1) and right side (player 2). Adjust
   // if the river runs through these defaults.
   const spawns: Array<{ x: number; y: number }> = [{ x: 0, y: 0 }];
   const findClearSpawn = (preferX: number, preferY: number) => {

@@ -346,8 +346,8 @@ function spawnZborovResource(
 }
 
 function zborovMgEmplacements(): GridPos[] {
-  // Each MG nest sits two tiles NORTH of (behind) the forward wire belt — the
-  // enemy side — in a wire bay, firing south through a slit in the wire at the
+  // Each MG nest sits two tiles NORTH of (behind) the forward wire belt - the
+  // enemy side - in a wire bay, firing south through a slit in the wire at the
   // player (see layZborovWire). Well out of range of the player at spawn.
   const cx = Math.round(MAP.WIDTH * 0.5);
   const beltY = Math.round(MAP.HEIGHT * ZBOROV_FORWARD_WIRE_FRAC);
@@ -355,13 +355,13 @@ function zborovMgEmplacements(): GridPos[] {
 }
 
 function layZborovWire(world: SimWorld): void {
-  // Barbed-wire belts in front of each rifle line — the WW1 wall replacement.
+  // Barbed-wire belts in front of each rifle line - the WW1 wall replacement.
   // Walkable but slows units to a crawl (ZBOROV_WIRE_SPEED_MULTIPLIER); left
   // open at GAP LANES so attackers can pour through, and INDENTED into wire
   // pockets around each machine-gun nest so the MGs read as dug-in emplacements.
   const cx = Math.round(MAP.WIDTH * 0.5);
   // Span the full playable corridor so the belts run wall-to-wall between the
-  // impassable dirt/mud flanks — no open shoulder to walk around them.
+  // impassable dirt/mud flanks - no open shoulder to walk around them.
   const leftX = cx - ZBOROV_CORRIDOR_HALF;
   const rightX = cx + ZBOROV_CORRIDOR_HALF;
 
@@ -431,7 +431,7 @@ function spawnZborovGarrison(world: SimWorld): ZborovGarrison {
   const y2 = Math.round(MAP.HEIGHT * ZBOROV_MID_LINE_FRAC);
   const y3 = Math.round(MAP.HEIGHT * ZBOROV_REAR_LINE_FRAC);
   // Rifle lines spread across the corridor (wide spacing) so the defence covers
-  // its full width — no thin centre to skirt around.
+  // its full width - no thin centre to skirt around.
   const riflemen = (y: number) =>
     spawnFormationRow(world, UnitDefId.GUNMAN, { x: midX, y }, south, across, 0, 0, AI_PLAYER_ID, 12, 2.4);
 

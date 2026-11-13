@@ -113,7 +113,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   const aiDifficulty = normalizeAiDifficulty(options.aiDifficulty);
   const ecs = createWorld();
   const rng = new Rng(seed);
-  // Generate the map first — its walkability grid drives the pathfinder.
+  // Generate the map first - its walkability grid drives the pathfinder.
   const selectedMapId = options.mapId ?? MapId.RIVERLANDS;
   const mapData = generateMap(rng, selectedMapId);
   const grid = mapData.walkability;
@@ -263,7 +263,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   safeSpawnCombatUnit('SPEARMAN', p1x - 1, p1y + 3, 1);
   safeSpawnCombatUnit('SCOUT_CAVALRY', p1x + 2, p1y + 2, 1);
 
-  // Player 1's local resource patches — denser around the TC so each AI/human
+  // Player 1's local resource patches - denser around the TC so each AI/human
   // has plenty to harvest without crossing the map.
   if (mirroredSnowSkirmish) {
     for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
@@ -367,7 +367,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
       safeSpawnMirroredResource(kind, x, y, amount);
     }
   } else {
-    // Map-wide resource scatter — gives the bigger 64×64 playfield enough
+    // Map-wide resource scatter - gives the bigger 64×64 playfield enough
     // ambient resources that expanding feels rewarding. Deterministic via rng.
     const mx = Math.floor(MAP.WIDTH / 2);
     const my = Math.floor(MAP.HEIGHT / 2);
@@ -386,7 +386,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
         safeSpawnResource(kind, x, y, amount);
       }
     } else {
-      // Contested centre gold/stone — worth crossing the river for.
+      // Contested centre gold/stone - worth crossing the river for.
       safeSpawnResource(ResourceKindId.GOLD, mx - 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
       safeSpawnResource(ResourceKindId.GOLD, mx, my, CENTER_GOLD_DEPOSIT_AMOUNT);
       safeSpawnResource(ResourceKindId.GOLD, mx + 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);

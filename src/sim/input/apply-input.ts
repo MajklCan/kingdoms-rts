@@ -152,7 +152,7 @@ export function commandableSelection(world: SimWorld): number[] {
 
 /** Validate a network/explicit eid list: keep only live entities the
  *  commanding player owns and that are commandable (not worksite workers, not
- *  dead). This is the trust boundary for commands arriving over the wire — a
+ *  dead). This is the trust boundary for commands arriving over the wire - a
  *  peer must not be able to move another player's units. Iteration order
  *  follows the supplied list, then is unused for ordering-sensitive mutations
  *  because callers that care re-sort (e.g. formationDestinations). */

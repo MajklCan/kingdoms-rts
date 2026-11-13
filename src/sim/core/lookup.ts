@@ -131,7 +131,7 @@ export function findEntityNear(
   return bestEid;
 }
 
-/** Lookup helper for render — does this eid belong to an enemy of `myPlayer`? */
+/** Lookup helper for render - does this eid belong to an enemy of `myPlayer`? */
 export function isEnemyOf(
   world: SimWorld,
   eid: number,

@@ -53,7 +53,7 @@ import {
 const CANNON_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 0.9);
 const MACHINE_GUN_DEPLOY_TICKS = Math.round(SIM.TICK_HZ * 1.35);
 // Mortars reuse the cannon's windup + splash + impact machinery, but lob on a
-// higher, slower arc — a longer aim/elevation delay before each shell.
+// higher, slower arc - a longer aim/elevation delay before each shell.
 const MORTAR_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 1.2);
 
 export function combatSystem(world: SimWorld): void {
@@ -84,7 +84,7 @@ export function combatSystem(world: SimWorld): void {
       continue;
     }
     const range = Combat.range[eid];
-    // Buildings have a non-trivial footprint — use edge distance so melee
+    // Buildings have a non-trivial footprint - use edge distance so melee
     // units beside a 3×3 TC are correctly "in range" instead of permanently
     // out-of-range against the centre.
     const dist = distanceToAttackTarget(world, eid, target);
@@ -109,7 +109,7 @@ export function combatSystem(world: SimWorld): void {
       }
       continue;
     }
-    // In range — stop moving + attack on cooldown 0.
+    // In range - stop moving + attack on cooldown 0.
     world.paths.delete(eid);
     clearFormationSpeedCap(world, eid);
     if (Cooldown.ticksRemaining[eid] > 0) continue;

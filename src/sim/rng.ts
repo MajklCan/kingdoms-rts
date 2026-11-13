@@ -1,6 +1,6 @@
 /**
  * Seeded deterministic PRNG (mulberry32). Required for determinism across browsers
- * and for replays. NEVER use Math.random() inside the sim — always go through this.
+ * and for replays. NEVER use Math.random() inside the sim - always go through this.
  */
 
 export class Rng {

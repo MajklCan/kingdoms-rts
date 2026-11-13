@@ -1,9 +1,9 @@
 /**
- * Lockstep turn scheduler — pure, transport-agnostic, deterministic.
+ * Lockstep turn scheduler - pure, transport-agnostic, deterministic.
  *
  * Model: a command issued locally is broadcast on a steady wall-clock cadence
  * tagged with a future target tick (`sendTick`, which advances every loop
- * iteration so the outgoing stream is always contiguous — no deadlock). A tick
+ * iteration so the outgoing stream is always contiguous - no deadlock). A tick
  * may only be EXECUTED once every player's packet for that tick has arrived.
  * Ticks below the input delay execute immediately with no commands (warm-up).
  *

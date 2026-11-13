@@ -87,7 +87,7 @@ function gatheringWalkingTo(world: SimWorld, eid: number): void {
     return;
   }
   if (Resource.amount[target] <= 0) {
-    // Resource depleted en route — try to retarget to nearest of same kind.
+    // Resource depleted en route - try to retarget to nearest of same kind.
     const kind = Resource.kind[target] as ResourceKind;
     // Auto-retarget after a node depletes: stay within ~15 tiles of the
     // villager rather than scouring the whole map. This is what stops the
@@ -118,7 +118,7 @@ function gatheringWalkingTo(world: SimWorld, eid: number): void {
 function gatheringActive(world: SimWorld, eid: number): void {
   const target = Gatherer.targetEid[eid];
   if (target < 0 || !hasComponent(world.ecs, Resource, target)) {
-    // Resource removed under us — pick nearest of same kind if we have a hint.
+    // Resource removed under us - pick nearest of same kind if we have a hint.
     const carryKind = ResourceCarry.amount[eid] > 0
       ? (ResourceCarry.kind[eid] as ResourceKind)
       : null;

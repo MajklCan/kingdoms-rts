@@ -36,7 +36,7 @@ const WORKER_CONTACT_PATH_PENALTY = 5;
 
 /** Plan a path for `eid` to (tx, ty) and stash it in world.paths.
  *  Returns `true` if a non-trivial path was produced (caller can safely commit
- *  state transitions). Returns `false` if the destination is unreachable —
+ *  state transitions). Returns `false` if the destination is unreachable -
  *  caller should leave the unit's previous state alone. */
 export function pathTo(world: SimWorld, eid: number, tx: number, ty: number): boolean {
   const from = {
@@ -47,7 +47,7 @@ export function pathTo(world: SimWorld, eid: number, tx: number, ty: number): bo
   const path = world.pathfinder.findPath(from, to);
   if (path === null) return false;
   if (path.length === 0) {
-    // Same tile — treat as success but no path needed.
+    // Same tile - treat as success but no path needed.
     world.paths.delete(eid);
     return true;
   }

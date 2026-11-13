@@ -44,7 +44,7 @@ export function configureBattleOfSudomer(world: SimWorld): void {
   world.ages[AI_PLAYER_ID] = createAgeState(AgeId.GUNPOWDER);
   world.researchedTechs[LOCAL_PLAYER_ID] = createAllTechSet();
   world.researchedTechs[AI_PLAYER_ID] = createAllTechSet();
-  // [food, wood, gold, stone] — a modest stockpile: enough to queue a handful of
+  // [food, wood, gold, stone] - a modest stockpile: enough to queue a handful of
   // units immediately, but the prep window must be spent ramping the economy.
   world.resources[LOCAL_PLAYER_ID].set([400, 500, 150, 200]);
   world.resources[AI_PLAYER_ID].set([0, 0, 0, 0]);
@@ -166,7 +166,7 @@ function buildSudomerPlayerTown(world: SimWorld, town: GridPos): number | null {
   place(BuildingDefId.FOUNDRY, 5, 3);
 
   // Economy. Each worksite seeds its own resource nodes and auto-starts one
-  // worker; the player must assign the idle villagers to ramp income — gold
+  // worker; the player must assign the idle villagers to ramp income - gold
   // especially, since gunmen cost 75 gold apiece.
   placeKutnaHoraWorksite(world, BuildingDefId.LUMBER_CAMP, town.x - 9, town.y - 3, ResourceKindId.WOOD);
   placeKutnaHoraWorksite(world, BuildingDefId.STONE_QUARRY, town.x + 9, town.y - 4, ResourceKindId.STONE);
@@ -195,7 +195,7 @@ function spawnSudomerStartingSquad(world: SimWorld, muster: GridPos): number[] {
     }
   };
   // A tidy square mustered in the base: 12 pikemen in front, 6 gunmen ranked up
-  // behind. Default stance — the player repositions them before the assault.
+  // behind. Default stance - the player repositions them before the assault.
   block(UnitDefId.SPEARMAN, muster.x - 2, muster.y, 4, 12);
   block(UnitDefId.GUNMAN, muster.x - 2, muster.y + 4, 3, 6);
   return squad;
@@ -286,7 +286,7 @@ interface SudomerWaveDef {
 
 // Five escalating waves alternating the dry central gap and the muddy flank,
 // building to wave 4's simultaneous two-front squeeze and a combined finale.
-// Counts are first-pass "balanced" values — tune against tests/playthrough.
+// Counts are first-pass "balanced" values - tune against tests/playthrough.
 const SUDOMER_WAVES: SudomerWaveDef[] = [
   { prongs: [{ route: 'middle', spearmen: 14, archers: 6, cavalry: 0 }] },
   { prongs: [{ route: 'mud', spearmen: 4, archers: 0, cavalry: 18 }] },

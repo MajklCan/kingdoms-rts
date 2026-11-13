@@ -14,7 +14,7 @@ import type { TechIdValue } from '../tech-tree';
 export type SimInput =
   // ── Selection-relative commands (local single-player UX). These read the
   //    local Selected component + LOCAL_PLAYER_ID, so they are NOT safe to send
-  //    over the wire — a peer has no idea what the sender had selected. The
+  //    over the wire - a peer has no idea what the sender had selected. The
   //    network layer must translate these into their self-describing `cmd*`
   //    equivalents (which carry an explicit playerId + eid list) before sending.
   | { type: 'moveSelected'; to: GridPos }
@@ -61,7 +61,7 @@ export interface AgeState {
   totalTicks: number;
 }
 
-/** Outcome of the match — set by winConditionSystem when one player loses or wins. */
+/** Outcome of the match - set by winConditionSystem when one player loses or wins. */
 export type MatchOutcome =
   | { state: 'playing' }
   | { state: 'victory'; winnerPlayerId: number; mode: 'conquest' };
@@ -115,7 +115,7 @@ export interface CombatEvent {
 
 /** Non-combat sound triggers the render layer plays. Sim appends; render
  *  drains. Output-only (sim never reads it back), so determinism is unaffected
- *  — same contract as combatEvents. Combat fire SFX come from combatEvents;
+ *  - same contract as combatEvents. Combat fire SFX come from combatEvents;
  *  these cover state transitions that emit no combat event. */
 export type SoundCueKind =
   | 'gather_wood'
@@ -134,7 +134,7 @@ export interface SoundCue {
   /** World tile coords for spatial panning. Ignored for non-spatial cues. */
   x: number;
   y: number;
-  /** Owning player — render uses this for fog/local-player filtering. */
+  /** Owning player - render uses this for fog/local-player filtering. */
   player: number;
 }
 
@@ -258,7 +258,7 @@ export interface SimWorld {
   visibility: PlayerVisibility[];
   /** Cheat/debug map reveal flags by player. When true, fog stays fully cleared. */
   revealedMapPlayers: boolean[];
-  /** Match outcome — set by winConditionSystem. */
+  /** Match outcome - set by winConditionSystem. */
   outcome: MatchOutcome;
   /** Active campaign mission state. Null in skirmish mode. */
   campaign: CampaignState | null;
@@ -270,7 +270,7 @@ export interface SimWorld {
   pendingCannonImpacts: PendingCannonImpact[];
   /** Players controlled by a human. Always includes LOCAL_PLAYER_ID. In a
    *  multiplayer match the remote player(s) are added here so the AI controller
-   *  is suppressed for them — they're driven by relayed commands instead. */
+   *  is suppressed for them - they're driven by relayed commands instead. */
   humanPlayers: Set<number>;
   /** Per-player AI controller state. Null for human/gaia players. */
   aiPlayers: Array<AiPlayerState | null>;

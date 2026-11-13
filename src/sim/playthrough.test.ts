@@ -7,7 +7,7 @@
  * a conquest victory, exercising the whole end-game loop (combat, targeting,
  * death, building destruction, win detection).
  *
- * Single-world game (not the lockstep harness) — MP determinism is covered in
+ * Single-world game (not the lockstep harness) - MP determinism is covered in
  * src/net/mp-smoke.test.ts.
  */
 import { describe, expect, it } from 'vitest';
@@ -29,7 +29,7 @@ function enemyTownCenter(world: SimWorld): number | undefined {
 function aliveMilitary(world: SimWorld, eids: number[]): number[] {
   return eids.filter((e) => !hasComponent(world.ecs, DeadTag, e) && Health.hp[e] > 0);
 }
-/** FOOD=0 WOOD=1 GOLD=2 STONE=3 — keep player 1 swimming in resources. */
+/** FOOD=0 WOOD=1 GOLD=2 STONE=3 - keep player 1 swimming in resources. */
 function cheatResources(world: SimWorld): void {
   world.resources[1].fill(100000);
 }

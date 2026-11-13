@@ -241,7 +241,7 @@ function lineOfSightRadius(world: SimWorld, eid: number): number {
   }
   if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return SCOUT_LINE_OF_SIGHT;
   if (hasComponent(world.ecs, MachineGunTag, eid)) return 8;
-  // Indirect fire is useless without spotting — match LOS to the 10-tile range.
+  // Indirect fire is useless without spotting - match LOS to the 10-tile range.
   if (hasComponent(world.ecs, MortarTag, eid)) return 10;
   return DEFAULT_UNIT_LINE_OF_SIGHT;
 }

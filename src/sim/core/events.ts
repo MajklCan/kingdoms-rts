@@ -24,7 +24,7 @@ export function gatherCueForKind(kind: ResourceKind): SoundCueKind {
 }
 
 /** Maximum buffered sound cues. The render layer drains every frame; this cap
- *  only matters in headless runs (tests) where nothing drains — it bounds
+ *  only matters in headless runs (tests) where nothing drains - it bounds
  *  memory by dropping the oldest cues. Output-only, so determinism-safe. */
 const MAX_SOUND_CUES = 256;
 

@@ -178,7 +178,7 @@ export function productionSystem(world: SimWorld): void {
         queue.shift();
         Producer.currentProgress[eid] = 0;
       } else {
-        // Pop blocked — try again next tick.
+        // Pop blocked - try again next tick.
         Producer.currentProgress[eid] = def.trainTimeTicks; // pin at full
       }
     }

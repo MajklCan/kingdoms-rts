@@ -4,10 +4,10 @@
  * Drives TWO MultiplayerSession instances against each other through a paired
  * in-memory Transport that emulates the relay (relay/server.mjs) for a 2-slot
  * room, plays a 1v1, and asserts the lockstep invariants:
- *   1. no desync — checksums stay in parity (onDesync never fires + explicit
+ *   1. no desync - checksums stay in parity (onDesync never fires + explicit
  *      end-of-run checksum compare matches),
- *   2. liveness — both sessions stay 'playing', tick counts converge,
- *   3. effect — sampled commands mutate the world identically on both clients.
+ *   2. liveness - both sessions stay 'playing', tick counts converge,
+ *   3. effect - sampled commands mutate the world identically on both clients.
  *
  * Each command type is exercised in its OWN test (a matrix) so a failure names
  * the offending command, plus one combined run to catch interaction desyncs.
@@ -446,7 +446,7 @@ const SCENARIOS: ReadonlyArray<{ name: string; issue: (ctx: MatchCtx) => void }>
   },
 ];
 
-describe('multiplayer 1v1 — per-command parity matrix', () => {
+describe('multiplayer 1v1 - per-command parity matrix', () => {
   for (const sc of SCENARIOS) {
     it(`stays in lockstep parity after ${sc.name} from both players`, () => {
       const ctx = setupMatch();
@@ -464,7 +464,7 @@ describe('multiplayer 1v1 — per-command parity matrix', () => {
     }
     pumpN(6);
     assertParity(ctx);
-    // Both clients agree on each player's mode, and the two players differ —
+    // Both clients agree on each player's mode, and the two players differ -
     // P2 picking 'compact' must not have reshaped P1's 'line' (and vice-versa).
     expect(worldA.formationModes[1]).toBe(1);
     expect(worldA.formationModes[2]).toBe(2);
@@ -508,7 +508,7 @@ describe('multiplayer 1v1 — per-command parity matrix', () => {
     expect(ownedBuildings(ctx.worldA, 2).some((eid) => Building.defId[eid] === BuildingDefId.FARM)).toBe(true);
   });
 
-  it('all commands in one match — no interaction desync + observable effects', () => {
+  it('all commands in one match - no interaction desync + observable effects', () => {
     const ctx = setupMatch();
     const { worldA, pumpN } = ctx;
 

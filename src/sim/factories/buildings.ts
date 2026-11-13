@@ -73,7 +73,7 @@ export function spawnTownCenter(
   // TC contributes pop cap.
   const tcDef = BUILDING_TABLE[BuildingDefId.TOWN_CENTER];
   world.population[playerId].cap += tcDef.popProvided;
-  // Block the FULL TC footprint (3×3) — not just the centre — so units
+  // Block the FULL TC footprint (3×3) - not just the centre - so units
   // can't walk underneath the visible building.
   markFootprintBlocked(world, x, y, tcDef.footprint.w, tcDef.footprint.h, true);
   return eid;
