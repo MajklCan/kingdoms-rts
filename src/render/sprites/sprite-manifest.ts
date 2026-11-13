@@ -1,10 +1,12 @@
 /**
- * Pre-rendered sprite atlas manifest (`public/assets/sprites/manifest.json`).
- * Shape and conventions are documented in docs/SPRITE_ATLAS.md.
+ * Pre-rendered sprite manifest (`public/assets/sprites/manifest.json`), as
+ * written by the Blender pipeline (`scripts/pack_sprites.py`). The Blender
+ * manifest is the source of truth; its shape and conventions are documented
+ * in docs/BLENDER_SPRITE_PIPELINE.md.
  *
  * The manifest may be absent, empty or partly invalid: invalid parts are
- * dropped with a console warning and everything not covered by a valid entry
- * keeps rendering from voxel bakes.
+ * dropped with a console warning and everything not covered keeps rendering
+ * from voxel bakes (and the flat-colour terrain bake).
  */
 
 export const SPRITE_ASSET_BASE = 'assets/sprites/';
@@ -12,40 +14,77 @@ export const SPRITE_MANIFEST_KEY = 'sprite-manifest';
 const SPRITE_MANIFEST_FILE = 'manifest.json';
 
 export interface SpriteAtlasDef {
-  /** Atlas id referenced by sprite entries. */
+  /** Atlas id referenced by variants, e.g. "kr-buildings-0". */
   key: string;
   /** PNG path relative to public/assets/sprites/. */
   image: string;
-  /** Phaser / TexturePacker JSON (hash or array) path relative to public/assets/sprites/. */
+  /** Phaser / TexturePacker JSON hash path relative to public/assets/sprites/. */
   json: string;
 }
 
-export interface SpriteFramePattern {
-  /** Atlas id; defaults to the entry's own atlas for team masks. */
-  atlas?: string;
-  /** Frame name, may contain {placeholders} (see docs/SPRITE_ATLAS.md). */
-  frame: string;
-}
-
-export interface SpriteEntryDef {
+/** One drawable frame of an asset (an era, a stage, a tile variant...). */
+export interface ArtVariant {
   atlas: string;
   frame: string;
-  originX?: number;
-  originY?: number;
-  scale?: number;
-  teamMask?: SpriteFramePattern;
-  /** Unit entries only: frame count per anim, overriding the voxel model's counts. */
-  frames?: Record<string, number>;
+  /** Bottom corner of the footprint diamond, in source pixels at render scale. */
+  anchor: readonly [number, number];
+  /** Full source size of the frame, in source pixels at render scale. */
+  size: readonly [number, number];
+  /** Team-colour mask frame (same atlas, size and anchor). */
+  mask?: string;
+  /** Ground shadow frame (same atlas, size and anchor). */
+  shadow?: string;
+  /** Construction stages: progress (0..1) from which this stage shows. */
+  progress?: number;
+  /** Resource piles: remaining fraction this look stands for. */
+  amount?: number;
+  /** Animated terrain: frame index of this variant. */
+  frameIndex?: number;
+  /** Fence decor: axis the fence runs along. */
+  connections?: string;
+}
+
+export interface ArtAsset {
+  kind: string;
+  footprint: readonly [number, number];
+  default: string;
+  variants: Readonly<Record<string, ArtVariant>>;
+  /** Buildings: BuildingDefId key in src/sim/defs.ts. */
+  defId?: string;
+  /** Resources: ResourceKindId key. */
+  resource?: string;
+  /** Terrain: TileType key in src/sim/map-gen.ts. */
+  tileType?: string;
+  /** Terrain: tiles repeat every `period` tiles on both axes. */
+  period?: number;
+  eras?: readonly string[];
+  stages?: readonly string[];
+  /** Buildings: construction / rubble asset ids for their footprint. */
+  construction?: string;
+  rubble?: string;
+  /** Cliffs: pixel height of one face step at 1x. */
+  stepPx?: number;
 }
 
 export interface SpriteManifest {
   version: number;
-  atlases: SpriteAtlasDef[];
-  /** Keyed by sprite id, e.g. "building:HOUSE", "unit:VILLAGER", "resource:WOOD:snow". */
-  sprites: Record<string, SpriteEntryDef>;
+  /** Draw scale for every frame (frames are rendered at 1 / scale). */
+  scale: number;
+  /** Screen pixels per elevation step at 1x. */
+  elevationStepPx: number;
+  eraOrder: readonly string[];
+  atlases: readonly SpriteAtlasDef[];
+  assets: Readonly<Record<string, ArtAsset>>;
 }
 
-export const EMPTY_SPRITE_MANIFEST: SpriteManifest = { version: 1, atlases: [], sprites: {} };
+export const EMPTY_SPRITE_MANIFEST: SpriteManifest = {
+  version: 1,
+  scale: 0.5,
+  elevationStepPx: 4,
+  eraOrder: ['dark', 'castle', 'gunpowder', 'total_war'],
+  atlases: [],
+  assets: {},
+};
 
 /** Texture-manager key an atlas is loaded under (namespaced away from voxel keys). */
 export function atlasTextureKey(atlasKey: string): string {
@@ -78,65 +117,77 @@ export function parseSpriteManifest(raw: unknown): { manifest: SpriteManifest; p
     atlases.push({ key: item.key, image: item.image, json: item.json });
   }
 
-  const sprites: Record<string, SpriteEntryDef> = {};
-  const rawSprites = raw.sprites ?? {};
-  if (!isRecord(rawSprites)) problems.push('"sprites" must be an object');
-  for (const [id, item] of Object.entries(isRecord(rawSprites) ? rawSprites : {})) {
-    const entry = parseEntry(id, item, atlasKeys, problems);
-    if (entry) sprites[id] = entry;
+  const assets: Record<string, ArtAsset> = {};
+  const rawAssets = raw.assets ?? {};
+  if (!isRecord(rawAssets)) problems.push('"assets" must be an object');
+  for (const [id, item] of Object.entries(isRecord(rawAssets) ? rawAssets : {})) {
+    const asset = parseAsset(id, item, atlasKeys, problems);
+    if (asset) assets[id] = asset;
   }
 
+  const scale = positiveNumber(raw.scale) ?? EMPTY_SPRITE_MANIFEST.scale;
+  const tile = isRecord(raw.tile) ? raw.tile : {};
+  const elevationStepPx = positiveNumber(tile.elevationStepPx) ?? EMPTY_SPRITE_MANIFEST.elevationStepPx;
+  const eraOrder = Array.isArray(raw.eraOrder) && raw.eraOrder.every(isNonEmptyString)
+    ? (raw.eraOrder as string[])
+    : EMPTY_SPRITE_MANIFEST.eraOrder;
   const version = typeof raw.version === 'number' ? raw.version : 1;
-  return { manifest: { version, atlases, sprites }, problems };
+  return { manifest: { version, scale, elevationStepPx, eraOrder, atlases, assets }, problems };
 }
 
-function parseEntry(
+function parseAsset(
   id: string,
   item: unknown,
   atlasKeys: ReadonlySet<string>,
   problems: string[]
-): SpriteEntryDef | null {
-  if (!isRecord(item) || !isNonEmptyString(item.atlas) || !isNonEmptyString(item.frame)) {
-    problems.push(`sprites["${id}"] needs string "atlas" and "frame"`);
+): ArtAsset | null {
+  if (!isRecord(item) || !isRecord(item.variants)) {
+    problems.push(`assets["${id}"] needs a "variants" object`);
     return null;
   }
-  if (!atlasKeys.has(item.atlas)) {
-    problems.push(`sprites["${id}"] references unknown atlas "${item.atlas}"`);
-    return null;
+  const variants: Record<string, ArtVariant> = {};
+  for (const [key, raw] of Object.entries(item.variants)) {
+    const variant = parseVariant(raw, atlasKeys);
+    if (variant) variants[key] = variant;
+    else problems.push(`assets["${id}"].variants["${key}"] is invalid or names an unknown atlas`);
   }
-  const entry: SpriteEntryDef = { atlas: item.atlas, frame: item.frame };
-  for (const field of ['originX', 'originY', 'scale'] as const) {
-    const value = item[field];
-    if (value === undefined) continue;
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      problems.push(`sprites["${id}"].${field} must be a finite number`);
-      continue;
-    }
-    entry[field] = value;
+  const keys = Object.keys(variants);
+  if (keys.length === 0) return null;
+  const footprint = pair(item.footprint) ?? [1, 1];
+  const fallback = isNonEmptyString(item.default) && variants[item.default] ? item.default : keys[0];
+  const asset: ArtAsset = {
+    kind: isNonEmptyString(item.kind) ? item.kind : 'sprite',
+    footprint,
+    default: fallback,
+    variants,
+  };
+  for (const field of ['defId', 'resource', 'tileType', 'construction', 'rubble'] as const) {
+    if (isNonEmptyString(item[field])) asset[field] = item[field];
   }
-  if (item.teamMask !== undefined) {
-    const mask = item.teamMask;
-    const maskAtlas = isRecord(mask) ? mask.atlas ?? item.atlas : undefined;
-    if (!isRecord(mask) || !isNonEmptyString(mask.frame) || !isNonEmptyString(maskAtlas) ||
-      !atlasKeys.has(maskAtlas)) {
-      problems.push(`sprites["${id}"].teamMask needs a "frame" and a known "atlas"`);
-    } else {
-      entry.teamMask = { atlas: maskAtlas, frame: mask.frame };
-    }
+  const period = positiveNumber(item.period);
+  if (period !== undefined) asset.period = Math.round(period);
+  const stepPx = positiveNumber(item.stepPx);
+  if (stepPx !== undefined) asset.stepPx = stepPx;
+  if (Array.isArray(item.eras)) asset.eras = item.eras.filter(isNonEmptyString);
+  if (Array.isArray(item.stages)) asset.stages = item.stages.filter(isNonEmptyString);
+  return asset;
+}
+
+function parseVariant(raw: unknown, atlasKeys: ReadonlySet<string>): ArtVariant | null {
+  if (!isRecord(raw) || !isNonEmptyString(raw.atlas) || !isNonEmptyString(raw.frame)) return null;
+  if (!atlasKeys.has(raw.atlas)) return null;
+  const anchor = pair(raw.anchor);
+  const size = pair(raw.size);
+  if (!anchor || !size || size[0] <= 0 || size[1] <= 0) return null;
+  const variant: ArtVariant = { atlas: raw.atlas, frame: raw.frame, anchor, size };
+  if (isNonEmptyString(raw.mask)) variant.mask = raw.mask;
+  if (isNonEmptyString(raw.shadow)) variant.shadow = raw.shadow;
+  if (isNonEmptyString(raw.connections)) variant.connections = raw.connections;
+  for (const field of ['progress', 'amount', 'frameIndex'] as const) {
+    const value = raw[field];
+    if (typeof value === 'number' && Number.isFinite(value)) variant[field] = value;
   }
-  if (item.frames !== undefined) {
-    if (!isRecord(item.frames)) {
-      problems.push(`sprites["${id}"].frames must be an object of anim -> count`);
-    } else {
-      const frames: Record<string, number> = {};
-      for (const [anim, count] of Object.entries(item.frames)) {
-        if (typeof count === 'number' && Number.isInteger(count) && count > 0) frames[anim] = count;
-        else problems.push(`sprites["${id}"].frames.${anim} must be a positive integer`);
-      }
-      entry.frames = frames;
-    }
-  }
-  return entry;
+  return variant;
 }
 
 /**
@@ -174,6 +225,19 @@ function warnProblems(problems: readonly string[]): void {
     // eslint-disable-next-line no-console
     console.warn(`[Kingdoms] sprite manifest: ${problem}`);
   }
+}
+
+function pair(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const [a, b] = value;
+  if (typeof a !== 'number' || typeof b !== 'number' || !Number.isFinite(a) || !Number.isFinite(b)) {
+    return null;
+  }
+  return [a, b];
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

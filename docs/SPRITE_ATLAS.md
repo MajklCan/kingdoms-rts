@@ -1,78 +1,103 @@
-# Sprite Atlases
+# Sprite Atlases in the engine
 
-Pre-rendered sprites (Blender renders packed into atlases) replace voxel bakes one entry at a time. Nothing in the renderers changes: they ask the sprite registry (`src/render/sprites/sprite-registry.ts`), which tries the atlas entry first and falls back to the voxel bake.
+How the game draws the Blender art. The art itself, the manifest format and
+how to re-render live in [BLENDER_SPRITE_PIPELINE.md](BLENDER_SPRITE_PIPELINE.md);
+the Blender manifest is the source of truth and the engine adapts to it.
 
-The manifest is optional. Missing, empty or partly invalid manifest = the game runs on voxels; invalid parts are dropped with a `[Kingdoms] sprite manifest:` console warning.
+The art is optional. A missing, empty or partly invalid manifest (or atlas
+PNG) means the game runs on voxel bakes and the flat-colour terrain; invalid
+parts are dropped with a `[Kingdoms] sprite manifest:` console warning, and a
+frame missing from a loaded atlas falls back per query.
 
-## Files
+## Loading
 
-```
-public/assets/sprites/
-  manifest.json
-  buildings.png  buildings.json     # Phaser / TexturePacker atlas (JSON hash or array)
-```
+`queueSpriteManifest()` loads `public/assets/sprites/manifest.json` in the
+scene preload, then every atlas under texture key `sprite-atlas:<key>`
+(for example `sprite-atlas:kr-buildings-0`). Atlas textures switch to LINEAR
+filtering: frames are rendered at 2x and drawn at `manifest.scale` (0.5), which
+the game's pixel-art NEAREST default would shred.
 
-## manifest.json
+| Module (`src/render/`) | Role |
+| --- | --- |
+| `sprites/sprite-manifest.ts` | Parses and validates the Blender manifest |
+| `sprites/art-catalog.ts` | Phaser-free lookup: exact variant, nearest earlier era, construction stage by progress, pile look by amount, hashed pick. Only returns frames that exist in a loaded atlas |
+| `sprites/atlas-sprite-source.ts` | Answers building / rubble / resource / stump / map feature queries from the catalog |
+| `sprites/voxel-sprite-source.ts` | Voxel bakes; units always, everything else as fallback |
+| `sprites/sprite-registry.ts` | Atlas first, voxel per query; exposes the catalog as `registry.art` for terrain and decor |
+| `terrain/` | Terrain chunk bake, transitions, cliffs, water loop, decor scatter |
 
-```json
-{
-  "version": 1,
-  "atlases": [
-    { "key": "buildings", "image": "buildings.png", "json": "buildings.json" }
-  ],
-  "sprites": {
-    "building:TOWN_CENTER:CASTLE": {
-      "atlas": "buildings",
-      "frame": "tc-{age}",
-      "originX": 0.5,
-      "originY": 0.82,
-      "scale": 1,
-      "teamMask": { "frame": "tc-{age}-mask" }
-    },
-    "resource:WOOD:snow": { "atlas": "buildings", "frame": "tree-snow" },
-    "unit:ARCHER": {
-      "atlas": "units",
-      "frame": "archer-{anim}-{facing}-{frame}",
-      "frames": { "idle": 1, "move": 4, "attack": 3 }
-    }
-  }
-}
-```
+## What maps to what
 
-Paths are relative to `public/assets/sprites/`. Atlases load in the scene preload, under texture key `sprite-atlas:<key>`.
+| Game thing | Asset / variant |
+| --- | --- |
+| Building of `BuildingDefId` X | `building.<x>` (by `defId`), variant = era of the owner's age (`AgeId` name lower-cased, `total_war` falls back to `gunpowder`, missing eras to the nearest earlier one) |
+| Building under construction | `construction.<w>x<h>`, stage by `ConstructionSite.progress / totalTicks` (0 / 0.34 / 0.67), no team mask |
+| Destroyed building | `rubble.<w>x<h>`, left for 75 s (fades over the last 6 s), only where the player saw it go down |
+| Farm | `building.farm` stage: render-only cycle (sim farms never deplete) `sown` > `growing` > `ripe` over 90 s per farm; `depleted` while no worker is assigned |
+| Wall | `building.wall` variant `<era>.<mask>`, mask bits 1 = +x, 2 = +y, 4 = -x, 8 = -y; neighbours are live walls and towers, or remembered ones in fog |
+| Tree (`ResourceKindId.WOOD`) | `resource.tree` species by tile hash; conifers favoured on forest tiles, `resource.tree_snow` on snow, `resource.tree_dead` in Zborov |
+| Felled tree | `resource.stump` (`conifer` / `broadleaf`) for 4 min where a tree vanished |
+| Gold, stone, berries | `resource.gold` / `resource.stone` / `resource.berry_bush`, look by remaining fraction (`full` / `half` / `low`) |
+| Linden landmark | `resource.tree` `linden` at 1.35x |
+| Rock spire | `decor.rocks` `boulder` scaled to the 2x2 / 4x4 footprint (no spire art yet) |
+| Units | no art: voxel |
+| Terrain `TileType` | `terrain.<name>` via `TILE_TERRAIN` in `terrain/terrain-art.ts`; GRASS also draws `meadow` in noise patches, BRIDGE as `bridge_x` / `bridge_y`, BARBED_WIRE as `mud` with wire drawn on top |
 
-## Sprite ids
+## Placement
 
-Tried most specific first; the first id whose frame exists in the loaded atlas wins.
+Every atlas frame is anchored at the bottom corner of its footprint diamond
+(`anchor` / atlas `pivot`). Renderers place the sim's footprint centre with
+`buildingScreenPosition()` and offset it by `footprintBottomOffset(w, h)`
+(`world-projection.ts`). Voxel refs keep `anchor: 'center'`.
 
-| Thing | Ids | Names come from |
-|---|---|---|
-| Building | `building:<DEF>:<variant>`, `building:<DEF>:<AGE>`, `building:<DEF>` | `BUILDING_TABLE[].id` (`TOWN_CENTER`, `HOUSE`, `WALL`...), `AgeId` (`DARK`, `CASTLE`, `GUNPOWDER`, `TOTAL_WAR`). Wall variant `x` / `y`. |
-| Unit | `unit:<UNIT>:<anim>`, `unit:<UNIT>` | `UNIT_TABLE[].id` (`VILLAGER`, `ARCHER`...). Anims: `idle`, `move`, `attack`; villager also `carry`, `harvest`, `build`. |
-| Resource | `resource:<KIND>:<variant>`, `resource:<KIND>` | `ResourceKindId` (`FOOD`, `WOOD`, `GOLD`, `STONE`). Wood variants `snow`, `dead`. |
-| Map feature | `feature:<KIND>:<size>`, `feature:<KIND>` | `MapFeatureKind` upper-cased (`ROCK_SPIRE`, `LINDEN_TREE`). |
+Depth is the screen y of the footprint centre (farms and rubble use the back
+corner so units walk over them). Status bars sit at `ref.top` above the anchor.
+Clicks still go through the sim's tile pick, but a click on a building's drawn
+pixels (a roof or tower top over another tile) selects that building.
 
-## Frame placeholders
+## Layers
 
-`frame` and `teamMask.frame` may contain placeholders, filled per query; unknown ones become empty.
+`world-layers.ts`, back to front:
 
-| Placeholder | Value |
-|---|---|
-| `{age}` | `dark`, `castle`, `gunpowder`, `total_war` |
-| `{player}` | owner player id (`0` for resources and features) |
-| `{variant}` | building / resource variant |
-| `{facing}` | `E`, `SE`, `S`, `SW`, `W`, `NW`, `N`, `NE` |
-| `{anim}` `{frame}` | unit anim and 0-based frame |
-| `{size}` | map feature footprint size |
+| Layer | Content |
+| --- | --- |
+| `terrain` | 8x8 tile chunk images (64 per map), water chunks swap 4 textures every 240 ms |
+| `decor` | render-only grass, flowers, rocks, ferns, reeds |
+| `shadows` | every `__shadow` frame and the unit contact blobs |
+| `ground` | back half of selection rings, placement footprint |
+| `fog` | explored dimming and unexplored black, soft-edged, quarter resolution |
+| `entities` | buildings, team masks, resources, units; depth-sorted |
+| `overlay` | front half of rings, HP bars, placement preview sprite |
+| `effects` | projectiles, bursts |
 
-## Entry fields
+Entities in explored-but-not-visible tiles (remembered buildings, resources,
+stumps) are tinted `FOG_DIM_TINT` instead of being covered, so tall art is
+never cut by a fogged tile.
 
-- `atlas`, `frame`: required.
-- `originX`, `originY` (default `0.5`): origin so the footprint centre (buildings) or feet (units, resources) sit on the tile anchor.
-- `scale` (default `1`).
-- `teamMask`: optional frame (same atlas unless `atlas` is given) drawn over the sprite, tinted with the owner's `TEAM_COLORS`. Paint the team-coloured parts white in the mask.
-- `frames` (units only): frame count per anim; overrides the voxel model's counts. Without it the voxel counts apply.
+## Team colour
 
-A frame missing from the atlas falls back to the voxel bake, so half-finished sheets are safe. Check what is drawn from atlases in the browser console with `__RENDER__.snapshot().sprites.atlas`.
+The `__mask` frame is drawn as a second image right above the frame, tinted
+with the owner's `TEAM_COLORS` entry. The packer writes the mask RGB as the
+colour frame's luma * 1.25, so tint (multiply) plus normal blending gives
+`mix(rgb, team * luma * 1.25, maskAlpha)`, the formula of the contact sheet.
 
-Terrain tiles are not in the registry yet; they still come from `bakeTerrain()`.
+## Terrain bake
+
+`terrain/terrain-baker.ts` composes each tile on a 2D canvas: cliff faces
+down to the lower neighbour (`cliff_<kind>`, lip on the top step), the tile
+frame (`(x mod p) + p * (y mod p)`), then each higher-priority neighbour
+terrain masked by the transition masks. Tiles are clipped to their diamond
+with a small bleed on edges that meet a same-height neighbour. The result is
+one image per chunk (four for chunks with water), baked once per map in
+about 0.2 to 1 s.
+
+Render-only randomness (meadow patches, decor, tree species, farm phase)
+hashes tile coordinates with a seed taken from the map bytes, never
+`Math.random`, so every peer draws the same and the sim never sees it.
+
+## Debugging
+
+`window.__RENDER__.snapshot()` reports sprite counts (incl. `atlas`, `ruins`,
+`stumps`, `decor`), terrain mode / chunks / bake time, fog repaints and layer
+sizes. `__RENDER__.startSkirmish(mapId, age)`, `loadLateGame()`, `setZoom()`
+and `panToTile()` drive the view for checks.

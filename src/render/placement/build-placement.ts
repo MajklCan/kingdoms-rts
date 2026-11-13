@@ -2,6 +2,10 @@
  * Placement modes: building placement (B + key, action grid) with its
  * footprint ghost, and the army rally point picker. Also draws the standing
  * army rally flag.
+ *
+ * The ghost is the footprint diamond on the ground layer plus, when a sprite
+ * source is given, a translucent preview of the building itself on the
+ * overlay layer (red-tinted where it cannot be placed).
  */
 
 import { ISO, MAP } from '../../config';
@@ -15,8 +19,12 @@ import type { PlayerCommands } from '../commands/player-commands';
 import { countOwnedArmyProducers } from '../commands/economy';
 import type { GameAudio } from '../game-audio';
 import type { SceneContext } from '../scene-context';
+import type { SpriteRef, SpriteSource } from '../sprites/sprite-source';
 import { addLayerGraphics } from '../world-layers';
-import { buildingAnchorTileForDef, isInsideMap } from '../world-projection';
+import { buildingAnchorTileForDef, isInsideMap, spriteAnchorPoint } from '../world-projection';
+
+const GHOST_ALPHA = 0.6;
+const GHOST_INVALID_TINT = 0xff6b6b;
 
 export type BuildMode =
   | 'none'
@@ -50,11 +58,14 @@ export class BuildPlacement {
   /** B was pressed; waiting for the building key. */
   awaitingBuildKind = false;
   private readonly ghost: Phaser.GameObjects.Graphics;
+  private ghostSprite: Phaser.GameObjects.Sprite | null = null;
+  private ghostRef: SpriteRef | null = null;
 
   constructor(
     private readonly ctx: SceneContext,
     private readonly commands: PlayerCommands,
-    private readonly audio: GameAudio
+    private readonly audio: GameAudio,
+    private readonly sprites: SpriteSource | null = null
   ) {
     this.ghost = addLayerGraphics(ctx.scene, ctx.layers.ground);
   }
@@ -106,7 +117,7 @@ export class BuildPlacement {
     this.mode = 'none';
     this.armyRallyMode = false;
     this.awaitingBuildKind = false;
-    this.ghost.clear();
+    this.clear();
   }
 
   /**
@@ -118,7 +129,7 @@ export class BuildPlacement {
     if (this.armyRallyMode) {
       if (pointer.rightButtonDown()) {
         this.armyRallyMode = false;
-        this.ghost.clear();
+        this.clear();
         setLastEvent('army rally cancelled');
         return true;
       }
@@ -130,7 +141,7 @@ export class BuildPlacement {
         this.commands.dispatch({ type: 'setArmyRallyPoint', playerId, x: tx, y: ty });
         setLastEvent(`army rally → (${tx},${ty})`);
         this.armyRallyMode = false;
-        this.ghost.clear();
+        this.clear();
         return true;
       }
     }
@@ -138,7 +149,7 @@ export class BuildPlacement {
     if (this.mode !== 'none') {
       if (pointer.rightButtonDown()) {
         this.mode = 'none';
-        this.ghost.clear();
+        this.clear();
         setLastEvent('build mode cancelled');
         return true;
       }
@@ -148,14 +159,14 @@ export class BuildPlacement {
           setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.mode} is locked`);
           this.audio.playUi(SFX_ERROR);
           this.mode = 'none';
-          this.ghost.clear();
+          this.clear();
           return true;
         }
         this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId });
         this.audio.playUi(PLACE_BUILDING);
         setLastEvent(`place ${this.mode} → (${tx},${ty})`);
         this.mode = 'none';
-        this.ghost.clear();
+        this.clear();
         return true;
       }
     }
@@ -167,7 +178,7 @@ export class BuildPlacement {
     const g = this.ghost;
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
-    g.clear();
+    this.clear();
     const rally = world.armyRallyPoints[playerId];
     if (rally) this.drawRallyMarker(rally, 0x4ecdc4, 0.9);
 
@@ -206,7 +217,8 @@ export class BuildPlacement {
     const unlocked = isBuildingUnlocked(world, playerId, defId);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
 
-    g.fillStyle(valid ? def.color : 0xff4757, 0.4);
+    const preview = this.drawGhostSprite(defId, playerId, c, def.footprint.w, def.footprint.h, valid);
+    g.fillStyle(valid ? def.color : 0xff4757, preview ? 0.22 : 0.4);
     g.beginPath();
     g.moveTo(c.x, c.y - h);
     g.lineTo(c.x + w, c.y);
@@ -220,6 +232,41 @@ export class BuildPlacement {
 
   clear(): void {
     this.ghost.clear();
+    this.ghostSprite?.setVisible(false);
+  }
+
+  /** Translucent building preview; false when there is no sprite to show. */
+  private drawGhostSprite(
+    defId: number,
+    playerId: number,
+    c: { x: number; y: number },
+    w: number,
+    h: number,
+    valid: boolean
+  ): boolean {
+    if (!this.sprites) return false;
+    const age = this.ctx.world.ages[playerId]?.current ?? 0;
+    const ref = this.sprites.building({ defId, age, playerId });
+    if (!ref) return false;
+    let sprite = this.ghostSprite;
+    if (!sprite) {
+      sprite = this.ctx.scene.add.sprite(0, 0, ref.texture, ref.frame);
+      this.ctx.layers.overlay.add(sprite);
+      this.ghostSprite = sprite;
+    }
+    if (ref !== this.ghostRef) {
+      sprite.setTexture(ref.texture, ref.frame);
+      sprite.setOrigin(ref.originX, ref.originY);
+      sprite.setScale(ref.scale);
+      this.ghostRef = ref;
+    }
+    const p = spriteAnchorPoint(ref.anchor, c, w, h);
+    sprite.setPosition(p.x, p.y);
+    sprite.setAlpha(GHOST_ALPHA);
+    if (valid) sprite.clearTint();
+    else sprite.setTint(GHOST_INVALID_TINT);
+    sprite.setVisible(true);
+    return true;
   }
 
   private drawRallyMarker(point: { x: number; y: number }, color: number, alpha: number): void {

@@ -685,24 +685,26 @@ def gold_mine(col, rng, era: str) -> None:
     b.pad(1, 1, "gravel")
     from nature import gold_ore_material
 
-    _mound(b, -0.08, 0.16, 0.44, 0.36, 0.52, gold_ore_material())
-    ex, ey = -0.08, -0.14
+    # The hill fills the tile (it read as a pebble on its footprint before).
+    _mound(b, -0.04, 0.12, 0.52, 0.46, 0.8, gold_ore_material())
+    _mound(b, 0.3, 0.32, 0.22, 0.2, 0.42, gold_ore_material())
+    ex, ey = -0.08, -0.2
     pm = "log" if era == "dark" else "ashlar"
     if era == "dark":
-        b.box(ex - 0.13, ey - 0.06, 0, ex + 0.13, ey + 0.1, 0.34, "void", 0)
-        for dx in (-0.14, 0.14):
-            b.cyl((ex + dx, ey - 0.05, 0), (ex + dx, ey - 0.05, 0.36), 0.024, pm, segs=7)
-        b.beam((ex - 0.19, ey - 0.05, 0.37), (ex + 0.19, ey - 0.05, 0.37), 0.04, pm)
+        b.box(ex - 0.16, ey - 0.06, 0, ex + 0.16, ey + 0.14, 0.44, "void", 0)
+        for dx in (-0.17, 0.17):
+            b.cyl((ex + dx, ey - 0.05, 0), (ex + dx, ey - 0.05, 0.47), 0.03, pm, segs=7)
+        b.beam((ex - 0.23, ey - 0.05, 0.48), (ex + 0.23, ey - 0.05, 0.48), 0.05, pm)
     else:
-        b.box(ex - 0.2, ey - 0.08, 0, ex + 0.2, ey + 0.1, 0.42, "ashlar", 0.01)
-        b.opening("-y", ex - 0.2, ey - 0.08, ex + 0.2, ey + 0.1, 0.5, 0.0, 0.24, 0.26, "void", frame_m="ashlar_grey",
+        b.box(ex - 0.24, ey - 0.08, 0, ex + 0.24, ey + 0.14, 0.52, "ashlar", 0.01)
+        b.opening("-y", ex - 0.24, ey - 0.08, ex + 0.24, ey + 0.14, 0.5, 0.0, 0.28, 0.32, "void", frame_m="ashlar_grey",
                   arch=True, depth=0.02)
         # winding gear on top of the hill
-        for dx in (-0.12, 0.12):
-            b.beam((-0.05 + dx, 0.2, 0.42), (-0.05, 0.2, 0.75), 0.022, "timber")
-        b.cyl((-0.17, 0.2, 0.7), (0.07, 0.2, 0.7), 0.012, "iron", segs=6)
-        b.cyl((-0.08, 0.2, 0.7), (-0.06, 0.2, 0.7), 0.09, "timber", segs=14, smooth=False)
-        b.gable_roof(-0.2, 0.08, 0.1, 0.32, 0.78, 0.1, "tile_red", axis="y", overhang=0.02, thick=0.02)
+        for dx in (-0.14, 0.14):
+            b.beam((-0.05 + dx, 0.2, 0.62), (-0.05, 0.2, 1.02), 0.026, "timber")
+        b.cyl((-0.19, 0.2, 0.96), (0.09, 0.2, 0.96), 0.014, "iron", segs=6)
+        b.cyl((-0.08, 0.2, 0.96), (-0.06, 0.2, 0.96), 0.11, "timber", segs=14, smooth=False)
+        b.gable_roof(-0.24, 0.1, 0.1, 0.34, 1.05, 0.12, "tile_red", axis="y", overhang=0.02, thick=0.02)
     # rails out of the adit
     for dx in (-0.045, 0.045):
         b.beam((ex + dx, ey - 0.02, 0.012), (ex + dx + 0.04, -0.47, 0.012), 0.01, "iron", d=0.01)
@@ -734,30 +736,31 @@ def stone_quarry(col, rng, era: str) -> None:
     b = _b(col, rng)
     b.pad(1, 1, "gravel")
     # stepped rock face at the back
-    blocks = [(-0.45, 0.05, -0.05, 0.45, 0.45), (-0.05, 0.2, 0.3, 0.45, 0.32), (-0.45, -0.2, -0.2, 0.08, 0.22),
-              (0.05, 0.08, 0.3, 0.2, 0.14)]
+    # Tall stepped face that fills the tile (it read as a pebble on its footprint before).
+    blocks = [(-0.48, 0.02, -0.02, 0.48, 0.74), (-0.04, 0.16, 0.36, 0.48, 0.52), (-0.48, -0.26, -0.18, 0.06, 0.38),
+              (0.04, 0.02, 0.36, 0.18, 0.24), (-0.24, 0.24, 0.12, 0.48, 0.9)]
     for (bx0, by0, bx1, by1, h) in blocks:
         ob = b.box(bx0, by0, 0, bx1, by1, h, "rock_cut", 0.02)
-        b.roughen(ob, 0.012, 0.08, 2)
-    for _ in range(4):
-        p = (rng.uniform(-0.4, 0.2), rng.uniform(0.3, 0.42), 0.4 + rng.uniform(0, 0.08))
-        r = b.sphere(p, rng.uniform(0.07, 0.11), "rock", scale=(1.2, 1, 0.7), subdiv=1)
+        b.roughen(ob, 0.014, 0.08, 2)
+    for _ in range(5):
+        p = (rng.uniform(-0.42, 0.2), rng.uniform(0.3, 0.44), 0.72 + rng.uniform(0, 0.12))
+        r = b.sphere(p, rng.uniform(0.08, 0.12), "rock", scale=(1.2, 1, 0.7), subdiv=1)
         b.roughen(r, 0.02, 0.1, 1)
     # cut blocks
     for i, (px, py, z) in enumerate(((0.18, -0.3, 0), (0.3, -0.3, 0), (0.24, -0.3, 0.07), (0.32, -0.12, 0))):
         b.box(px - 0.055, py - 0.045, z, px + 0.055, py + 0.045, z + 0.07, "ashlar" if era != "dark" else "rock_cut",
               0.006, rng.uniform(-0.1, 0.1))
     # tripod crane
-    cx, cy, top = -0.12, -0.18, 0.72
+    cx, cy, top = -0.12, -0.2, 0.95
     for a in (0.3, 2.4, 4.4):
         b.cyl((cx + math.cos(a) * 0.2, cy + math.sin(a) * 0.2, 0), (cx, cy, top), 0.016, "log", segs=6)
     b.beam((cx, cy, top), (cx + 0.18, cy - 0.12, top - 0.05), 0.02, "log")
     b.cyl((cx + 0.17, cy - 0.11, top - 0.06), (cx + 0.17, cy - 0.11, 0.3), 0.004, "rope", segs=4)
     b.box(cx + 0.12, cy - 0.16, 0.22, cx + 0.22, cy - 0.06, 0.3, "rock_cut", 0.006)
     if era != "dark":
-        b.gable_roof(0.12, 0.08, 0.44, 0.44, 0.38, 0.12, "tile_red", axis="x", overhang=0.03, thick=0.02)
-        for (px, py) in ((0.12, 0.08), (0.44, 0.08)):
-            b.cyl((px, py, 0), (px, py, 0.38), 0.015, "timber", segs=6)
+        b.gable_roof(0.12, -0.12, 0.46, 0.18, 0.46, 0.14, "tile_red", axis="x", overhang=0.03, thick=0.02)
+        for (px, py) in ((0.12, -0.12), (0.46, -0.12)):
+            b.cyl((px, py, 0), (px, py, 0.46), 0.018, "timber", segs=6)
     b.banner(0.42, -0.4, 0.0, 0.5, 0.12, 0.08, pole_m="log" if era == "dark" else "timber")
 
 
@@ -787,7 +790,8 @@ def defensive_tower(col, rng, era: str) -> None:
         b.box(-p, -p, top + 0.05, -p + 0.03, p, top + 0.27, "planks", 0.004)
         for (px, py) in ((-p, -p), (p, -p), (p, p), (-p, p)):
             b.cyl((px, py, top), (px, py, top + 0.56), 0.02, "log", segs=6)
-        b.hip_roof(-p, -p, p, p, top + 0.56, 0.42, "thatch", overhang=0.1, thick=0.07, rough=0.012)
+        # No roughen here: displace + bevel on the pyramid apex shaded the whole roof pure black.
+        b.hip_roof(-p, -p, p, p, top + 0.56, 0.42, "thatch", overhang=0.1, thick=0.07, rough=0.0)
         # ladder
         for dx in (-0.06, 0.06):
             b.beam((0.05 + dx, -0.48, 0), (0.05 + dx, -0.24, top), 0.014, "log")
@@ -888,25 +892,30 @@ def wall(col, rng, era: str, mask: int) -> None:
     arms = [d for bit, d in WALL_DIRS if mask & bit]
     straight = mask in (5, 10)
     if era == "dark":
-        def stake(x: float, y: float, h: float, r: float = 0.042) -> None:
-            b.cyl((x, y, 0), (x, y, h), r, "log", segs=8)
-            b.cone(x, y, h, r, 0.08, "log", segs=8)
+        # Log palisade: fat bark stakes with pale sharpened tips and a ragged top,
+        # two binding rails and an earth bank, so it reads as logs and not a slab.
+        def stake(x: float, y: float, h: float, r: float = 0.054) -> None:
+            b.cyl((x, y, 0), (x, y, h), r, "log", segs=9)
+            b.cone(x, y, h, r * 0.98, 0.1, "log_end", segs=9)
 
         for dx, dy in arms:
-            n = 6
+            n = 5
             for i in range(1, n + 1):
-                t = 0.5 * i / n
-                stake(dx * t + rng.uniform(-0.006, 0.006), dy * t + rng.uniform(-0.006, 0.006),
-                      rng.uniform(0.78, 0.9), rng.uniform(0.036, 0.046))
-            # binding rail on the outside faces
-            b.beam((0, 0, 0.55), (dx * 0.5, dy * 0.5, 0.55), 0.02, "timber", d=0.1 if dy == 0 else 0.1)
+                t = 0.5 * i / n - 0.04
+                stake(dx * t + rng.uniform(-0.007, 0.007), dy * t + rng.uniform(-0.007, 0.007),
+                      rng.uniform(0.7, 0.92), rng.uniform(0.048, 0.06))
+            for z in (0.24, 0.56):
+                b.beam((0, 0, z), (dx * 0.5, dy * 0.5, z), 0.028, "timber", d=0.15)
+            bank = b.box(min(0, dx * 0.5) - 0.07 * abs(dy), min(0, dy * 0.5) - 0.07 * abs(dx), 0,
+                         max(0, dx * 0.5) + 0.07 * abs(dy), max(0, dy * 0.5) + 0.07 * abs(dx), 0.07, "dirt", 0.03)
+            b.roughen(bank, 0.02, 0.1, 1)
         if not straight:
-            stake(0, 0, 0.98, 0.06)
+            stake(0, 0, 1.0, 0.07)
             if not arms:
                 for a in (0.0, 2.1, 4.2):
-                    stake(math.cos(a) * 0.09, math.sin(a) * 0.09, 0.82, 0.045)
+                    stake(math.cos(a) * 0.1, math.sin(a) * 0.1, 0.84, 0.052)
         else:
-            stake(0, 0, 0.86, 0.044)
+            stake(0, 0, 0.86, 0.054)
         b.pad(0.9, 0.9, "dirt", inset=0.25, irregular=0.03)
     else:
         mt = "ashlar" if era == "castle" else "brick"

@@ -9,6 +9,7 @@
  * Module map (all under src/render/):
  *   world-layers / scene-context    draw order + shared per-scene state
  *   sprites/                        sprite-source registry (voxel bakes, atlas overrides)
+ *   terrain/                        chunk-baked ground tiles, render-only decor
  *   entities/                       building / unit / resource sprite renderers
  *   overlays/                       selection rings, health bars, fog of war
  *   effects/                        EffectsLayer, projectiles, combat feedback
@@ -53,6 +54,7 @@ import { CombatFeedback } from './effects/combat-feedback';
 import { EffectsLayer, PARTICLE_BURST_EFFECT, particleBurstEffect } from './effects/effects-layer';
 import { registerProjectileEffects } from './effects/projectile-effects';
 import { BuildingRenderer } from './entities/building-renderer';
+import { Occupancy } from './entities/occupancy';
 import { ResourceRenderer } from './entities/resource-renderer';
 import { UnitRenderer } from './entities/unit-renderer';
 import { GameAudio } from './game-audio';
@@ -78,7 +80,9 @@ import { SceneContext } from './scene-context';
 import { queueSpriteManifest } from './sprites/sprite-manifest';
 import { createSpriteRegistry, type SpriteSourceRegistry } from './sprites/sprite-registry';
 import { bakeVoxelTextures } from './sprites/voxel-bake';
-import { bakeTerrain } from './voxel/terrain';
+import { DecorLayer } from './terrain/decor-layer';
+import { TerrainLayer } from './terrain/terrain-layer';
+import { hashBytes } from './tile-hash';
 import { createWorldLayers, type WorldLayers } from './world-layers';
 
 /** Max sim steps per frame when catching up (avoids a spiral of death). */
@@ -104,7 +108,9 @@ export class GameScene extends Phaser.Scene {
   private pointer!: PointerController;
   private actions!: ActionGrid;
   private cheats!: Cheats;
-  private terrainSprite?: Phaser.GameObjects.Sprite;
+  private occupancy!: Occupancy;
+  private terrain!: TerrainLayer;
+  private decor!: DecorLayer;
   /** `?inspect=` sprite sheet is showing instead of the game. */
   private inspectionMode = false;
   /** True once create() has finished (graphics + textures exist). */
@@ -147,15 +153,19 @@ export class GameScene extends Phaser.Scene {
     bakeVoxelTextures(this);
     this.sprites = createSpriteRegistry(this);
 
-    // Graphics in the ground layer stack in construction order:
+    this.occupancy = new Occupancy(this.ctx);
+    this.terrain = new TerrainLayer(this, this.layers.terrain);
+    this.decor = new DecorLayer(this, this.layers.decor, this.layers.shadows, this.occupancy);
+
+    // Graphics in the ground / overlay layers stack in construction order:
     // building bars, rings + health bars, build ghost.
     this.buildings = new BuildingRenderer(this.ctx, this.sprites);
     this.status = new StatusOverlay(this.ctx);
     this.commands = new PlayerCommands(this.ctx, this.audio);
-    this.placement = new BuildPlacement(this.ctx, this.commands, this.audio);
+    this.placement = new BuildPlacement(this.ctx, this.commands, this.audio, this.sprites);
     this.units = new UnitRenderer(this.ctx, this.sprites);
-    this.resources = new ResourceRenderer(this.ctx, this.sprites);
-    this.fog = new FogRenderer(this.ctx, () => this.terrainSprite);
+    this.resources = new ResourceRenderer(this.ctx, this.sprites, this.occupancy);
+    this.fog = new FogRenderer(this.ctx, () => this.terrain.bounds);
     this.effects = new EffectsLayer(this.ctx);
     this.effects.setAnchorResolver((eid) => this.units.anchorOf(eid) ?? this.buildings.anchorOf(eid));
     this.effects.register(PARTICLE_BURST_EFFECT, particleBurstEffect);
@@ -187,6 +197,7 @@ export class GameScene extends Phaser.Scene {
       commands: this.commands,
       placement: this.placement,
       audio: this.audio,
+      pickBuilding: (x, y) => this.buildings.pickAt(x, y),
     });
     this.pointer.install();
     installHotkeys(this, {
@@ -218,6 +229,9 @@ export class GameScene extends Phaser.Scene {
     pruneHiddenSelectionForPlayer(this.world, ctx.perspectivePlayerId);
     ctx.snapshotSelection();
     this.camera.update();
+    this.terrain.update(delta);
+    this.occupancy.update();
+    this.decor.update();
 
     this.resources.drawMapFeatures();
     this.buildings.draw();
@@ -520,6 +534,19 @@ export class GameScene extends Phaser.Scene {
             resources: r.resources,
             mapFeatures: r.features,
             atlas: b.atlas + u.atlas + r.atlas,
+            ruins: b.ruins,
+            stumps: r.stumps,
+            decor: this.decor.count,
+          },
+          terrain: { ...this.terrain.stats },
+          fogRepaints: this.fog.repaints,
+          layers: {
+            terrain: this.layers.terrain.length,
+            decor: this.layers.decor.length,
+            shadows: this.layers.shadows.length,
+            ground: this.layers.ground.length,
+            fog: this.layers.fog.length,
+            overlay: this.layers.overlay.length,
           },
           atlasEntries: this.sprites.atlasEntryCount,
           effects: {
@@ -533,6 +560,13 @@ export class GameScene extends Phaser.Scene {
       spawnEffect: (id, tileX, tileY, params) =>
         this.effects.spawn(id, { x: tileX, y: tileY }, { params }) !== null,
       shake: (intensity, durationMs) => this.effects.shake(intensity, durationMs),
+      startSkirmish: (mapId, age) => this.startNewGame(age as AgeIdValue | undefined, mapId as MapIdValue),
+      startCampaign: (missionId) => this.startCampaignMission(missionId as CampaignMissionIdValue),
+      loadLateGame: () => this.loadLateGameTestSave(),
+      setZoom: (zoom) => this.camera.applyZoom(zoom - this.camera.zoom),
+      panToTile: (x, y) => this.camera.panToTile(x, y),
+      fps: () => this.game.loop.actualFps,
+      scene: () => this,
       tileToClient: (tileX, tileY) => {
         const p = this.ctx.localToWorld(this.ctx.tileToScreen(tileX, tileY));
         const cam = this.cameras.main;
@@ -566,10 +600,16 @@ export class GameScene extends Phaser.Scene {
     setLastEvent(message);
   }
 
-  /** Re-bake the terrain for the current map and rebuild the fog to match. */
+  /**
+   * Re-bake the ground and decor for the current map and rebuild the fog to
+   * match. The render seed comes from the map bytes (the sim keeps no seed),
+   * so every peer of a multiplayer match draws the same details.
+   */
   private refreshTerrain(): void {
-    this.terrainSprite?.destroy();
-    this.terrainSprite = bakeTerrain(this, this.layers.terrain, this.world.map);
+    const map = this.world.map;
+    const seed = hashBytes(map.elevation, hashBytes(map.tiles));
+    this.terrain.build(map, this.sprites.art, seed);
+    this.decor.build(map, this.terrain.names, this.sprites.art, seed);
     this.fog.rebuild();
   }
 }

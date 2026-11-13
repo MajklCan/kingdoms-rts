@@ -7,6 +7,8 @@
 import { TEAM_COLORS } from '../../config';
 import { bakeVoxelTexture } from '../voxel/voxel-render';
 import { FACINGS } from './facing';
+import { LINEAR_FILTER } from './sprite-registry';
+import { UNIT_SHADOW_KEY } from './voxel-sprite-source';
 import {
   VOXEL_SHARED_BAKES,
   VOXEL_TEAM_PLAYERS,
@@ -44,6 +46,30 @@ export function bakeVoxelTextures(scene: Phaser.Scene): void {
     }
   }
   for (const bake of VOXEL_SHARED_BAKES) bakeStatic(scene, bake);
+  bakeUnitShadow(scene);
+}
+
+/**
+ * Soft elliptical contact shadow for units (2:1, like the ground plane), so
+ * voxel units sit on the pre-rendered art instead of floating over it.
+ */
+function bakeUnitShadow(scene: Phaser.Scene): void {
+  if (scene.textures.exists(UNIT_SHADOW_KEY)) return;
+  const w = 64;
+  const h = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, h / w, 0, 0);
+  const gradient = ctx.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+  gradient.addColorStop(0.55, 'rgba(0, 0, 0, 0.75)');
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, w, w);
+  scene.textures.addImage(UNIT_SHADOW_KEY, canvas as unknown as HTMLImageElement)?.setFilter(LINEAR_FILTER);
 }
 
 function bakeStatic(scene: Phaser.Scene, bake: VoxelStaticBake): void {

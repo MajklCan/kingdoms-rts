@@ -2,18 +2,18 @@
  * Sprite-source contract. Renderers never build texture keys themselves; they
  * describe WHAT they want to draw (building X in age Y for player P, unit U
  * facing F doing anim A frame N, ...) and a {@link SpriteSource} answers with a
- * {@link SpriteRef}: texture + optional atlas frame, origin, scale and an
- * optional team-colour mask layer.
+ * {@link SpriteRef}: texture + optional atlas frame, origin, scale, an optional
+ * team-colour mask layer and an optional ground shadow.
  *
  * Two implementations exist:
  *  - `VoxelSpriteSource` (voxel-sprite-source.ts): textures baked in-engine
  *    from the TypeScript voxel models. Always available.
- *  - `AtlasSpriteSource` (atlas-sprite-source.ts): frames from pre-rendered
+ *  - `AtlasSpriteSource` (atlas-sprite-source.ts): frames from the Blender
  *    atlases listed in `public/assets/sprites/manifest.json`.
  *
  * `SpriteSourceRegistry` (sprite-registry.ts) asks the atlas source first and
- * falls back to voxels per request, so a manifest can override one building
- * without touching anything else.
+ * falls back to voxels per request, so a missing atlas or frame never blanks
+ * an entity.
  */
 
 import type { MapFeatureKindValue } from '@sim/map-gen';
@@ -30,6 +30,16 @@ export interface TeamMaskRef extends SpriteFrameRef {
   tint: number;
 }
 
+/** Ground shadow drawn on the shadow layer under every entity. */
+export interface ShadowRef extends SpriteFrameRef {
+  originX: number;
+  originY: number;
+  scale: number;
+  /** Extra vertical scale (flattened blob shadows); defaults to 1. */
+  scaleY?: number;
+  alpha?: number;
+}
+
 /**
  * Everything a renderer needs to place one sprite. Instances are cached and
  * reused by the sources, so renderers can compare refs by identity to skip
@@ -40,17 +50,32 @@ export interface SpriteRef extends SpriteFrameRef {
   originY: number;
   scale: number;
   teamMask?: TeamMaskRef;
+  shadow?: ShadowRef;
+  /**
+   * Where the sprite's anchor sits: 'footprint' = bottom corner of the
+   * footprint diamond (Blender art), 'center' = footprint centre / unit feet
+   * (voxel bakes). Renderers place the sprite accordingly.
+   */
+  anchor: 'footprint' | 'center';
+  /** Screen pixels from the anchor up to the top of the art (bars go above). */
+  top: number;
   /** Where the ref came from. Debug / introspection only. */
   source: 'voxel' | 'atlas';
 }
+
+export type FarmStage = 'sown' | 'growing' | 'ripe' | 'depleted';
 
 export interface BuildingSpriteQuery {
   defId: number;
   /** Age the building is drawn in (owner's current age, or the age a fogged snapshot was seen in). */
   age: number;
   playerId: number;
-  /** Optional shape variant, e.g. wall orientation 'x' / 'y'. */
-  variant?: string;
+  /** Walls: connected neighbours, 1 = +x, 2 = +y, 4 = -x, 8 = -y. */
+  wallMask?: number;
+  /** Farms: crop stage. */
+  farmStage?: FarmStage;
+  /** Foundations: construction progress 0..1. */
+  construction?: number;
 }
 
 export interface UnitSpriteQuery {
@@ -65,19 +90,30 @@ export interface ResourceSpriteQuery {
   kind: number;
   /** Optional look variant, e.g. 'snow' or 'dead' for trees. */
   variant?: string;
+  /** Tile, for the deterministic per-tile look (tree species...). */
+  x: number;
+  y: number;
+  /** Remaining amount as a fraction of the full pile (depletion looks). */
+  remaining?: number;
 }
 
 export interface MapFeatureSpriteQuery {
   kind: MapFeatureKindValue;
   /** Footprint size in tiles (rock spires are 2 or 4). */
   size: number;
+  x: number;
+  y: number;
 }
 
 export interface SpriteSource {
   building(query: BuildingSpriteQuery): SpriteRef | null;
+  /** Ruins left by a destroyed building of this def (null = no ruin art). */
+  rubble(defId: number): SpriteRef | null;
   unit(query: UnitSpriteQuery): SpriteRef | null;
   /** Number of frames a unit animation has; 0 when the source has no such anim. */
   unitFrameCount(unitDefId: number, anim: string): number;
   resource(query: ResourceSpriteQuery): SpriteRef | null;
+  /** Stump left by a felled tree (null = no stump art). */
+  stump(conifer: boolean): SpriteRef | null;
   mapFeature(query: MapFeatureSpriteQuery): SpriteRef | null;
 }

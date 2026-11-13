@@ -24,7 +24,7 @@ export class UnitRenderer {
     private readonly sprites: SpriteSource
   ) {
     this.animator = new UnitAnimator(ctx, (unitDefId, anim) => sprites.unitFrameCount(unitDefId, anim));
-    this.units = new SpriteSync(ctx.scene, ctx.layers.entities, (eid) => this.animator.forget(eid));
+    this.units = new SpriteSync(ctx.scene, ctx.layers, (eid) => this.animator.forget(eid));
   }
 
   /** Sync every visible unit sprite and draw its ground status (ring, bars). */
@@ -56,7 +56,7 @@ export class UnitRenderer {
       const screen = this.ctx.tileToScreen(px, py);
       const view = this.units.show(eid, ref, screen.x, screen.y);
       view.setDepth(screen.y + 1);
-      overlay.drawUnit(eid, screen);
+      overlay.drawUnit(eid, screen, screen.y - ref.top);
     }
     this.units.end();
   }
