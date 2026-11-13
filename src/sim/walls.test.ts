@@ -153,7 +153,8 @@ describe('walls', () => {
     const at = openBlock(world, Math.round(Position.x[tc]), Math.round(Position.y[tc]), 9, 3);
     const y = at.y + 1;
     spawnResource(world, ResourceKindId.WOOD, at.x + 2, y, 50);
-    spawnSpearman(world, at.x + 4, y, P2);
+    // Own unit: an enemy one would knock down the 1 hp foundations next to it.
+    spawnSpearman(world, at.x + 4, y, P1);
     placeLine(world, at.x, y, at.x + 8, y);
     const xs = wallsOf(world, P1).map((eid) => Position.x[eid] - at.x).sort((a, b) => a - b);
     expect(xs).toEqual([0, 1, 3, 5, 6, 7, 8]);

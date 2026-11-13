@@ -69,6 +69,25 @@ const FOREST_EDGE_INITIAL_TREE_BONUS = 0.2;
 const LOCAL_STARTING_TREE_COUNT = 20;
 const INITIAL_SCATTERED_TREE_COUNT = 72;
 const INITIAL_EDGE_TREE_COUNT = 48;
+/** Food in one berry bush. */
+export const BERRY_BUSH_AMOUNT = 125;
+/**
+ * Starting berry patch, as offsets from player 1's town center; player 2 gets
+ * the point mirror (negated offsets), like the other local patches. South-east
+ * of the TC, clear of the trees (north-east), gold (north-west), stone
+ * (south-west) and the starting army (just south).
+ */
+const LOCAL_BERRY_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [4, 3],
+  [5, 3],
+  [4, 4],
+  [5, 4],
+  [6, 4],
+];
+/** Lone bushes scattered over the rest of the map (mirrored pairs on Krkonose). */
+const SCATTERED_BERRY_BUSH_COUNT = 6;
+/** Scattered bushes stay at least this far from either town center. */
+const SCATTERED_BERRY_MIN_SPAWN_DISTANCE = 10;
 
 export function applyStartingResources(bank: Int32Array, ageId: AgeIdValue): void {
   const resources = STARTING_RESOURCE_BANKS[ageId] ?? STARTING_RESOURCE_BANKS[AgeId.DARK];
@@ -272,6 +291,9 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   // Player 1's local resource patches - denser around the TC so each AI/human
   // has plenty to harvest without crossing the map.
   if (mirroredSnowSkirmish) {
+    for (const [dx, dy] of LOCAL_BERRY_OFFSETS) {
+      safeSpawnMirroredResource(ResourceKindId.FOOD, p1x + dx, p1y + dy, BERRY_BUSH_AMOUNT);
+    }
     for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
       safeSpawnMirroredResource(
         ResourceKindId.WOOD,
@@ -297,6 +319,9 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
       );
     }
   } else {
+    for (const [dx, dy] of LOCAL_BERRY_OFFSETS) {
+      safeSpawnResource(ResourceKindId.FOOD, p1x + dx, p1y + dy, BERRY_BUSH_AMOUNT);
+    }
     for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
       safeSpawnResource(
         ResourceKindId.WOOD,
@@ -334,6 +359,9 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
 
   // Player 2's local patches mirror player 1.
   if (!mirroredSnowSkirmish) {
+    for (const [dx, dy] of LOCAL_BERRY_OFFSETS) {
+      safeSpawnResource(ResourceKindId.FOOD, p2x - dx, p2y - dy, BERRY_BUSH_AMOUNT);
+    }
     for (let i = 0; i < LOCAL_STARTING_TREE_COUNT; i++) {
       safeSpawnResource(
         ResourceKindId.WOOD,
@@ -437,6 +465,28 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
       const x = Math.floor(rng.next() * MAP.WIDTH);
       const y = Math.floor(rng.next() * MAP.HEIGHT);
       safeSpawnResource(ResourceKindId.STONE, x, y, SCATTERED_STONE_DEPOSIT_AMOUNT);
+    }
+  }
+
+  // Lone berry bushes away from both bases. The only rng draws added for
+  // berries, deliberately last in world creation, so map, forests and every
+  // other resource spawn exactly where they did before.
+  for (let i = 0; i < SCATTERED_BERRY_BUSH_COUNT; i++) {
+    const x = Math.floor(rng.next() * MAP.WIDTH);
+    const y = Math.floor(rng.next() * MAP.HEIGHT);
+    const spot = resolveResourceSpawn(x, y);
+    if (!spot) continue;
+    // Checked on the resolved tile (and its mirror), so no base gets a bonus bush.
+    const awayFromBases = (tile: GridPos) =>
+      [p1, p2].every(
+        (spawn) => Math.hypot(spawn.x - tile.x, spawn.y - tile.y) >= SCATTERED_BERRY_MIN_SPAWN_DISTANCE
+      );
+    if (!awayFromBases(spot)) continue;
+    if (mirroredSnowSkirmish) {
+      if (!awayFromBases({ x: MAP.WIDTH - 1 - spot.x, y: MAP.HEIGHT - 1 - spot.y })) continue;
+      safeSpawnMirroredResource(ResourceKindId.FOOD, spot.x, spot.y, BERRY_BUSH_AMOUNT);
+    } else {
+      spawnResource(world, ResourceKindId.FOOD, spot.x, spot.y, BERRY_BUSH_AMOUNT);
     }
   }
 
