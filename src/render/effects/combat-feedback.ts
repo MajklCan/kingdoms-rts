@@ -17,6 +17,8 @@ import type { EffectsLayer } from './effects-layer';
 import { PROJECTILE_EFFECT, type ProjectileKind } from './projectile-effects';
 
 export class CombatFeedback {
+  private readonly listeners: Array<(event: CombatEvent) => void> = [];
+
   constructor(
     private readonly ctx: SceneContext,
     private readonly deps: {
@@ -27,11 +29,17 @@ export class CombatFeedback {
     }
   ) {}
 
+  /** Extra render-side consumer of every drained combat event (world VFX). */
+  onEvent(listener: (event: CombatEvent) => void): void {
+    this.listeners.push(listener);
+  }
+
   consume(): void {
     const world = this.ctx.world;
     if (world.combatEvents.length === 0) return;
     const events = world.combatEvents.splice(0);
     for (const event of events) {
+      for (const listener of this.listeners) listener(event);
       this.deps.alerts.record(event);
       this.deps.audio.onCombatEvent(event);
       this.deps.animator.noteCombatEvent(event);

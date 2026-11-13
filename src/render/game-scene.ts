@@ -53,6 +53,7 @@ import { PlayerCommands } from './commands/player-commands';
 import { CombatFeedback } from './effects/combat-feedback';
 import { EffectsLayer, PARTICLE_BURST_EFFECT, particleBurstEffect } from './effects/effects-layer';
 import { registerProjectileEffects } from './effects/projectile-effects';
+import { WorldFx } from './effects/world-fx';
 import { BuildingRenderer } from './entities/building-renderer';
 import { Occupancy } from './entities/occupancy';
 import { ResourceRenderer } from './entities/resource-renderer';
@@ -102,6 +103,7 @@ export class GameScene extends Phaser.Scene {
   private fog!: FogRenderer;
   private effects!: EffectsLayer;
   private combat!: CombatFeedback;
+  private worldFx!: WorldFx;
   private alerts!: MinimapAlerts;
   private commands!: PlayerCommands;
   private placement!: BuildPlacement;
@@ -177,6 +179,7 @@ export class GameScene extends Phaser.Scene {
       animator: this.units.animator,
       effects: this.effects,
     });
+    this.worldFx = new WorldFx(this.ctx, { units: this.units, buildings: this.buildings, resources: this.resources, combat: this.combat, audio: this.audio });
     this.actions = new ActionGrid(this.ctx, this.commands, this.placement);
     this.cheats = this.createCheats();
 
@@ -246,6 +249,7 @@ export class GameScene extends Phaser.Scene {
     this.audio.consumeSoundCues();
     this.audio.update();
     this.effects.update(delta * ctx.gameSpeed);
+    this.worldFx.update(delta);
     this.placement.draw();
     const pointer = this.input.activePointer;
     if (this.placement.mode === 'none' && !this.placement.armyRallyMode && !pointer.rightButtonDown()) {
@@ -588,6 +592,7 @@ export class GameScene extends Phaser.Scene {
     this.ctx.accumulatorMs = 0;
     this.placement.reset();
     this.effects.clear();
+    this.worldFx.clear();
     this.status.clear();
     this.alerts.clear();
     this.buildings.clear();

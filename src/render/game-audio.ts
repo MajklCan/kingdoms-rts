@@ -25,7 +25,7 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from '@sim/components';
-import { buildingQuery, selectedQuery, unitQuery, type CombatEvent } from '@sim/world';
+import { buildingQuery, selectedQuery, unitQuery, type CombatEvent, type SoundCue } from '@sim/world';
 import { AudioManager } from './audio/audio-manager';
 import {
   ALERT,
@@ -77,6 +77,7 @@ export class GameAudio {
   private battleTrack: string | null = null;
   private musicContext: MusicContext = 'playlist';
   private contextSinceTick = -1;
+  private readonly cueListeners: Array<(cue: SoundCue) => void> = [];
 
   constructor(private readonly ctx: SceneContext) {
     this.manager = new AudioManager(ctx.scene);
@@ -136,12 +137,28 @@ export class GameAudio {
     this.noteCombatForAdaptiveAudio(event);
   }
 
+  /** Extra render-side consumer of every drained sound cue (world VFX). */
+  onCue(listener: (cue: SoundCue) => void): void {
+    this.cueListeners.push(listener);
+  }
+
+  /**
+   * World-positioned SFX for render-only triggers (construction knocks,
+   * collapse rumble), with the same fog gate, pan, falloff and rate limit as
+   * sim cues.
+   */
+  playWorld(cfg: SfxConfig, tileX: number, tileY: number): void {
+    if (!this.ctx.isTileVisible(tileX, tileY)) return;
+    this.playSpatial(cfg, tileX, tileY);
+  }
+
   /** Drain sim sound cues. Fog-gated; non-spatial cues only for the local player. */
   consumeSoundCues(): void {
     const world = this.ctx.world;
     if (world.soundCues.length === 0) return;
     const cues = world.soundCues.splice(0);
     for (const cue of cues) {
+      for (const listener of this.cueListeners) listener(cue);
       const cfg = cueSound(cue.kind);
       if (isNonSpatialCue(cue.kind)) {
         if (cue.player === this.ctx.perspectivePlayerId) {
