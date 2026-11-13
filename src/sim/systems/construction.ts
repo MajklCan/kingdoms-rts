@@ -27,13 +27,20 @@ import { trySpawnInitialWorksiteWorker } from './worksites';
 export function constructionSystem(world: SimWorld): void {
   const sites = sortedEids(world, foundationQuery(world.ecs));
   for (const siteEid of sites) {
+    // Killed this tick: leave it for the death system, never build it back up.
+    if (Health.hp[siteEid] <= 0) continue;
     const total = Math.max(1, ConstructionSite.totalTicks[siteEid]);
+    const builtBefore = builtHp(siteEid, ConstructionSite.progress[siteEid], total);
+    // Damage taken so far is kept as a deficit below the built curve, so hits
+    // on a foundation stick instead of being healed by the next tick.
+    const deficit = Math.max(0, builtBefore - Health.hp[siteEid]);
     ConstructionSite.progress[siteEid] += 1;
-    const frac = Math.min(1, ConstructionSite.progress[siteEid] / total);
-    Health.hp[siteEid] = Math.max(1, Math.floor(Health.hpMax[siteEid] * frac));
+    Health.hp[siteEid] = builtHp(siteEid, ConstructionSite.progress[siteEid], total) - deficit;
     if (ConstructionSite.progress[siteEid] >= total) {
       const defId = ConstructionSite.defId[siteEid];
       finaliseBuilding(world, siteEid);
+      // Completion does not repair damage the foundation took.
+      Health.hp[siteEid] = Math.max(1, Health.hp[siteEid] - deficit);
       const playerId = Owner.player[siteEid];
       recordBuildingBuilt(world, playerId);
       pushGameEvent(world, {
@@ -46,6 +53,12 @@ export function constructionSystem(world: SimWorld): void {
       });
     }
   }
+}
+
+/** HP an undamaged foundation has at `progress` ticks: grows with the build, never below 1. */
+function builtHp(siteEid: number, progress: number, total: number): number {
+  const frac = Math.min(1, progress / total);
+  return Math.max(1, Math.floor(Health.hpMax[siteEid] * frac));
 }
 
 export function finaliseBuilding(world: SimWorld, siteEid: number): void {

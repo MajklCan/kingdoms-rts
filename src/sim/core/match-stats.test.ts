@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Building, Health, Owner, Position, Producer, TownCenterTag } from '../components';
+import { Building, ConstructionSite, Health, Owner, Position, Producer, TownCenterTag } from '../components';
 import { hasComponent } from 'bitecs';
 import { checksumWorld } from '../checksum';
 import { BUILDING_TABLE, BuildingDefId, UnitDefId, getBuildingDef, getUnitDef } from '../defs';
@@ -10,6 +10,7 @@ import {
   canPlaceBuildingAt,
   createSimWorld,
   createLateGameTestWorld,
+  spawnFoundation,
   spawnSpearman,
   spawnVillager,
   step,
@@ -138,7 +139,73 @@ describe('match statistics', () => {
     expect(world.matchStats[P2]!.unitsLost).toBe(1);
     const destroyed = events(world, 'entityDestroyed');
     expect(destroyed).toHaveLength(1);
-    expect(destroyed[0]).toMatchObject({ ownerId: P2, isBuilding: false });
+    expect(destroyed[0]).toMatchObject({
+      eid: victim,
+      ownerId: P2,
+      isBuilding: false,
+      defId: UnitDefId.VILLAGER,
+      x: 10,
+      y: 10,
+      footprint: { w: 1, h: 1 },
+      wasFoundation: false,
+      killerOwnerId: P1,
+    });
+    expect(world.killingBlows.size).toBe(0);
+  });
+
+  it('reports no killer for a scripted removal and a foundation flag for unfinished buildings', () => {
+    const world = richWorld();
+    const unit = spawnVillager(world, 12, 12, P2);
+    Health.hp[unit] = 0; // scripted: nobody dealt the blow
+    const tc = townCenterOf(world, P1);
+    const def = getBuildingDef(BuildingDefId.HOUSE)!;
+    let foundation = -1;
+    for (let r = 4; r < 14 && foundation < 0; r++) {
+      for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r]] as const) {
+        const x = Position.x[tc] + dx;
+        const y = Position.y[tc] + dy;
+        if (!canPlaceBuildingAt(world, def, x, y)) continue;
+        foundation = spawnFoundation(world, BuildingDefId.HOUSE, x, y, P1);
+        break;
+      }
+    }
+    expect(foundation).toBeGreaterThanOrEqual(0);
+    // Well past zero: the construction step keeps raising a foundation's hp.
+    applyDamage(world, foundation, def.hp * 2, P2);
+    step(world);
+    const destroyed = events(world, 'entityDestroyed') as Array<Extract<GameEvent, { kind: 'entityDestroyed' }>>;
+    expect(destroyed.find((e) => e.eid === unit)).toMatchObject({ killerOwnerId: -1, isBuilding: false });
+    expect(destroyed.find((e) => e.eid === foundation)).toMatchObject({
+      isBuilding: true,
+      defId: BuildingDefId.HOUSE,
+      footprint: { w: def.footprint.w, h: def.footprint.h },
+      wasFoundation: true,
+      killerOwnerId: P2,
+    });
+  });
+
+  it('keeps damage on a growing foundation instead of healing it the next tick', () => {
+    const world = richWorld();
+    const tc = townCenterOf(world, P1);
+    const def = getBuildingDef(BuildingDefId.HOUSE)!;
+    let site = -1;
+    for (let r = 4; r < 14 && site < 0; r++) {
+      for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r]] as const) {
+        if (!canPlaceBuildingAt(world, def, Position.x[tc] + dx, Position.y[tc] + dy)) continue;
+        site = spawnFoundation(world, BuildingDefId.HOUSE, Position.x[tc] + dx, Position.y[tc] + dy, P1);
+        break;
+      }
+    }
+    expect(site).toBeGreaterThanOrEqual(0);
+    for (let i = 0; i < Math.floor(def.buildTimeTicks / 2); i++) step(world);
+    const halfway = Health.hp[site];
+    expect(halfway).toBeGreaterThan(10);
+    applyDamage(world, site, 10, P2);
+    step(world);
+    // One more tick of growth, minus the 10 it took.
+    expect(Health.hp[site]).toBeLessThan(halfway);
+    stepUntil(world, () => !hasComponent(world.ecs, ConstructionSite, site), def.buildTimeTicks + 5);
+    expect(Health.hp[site]).toBe(def.hp - 10);
   });
 
   it('counts a real fight: the spearman kills, the villager is lost', () => {
@@ -170,7 +237,16 @@ describe('match statistics', () => {
     step(world);
     expect(world.matchStats[P1]!.buildingsRazed).toBe(1);
     expect(world.matchStats[P2]!.buildingsLost).toBe(1);
-    expect(events(world, 'entityDestroyed')[0]).toMatchObject({ ownerId: P2, isBuilding: true, defId: Building.defId[target] });
+    const targetDef = getBuildingDef(Building.defId[target])!;
+    expect(events(world, 'entityDestroyed')[0]).toMatchObject({
+      eid: target,
+      ownerId: P2,
+      isBuilding: true,
+      defId: Building.defId[target],
+      footprint: { w: targetDef.footprint.w, h: targetDef.footprint.h },
+      wasFoundation: false,
+      killerOwnerId: P1,
+    });
   });
 
   it('counts a building once its foundation completes', () => {

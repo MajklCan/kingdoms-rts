@@ -86,6 +86,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   world.aiEvents.length = 0;
   world.soundCues.length = 0;
   world.gameEvents.length = 0;
+  world.killingBlows.clear();
   world.matchStats = snapshot.matchStats.map((stats) => ({ ...stats, gathered: [...stats.gathered] }));
   world.paused = snapshot.paused;
   world.humanPlayers = new Set(

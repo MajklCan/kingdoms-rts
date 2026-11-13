@@ -179,6 +179,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     aiEvents: [],
     soundCues: [],
     gameEvents: [],
+    killingBlows: new Map(),
     matchStats: createMatchStats(),
     paused: true,
     map: mapData,

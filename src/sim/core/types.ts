@@ -177,12 +177,22 @@ export type GameEvent =
   | {
       kind: 'entityDestroyed';
       tick: number;
+      /** The entity's raw eid this tick (removed by cleanup the same tick). */
+      eid: number;
       ownerId: number;
       isBuilding: boolean;
-      /** Unit def id for units, building def id for buildings. */
+      /** Unit def id (UnitDefId) for units, building def id (BuildingDefId) for buildings. */
       defId: number;
+      /** Position: unit position, or the building's footprint anchor. */
       x: number;
       y: number;
+      /** Footprint in tiles (1x1 for units). Occupied tiles start at
+       *  round(x) - floor(w / 2), round(y) - floor(h / 2), like the sim grid. */
+      footprint: { w: number; h: number };
+      /** True when a building fell before its construction finished. */
+      wasFoundation: boolean;
+      /** Player whose hit took it to zero hp; -1 when no hit is on record. */
+      killerOwnerId: number;
     };
 
 interface CannonWindup {
@@ -329,6 +339,12 @@ export interface SimWorld {
   soundCues: SoundCue[];
   /** Render-consumed player-facing events (trained, built, researched, destroyed). */
   gameEvents: GameEvent[];
+  /**
+   * eid -> owner of the hit that took it to zero hp. Output-only bookkeeping
+   * for the entityDestroyed event: written by applyDamage, consumed by the
+   * death system, never read by gameplay, not saved and not checksummed.
+   */
+  killingBlows: Map<number, number>;
   /** Per-player match statistics, indexed by playerId. Write-only for the sim. */
   matchStats: PlayerMatchStats[];
   /** When true, step() is a no-op (title screen, pause menu). */
