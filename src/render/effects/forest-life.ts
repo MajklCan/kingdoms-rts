@@ -180,7 +180,9 @@ export class ForestLife {
         continue;
       }
       if (this.units.near(p.tx, p.ty, FLUSH_UNIT_RANGE)) {
+        // The whole group on the tree goes at once: the list may now be shorter.
         this.flushTree(p.tx, p.ty, now);
+        i = Math.min(i, this.perched.length);
         continue;
       }
       if (now >= p.nextFidget) {
