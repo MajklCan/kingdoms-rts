@@ -18,6 +18,7 @@ import { AgeId, type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } fro
 import { TileType } from '../map-gen';
 import type { GridPos } from '../pathfinding';
 import { createAllTechSet } from '../tech-tree';
+import { createAiPlayerState } from '../ai/difficulty';
 import { AI_PLAYER_ID, LOCAL_PLAYER_ID } from '../core/constants';
 import { createSimWorld } from '../core/create-world';
 import { removeSimEntity } from '../core/entities';
@@ -31,7 +32,6 @@ import {
   getWorksiteWorkerSlots,
   spawnWorksiteWorker,
 } from '../systems/worksites';
-import { createAiPlayerState } from '../world';
 import { spawnCompletedBuilding } from './buildings';
 import {
   spawnArcher,

@@ -23,6 +23,7 @@ import {
 } from '../components';
 import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } from '../defs';
 import { TechId, hasTech, worksiteWorkerSlotsForKind } from '../tech-tree';
+import { aiResourceWorksiteCanStillProduce } from '../ai/snapshot';
 import {
   AI_PLAYER_ID,
   DROP_OFF_EDGE_DISTANCE,
@@ -37,7 +38,6 @@ import { resourceWorksiteQuery, worksiteWorkerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnVillager } from '../factories/units';
 import { clearFormationSpeedCap } from '../input/unit-orders';
-import { aiResourceWorksiteCanStillProduce } from '../world';
 import { findNearestDropOffEid, routeToNearestDropOff } from './dropoff';
 import { routeFarmWorkerToNextPatch, routeToNearestReachableResource } from './gathering';
 

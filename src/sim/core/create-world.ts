@@ -10,6 +10,7 @@ import { MapId, TileType, generateMap } from '../map-gen';
 import { type GridPos, Pathfinder } from '../pathfinding';
 import { Rng } from '../rng';
 import { type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
+import { createAiPlayers, normalizeAiDifficulty } from '../ai/difficulty';
 import { spawnResource, spawnTownCenter } from '../factories/buildings';
 import { spawnArcher, spawnScoutCavalry, spawnSpearman } from '../factories/units';
 import { edgeProximity01, trySpawnTreeAt } from '../systems/forest-regrowth';
@@ -18,9 +19,7 @@ import {
   LOCAL_GOLD_DEPOSIT_AMOUNT,
   LOCAL_STONE_DEPOSIT_AMOUNT,
   TREE_RESOURCE_AMOUNT,
-  createAiPlayers,
   createCampaignWorld,
-  normalizeAiDifficulty,
 } from '../world';
 import {
   AI_PLAYER_ID,
