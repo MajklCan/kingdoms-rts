@@ -111,9 +111,7 @@ import {
   GathererStateId,
   GunmanTag,
   Health,
-  MachineGunDeployment,
   MachineGunTag,
-  MortarTag,
   Owner,
   PopulationCost,
   Position,
@@ -136,7 +134,6 @@ import {
 import {
   AGE_TABLE,
   AgeId,
-  BUILDING_TABLE,
   type BuildingDef,
   BuildingDefId,
   type CostTuple,
@@ -145,7 +142,6 @@ import {
   getAgeDef,
   getBuildingDef,
   getUnitDef,
-  refund,
   spend,
 } from './defs';
 import {
@@ -169,8 +165,8 @@ import {
 } from './tech-tree';
 import { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
 import { applyStartingResources, createAgeState, createSimWorld } from './core/create-world';
-import { deterministicEidKey, isLiveEntity, removeSimEntity, sortedEids } from './core/entities';
-import { pushAiEvent, pushSoundCue } from './core/events';
+import { isLiveEntity, removeSimEntity, sortedEids } from './core/entities';
+import { pushAiEvent } from './core/events';
 import {
   canUnitOccupy,
   distToBuildingEdge,
@@ -185,33 +181,15 @@ import {
   findResourceAt,
 } from './core/lookup';
 import { pathTo } from './core/navigation';
-import {
-  countPendingPopCap,
-  countQueuedPopCost,
-  getBuildingPopProvided,
-  recalculatePlayerPopCap,
-} from './core/population';
+import { countPendingPopCap, countQueuedPopCost, recalculatePlayerPopCap } from './core/population';
 import {
   buildingQuery,
-  combatQuery,
-  damageableQuery,
-  deadQuery,
-  gathererQuery,
-  movableQuery,
   resourceQuery,
   selectedQuery,
   townCenterQuery,
   unitQuery,
 } from './core/queries';
-import type {
-  AiDifficulty,
-  AiPlayerState,
-  CampaignState,
-  PendingCannonImpact,
-  PendingProjectileImpact,
-  SimInput,
-  SimWorld,
-} from './core/types';
+import type { AiDifficulty, AiPlayerState, CampaignState, SimInput, SimWorld } from './core/types';
 import { spawnFoundation, spawnResource, spawnTownCenter } from './factories/buildings';
 import {
   findPresetUnitSpot,
@@ -224,12 +202,16 @@ import {
 } from './factories/late-game';
 import { spawnScoutCavalry, spawnVillager } from './factories/units';
 import { ageProgressionSystem, applyAdvanceAge, applyResearchTech } from './systems/age-tech';
+import { combatSystem } from './systems/combat';
 import { constructionSystem } from './systems/construction';
+import { cleanupSystem, deathSystem } from './systems/death';
 import { dropoffSystem, routeToNearestDropOff } from './systems/dropoff';
 import { forestRegrowthSystem } from './systems/forest-regrowth';
 import { gatheringSystem, startGatheringResource } from './systems/gathering';
 import { movementSystem } from './systems/movement';
 import { applyCancelProduction, applyTrainUnit, productionSystem } from './systems/production';
+import { cannonImpactSystem, projectileImpactSystem } from './systems/projectiles';
+import { isTargetInAttackRange, isValidHostileTarget, targetingSystem } from './systems/targeting';
 import {
   isEntityVisibleTo,
   isTileInMap,
@@ -237,6 +219,7 @@ import {
   updatePlayerVisibility,
   visibilitySystem,
 } from './systems/visibility';
+import { winConditionSystem } from './systems/win-condition';
 import {
   countQueuedWorksiteWorkers,
   countWorksiteWorkers,
@@ -292,24 +275,10 @@ export const FORMATION_MODE_DEFAULT = FORMATION_MODE_FREE;
 const FORMATION_FACING_STEPS = 8;
 export const FORMATION_FACING_DEFAULT = 0;
 const FORMATION_MAX_COLUMNS = 12;
-const ATTACK_RANGE_TOLERANCE = 0.5;
-const CANNON_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 0.9);
-const CANNON_SPLASH_FULL_DAMAGE_RADIUS = 0.48;
-const CANNON_SPLASH_MAX_RADIUS = 2.6;
-const CANNON_SPLASH_MIN_DAMAGE_FRACTION = 0.08;
-const CANNON_SPLASH_FALLOFF_EXPONENT = 2.3;
-const CANNON_BUILDING_DIRECT_HIT_RADIUS = 0.35;
-const CANNON_BUILDING_DAMAGE_MULTIPLIER = 2;
-const MACHINE_GUN_DEPLOY_TICKS = Math.round(SIM.TICK_HZ * 1.35);
-// Mortars reuse the cannon's windup + splash + impact machinery, but lob on a
-// higher, slower arc — a longer aim/elevation delay before each shell.
-const MORTAR_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 1.2);
 const AI_DEFENSE_RADIUS = 11;
 const AI_DEFENSE_ORDER_RADIUS = 18;
 const AI_STAGE_RADIUS = 3.5;
 const AI_EVENT_COOLDOWN_TICKS = SIM.TICK_HZ * 20;
-const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
-const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
 
 interface AiDifficultySettings {
   thinkIntervalTicks: number;
@@ -2167,7 +2136,7 @@ function clearCombatOrders(world: SimWorld, eid: number): void {
 }
 
 /** Cancel the gathering / building side. Mirror of clearCombatOrders. */
-function clearWorkOrders(world: SimWorld, eid: number): void {
+export function clearWorkOrders(world: SimWorld, eid: number): void {
   if (hasComponent(world.ecs, Gatherer, eid)) {
     Gatherer.state[eid] = GathererStateId.IDLE;
     Gatherer.targetEid[eid] = -1;
@@ -2692,7 +2661,7 @@ function applyRotateFormationCommand(
   applyReformFormationCommand(world, playerId, eids);
 }
 
-function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
+export function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
   if (!hasComponent(world.ecs, AttackTarget, eid)) return;
   if (AttackTarget.targetEid[eid] < 0) return;
   if (AttackTarget.retainGoal[eid] === 1) return;
@@ -2784,824 +2753,6 @@ export function canPlaceBuildingAt(
     }
   }
   return true;
-}
-
-interface TargetScore {
-  priority: number;
-  distance: number;
-  hpFrac: number;
-  order: number;
-  eid: number;
-}
-
-function findBestAutoTarget(
-  world: SimWorld,
-  attacker: number,
-  aggro: number,
-  targetAllowed: (target: number) => boolean = () => true
-): number {
-  const maxDistance = isMovableEntity(world, attacker)
-    ? aggro + ATTACK_RANGE_TOLERANCE
-    : Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
-  let best: TargetScore | null = null;
-  for (const target of sortedEids(world, damageableQuery(world.ecs))) {
-    if (!isValidHostileTarget(world, attacker, target)) continue;
-    if (!targetAllowed(target)) continue;
-    const distance = distanceToAttackTarget(world, attacker, target);
-    if (distance > maxDistance) continue;
-    const score = targetScore(world, attacker, target, distance);
-    if (!best || compareTargetScore(score, best) < 0) {
-      best = score;
-    }
-  }
-  return best?.eid ?? -1;
-}
-
-function isValidHostileTarget(world: SimWorld, attacker: number, target: number): boolean {
-  if (attacker === target) return false;
-  if (!hasComponent(world.ecs, Owner, attacker)) return false;
-  if (!hasComponent(world.ecs, Owner, target)) return false;
-  if (Owner.player[target] === Owner.player[attacker]) return false;
-  if (Owner.player[target] === 0) return false;
-  if (!hasComponent(world.ecs, Health, target) || Health.hp[target] <= 0) return false;
-  return isTargetVisibleToAttackerOwner(world, attacker, target);
-}
-
-function isTargetVisibleToAttackerOwner(world: SimWorld, attacker: number, target: number): boolean {
-  const attackerOwner = Owner.player[attacker];
-  if (!world.humanPlayers.has(attackerOwner)) return true;
-  return isEntityVisibleTo(world, attackerOwner, target);
-}
-
-function targetScore(
-  world: SimWorld,
-  attacker: number,
-  target: number,
-  distance: number
-): TargetScore {
-  const isUnit = hasComponent(world.ecs, UnitKind, target);
-  const isArmed = hasComponent(world.ecs, Combat, target) && Combat.atk[target] > 0;
-  const isTargetingAttacker =
-    hasComponent(world.ecs, AttackTarget, target) &&
-    AttackTarget.targetEid[target] === attacker;
-  const priority = isTargetingAttacker
-    ? 0
-    : isUnit && isArmed
-      ? 1
-      : isUnit
-        ? 2
-        : isArmed
-          ? 3
-          : 4;
-  const hpMax = Math.max(1, Health.hpMax[target]);
-  return {
-    priority,
-    distance,
-    hpFrac: Health.hp[target] / hpMax,
-    order: deterministicEidKey(world, target),
-    eid: target,
-  };
-}
-
-function compareTargetScore(a: TargetScore, b: TargetScore): number {
-  if (a.priority !== b.priority) return a.priority - b.priority;
-  if (Math.abs(a.distance - b.distance) > 0.001) return a.distance - b.distance;
-  if (Math.abs(a.hpFrac - b.hpFrac) > 0.001) return a.hpFrac - b.hpFrac;
-  if (a.order !== b.order) return a.order - b.order;
-  return a.eid - b.eid;
-}
-
-function distanceToAttackTarget(world: SimWorld, attacker: number, target: number): number {
-  return hasComponent(world.ecs, Building, target)
-    ? distToBuildingEdge(world, Position.x[attacker], Position.y[attacker], target)
-    : Math.hypot(
-        Position.x[attacker] - Position.x[target],
-        Position.y[attacker] - Position.y[target]
-      );
-}
-
-function isTargetInAttackRange(world: SimWorld, attacker: number, target: number): boolean {
-  return distanceToAttackTarget(world, attacker, target) <=
-    Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
-}
-
-function isHoldPositionStance(world: SimWorld, eid: number): boolean {
-  return (
-    hasComponent(world.ecs, UnitStance, eid) &&
-    UnitStance.stance[eid] === UnitStanceId.HOLD_POSITION
-  );
-}
-
-function isMeleeHoldPositionUnit(world: SimWorld, eid: number): boolean {
-  return isMovableEntity(world, eid) && Combat.range[eid] <= 1.25;
-}
-
-function holdPositionAutoSearchRadius(world: SimWorld, eid: number): number {
-  return isMeleeHoldPositionUnit(world, eid)
-    ? HOLD_POSITION_MELEE_LEASH_TILES + Combat.range[eid]
-    : Combat.range[eid];
-}
-
-function isHoldPositionTargetAllowed(world: SimWorld, eid: number, target: number): boolean {
-  if (isTargetInAttackRange(world, eid, target)) return true;
-  if (!isMeleeHoldPositionUnit(world, eid)) return false;
-
-  const anchorX = UnitStance.anchorX[eid];
-  const anchorY = UnitStance.anchorY[eid];
-  const anchorToTarget = distToBuildingEdge(world, anchorX, anchorY, target);
-  return anchorToTarget <=
-    HOLD_POSITION_MELEE_LEASH_TILES + Combat.range[eid] + ATTACK_RANGE_TOLERANCE;
-}
-
-function canHoldPositionMoveToTarget(world: SimWorld, eid: number, target: number): boolean {
-  if (!isMeleeHoldPositionUnit(world, eid)) return false;
-  if (!isHoldPositionTargetAllowed(world, eid, target)) return false;
-  const distanceFromAnchor = Math.hypot(
-    Position.x[eid] - UnitStance.anchorX[eid],
-    Position.y[eid] - UnitStance.anchorY[eid]
-  );
-  return distanceFromAnchor <=
-    HOLD_POSITION_MELEE_LEASH_TILES + HOLD_POSITION_MELEE_LEASH_BUFFER;
-}
-
-function targetingSystem(world: SimWorld): void {
-  const ents = sortedEids(world, combatQuery(world.ecs));
-  for (const eid of ents) {
-    if (Health.hp[eid] <= 0) continue;
-    const cur = AttackTarget.targetEid[eid];
-    const aggro = Combat.aggroRadius[eid];
-    const holdPosition = isHoldPositionStance(world, eid);
-    const attackMoving =
-      hasComponent(world.ecs, AttackMoveGoal, eid) &&
-      AttackMoveGoal.active[eid] === 1;
-    const targetValid =
-      cur >= 0 &&
-      hasComponent(world.ecs, Health, cur) &&
-      Health.hp[cur] > 0;
-
-    if (targetValid) {
-      // Apply a leash: aggro-acquired targets are dropped if they wander too
-      // far. Explicit attack orders (AttackMoveGoal.active=0 + retainGoal=0)
-      // also leash; only retainGoal=1 explicit-attack persists indefinitely.
-      const explicitOrder = AttackTarget.retainGoal[eid] === 1;
-      if (holdPosition && !explicitOrder && !attackMoving) {
-        if (isHoldPositionTargetAllowed(world, eid, cur)) {
-          if (isTargetInAttackRange(world, eid, cur)) world.paths.delete(eid);
-          continue;
-        }
-        clearNonExplicitCombatTarget(world, eid);
-      } else if (!explicitOrder && aggro > 0) {
-        const dist = distanceToAttackTarget(world, eid, cur);
-        // Leash = 2× aggro radius. Stops "infinite chase" from one slip of vision.
-        if (dist > aggro * 2) {
-          AttackTarget.targetEid[eid] = -1;
-        } else {
-          continue;
-        }
-      } else {
-        continue;
-      }
-    }
-
-    AttackTarget.targetEid[eid] = -1;
-
-    // Once we have no target, decide whether to auto-aggro or resume an
-    // attack-move destination.
-    if (aggro === 0) {
-      // Non-aggressors (villagers) just stop chasing.
-      continue;
-    }
-
-    // Suppress aggro re-acquisition while the unit is executing a manual
-    // move order. Without this, the moment we clear AttackTarget in
-    // `applyMoveSelected`, this system would auto-acquire the same enemy
-    // again on the next tick and the player's move command would feel like
-    // it did nothing. We detect manual-move as: has an active path AND
-    // attack-move goal is NOT active.
-    const onManualMove =
-      world.paths.has(eid) &&
-      !attackMoving;
-    if (onManualMove) continue;
-
-    const searchRadius = holdPosition && !attackMoving
-      ? holdPositionAutoSearchRadius(world, eid)
-      : aggro;
-    const bestEid = findBestAutoTarget(
-      world,
-      eid,
-      searchRadius,
-      holdPosition && !attackMoving
-        ? (target) => isHoldPositionTargetAllowed(world, eid, target)
-        : undefined
-    );
-    if (bestEid >= 0) {
-      const inRange = isTargetInAttackRange(world, eid, bestEid);
-      const canMoveIntoRange =
-        (holdPosition && !attackMoving
-          ? canHoldPositionMoveToTarget(world, eid, bestEid)
-          : isMovableEntity(world, eid)) &&
-        pathTo(world, eid, Position.x[bestEid], Position.y[bestEid]);
-      const canEngage = inRange || canMoveIntoRange;
-      if (canEngage) {
-        AttackTarget.targetEid[eid] = bestEid;
-        clearFormationSpeedCap(world, eid);
-      }
-    } else if (
-      hasComponent(world.ecs, AttackMoveGoal, eid) &&
-      AttackMoveGoal.active[eid] === 1
-    ) {
-      // No enemy in aggro range — resume marching toward the attack-move
-      // destination. Once we arrive (path empty), we clear active in
-      // movement / above on next eval.
-      const gx = AttackMoveGoal.x[eid];
-      const gy = AttackMoveGoal.y[eid];
-      const arrived =
-        Math.hypot(Position.x[eid] - gx, Position.y[eid] - gy) < 0.6;
-      if (arrived) {
-        AttackMoveGoal.active[eid] = 0;
-      } else if (!world.paths.has(eid)) {
-        if (!pathTo(world, eid, gx, gy)) {
-          AttackMoveGoal.active[eid] = 0;
-        }
-      }
-    }
-  }
-}
-
-function combatSystem(world: SimWorld): void {
-  const ents = sortedEids(world, combatQuery(world.ecs));
-  for (const eid of ents) {
-    if (Cooldown.ticksRemaining[eid] > 0) {
-      Cooldown.ticksRemaining[eid] -= 1;
-    }
-    if (Health.hp[eid] <= 0) continue;
-    if (usesSiegeWindup(world, eid) && processCannonWindup(world, eid)) {
-      continue;
-    }
-    if (hasComponent(world.ecs, MachineGunTag, eid) && !processMachineGunDeployment(world, eid)) {
-      continue;
-    }
-    const target = AttackTarget.targetEid[eid];
-    if (target < 0) continue;
-    if (!hasComponent(world.ecs, Health, target) || Health.hp[target] <= 0) {
-      AttackTarget.targetEid[eid] = -1;
-      // Also free the path that was chasing this dead target so the unit
-      // doesn't keep walking to where it died.
-      world.paths.delete(eid);
-      continue;
-    }
-    if (!isTargetVisibleToAttackerOwner(world, eid, target)) {
-      AttackTarget.targetEid[eid] = -1;
-      world.paths.delete(eid);
-      continue;
-    }
-    const range = Combat.range[eid];
-    // Buildings have a non-trivial footprint — use edge distance so melee
-    // units beside a 3×3 TC are correctly "in range" instead of permanently
-    // out-of-range against the centre.
-    const dist = distanceToAttackTarget(world, eid, target);
-    if (dist > range + ATTACK_RANGE_TOLERANCE) {
-      if (isMovableEntity(world, eid)) {
-        const holdRestricted =
-          isHoldPositionStance(world, eid) &&
-          AttackTarget.retainGoal[eid] !== 1 &&
-          (!hasComponent(world.ecs, AttackMoveGoal, eid) ||
-            AttackMoveGoal.active[eid] === 0);
-        if (holdRestricted && !canHoldPositionMoveToTarget(world, eid, target)) {
-          clearNonExplicitCombatTarget(world, eid);
-          continue;
-        }
-        const path = world.paths.get(eid);
-        if (!path || path.length === 0 || dist > range + 2) {
-          if (!pathTo(world, eid, Position.x[target], Position.y[target])) {
-            AttackTarget.targetEid[eid] = -1;
-            world.paths.delete(eid);
-          }
-        }
-      }
-      continue;
-    }
-    // In range — stop moving + attack on cooldown 0.
-    world.paths.delete(eid);
-    clearFormationSpeedCap(world, eid);
-    if (Cooldown.ticksRemaining[eid] > 0) continue;
-    if (usesSiegeWindup(world, eid)) {
-      startCannonWindup(world, eid, target, range);
-      continue;
-    }
-    if (usesProjectileAttack(world, eid)) {
-      fireProjectileAttack(world, eid, target, range);
-      continue;
-    }
-    applyAttackDamage(world, eid, target, computeAttackDamage(world, eid, target));
-    Cooldown.ticksRemaining[eid] = Combat.attackSpeedTicks[eid];
-    world.combatEvents.push({
-      type: 'attack',
-      tick: world.tick,
-      attackerEid: eid,
-      targetEid: target,
-      attackerKind: hasComponent(world.ecs, UnitKind, eid) ? UnitKind.kind[eid] : -1,
-      range,
-      fromX: Position.x[eid],
-      fromY: Position.y[eid],
-      toX: Position.x[target],
-      toY: Position.y[target],
-    });
-  }
-}
-
-function usesProjectileAttack(world: SimWorld, attacker: number): boolean {
-  return Combat.range[attacker] > 1 &&
-    (
-      hasComponent(world.ecs, ArcherTag, attacker) ||
-      hasComponent(world.ecs, GunmanTag, attacker) ||
-      hasComponent(world.ecs, MachineGunTag, attacker) ||
-      hasComponent(world.ecs, Building, attacker)
-    );
-}
-
-function processMachineGunDeployment(world: SimWorld, eid: number): boolean {
-  if (!hasComponent(world.ecs, MachineGunDeployment, eid)) {
-    addComponent(world.ecs, MachineGunDeployment, eid);
-    MachineGunDeployment.deployed[eid] = 1;
-    MachineGunDeployment.setupTicks[eid] = 0;
-  }
-
-  const target = AttackTarget.targetEid[eid];
-  if (
-    target >= 0 &&
-    hasComponent(world.ecs, Health, target) &&
-    Health.hp[target] > 0 &&
-    isTargetInAttackRange(world, eid, target)
-  ) {
-    world.paths.delete(eid);
-    clearFormationSpeedCap(world, eid);
-  }
-
-  const path = world.paths.get(eid);
-  const isMoving =
-    (path !== undefined && path.length > 0) ||
-    Math.hypot(Velocity.x[eid], Velocity.y[eid]) > 0.05;
-
-  if (isMoving) {
-    MachineGunDeployment.deployed[eid] = 0;
-    MachineGunDeployment.setupTicks[eid] = MACHINE_GUN_DEPLOY_TICKS;
-    return false;
-  }
-
-  if (MachineGunDeployment.setupTicks[eid] > 0) {
-    MachineGunDeployment.setupTicks[eid] -= 1;
-    MachineGunDeployment.deployed[eid] = 0;
-    return false;
-  }
-
-  MachineGunDeployment.deployed[eid] = 1;
-  return true;
-}
-
-function fireProjectileAttack(
-  world: SimWorld,
-  attacker: number,
-  target: number,
-  range: number
-): void {
-  const distance = Math.hypot(
-    Position.x[attacker] - Position.x[target],
-    Position.y[attacker] - Position.y[target]
-  );
-  const projectileTicks = projectileTravelTicksForAttack(world, attacker, distance);
-  world.pendingProjectileImpacts.push({
-    impactTick: world.tick + projectileTicks,
-    attackerEid: attacker,
-    attackerOwner: Owner.player[attacker],
-    targetEid: target,
-    damage: computeAttackDamage(world, attacker, target),
-  });
-  Cooldown.ticksRemaining[attacker] = Combat.attackSpeedTicks[attacker];
-  world.combatEvents.push({
-    type: 'attack',
-    tick: world.tick,
-    attackerEid: attacker,
-    targetEid: target,
-    attackerKind: hasComponent(world.ecs, UnitKind, attacker) ? UnitKind.kind[attacker] : -1,
-    range,
-    fromX: Position.x[attacker],
-    fromY: Position.y[attacker],
-    toX: Position.x[target],
-    toY: Position.y[target],
-    projectileTicks,
-  });
-}
-
-function processCannonWindup(world: SimWorld, attacker: number): boolean {
-  const windup = world.cannonWindups.get(attacker);
-  if (!windup) return false;
-  const target = windup.targetEid;
-  if (!isCannonWindupTargetValid(world, attacker, target)) {
-    world.cannonWindups.delete(attacker);
-    return true;
-  }
-
-  world.paths.delete(attacker);
-  clearFormationSpeedCap(world, attacker);
-  windup.ticksRemaining -= 1;
-  if (windup.ticksRemaining > 0) return true;
-
-  world.cannonWindups.delete(attacker);
-  fireCannonShot(world, attacker, target);
-  return true;
-}
-
-function isCannonWindupTargetValid(world: SimWorld, attacker: number, target: number): boolean {
-  if (target < 0) return false;
-  if (!hasComponent(world.ecs, Health, target) || Health.hp[target] <= 0) return false;
-  if (!isTargetVisibleToAttackerOwner(world, attacker, target)) return false;
-  return distanceToAttackTarget(world, attacker, target) <=
-    Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
-}
-
-/** Cannons and mortars share the wind-up → splash-impact pipeline. */
-function usesSiegeWindup(world: SimWorld, eid: number): boolean {
-  return (
-    hasComponent(world.ecs, CannonTag, eid) ||
-    hasComponent(world.ecs, MortarTag, eid)
-  );
-}
-
-function startCannonWindup(world: SimWorld, attacker: number, target: number, range: number): void {
-  const isMortar = hasComponent(world.ecs, MortarTag, attacker);
-  const windupTicks = isMortar ? MORTAR_WINDUP_TICKS : CANNON_WINDUP_TICKS;
-  world.cannonWindups.set(attacker, {
-    targetEid: target,
-    ticksRemaining: windupTicks,
-  });
-  world.combatEvents.push({
-    type: 'attack',
-    tick: world.tick,
-    attackerEid: attacker,
-    targetEid: target,
-    attackerKind: isMortar ? UnitDefId.MORTAR : UnitDefId.CANNON,
-    range,
-    fromX: Position.x[attacker],
-    fromY: Position.y[attacker],
-    toX: Position.x[target],
-    toY: Position.y[target],
-    phase: 'windup',
-    windupTicks,
-  });
-}
-
-function fireCannonShot(world: SimWorld, attacker: number, target: number): void {
-  const isMortar = hasComponent(world.ecs, MortarTag, attacker);
-  const dist = Math.hypot(Position.x[attacker] - Position.x[target], Position.y[attacker] - Position.y[target]);
-  const projectileTicks = isMortar
-    ? mortarProjectileTravelTicks(dist)
-    : cannonProjectileTravelTicks(dist);
-  world.pendingCannonImpacts.push({
-    impactTick: world.tick + projectileTicks,
-    attackerEid: attacker,
-    attackerOwner: Owner.player[attacker],
-    impactX: Position.x[target],
-    impactY: Position.y[target],
-    damage: Combat.atk[attacker],
-  });
-  Cooldown.ticksRemaining[attacker] = Combat.attackSpeedTicks[attacker];
-  world.combatEvents.push({
-    type: 'attack',
-    tick: world.tick,
-    attackerEid: attacker,
-    targetEid: target,
-    attackerKind: isMortar ? UnitDefId.MORTAR : UnitDefId.CANNON,
-    range: Combat.range[attacker],
-    fromX: Position.x[attacker],
-    fromY: Position.y[attacker],
-    toX: Position.x[target],
-    toY: Position.y[target],
-    phase: 'fire',
-    projectileTicks,
-  });
-}
-
-function projectileTravelTicksForAttack(
-  world: SimWorld,
-  attacker: number,
-  distanceTiles: number
-): number {
-  if (hasComponent(world.ecs, GunmanTag, attacker)) {
-    return projectileTravelTicks(distanceTiles, 70, 160, 24);
-  }
-  if (hasComponent(world.ecs, MachineGunTag, attacker)) {
-    return projectileTravelTicks(distanceTiles, 45, 120, 18);
-  }
-  return projectileTravelTicks(distanceTiles, 180, 520, 70);
-}
-
-function cannonProjectileTravelTicks(distanceTiles: number): number {
-  return projectileTravelTicks(distanceTiles, 320, 827, 96);
-}
-
-/** Mortar shells hang on a higher, slower arc than a flat cannon shot. */
-function mortarProjectileTravelTicks(distanceTiles: number): number {
-  return projectileTravelTicks(distanceTiles, 300, 760, 95);
-}
-
-function projectileTravelTicks(
-  distanceTiles: number,
-  minMs: number,
-  maxMs: number,
-  msPerTile: number
-): number {
-  const durationMs = Math.max(minMs, Math.min(maxMs, distanceTiles * msPerTile));
-  return Math.max(1, Math.round(durationMs / SIM.TICK_MS));
-}
-
-function projectileImpactSystem(world: SimWorld): void {
-  if (world.pendingProjectileImpacts.length === 0) return;
-  const pending: PendingProjectileImpact[] = [];
-  for (const impact of world.pendingProjectileImpacts) {
-    if (impact.impactTick > world.tick) {
-      pending.push(impact);
-      continue;
-    }
-    applyProjectileImpactDamage(world, impact);
-  }
-  world.pendingProjectileImpacts = pending;
-}
-
-function applyProjectileImpactDamage(world: SimWorld, impact: PendingProjectileImpact): void {
-  if (
-    !hasComponent(world.ecs, Health, impact.targetEid) ||
-    Health.hp[impact.targetEid] <= 0 ||
-    !hasComponent(world.ecs, Owner, impact.targetEid) ||
-    Owner.player[impact.targetEid] === impact.attackerOwner ||
-    Owner.player[impact.targetEid] === 0
-  ) {
-    return;
-  }
-  Health.hp[impact.targetEid] -= impact.damage;
-  retaliateWhenEngaged(world, impact.targetEid, impact.attackerEid);
-}
-
-function cannonImpactSystem(world: SimWorld): void {
-  if (world.pendingCannonImpacts.length === 0) return;
-  const pending: PendingCannonImpact[] = [];
-  for (const impact of world.pendingCannonImpacts) {
-    if (impact.impactTick > world.tick) {
-      pending.push(impact);
-      continue;
-    }
-    applyCannonImpactDamage(world, impact);
-  }
-  world.pendingCannonImpacts = pending;
-}
-
-function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): void {
-  pushSoundCue(world, 'cannon_impact', impact.impactX, impact.impactY, impact.attackerOwner);
-  for (const building of sortedEids(world, buildingQuery(world.ecs))) {
-    if (!isValidCannonBuildingVictim(world, impact.attackerOwner, building)) continue;
-    if (distToBuildingEdge(world, impact.impactX, impact.impactY, building) > CANNON_BUILDING_DIRECT_HIT_RADIUS) {
-      continue;
-    }
-    Health.hp[building] -= Math.max(
-      1,
-      Math.ceil(impact.damage * CANNON_BUILDING_DAMAGE_MULTIPLIER) - Health.armor[building]
-    );
-    retaliateWhenEngaged(world, building, impact.attackerEid);
-  }
-
-  for (const victim of sortedEids(world, unitQuery(world.ecs))) {
-    if (!isValidCannonSplashVictim(world, impact.attackerOwner, victim)) continue;
-    const distance = Math.hypot(Position.x[victim] - impact.impactX, Position.y[victim] - impact.impactY);
-    if (distance > CANNON_SPLASH_MAX_RADIUS) continue;
-    Health.hp[victim] -= computeCannonSplashDamage(impact.damage, victim, distance);
-    retaliateWhenEngaged(world, victim, impact.attackerEid);
-  }
-}
-
-function isValidCannonBuildingVictim(
-  world: SimWorld,
-  attackerOwner: number,
-  building: number
-): boolean {
-  if (!hasComponent(world.ecs, Owner, building)) return false;
-  if (Owner.player[building] === attackerOwner) return false;
-  if (Owner.player[building] === 0) return false;
-  return hasComponent(world.ecs, Health, building) && Health.hp[building] > 0;
-}
-
-function isValidCannonSplashVictim(world: SimWorld, attackerOwner: number, victim: number): boolean {
-  if (!hasComponent(world.ecs, Owner, victim)) return false;
-  if (Owner.player[victim] === attackerOwner) return false;
-  if (Owner.player[victim] === 0) return false;
-  return hasComponent(world.ecs, Health, victim) && Health.hp[victim] > 0;
-}
-
-function computeCannonSplashDamage(baseDamage: number, victim: number, distance: number): number {
-  const span = Math.max(0.01, CANNON_SPLASH_MAX_RADIUS - CANNON_SPLASH_FULL_DAMAGE_RADIUS);
-  const t = Math.min(1, Math.max(0, (distance - CANNON_SPLASH_FULL_DAMAGE_RADIUS) / span));
-  const damageFraction =
-    CANNON_SPLASH_MIN_DAMAGE_FRACTION +
-    (1 - CANNON_SPLASH_MIN_DAMAGE_FRACTION) *
-      Math.pow(1 - t, CANNON_SPLASH_FALLOFF_EXPONENT);
-  return Math.max(1, Math.ceil(baseDamage * damageFraction) - Health.armor[victim]);
-}
-
-function retaliateWhenEngaged(world: SimWorld, defender: number, attacker: number): void {
-  if (defender === attacker) return;
-  if (!hasComponent(world.ecs, Position, defender)) return;
-  if (!hasComponent(world.ecs, Position, attacker)) return;
-  if (!hasComponent(world.ecs, Health, defender) || Health.hp[defender] <= 0) return;
-  if (!hasComponent(world.ecs, Health, attacker) || Health.hp[attacker] <= 0) return;
-  if (!hasComponent(world.ecs, Owner, defender) || !hasComponent(world.ecs, Owner, attacker)) return;
-  if (Owner.player[defender] === Owner.player[attacker]) return;
-  if (!hasComponent(world.ecs, Combat, defender)) return;
-  if (!hasComponent(world.ecs, AttackTarget, defender)) return;
-  if (isHoldPositionStance(world, defender)) return;
-
-  const current = AttackTarget.targetEid[defender];
-  if (current === attacker) return;
-  const currentIsLivingUnit =
-    current >= 0 &&
-    hasComponent(world.ecs, UnitKind, current) &&
-    hasComponent(world.ecs, Health, current) &&
-    Health.hp[current] > 0;
-  if (currentIsLivingUnit) return;
-
-  AttackTarget.targetEid[defender] = attacker;
-  AttackTarget.retainGoal[defender] = 0;
-  if (hasComponent(world.ecs, AttackMoveGoal, defender)) {
-    AttackMoveGoal.active[defender] = 0;
-  }
-  if (hasComponent(world.ecs, Gatherer, defender)) {
-    clearWorkOrders(world, defender);
-  }
-  if (isMovableEntity(world, defender)) {
-    if (isTargetInAttackRange(world, defender, attacker)) {
-      world.paths.delete(defender);
-      clearFormationSpeedCap(world, defender);
-    } else {
-      pathTo(world, defender, Position.x[attacker], Position.y[attacker]);
-    }
-  }
-}
-
-function applyAttackDamage(
-  world: SimWorld,
-  attacker: number,
-  target: number,
-  damage: number
-): void {
-  Health.hp[target] -= damage;
-  retaliateWhenEngaged(world, target, attacker);
-}
-
-function computeAttackDamage(world: SimWorld, attacker: number, target: number): number {
-  let bonus = 0;
-  if (
-    hasComponent(world.ecs, SpearmanTag, attacker) &&
-    hasComponent(world.ecs, ScoutCavalryTag, target)
-  ) {
-    bonus += 13;
-  }
-  if (
-    hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
-    hasComponent(world.ecs, ArcherTag, target)
-  ) {
-    bonus += 4;
-  }
-  if (
-    hasComponent(world.ecs, ArcherTag, attacker) &&
-    hasComponent(world.ecs, SpearmanTag, target)
-  ) {
-    bonus += 2;
-  }
-  if (
-    hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
-    hasComponent(world.ecs, CannonTag, target)
-  ) {
-    bonus += 10;
-  }
-  if (
-    hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
-    hasComponent(world.ecs, MachineGunTag, target)
-  ) {
-    bonus += 8;
-  }
-  if (
-    hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
-    hasComponent(world.ecs, MortarTag, target)
-  ) {
-    bonus += 10;
-  }
-  return Math.max(1, Combat.atk[attacker] + bonus - Health.armor[target]);
-}
-
-function deathSystem(world: SimWorld): void {
-  const ents = sortedEids(world, damageableQuery(world.ecs));
-  for (const eid of ents) {
-    if (Health.hp[eid] <= 0 && !hasComponent(world.ecs, DeadTag, eid)) {
-      addComponent(world.ecs, DeadTag, eid);
-      const isBuilding = hasComponent(world.ecs, Building, eid);
-      pushSoundCue(
-        world,
-        isBuilding ? 'building_destroyed' : 'unit_death',
-        Position.x[eid],
-        Position.y[eid],
-        Owner.player[eid]
-      );
-    }
-  }
-}
-
-function cleanupSystem(world: SimWorld): void {
-  const dead = sortedEids(world, deadQuery(world.ecs));
-  for (const eid of dead) {
-    let recalculatePopFor: number | null = null;
-    // Update population counters.
-    if (hasComponent(world.ecs, PopulationCost, eid)) {
-      const p = Owner.player[eid];
-      if (world.population[p]) {
-        world.population[p].current = Math.max(
-          0,
-          world.population[p].current - PopulationCost.value[eid]
-        );
-      }
-    }
-    if (hasComponent(world.ecs, Building, eid)) {
-      const defId = Building.defId[eid];
-      const def = BUILDING_TABLE[defId];
-      const p = Owner.player[eid];
-      // CRITICAL: only decrement pop cap for COMPLETED buildings. Foundations
-      // that haven't been finalised never granted cap, so destroying them
-      // mid-build should not reduce cap.
-      const wasFoundation = hasComponent(world.ecs, ConstructionSite, eid);
-      if (!wasFoundation && def && getBuildingPopProvided(world, p, defId) > 0) {
-        recalculatePopFor = p;
-      }
-      // Refund any queued production (resources were spent at queue time).
-      const queue = world.productionQueues.get(eid);
-      if (queue) {
-        for (const qDef of queue) {
-          const unitDef = getUnitDef(qDef);
-          if (unitDef && world.resources[p]) {
-            refund(world.resources[p], unitDef.cost);
-          }
-        }
-      }
-      world.productionQueues.delete(eid);
-      if (def) {
-        markFootprintBlocked(
-          world,
-          Position.x[eid],
-          Position.y[eid],
-          def.footprint.w,
-          def.footprint.h,
-          false
-        );
-      }
-      markWorksiteWorkersDead(world, eid);
-    }
-    // Clear any attack targets pointing at us — AND drop the path that was
-    // chasing us. Without this, attackers keep walking to the deceased's last
-    // tile (the "targeting a previous position" bug).
-    const attackers = sortedEids(world, combatQuery(world.ecs));
-    for (const a of attackers) {
-      if (AttackTarget.targetEid[a] === eid) {
-        AttackTarget.targetEid[a] = -1;
-        world.paths.delete(a);
-        clearFormationSpeedCap(world, a);
-      }
-    }
-    world.cannonWindups.delete(eid);
-    // Clear gatherer targets pointing at us (resource depleted, etc.).
-    const gatherers = sortedEids(world, gathererQuery(world.ecs));
-    for (const g of gatherers) {
-      if (Gatherer.targetEid[g] === eid) {
-        Gatherer.state[g] = GathererStateId.IDLE;
-        Gatherer.targetEid[g] = -1;
-        world.paths.delete(g);
-        clearFormationSpeedCap(world, g);
-      }
-    }
-    // Clear builders' BuildOrder pointing at us.
-    if (hasComponent(world.ecs, Building, eid)) {
-      const allMovable = sortedEids(world, movableQuery(world.ecs));
-      for (const m of allMovable) {
-        if (
-          hasComponent(world.ecs, BuildOrder, m) &&
-          BuildOrder.targetEid[m] === eid
-        ) {
-          BuildOrder.targetEid[m] = -1;
-          world.paths.delete(m);
-          clearFormationSpeedCap(world, m);
-        }
-      }
-    }
-    world.paths.delete(eid);
-    clearFormationSpeedCap(world, eid);
-    removeSimEntity(world, eid);
-    if (recalculatePopFor !== null) recalculatePlayerPopCap(world, recalculatePopFor);
-  }
 }
 
 function zborovAssaultSystem(world: SimWorld): void {
@@ -3803,7 +2954,7 @@ function countIncompleteCampaignObjectives(campaign: CampaignState, ids: string[
   return count;
 }
 
-function countLiveMilitary(world: SimWorld, playerId: number): number {
+export function countLiveMilitary(world: SimWorld, playerId: number): number {
   let count = 0;
   for (const eid of unitQuery(world.ecs)) {
     if (Owner.player[eid] !== playerId) continue;
@@ -4087,7 +3238,7 @@ function sudomerWaveSpawnAnchor(waveIndex: number): GridPos {
   return anchors[waveIndex % anchors.length];
 }
 
-function countLiveTrackedEids(world: SimWorld, eids: number[]): number {
+export function countLiveTrackedEids(world: SimWorld, eids: number[]): number {
   let count = 0;
   for (const eid of eids) {
     if (isLiveEntity(world, eid)) count++;
@@ -5631,76 +4782,4 @@ function aiNearestResourceDistance(
   const target = findNearestResource(world, x, y, kind, radius);
   if (target === null) return radius;
   return Math.hypot(Position.x[target] - x, Position.y[target] - y);
-}
-
-function winConditionSystem(world: SimWorld): void {
-  if (world.outcome.state !== 'playing') return;
-  if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_BILA_HORA) {
-    const playerArmy = countLiveMilitary(world, LOCAL_PLAYER_ID);
-    const enemyArmy = countLiveMilitary(world, AI_PLAYER_ID);
-    if (playerArmy <= 0 && enemyArmy > 0) {
-      world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
-    } else if (enemyArmy <= 0 && playerArmy > 0) {
-      world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
-    }
-    return;
-  }
-  if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_KUTNA_HORA) {
-    const townCenter = findOwnedTownCenter(world, LOCAL_PLAYER_ID);
-    if (townCenter === null) {
-      world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
-      return;
-    }
-    const survived = world.campaign.objectives.find((objective) =>
-      objective.id === 'survive_kutna_hora'
-    )?.completed;
-    if (survived) {
-      world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
-    }
-    return;
-  }
-  if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_SUDOMER) {
-    // Town defense: lose if the Town Hall falls, win by surviving every wave.
-    if (findOwnedTownCenter(world, LOCAL_PLAYER_ID) === null) {
-      world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
-      return;
-    }
-    const survived = world.campaign.objectives.find((objective) =>
-      objective.id === 'survive_sudomer_assault'
-    )?.completed;
-    if (survived) {
-      world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
-    }
-    return;
-  }
-  if (world.campaign?.missionId === CampaignMissionId.BATTLE_OF_ZBOROV) {
-    // Economy trench duel: either command foundry falling decides the mission.
-    const playerCommand = world.campaign.trackedObjectiveEids.hold_legion_command ?? [];
-    const playerCommandDown = playerCommand.length > 0 && countLiveTrackedEids(world, playerCommand) === 0;
-    if (playerCommandDown) {
-      world.outcome = { state: 'victory', winnerPlayerId: AI_PLAYER_ID, mode: 'conquest' };
-      return;
-    }
-    const bunker = world.campaign.trackedObjectiveEids.take_command_bunker ?? [];
-    const bunkerDown = bunker.length > 0 && countLiveTrackedEids(world, bunker) === 0;
-    if (bunkerDown) {
-      world.outcome = { state: 'victory', winnerPlayerId: LOCAL_PLAYER_ID, mode: 'conquest' };
-    }
-    return;
-  }
-  // Conquest victory: only one player still has a Town Center.
-  const tcs = townCenterQuery(world.ecs);
-  let p1 = 0;
-  let p2 = 0;
-  for (const eid of tcs) {
-    if (Health.hp[eid] <= 0) continue;
-    const player = Owner.player[eid];
-    if (player === 1) p1++;
-    else if (player === 2) p2++;
-  }
-  if (p1 === 0 && p2 > 0) {
-    world.outcome = { state: 'victory', winnerPlayerId: 2, mode: 'conquest' };
-  } else if (p2 === 0 && p1 > 0) {
-    world.outcome = { state: 'victory', winnerPlayerId: 1, mode: 'conquest' };
-  }
 }

@@ -14,4 +14,5 @@ export const TREE_REGEN_BUILDING_CLEARANCE = 4;
 export const RESOURCE_GATHER_DISTANCE = 0.55;
 export const DROP_OFF_EDGE_DISTANCE = 0.24;
 export const FARM_WORK_EDGE_DISTANCE = 0.65;
+export const ATTACK_RANGE_TOLERANCE = 0.5;
 export const AI_PLAYER_ID = 2;
