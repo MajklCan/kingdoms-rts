@@ -1,5 +1,5 @@
 /**
- * Rebuild a SimWorld from a SavedGameV1: entities, components, eid references and fog.
+ * Rebuild a SimWorld from a SavedGame (older versions are migrated first): entities, components, eid references and fog.
  */
 
 import { addComponent } from 'bitecs';
@@ -60,11 +60,12 @@ import {
 } from '../world';
 import { Pathfinder } from '../pathfinding';
 import { TECH_TREE, type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
-import { SAVE_VERSION, type SavedEntityV1, type SavedGameV1 } from './schema';
+import { type SavedEntityV1, type SavedGame, type SavedGameV1, migrateSavedGame } from './schema';
 
-export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): void {
-  if (snapshot.version !== SAVE_VERSION) {
-    throw new Error(`Unsupported save version ${snapshot.version}`);
+export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV1): void {
+  const snapshot = migrateSavedGame(saved);
+  if (!snapshot) {
+    throw new Error(`Unsupported save version ${String((saved as { version?: unknown }).version)}`);
   }
 
   for (const eid of [...positionQuery(world.ecs)]) {
@@ -84,6 +85,8 @@ export function loadSimWorldSnapshot(world: SimWorld, snapshot: SavedGameV1): vo
   world.pendingCannonImpacts.length = 0;
   world.aiEvents.length = 0;
   world.soundCues.length = 0;
+  world.gameEvents.length = 0;
+  world.matchStats = snapshot.matchStats.map((stats) => ({ ...stats, gathered: [...stats.gathered] }));
   world.paused = snapshot.paused;
   world.humanPlayers = new Set(
     (snapshot.humanPlayers ?? [LOCAL_PLAYER_ID])
@@ -309,7 +312,7 @@ function isKnownTechId(techId: unknown): techId is TechIdValue {
   return typeof techId === 'string' && KNOWN_TECH_IDS.has(techId);
 }
 
-function fallbackTechSet(snapshot: SavedGameV1, playerId: number): Set<TechIdValue> {
+function fallbackTechSet(snapshot: SavedGame, playerId: number): Set<TechIdValue> {
   return createStartingTechSetForAge(snapshot.ages[playerId]?.current ?? AgeId.DARK);
 }
 
@@ -486,7 +489,7 @@ function remapEid(savedEid: number, eidMap: Map<number, number>): number {
 
 function restoreVisibility(
   world: SimWorld,
-  snapshot: SavedGameV1,
+  snapshot: SavedGame,
   eidMap: Map<number, number>
 ): void {
   const next = createVisibilityStates();

@@ -10,6 +10,7 @@ import { LOCAL_PLAYER_ID } from '../core/constants';
 import { createSimWorld } from '../core/create-world';
 import { isLiveEntity } from '../core/entities';
 import { pushAiEvent } from '../core/events';
+import { resetMatchStats } from '../core/match-stats';
 import { unitQuery } from '../core/queries';
 import type { CampaignState, SimWorld } from '../core/types';
 import { updatePlayerVisibility } from '../systems/visibility';
@@ -69,6 +70,9 @@ export function createCampaignWorld(
 
   updateCampaignObjectives(world);
   updatePlayerVisibility(world, LOCAL_PLAYER_ID);
+  // Mission setup spawns and despawns armies; the match starts counting here.
+  resetMatchStats(world);
+  world.gameEvents.length = 0;
   return world;
 }
 

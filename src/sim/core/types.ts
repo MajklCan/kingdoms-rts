@@ -48,7 +48,9 @@ export type SimInput =
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
   | { type: 'removeSelectedBuildings'; playerId: number }
   | { type: 'trainUnit'; atEid: number; defId: number; count?: number; playerId?: number }
-  | { type: 'cancelProduction'; atEid: number; playerId?: number }
+  /** Cancel queue entry `slot` (0 = the one training now). Without a slot the
+   *  most recently queued entry is cancelled. The cost is refunded either way. */
+  | { type: 'cancelProduction'; atEid: number; playerId?: number; slot?: number }
   | { type: 'advanceAge'; playerId: number }
   | { type: 'researchTech'; playerId: number; techId: TechIdValue };
 
@@ -137,6 +139,49 @@ export interface SoundCue {
   /** Owning player - render uses this for fog/local-player filtering. */
   player: number;
 }
+
+/** Exact per-player match statistics (see core/match-stats.ts). */
+export interface PlayerMatchStats {
+  /** Units that left a production queue (villagers, soldiers, worksite crews). */
+  unitsTrained: number;
+  /** Own units whose health reached zero. */
+  unitsLost: number;
+  /** Enemy units this player dealt the killing blow to. */
+  unitsKilled: number;
+  /** Foundations this player finished building. */
+  buildingsBuilt: number;
+  /** Own buildings (and foundations) whose health reached zero. Demolitions are not losses. */
+  buildingsLost: number;
+  /** Enemy buildings (and foundations) this player dealt the killing blow to. */
+  buildingsRazed: number;
+  /** Income per ResourceKindId (food, wood, gold, stone). Refunds and grants excluded. */
+  gathered: [number, number, number, number];
+  /** Technologies researched (age advances are not counted here). */
+  techsResearched: number;
+  /** Highest population reached. */
+  peakPopulation: number;
+}
+
+/**
+ * Player-facing game events. Output-only like soundCues: the sim appends,
+ * render drains, the sim never reads them back, so they cannot affect
+ * determinism and are not part of the checksum or save files.
+ */
+export type GameEvent =
+  | { kind: 'unitTrained'; tick: number; playerId: number; unitDefId: number; eid: number; x: number; y: number }
+  | { kind: 'buildingCompleted'; tick: number; playerId: number; buildingDefId: number; eid: number; x: number; y: number }
+  | { kind: 'researchCompleted'; tick: number; playerId: number; techId: TechIdValue }
+  | { kind: 'ageAdvanced'; tick: number; playerId: number; ageId: number }
+  | {
+      kind: 'entityDestroyed';
+      tick: number;
+      ownerId: number;
+      isBuilding: boolean;
+      /** Unit def id for units, building def id for buildings. */
+      defId: number;
+      x: number;
+      y: number;
+    };
 
 interface CannonWindup {
   targetEid: number;
@@ -280,6 +325,10 @@ export interface SimWorld {
   aiEvents: AiEvent[];
   /** Render-consumed non-combat sound cues. Sim appends; render drains. */
   soundCues: SoundCue[];
+  /** Render-consumed player-facing events (trained, built, researched, destroyed). */
+  gameEvents: GameEvent[];
+  /** Per-player match statistics, indexed by playerId. Write-only for the sim. */
+  matchStats: PlayerMatchStats[];
   /** When true, step() is a no-op (title screen, pause menu). */
   paused: boolean;
   /** Procedurally generated map (terrain tiles + heightmap + bridges + spawns). */

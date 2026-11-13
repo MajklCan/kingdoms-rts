@@ -16,7 +16,8 @@ import {
 } from '../components';
 import { BuildingDefId, getBuildingDef } from '../defs';
 import { sortedEids } from '../core/entities';
-import { pushSoundCue } from '../core/events';
+import { pushGameEvent, pushSoundCue } from '../core/events';
+import { recordBuildingBuilt } from '../core/match-stats';
 import { getBuildingPopProvided, recalculatePlayerPopCap } from '../core/population';
 import { foundationQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -31,7 +32,18 @@ export function constructionSystem(world: SimWorld): void {
     const frac = Math.min(1, ConstructionSite.progress[siteEid] / total);
     Health.hp[siteEid] = Math.max(1, Math.floor(Health.hpMax[siteEid] * frac));
     if (ConstructionSite.progress[siteEid] >= total) {
+      const defId = ConstructionSite.defId[siteEid];
       finaliseBuilding(world, siteEid);
+      const playerId = Owner.player[siteEid];
+      recordBuildingBuilt(world, playerId);
+      pushGameEvent(world, {
+        kind: 'buildingCompleted',
+        playerId,
+        buildingDefId: defId,
+        eid: siteEid,
+        x: Position.x[siteEid],
+        y: Position.y[siteEid],
+      });
     }
   }
 }

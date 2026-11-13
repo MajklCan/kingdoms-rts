@@ -15,10 +15,12 @@ import {
   Owner,
   PopulationCost,
   Position,
+  UnitKind,
 } from '../components';
 import { BUILDING_TABLE, getUnitDef, refund } from '../defs';
 import { removeSimEntity, sortedEids } from '../core/entities';
-import { pushSoundCue } from '../core/events';
+import { pushGameEvent, pushSoundCue } from '../core/events';
+import { recordDeath } from '../core/match-stats';
 import { markFootprintBlocked } from '../core/grid';
 import { getBuildingPopProvided, recalculatePlayerPopCap } from '../core/population';
 import {
@@ -45,6 +47,20 @@ export function deathSystem(world: SimWorld): void {
         Position.y[eid],
         Owner.player[eid]
       );
+      recordDeath(world, eid);
+      const ownerId = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : 0;
+      if (ownerId !== 0) {
+        pushGameEvent(world, {
+          kind: 'entityDestroyed',
+          ownerId,
+          isBuilding,
+          defId: isBuilding
+            ? Building.defId[eid]
+            : hasComponent(world.ecs, UnitKind, eid) ? UnitKind.kind[eid] : -1,
+          x: Position.x[eid],
+          y: Position.y[eid],
+        });
+      }
     }
   }
 }

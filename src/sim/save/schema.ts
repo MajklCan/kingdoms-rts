@@ -1,5 +1,9 @@
 /**
- * Versioned save format. Bump SAVE_VERSION when a field changes meaning.
+ * Versioned save format. Bump SAVE_VERSION when a field changes meaning and
+ * add a step to migrateSavedGame() so older saves keep loading.
+ *
+ *   v1  original format
+ *   v2  + matchStats (per-player match statistics)
  */
 
 import type { MapFeature } from '../map-gen';
@@ -9,11 +13,12 @@ import type {
   CampaignState,
   LastSeenBuilding,
   MatchOutcome,
+  PlayerMatchStats,
 } from '../world';
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const LATE_GAME_TEST_SAVE_ID = 'late-game-test';
 
 export interface SavedMapV1 {
@@ -76,8 +81,9 @@ export interface SavedEntityV1 {
   dead?: true;
 }
 
+/** v1 layout. Only read by migrateSavedGame(); new saves are SavedGame (v2). */
 export interface SavedGameV1 {
-  version: typeof SAVE_VERSION;
+  version: 1;
   label: string;
   savedAt: string;
   tick: number;
@@ -113,6 +119,15 @@ export interface SavedGameV1 {
   campaign?: SavedCampaignV1 | null;
 }
 
+export interface SavedGameV2 extends Omit<SavedGameV1, 'version'> {
+  version: 2;
+  /** Per-player statistics, indexed by playerId. */
+  matchStats: PlayerMatchStats[];
+}
+
+/** The current save format. */
+export type SavedGame = SavedGameV2;
+
 export interface SavedAiPlayerStateV1 {
   plan: AiPlayerState['plan'];
   nextAttackTick: number;
@@ -146,12 +161,75 @@ export interface SavedCampaignV1 {
   zborovForwardY?: number;
 }
 
-export function parseSavedGame(text: string): SavedGameV1 | null {
+function zeroStats(): PlayerMatchStats {
+  return {
+    unitsTrained: 0,
+    unitsLost: 0,
+    unitsKilled: 0,
+    buildingsBuilt: 0,
+    buildingsLost: 0,
+    buildingsRazed: 0,
+    gathered: [0, 0, 0, 0],
+    techsResearched: 0,
+    peakPopulation: 0,
+  };
+}
+
+const COUNTER_KEYS = [
+  'unitsTrained',
+  'unitsLost',
+  'unitsKilled',
+  'buildingsBuilt',
+  'buildingsLost',
+  'buildingsRazed',
+  'techsResearched',
+  'peakPopulation',
+] as const;
+
+const count = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+
+/** Coerce whatever a (possibly hand-edited) file holds into valid counters. */
+export function sanitizeSavedMatchStats(raw: unknown, players: number): PlayerMatchStats[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: players }, (_, playerId) => {
+    const entry: unknown = list[playerId];
+    const stats = zeroStats();
+    if (typeof entry !== 'object' || entry === null) return stats;
+    const record = entry as Record<string, unknown>;
+    for (const key of COUNTER_KEYS) stats[key] = count(record[key]);
+    const gathered = Array.isArray(record.gathered) ? record.gathered : [];
+    stats.gathered = [count(gathered[0]), count(gathered[1]), count(gathered[2]), count(gathered[3])];
+    return stats;
+  });
+}
+
+/**
+ * Bring any supported save up to the current format. v1 predates match
+ * statistics; nothing in it lets us reconstruct them, so they start at zero
+ * (peak population at the population saved). Returns null for unknown versions.
+ */
+export function migrateSavedGame(save: SavedGameV1 | SavedGameV2): SavedGame | null {
+  const players = Array.isArray(save.resources) ? save.resources.length : 0;
+  if (save.version === 2) {
+    return { ...save, matchStats: sanitizeSavedMatchStats(save.matchStats, players) };
+  }
+  if (save.version === 1) {
+    const matchStats = sanitizeSavedMatchStats([], players).map((stats, playerId) => ({
+      ...stats,
+      peakPopulation: count(save.population?.[playerId]?.current),
+    }));
+    return { ...save, version: 2, matchStats };
+  }
+  return null;
+}
+
+export function parseSavedGame(text: string): SavedGame | null {
   try {
-    const parsed = JSON.parse(text) as Partial<SavedGameV1>;
-    if (parsed.version !== SAVE_VERSION) return null;
+    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2>;
+    if (parsed.version !== 1 && parsed.version !== SAVE_VERSION) return null;
     if (!Array.isArray(parsed.entities) || !parsed.map) return null;
-    return parsed as SavedGameV1;
+    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2);
   } catch {
     return null;
   }

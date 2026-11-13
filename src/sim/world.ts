@@ -21,8 +21,10 @@ export type {
   CampaignState,
   CombatEvent,
   CreateSimWorldOptions,
+  GameEvent,
   LastSeenBuilding,
   MatchOutcome,
+  PlayerMatchStats,
   PlayerVisibility,
   PopState,
   SimInput,
@@ -65,6 +67,14 @@ export {
   setSelected,
 } from './core/selection';
 export { createSimWorld } from './core/create-world';
+export { findIdleVillagers, isIdleVillager } from './core/idle-villagers';
+export { clonePlayerStats, emptyPlayerStats } from './core/match-stats';
+export {
+  isSelectionRelativeInput,
+  selectedCommandableEids,
+  toSelfDescribingInput,
+  type SelectionRelativeInput,
+} from './input/self-describing';
 export {
   spawnArcher,
   spawnCannon,
@@ -97,7 +107,8 @@ export {
   updatePlayerVisibility,
 } from './systems/visibility';
 export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
-export { getWorksiteWorkerSlots } from './systems/worksites';
+export { getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
+export { canPlaceBuildingAt } from './input/buildings';
 export { createAiPlayerState, normalizeAiDifficulty } from './ai/difficulty';
 export { createCampaignWorld } from './missions/campaign-world';
 export { step } from './step';

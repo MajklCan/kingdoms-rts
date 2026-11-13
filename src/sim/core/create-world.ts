@@ -29,6 +29,7 @@ import {
   TREE_RESOURCE_AMOUNT,
 } from './constants';
 import { findSpawnSpot } from './grid';
+import { createMatchStats, resetMatchStats } from './match-stats';
 import { findBuildingAt, findResourceAt, hasMapFeatureAt } from './lookup';
 import type { AgeState, CreateSimWorldOptions, PopState, SimWorld } from './types';
 
@@ -177,6 +178,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     aiDifficulty,
     aiEvents: [],
     soundCues: [],
+    gameEvents: [],
+    matchStats: createMatchStats(),
     paused: true,
     map: mapData,
   };
@@ -435,6 +438,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   }
 
   updatePlayerVisibility(world, LOCAL_PLAYER_ID);
+  resetMatchStats(world);
   return world;
 }
 
