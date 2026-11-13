@@ -36,6 +36,16 @@
     697
    ],
    "frames": 42
+  },
+  {
+   "key": "kr-terrain-0",
+   "image": "terrain-0.png",
+   "json": "terrain-0.json",
+   "size": [
+    2046,
+    2040
+   ],
+   "frames": 190
   }
  ],
  "assets": {
@@ -1993,6 +2003,2688 @@
     }
    },
    "default": "default"
+  },
+  "terrain.bridge_x": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_x_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_x_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_x_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_x_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "BRIDGE",
+   "period": 2,
+   "default": "0"
+  },
+  "terrain.bridge_y": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_y_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_y_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_y_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_bridge_y_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "BRIDGE",
+   "period": 2,
+   "default": "0"
+  },
+  "terrain.cliff_earth": {
+   "kind": "cliff",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "left": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_earth_left",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "left_lip": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_earth_left_lip",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_earth_right",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right_lip": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_earth_right_lip",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    }
+   },
+   "stepPx": 4,
+   "default": "left"
+  },
+  "terrain.cliff_rock": {
+   "kind": "cliff",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "left": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_rock_left",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "left_lip": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_rock_left_lip",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_rock_right",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right_lip": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_rock_right_lip",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    }
+   },
+   "stepPx": 4,
+   "default": "left"
+  },
+  "terrain.cliff_sand": {
+   "kind": "cliff",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "left": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_sand_left",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_sand_right",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    }
+   },
+   "stepPx": 4,
+   "default": "left"
+  },
+  "terrain.cliff_snow": {
+   "kind": "cliff",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "left": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_snow_left",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "left_lip": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_snow_left_lip",
+     "anchor": [
+      64,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_snow_right",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    },
+    "right_lip": {
+     "atlas": "kr-terrain-0",
+     "frame": "cliff_snow_right_lip",
+     "anchor": [
+      0,
+      32
+     ],
+     "size": [
+      64,
+      40
+     ]
+    }
+   },
+   "stepPx": 4,
+   "default": "left"
+  },
+  "terrain.dirt": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_dirt_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "DIRT",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.forest": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_forest_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "FOREST",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.grass": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_grass_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "GRASS",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.ice": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "ICE",
+   "period": 2,
+   "default": "0"
+  },
+  "terrain.meadow": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_meadow_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "GRASS",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.mud": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_mud_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "MUD",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.packed_snow": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "PACKED_SNOW",
+   "period": 2,
+   "default": "0"
+  },
+  "terrain.sand": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_sand_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "SAND",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.snow": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "SNOW",
+   "period": 2,
+   "default": "0"
+  },
+  "terrain.snow_forest": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "SNOW_FOREST",
+   "period": 2,
+   "default": "0"
+  },
+  "terrain.stone": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_00",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_01",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_02",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_03",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_04",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_05",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_06",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_07",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_08",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_09",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_10",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_11",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_12",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_13",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_14",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_stone_15",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    }
+   },
+   "tileType": "STONE",
+   "period": 4,
+   "default": "0"
+  },
+  "terrain.transition": {
+   "kind": "transition_mask",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "corner_mx_my": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_corner_mx_my",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "corner_mx_py": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_corner_mx_py",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "corner_px_my": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_corner_px_my",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "corner_px_py": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_corner_px_py",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "edge_mx": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_mx",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "edge_my": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_my",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "edge_px": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_px",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    },
+    "edge_py": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_py",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ]
+    }
+   },
+   "default": "corner_mx_my"
+  },
+  "terrain.water": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_00_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "0.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_00_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "0.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_00_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "0.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_00_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    },
+    "1.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_01_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_01_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "1.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_01_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "1.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_01_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    },
+    "2.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_02_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_02_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "2.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_02_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "2.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_02_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    },
+    "3.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_03_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_03_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "3.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_03_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "3.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_03_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    }
+   },
+   "tileType": "WATER",
+   "period": 2,
+   "default": "0.0"
+  },
+  "terrain.water_shallow": {
+   "kind": "terrain",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_00_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "0.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_00_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "0.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_00_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "0.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_00_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    },
+    "1.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_01_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "1.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_01_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "1.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_01_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "1.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_01_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    },
+    "2.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_02_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "2.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_02_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "2.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_02_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "2.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_02_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    },
+    "3.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_03_f0",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 0
+    },
+    "3.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_03_f1",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 1
+    },
+    "3.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_03_f2",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 2
+    },
+    "3.3": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_water_shallow_03_f3",
+     "anchor": [
+      66,
+      66
+     ],
+     "size": [
+      132,
+      68
+     ],
+     "frameIndex": 3
+    }
+   },
+   "tileType": "WATER_SHALLOW",
+   "period": 2,
+   "default": "0.0"
   }
  }
 }

@@ -234,6 +234,10 @@ def _layer_col(view_layer: bpy.types.ViewLayer, col: bpy.types.Collection):
                 return r
         return None
 
+    if view_layer.layer_collection is None:  # layer tree not synced yet (new collections)
+        view_layer.update()
+    if view_layer.layer_collection is None:
+        return None
     return walk(view_layer.layer_collection)
 
 

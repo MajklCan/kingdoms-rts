@@ -51,8 +51,9 @@ def _args() -> argparse.Namespace:
 def run_family(family: str, only: str | None, samples: int, save_blend: bool) -> list[dict]:
     mod = importlib.import_module(family)
     importlib.reload(mod)
-    jobs = mod.jobs(only)
-    if not jobs:
+    custom = hasattr(mod, "render")  # families that slice/compose their own frames (terrain)
+    jobs = [] if custom else mod.jobs(only)
+    if not custom and not jobs:
         return []
     out_dir = os.path.join(kr_lib.RAW_DIR, family)
     os.makedirs(out_dir, exist_ok=True)
@@ -60,7 +61,9 @@ def run_family(family: str, only: str | None, samples: int, save_blend: bool) ->
     if hasattr(mod, "setup_scene"):
         mod.setup_scene(scene)
     t0 = time.time()
-    records = kr_lib.run_jobs(scene, jobs, out_dir)
+    records = mod.render(scene, out_dir, only) if custom else kr_lib.run_jobs(scene, jobs, out_dir)
+    if not records:
+        return []
     print(f"[{family}] {len(records)} sprites in {time.time() - t0:.1f}s")
     for rec in records:
         rec["family"] = family
