@@ -1,12 +1,13 @@
 /**
  * Quiet life in the world around the camera, sparse and cheap:
  *
- *   cloud shadows  three huge soft blobs drifting with the wind
- *   birds          a small flock crosses the view every half minute or so
+ *   cloud shadows  three huge soft blobs drifting with the wind, faded out
+ *                  where they would leave the map (the void never darkens)
+ *   birds          a small pixel flock crosses the view every half minute or so
  *   butterflies    a few flutter over grass (temperate maps)
  *   fireflies      blinking glows over mud and shallows (marsh maps)
  *   mist           pale banks drifting low (marsh maps)
- *   snow           flakes falling across the view (winter maps)
+ *   snow           blue-grey flakes with a drop shadow, so they read on snow
  *   motes          sunlit dust drifting (non-winter maps)
  *   glints         twinkles on open water and on gold piles
  *
@@ -15,13 +16,14 @@
  * With prefers-reduced-motion only the static touches remain (glints, mist).
  */
 
-import { MAP } from '../../config';
+import { ISO, MAP } from '../../config';
 import { TileType } from '@sim/map-gen';
 import type { ResourceRenderer } from '../entities/resource-renderer';
 import { clamp01, type FxHost } from './fx-host';
 import { rand } from './fx-particles';
 import { FX_COLORS, glint } from './fx-recipes';
-import { FX_CLOUD, FX_SHEET, type FxFrame } from './fx-textures';
+import { FX_CLOUD, FX_SHEET } from './fx-textures';
+import { LIFE_SHEET } from './life-sprites';
 import { reducedMotion } from './motion-prefs';
 
 /** Wind, px/s (layer space): drifts clouds, smoke leans the same way. */
@@ -36,6 +38,8 @@ interface Climate {
 
 interface Drifter {
   img: Phaser.GameObjects.Image;
+  /** Alpha when fully over the map. */
+  alpha: number;
   /** Offset from the view's top-left, px; wraps around the view. */
   ox: number;
   oy: number;
@@ -44,7 +48,7 @@ interface Drifter {
 
 interface Critter {
   img: Phaser.GameObjects.Image;
-  frames: readonly [FxFrame, FxFrame];
+  frames: readonly [string, string];
   x: number;
   y: number;
   vx: number;
@@ -85,18 +89,24 @@ export class AmbientFx {
     this.front = scene.add.container(0, 0);
     host.ctx.layers.effects.add(this.front);
     for (let i = 0; i < 3; i++) {
-      const img = scene.add.image(0, 0, FX_CLOUD).setTint(0x101418).setAlpha(0.085);
+      const img = scene.add.image(0, 0, FX_CLOUD).setTint(0x101418).setAlpha(CLOUD_ALPHA);
       img.setScale(rand(4.2, 5.6), rand(2.6, 3.2));
       this.back.add(img);
-      this.clouds.push({ img, ox: 0, oy: 0, speed: rand(0.8, 1.2) });
+      this.clouds.push({ img, alpha: CLOUD_ALPHA, ox: 0, oy: 0, speed: rand(0.8, 1.2) });
     }
     for (let i = 0; i < 5; i++) {
-      const img = scene.add.image(0, 0, FX_CLOUD).setTint(0xeef3f2).setAlpha(rand(0.24, 0.32));
+      const alpha = rand(0.24, 0.32);
+      const img = scene.add.image(0, 0, FX_CLOUD).setTint(0xeef3f2).setAlpha(alpha);
       img.setScale(rand(2.2, 3.2), rand(0.8, 1.1));
       img.setVisible(false);
       this.back.add(img);
-      this.mist.push({ img, ox: 0, oy: 0, speed: rand(0.35, 0.6) });
+      this.mist.push({ img, alpha, ox: 0, oy: 0, speed: rand(0.35, 0.6) });
     }
+  }
+
+  /** The current map's climate (read on reset). */
+  get climateNow(): Readonly<Climate> {
+    return this.climate;
   }
 
   /** Read the map's climate and scatter the drifters (new world). */
@@ -187,7 +197,11 @@ export class AmbientFx {
     for (const d of items) {
       d.ox = wrap(d.ox + WIND_X * d.speed * dt, w);
       d.oy = wrap(d.oy + WIND_Y * d.speed * dt, h);
-      d.img.setPosition(v.left - padX / 2 + d.ox, v.top - padY / 2 + d.oy);
+      const x = v.left - padX / 2 + d.ox;
+      const y = v.top - padY / 2 + d.oy;
+      d.img.setPosition(x, y);
+      // Shadows and mist only fall on the map: fade them as they slide off it.
+      d.img.setAlpha(d.alpha * onMapFraction(x, y, d.img.displayWidth * 0.36, d.img.displayHeight * 0.3));
       if (d.img.visible !== visible && items === this.clouds) d.img.setVisible(visible);
     }
   }
@@ -207,7 +221,7 @@ export class AmbientFx {
     const climb = rand(-6, 6);
     for (let i = 0; i < n; i++) {
       const rank = Math.ceil(i / 2) * (i % 2 === 0 ? 1 : -1);
-      const b = this.critter(this.birds, ['bird0', 'bird1'], this.front);
+      const b = this.critter(this.birds, ['bird_fly0', 'bird_fly1'], this.front, LIFE_SHEET);
       if (!b) return;
       b.x = x0 - dir * Math.abs(rank) * 14;
       b.y = y0 + rank * 9;
@@ -218,6 +232,7 @@ export class AmbientFx {
       b.phase = rand(0, 300);
       b.flapMs = rand(120, 160);
       b.img.setTint(0xffffff).setAlpha(0.85).setScale(1).setFlipX(!fromLeft);
+      b.img.setOrigin(0.5, 0.5);
     }
   }
 
@@ -266,14 +281,21 @@ export class AmbientFx {
       c.x += c.vx * dt;
       c.y += c.vy * dt;
       const bob = items === this.flies ? Math.sin((age + c.phase) / 140) * 1.5 : 0;
-      c.img.setPosition(c.x, c.y + bob);
+      // Pixel birds stay on whole pixels.
+      if (items === this.birds) c.img.setPosition(Math.round(c.x), Math.round(c.y));
+      else c.img.setPosition(c.x, c.y + bob);
       c.img.setFrame(c.frames[Math.floor((age + c.phase) / c.flapMs) % 2]);
       const fade = clamp01(age / 500) * clamp01((c.life - age) / 600);
       c.img.setAlpha((items === this.birds ? 0.85 : 0.95) * fade);
     }
   }
 
-  private critter(items: Critter[], frames: readonly [FxFrame, FxFrame], into: Phaser.GameObjects.Container): Critter | null {
+  private critter(
+    items: Critter[],
+    frames: readonly [string, string],
+    into: Phaser.GameObjects.Container,
+    texture = FX_SHEET
+  ): Critter | null {
     for (const c of items) {
       if (c.active) continue;
       c.active = true;
@@ -282,7 +304,7 @@ export class AmbientFx {
       return c;
     }
     if (items.length >= 8) return null;
-    const img = this.host.ctx.scene.add.image(0, 0, FX_SHEET, frames[0]);
+    const img = this.host.ctx.scene.add.image(0, 0, texture, frames[0]);
     into.add(img);
     const c: Critter = { img, frames, x: 0, y: 0, vx: 0, vy: 0, born: 0, life: 0, phase: 0, flapMs: 140, active: true };
     items.push(c);
@@ -303,18 +325,21 @@ export class AmbientFx {
     const n = spawnCount(70 * areaMpx, dtMs);
     for (let i = 0; i < n; i++) {
       const big = Math.random() < 0.25;
+      const x = rand(v.left - 40, v.right);
+      const y = rand(v.top - 30, v.bottom - 40);
+      const vx = WIND_X * 1.6 + rand(-5, 5);
+      const vy = rand(24, 38) * (big ? 1.25 : 1);
+      const life = rand(3600, 5200);
+      const scale = big ? rand(0.55, 0.75) : rand(0.3, 0.45);
+      // White flakes vanish against snow: a blue-grey flake over a soft
+      // shadow a few px down-right reads on snow and on grass alike.
       fx.emit('normal', {
-        frame: 'dot',
-        x: rand(v.left - 40, v.right),
-        y: rand(v.top - 30, v.bottom - 40),
-        vx: WIND_X * 1.6 + rand(-5, 5),
-        vy: rand(24, 38) * (big ? 1.25 : 1),
-        life: rand(3600, 5200),
-        scale: big ? rand(0.55, 0.75) : rand(0.3, 0.45),
-        alpha: big ? 0.9 : 0.75,
-        fadeIn: 0.15,
-        fadeOut: 0.25,
-        tint: FX_COLORS.snowDust,
+        frame: 'chip', x: x + 2, y: y + 3, vx, vy, life, scale: scale * 0.7,
+        alpha: 0.28, fadeIn: 0.15, fadeOut: 0.25, tint: 0x2a3446,
+      });
+      fx.emit('normal', {
+        frame: 'chip', x, y, vx, vy, life, scale: scale * 0.8,
+        alpha: big ? 0.95 : 0.85, fadeIn: 0.15, fadeOut: 0.25, tint: big ? 0xb7c8e2 : 0x9fb4d6,
       });
     }
   }
@@ -377,6 +402,34 @@ export class AmbientFx {
 }
 
 const GRASS_TILES: ReadonlySet<number> = new Set([TileType.GRASS, TileType.FOREST]);
+
+/** Cloud shadow alpha over the map. */
+const CLOUD_ALPHA = 0.085;
+
+/**
+ * Share of a cloud (ellipse of half-size rx, ry around a layer point) lying
+ * over the map diamond, from a 5 x 3 sample grid, squared so a cloud fades
+ * well before its edge reaches the void.
+ */
+function onMapFraction(x: number, y: number, rx: number, ry: number): number {
+  let inside = 0;
+  let total = 0;
+  const hw = ISO.TILE_W / 2;
+  const hh = ISO.TILE_H / 2;
+  for (let j = -1; j <= 1; j++) {
+    for (let i = -2; i <= 2; i++) {
+      const px = x + (i / 2) * rx;
+      const py = y + j * ry;
+      // Layer px -> tile (inverse of tileToScreen), tile centres at integers.
+      const tx = (px / hw + py / hh) / 2;
+      const ty = (py / hh - px / hw) / 2;
+      total++;
+      if (tx >= -0.5 && ty >= -0.5 && tx <= MAP.WIDTH - 0.5 && ty <= MAP.HEIGHT - 0.5) inside++;
+    }
+  }
+  const f = inside / total;
+  return f * f;
+}
 
 function wrap(v: number, size: number): number {
   if (size <= 0) return 0;

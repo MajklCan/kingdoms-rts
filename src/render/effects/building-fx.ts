@@ -25,13 +25,18 @@ import type { GameAudio } from '../game-audio';
 import { hash01, type FxHost } from './fx-host';
 import { rand } from './fx-particles';
 import { dustPuff, dustRing, flame, FX_COLORS, glint, smoke, sparks } from './fx-recipes';
+import type { VoxelSmoke } from './village-life';
 
-/** Chimney mouths in 1x px from the sprite anchor, per atlas frame. `a` = smoke alpha. */
+/**
+ * Chimney mouths in 1x px from the sprite anchor, per atlas frame. `a` = smoke
+ * alpha. From the Blender models: dx = (X + Y) * 32, dy = (X - Y) * 16 - (w + h)
+ * * 8 - Z * 39.19 for a mouth at Blender (X, Y, Z) on a w x h footprint.
+ */
 const CHIMNEYS: Readonly<Record<string, ReadonlyArray<{ x: number; y: number; a: number; dark?: boolean }>>> = {
-  house_dark: [{ x: -15, y: -63, a: 0.3 }],
+  house_dark: [{ x: -5, y: -57, a: 0.3 }],
   house_castle: [{ x: 7.5, y: -71.5, a: 0.38 }],
   house_gunpowder: [{ x: 10, y: -72.5, a: 0.4 }],
-  town_center_dark: [{ x: 61, y: -94.5, a: 0.38 }, { x: -64, y: -92, a: 0.32 }],
+  town_center_dark: [{ x: 47, y: -108, a: 0.38 }],
   town_center_castle: [{ x: 62, y: -114.5, a: 0.4 }],
   town_center_gunpowder: [{ x: 41, y: -92, a: 0.42 }],
   foundry_gunpowder: [{ x: -1, y: -140.5, a: 0.48, dark: true }],
@@ -65,7 +70,8 @@ export class BuildingFx {
   constructor(
     private readonly host: FxHost,
     private readonly buildings: BuildingRenderer,
-    private readonly audio: GameAudio
+    private readonly audio: GameAudio,
+    private readonly puffs: VoxelSmoke
   ) {}
 
   update(dtMs: number): void {
@@ -146,7 +152,8 @@ export class BuildingFx {
     if (!mouths) return;
     for (const m of mouths) {
       if (!chance(CHIMNEY_RATE, dtMs)) continue;
-      smoke(fx, x + m.x, y + m.y, m.dark ? FX_COLORS.smokeGrey : FX_COLORS.smokeLight, m.dark ? 1.2 : 0.9, m.a);
+      // Style A art: blocky voxel puffs that match the sprites.
+      this.puffs.puff(x + m.x, y + m.y, m.a, m.dark);
     }
     if (frame === 'foundry_gunpowder') {
       if (chance(3, dtMs)) {

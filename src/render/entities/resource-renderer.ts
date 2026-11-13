@@ -144,6 +144,11 @@ export class ResourceRenderer {
     return eid === undefined ? undefined : this.resources.get(eid);
   }
 
+  /** Live trees by eid (tile + species group), for the ambient life. */
+  get liveTrees(): ReadonlyMap<number, { readonly x: number; readonly y: number; readonly conifer: boolean }> {
+    return this.trees;
+  }
+
   /** Number of valid entries at the front of {@link goldInView}. */
   get goldInViewCount(): number {
     return this.goldCount;

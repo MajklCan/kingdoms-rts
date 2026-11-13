@@ -8,7 +8,8 @@
  *   RemainsFx   falling bodies, toppling trees, collapsing buildings
  *   BuildingFx  chimneys, fire by damage, construction, placement thud
  *   EconomyFx   chips while gathering, drop-off pops
- *   AmbientFx   clouds, birds, critters, weather, glints
+ *   AmbientFx   clouds, flocks, butterflies, weather, glints
+ *   LifeFx      perched birds, leaves, wildlife, village life, voxel smoke
  *   CommandFx   red pulse on the enemy you ordered to attack
  *
  * Plus the team-colour silhouettes of units hidden behind trees/buildings.
@@ -32,6 +33,7 @@ import { EconomyFx } from './economy-fx';
 import type { FxHost } from './fx-host';
 import { FxParticles } from './fx-particles';
 import { ensureFxTextures } from './fx-textures';
+import { LifeFx } from './life-fx';
 import { reducedMotion } from './motion-prefs';
 import { RemainsFx } from './remains-fx';
 
@@ -54,6 +56,7 @@ export class WorldFx implements FxHost {
   private readonly buildingFx: BuildingFx;
   private readonly economy: EconomyFx;
   private readonly ambient: AmbientFx;
+  private readonly life: LifeFx;
   private readonly commands: CommandFx;
   private shakeUntil = 0;
   private shakeLevel = 0;
@@ -67,7 +70,8 @@ export class WorldFx implements FxHost {
     this.fx = new FxParticles(ctx.scene, ctx.layers);
     this.combat = new CombatFx(this);
     this.remains = new RemainsFx(this);
-    this.buildingFx = new BuildingFx(this, deps.buildings, deps.audio);
+    this.life = new LifeFx(this, deps.resources, deps.buildings);
+    this.buildingFx = new BuildingFx(this, deps.buildings, deps.audio, this.life.smoke);
     this.economy = new EconomyFx(this, deps.units);
     this.ambient = new AmbientFx(this, deps.resources);
     this.commands = new CommandFx(this, deps.units);
@@ -81,7 +85,10 @@ export class WorldFx implements FxHost {
     deps.units.onDeath((death) => this.remains.unitDied(death));
     deps.buildings.onRemoved((removal) => this.remains.buildingRemoved(removal));
     deps.resources.onTreeFall((fall) => this.remains.treeFell(fall));
-    deps.resources.onHit((hit) => this.economy.onResourceHit(hit));
+    deps.resources.onHit((hit) => {
+      this.economy.onResourceHit(hit);
+      this.life.onResourceHit(hit);
+    });
   }
 
   /** Once per frame after the sim stepped and the renderers drew. `deltaMs` is real time. */
@@ -93,12 +100,14 @@ export class WorldFx implements FxHost {
     if (this.needsReset) {
       this.needsReset = false;
       this.ambient.reset();
+      this.life.reset(this.ambient.climateNow);
     }
     this.combat.update();
     this.remains.update();
     this.buildingFx.update(dt);
     this.economy.update();
     this.ambient.update(dt);
+    this.life.update(dt);
     this.commands.update();
     this.fx.update(dt);
   }
@@ -111,6 +120,7 @@ export class WorldFx implements FxHost {
     this.buildingFx.clear();
     this.economy.clear();
     this.ambient.clear();
+    this.life.clear();
     this.commands.clear();
     this.needsReset = true;
   }
@@ -134,8 +144,13 @@ export class WorldFx implements FxHost {
   }
 
   /** Debug / perf counters. */
-  get stats(): { particles: Record<string, number>; remains: number; time: number } {
-    return { particles: this.fx.counts, remains: this.remains.count, time: Math.round(this.time) };
+  get stats(): {
+    particles: Record<string, number>;
+    remains: number;
+    life: { forest: number; wild: number; village: number; smoke: number };
+    time: number;
+  } {
+    return { particles: this.fx.counts, remains: this.remains.count, life: this.life.stats, time: Math.round(this.time) };
   }
 
   private refreshView(): void {
