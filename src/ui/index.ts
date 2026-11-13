@@ -7,6 +7,7 @@
 
 import type Phaser from 'phaser';
 import { bindLayerKeys, syncSceneKeyboard } from './a11y/layers';
+import { bindNativeFeel } from './a11y/native-feel';
 import { setPhase } from './app-state';
 import { bindDevPanel, buildDevPanel } from './dev/dev-panel';
 import { byId, wait } from './dom';
@@ -70,6 +71,7 @@ async function revealWhenReady(): Promise<void> {
 
 export function mountUi(game: Phaser.Game): void {
   attachGame(game);
+  bindNativeFeel();
   applyStoredUiScale();
   setPhase('boot');
 

@@ -172,7 +172,7 @@ function renderStats(text: string): void {
       const full = STAT_LABEL[label];
       return h(
         'li',
-        { class: 'stat-chip', title: full ? `${full} ${value}` : part },
+        { class: 'stat-chip', 'aria-label': full ? `${full} ${value}` : part },
         full ? h('span', { class: 'stat-label' }, label) : null,
         h('span', { class: 'stat-value' }, full ? value : part)
       );
