@@ -21,7 +21,7 @@ The codebase is currently in a transition state from the "Stage 0 prototype" to 
 
 *   **Float Coordinates**: Although `docs/ARCHITECTURE.md` states the sim uses Q16.16 fixed-point math, the current code still uses floating-point coordinates (`f32`) for `Position`, `PrevPosition`, `Velocity`, and `Speed`. Do NOT attempt to use fixed-point math unless you are explicitly tasked with performing the Q16.16 conversion.
 *   **Static Tables**: Game definitions (units, buildings, ages) live as TypeScript structures in `src/sim/defs.ts` and `src/sim/tech-tree.ts` rather than JSON files in `public/assets/data/`.
-*   **Monolithic Files**: The core of the sim lives in a single large file `src/sim/world.ts` (~5,100 lines), and the main renderer is in `src/render/game-scene.ts` (~3,700 lines). Be extremely precise when using code editing tools on these files.
+*   **Sim Modules**: The sim is split into small modules under `src/sim/` (`core/`, `systems/`, `input/`, `ai/`, `missions/`, `factories/`, `maps/`, `save/`; tick order in `src/sim/step.ts`). `src/sim/world.ts` only re-exports the public API. The main renderer is still one large file, `src/render/game-scene.ts` (~3,700 lines). Be extremely precise when using code editing tools on it.
 
 ---
 

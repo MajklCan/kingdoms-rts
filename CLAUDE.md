@@ -35,7 +35,7 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 - `step(world)` is pure fn of `(world, inputs)` → same world + same inputs → same next state.
 - **Note:** RNG state is NOT persisted by `serializeSimWorld` currently. Replays from seed work; mid-game save/load won't reproduce future RNG draws.
 
-### Tick order (`step()` in `src/sim/world.ts`)
+### Tick order (`step()` in `src/sim/step.ts`)
 
 Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction → resourceWorksite → gathering → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
@@ -52,16 +52,29 @@ src/
   main.ts              Phaser.Game ctor + rAF HUD loop driving DOM overlay
   config.ts            SIM.TICK_HZ, RENDER (1280×720), ISO, MAP, TEAM_COLORS
   sim/
-    world.ts           ~7.5k lines — SimWorld shape, ALL systems, step(), AI, factories
+    world.ts           barrel only: the stable public sim API (`@sim/world`); add code to the owning module
+    step.ts            step(): the tick order
+    core/              SimWorld/SimInput types, constants, entity + NetId ids, queries, lookup, grid, createSimWorld
+    factories/         spawn helpers (military units are a MilitaryUnitSpec table), late-game fixture
+    input/             applyInput switch + command handlers (orders, formations, buildings)
+    systems/           one file per tick system (visibility, production, combat, movement, ...)
+    ai/                computer player: difficulty, snapshot, brain, economy, military, attack
+    missions/          campaign world setup + scripted mission runtime (one file per mission)
+    maps/              map generators; map-gen.ts is their barrel
+    save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
     defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE + canAfford/spend/refund
     tech-tree.ts       TECH_TREE nodes + pure prereq/age helpers
     campaign.ts        2 missions: SIEGE_OF_BRNO, BATTLE_OF_BILA_HORA
     pathfinding.ts     EasyStar wrapper, LOS smoothing, nearest-walkable fallback
-    map-gen.ts         5 generators → MapData{tiles,elevation,walkability,...}
-    save-load.ts       SAVE_VERSION=1; round-trip
     rng.ts             Mulberry32; getState/setState
     *.test.ts          vitest, sit next to source
+  net/                 lockstep multiplayer (relay server in relay/)
+    session.ts         MultiplayerSession: transport + lockstep + sim driver, desync checks
+    lockstep.ts        pure turn scheduler (input delay, bounded send-ahead)
+    commands.ts        wire command validation + eid <-> NetId mapping
+    checksum-ledger.ts per-tick local vs peer checksum pairing
+    protocol.ts        message types + validated decodeServer; transport.ts WebSocket
   render/
     game-scene.ts      ~4k lines — GameScene, draw fns, texture bake registry
     iso.ts             tileToScreen / screenToTile (64×32 diamond, VPER=4)
@@ -143,7 +156,7 @@ Scripts in `scripts/` (`gen-minimal.mjs`, `gen-tc-v2.mjs`, `gen-voxel-tc.mjs`) e
 Covered (50+ tests): `age-tower`, `ai`, `campaign`, `combat-formation` (heaviest, ~600L), `dropoff-distance`, `fog-of-war`, `forest-regrowth`, `map-gen`, `save-load`, `selection`, `tech-tree`, `unit-separation`, `worksite-workers`.
 
 Thin / missing coverage:
-- `world.ts` has no direct test file — only indirect coverage through the others.
+- Sim modules (`core/`, `systems/`, `input/`, `ai/`) have no per-module test files, only behaviour coverage through the tests above.
 - `pathfinding.ts` has no dedicated test.
 - `render/` and `debug/` have no tests.
 
@@ -156,7 +169,7 @@ In dev, `window.__GAME__` exposes: `getTick`, `listUnits`, `inspect`, `kill`, `s
 ## Conventions & rules
 
 - **Immutability:** ECS struct-of-arrays writes are the exception; everywhere else prefer copy-on-update.
-- **Many small files:** 200–400 LOC typical, 800 max. `world.ts` and `game-scene.ts` violate this and are scheduled for extraction — be surgical inside them; don't pile more on.
+- **Many small files:** 200-400 LOC typical, 800 max. `game-scene.ts` violates this and is scheduled for extraction - be surgical inside it; don't pile more on. `src/sim/world.ts`, `map-gen.ts` and `save-load.ts` are barrels: never add logic to them.
 - **Don't import `/render` from `/sim`.** Lint will catch you eventually; assume it does today.
 - **Iteration order:** ascending eid for any mutation order that matters.
 - **Czech naming preserved** in domain terms: `Brno`, `Bílá Hora`, `Bohemia`. Keep them.
@@ -173,7 +186,7 @@ The four docs in `docs/` were written at different stages and contradict each ot
 5. **System numeric prefixes** (`00 input`, `10 ai`, …) — described in `ARCHITECTURE.md`. Real `step()` is a function with hand-ordered calls; the numeric naming convention isn't applied to filenames yet.
 6. `@data/*` and `@ui/*` aliases declared without backing directories (see above).
 
-When in doubt: read `src/sim/world.ts` and `src/render/game-scene.ts`; they're the ground truth.
+When in doubt: read `src/sim/step.ts` (then the system module it calls) and `src/render/game-scene.ts`; they're the ground truth.
 
 ## Workflow expectations
 
