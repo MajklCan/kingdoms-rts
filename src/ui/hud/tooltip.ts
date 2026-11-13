@@ -1,5 +1,5 @@
 /**
- * Rich tooltip singleton (parchment card). Shows on hover and keyboard
+ * Rich tooltip singleton (stitched leather with a red ribbon header). Shows on hover and keyboard
  * focus, positions itself above the anchor (flipping when there is no
  * room), and re-reads its content a few times a second so costs turn red or
  * back as resources change while it is open.
@@ -35,7 +35,7 @@ const sources = new WeakMap<HTMLElement, TipSource>();
 
 export function getTooltipRoot(): HTMLElement {
   if (!tipEl) {
-    tipEl = h('div', { id: 'tooltip', class: 'tooltip parchment', role: 'tooltip', hidden: true });
+    tipEl = h('div', { id: 'tooltip', class: 'tooltip', role: 'tooltip', hidden: true });
   }
   return tipEl;
 }
@@ -64,12 +64,12 @@ function render(content: TipContent): void {
           'span',
           { class: `tip-res${short ? ' is-short' : ''}`, 'aria-label': `${need} ${k}${short ? ', not enough' : ''}` },
           icon(k, `res-${k}`),
-          formatAmount(need)
+          h('span', { class: 'num' }, formatAmount(need))
         )
       );
     }
-    if (content.seconds) row.append(h('span', { class: 'tip-res' }, icon('hourglass'), `${content.seconds}s`));
-    if (content.pop) row.append(h('span', { class: 'tip-res' }, icon('pop', 'res-pop'), String(content.pop)));
+    if (content.seconds) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.seconds} seconds` }, icon('hourglass', 'res-time'), h('span', { class: 'num' }, `${content.seconds}s`)));
+    if (content.pop) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.pop} population` }, icon('pop', 'res-pop'), h('span', { class: 'num' }, String(content.pop))));
     parts.push(row);
   }
   if (content.body) parts.push(h('p', { class: 'tip-body' }, content.body));

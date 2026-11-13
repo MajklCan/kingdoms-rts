@@ -35,9 +35,9 @@ export function getMenuRoot(): HTMLElement {
   root = h(
     'div',
     { id: 'menu-root', class: 'menu-root' },
-    h('div', { class: 'menu-bg', 'aria-hidden': 'true' }),
+    h('div', { class: 'menu-bg', id: 'menu-bg', 'aria-hidden': 'true' }),
     h('div', { class: 'menu-haze', 'aria-hidden': 'true' }),
-    h('div', { class: 'menu-glow-hall', 'aria-hidden': 'true' }),
+    h('div', { class: 'menu-glow-hall', id: 'menu-glow-hall', 'aria-hidden': 'true' }),
     h('div', { class: 'menu-glow-core', id: 'menu-glow-core', 'aria-hidden': 'true' }),
     h('canvas', { class: 'menu-dust', id: 'menu-dust', 'aria-hidden': 'true' }),
     ...corners,

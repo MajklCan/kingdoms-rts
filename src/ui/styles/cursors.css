@@ -1,0 +1,64 @@
+/* Game cursors (scripts/ui/gen_cursors.py): 32x32 PNGs plus @2x copies for
+   high-DPI screens. Hotspots are in 32px cursor space and must match the
+   generator output. The battlefield cursor is picked by src/ui/skin/cursors.ts
+   (data-cursor on #game-root) from what the pointer is over; the HUD always
+   shows the default steel pointer, text fields the text beam. */
+:root {
+  --cur-default: url("/assets/ui/cursors/default.png") 2 2, default;
+  --cur-attack: url("/assets/ui/cursors/attack.png") 2 2, crosshair;
+  --cur-gather-wood: url("/assets/ui/cursors/gather-wood.png") 4 4, default;
+  --cur-gather-mine: url("/assets/ui/cursors/gather-mine.png") 2 4, default;
+  --cur-gather-food: url("/assets/ui/cursors/gather-food.png") 2 12, default;
+  --cur-build: url("/assets/ui/cursors/build.png") 6 6, default;
+  --cur-rally: url("/assets/ui/cursors/rally.png") 4 28, default;
+  --cur-forbidden: url("/assets/ui/cursors/forbidden.png") 16 16, not-allowed;
+}
+
+@supports (cursor: image-set(url("/assets/ui/cursors/default.png") 1x) 2 2, default) {
+  :root {
+    --cur-default: image-set(url("/assets/ui/cursors/default.png") 1x, url("/assets/ui/cursors/default@2x.png") 2x) 2 2, default;
+    --cur-attack: image-set(url("/assets/ui/cursors/attack.png") 1x, url("/assets/ui/cursors/attack@2x.png") 2x) 2 2, crosshair;
+    --cur-gather-wood: image-set(url("/assets/ui/cursors/gather-wood.png") 1x, url("/assets/ui/cursors/gather-wood@2x.png") 2x) 4 4, default;
+    --cur-gather-mine: image-set(url("/assets/ui/cursors/gather-mine.png") 1x, url("/assets/ui/cursors/gather-mine@2x.png") 2x) 2 4, default;
+    --cur-gather-food: image-set(url("/assets/ui/cursors/gather-food.png") 1x, url("/assets/ui/cursors/gather-food@2x.png") 2x) 2 12, default;
+    --cur-build: image-set(url("/assets/ui/cursors/build.png") 1x, url("/assets/ui/cursors/build@2x.png") 2x) 6 6, default;
+    --cur-rally: image-set(url("/assets/ui/cursors/rally.png") 1x, url("/assets/ui/cursors/rally@2x.png") 2x) 4 28, default;
+    --cur-forbidden: image-set(url("/assets/ui/cursors/forbidden.png") 1x, url("/assets/ui/cursors/forbidden@2x.png") 2x) 16 16, not-allowed;
+  }
+}
+
+html,
+body,
+button,
+select,
+label,
+[role="button"],
+[role="tab"],
+[role="option"],
+#minimap-canvas {
+  cursor: var(--cur-default);
+}
+
+input:not([type]),
+input[type="text"],
+input[type="search"],
+input[type="number"],
+textarea,
+[contenteditable="true"] {
+  cursor: text;
+}
+
+[aria-disabled="true"],
+button[disabled],
+.cmd-cell.is-disabled {
+  cursor: var(--cur-forbidden);
+}
+
+#game-root canvas { cursor: var(--cur-default); }
+#game-root[data-cursor="attack"] canvas { cursor: var(--cur-attack); }
+#game-root[data-cursor="gather-wood"] canvas { cursor: var(--cur-gather-wood); }
+#game-root[data-cursor="gather-mine"] canvas { cursor: var(--cur-gather-mine); }
+#game-root[data-cursor="gather-food"] canvas { cursor: var(--cur-gather-food); }
+#game-root[data-cursor="build"] canvas { cursor: var(--cur-build); }
+#game-root[data-cursor="rally"] canvas { cursor: var(--cur-rally); }
+#game-root[data-cursor="forbidden"] canvas { cursor: var(--cur-forbidden); }

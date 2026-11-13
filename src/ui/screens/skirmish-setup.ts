@@ -7,11 +7,12 @@
 import { AgeId, AGE_TABLE, type AgeIdValue } from '../../sim/defs';
 import { MAP_DEFS, normalizeMapId, type MapIdValue } from '../../sim/map-gen';
 import { normalizeAiDifficulty, type AiDifficulty } from '../../sim/world';
-import { h, readStorage, writeStorage } from '../dom';
+import { h, plainDashes, readStorage, writeStorage } from '../dom';
 import { icon } from '../icons/icon';
 import { startSkirmish } from '../match/match-flow';
-import { backButton, registerMenuScreen } from './menu-shell';
 import { storedPlayerName } from './main-menu';
+import { paintMapPreview } from './map-preview';
+import { backButton, registerMenuScreen } from './menu-shell';
 
 const PREFS_KEY = 'kingdoms.skirmishSetup.v1';
 
@@ -72,7 +73,10 @@ export function bindSkirmishSetup(): void {
   const prefs = loadPrefs();
 
   const mapList = h('div', { class: 'map-list', role: 'radiogroup', 'aria-label': 'Map' });
+  const thumbs: Array<{ canvas: HTMLCanvasElement; id: MapIdValue }> = [];
   for (const map of MAP_DEFS) {
+    const thumb = h('canvas', { class: 'map-thumb', 'aria-hidden': 'true' });
+    thumbs.push({ canvas: thumb, id: map.id });
     mapList.append(
       h(
         'label',
@@ -81,12 +85,18 @@ export function bindSkirmishSetup(): void {
         h(
           'span',
           { class: 'map-option-body' },
-          h('span', { class: 'map-option-name' }, map.name),
-          h('span', { class: 'map-option-desc' }, map.description)
+          h('span', { class: 'map-thumb-frame' }, thumb),
+          h('span', { class: 'map-option-text' }, h('span', { class: 'map-option-name' }, map.name), h('span', { class: 'map-option-desc' }, plainDashes(map.description)))
         )
       )
     );
   }
+  // Painted after the screen has laid out (the canvases need a size); the
+  // terrain is cached, so repainting on every visit is cheap and follows
+  // UI scale changes.
+  const paintThumbs = () => {
+    for (const t of thumbs) paintMapPreview(t.canvas, t.id);
+  };
 
   const difficulty = h(
     'div',
@@ -187,6 +197,7 @@ export function bindSkirmishSetup(): void {
     onShow: () => {
       const name = el.querySelector('.banner-card.team-1 strong');
       if (name) name.textContent = storedPlayerName();
+      requestAnimationFrame(paintThumbs);
     },
   });
 }

@@ -1,11 +1,15 @@
 /* UI stylesheet entry: tokens first, then shared base and components, then
    one file per surface. */
 @import './tokens.css';
+@import './fonts.css';
 @import './base.css';
+@import './cursors.css';
 @import './components.css';
 @import './menu.css';
 @import './setup.css';
 @import './loading.css';
 @import './hud.css';
+@import './hud-selection.css';
+@import './hud-dock.css';
 @import './panels.css';
 @import './overlays.css';

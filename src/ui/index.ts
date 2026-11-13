@@ -7,11 +7,13 @@
 
 import type Phaser from 'phaser';
 import { bindLayerKeys, syncSceneKeyboard } from './a11y/layers';
+import { bindNativeFeel } from './a11y/native-feel';
 import { setPhase } from './app-state';
 import { bindDevPanel, buildDevPanel } from './dev/dev-panel';
 import { byId, wait } from './dom';
 import { attachGame, getScene, isSceneReady } from './game-bridge';
 import { startHudLoop } from './hud-loop';
+import { hideAgeBanner } from './hud/age-banner';
 import { bindAlerts, resetAlerts } from './hud/alerts';
 import { resetCommandGrid } from './hud/command-grid';
 import { bindControlGroups, resetControlGroups } from './hud/control-groups';
@@ -37,6 +39,8 @@ import { bindMainMenu } from './screens/main-menu';
 import { bindMenuShell, enterMenu, getMenuRoot } from './screens/menu-shell';
 import { bindMultiplayerLobby } from './screens/multiplayer-lobby';
 import { bindSkirmishSetup } from './screens/skirmish-setup';
+import { bindCursor } from './skin/cursors';
+import { bindPixelScale } from './skin/pixel-scale';
 import { bindUiSounds } from './ui-sounds';
 
 function resetMatchUi(): void {
@@ -53,6 +57,7 @@ function resetMatchUi(): void {
   resetConnectionLost();
   resetObjectives();
   resetTopBar();
+  hideAgeBanner();
 }
 
 async function revealWhenReady(): Promise<void> {
@@ -70,7 +75,9 @@ async function revealWhenReady(): Promise<void> {
 
 export function mountUi(game: Phaser.Game): void {
   attachGame(game);
+  bindNativeFeel();
   applyStoredUiScale();
+  bindPixelScale();
   setPhase('boot');
 
   const root = byId('ui-root');
@@ -99,6 +106,7 @@ export function mountUi(game: Phaser.Game): void {
   bindTooltipDismiss();
   bindDevPanel();
   bindUiSounds();
+  bindCursor();
 
   installMultiplayerDebugApi();
   bindMultiplayerClientDiagnostics();

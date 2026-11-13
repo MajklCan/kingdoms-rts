@@ -15,6 +15,7 @@ import { icon } from '../icons/icon';
 import { openPauseMenu } from '../panels/pause-menu';
 import { toggleObjectives } from '../panels/objectives';
 import { toggleTechTree } from '../panels/tech-tree';
+import { buildAgeBanner } from './age-banner';
 import { buildAlerts } from './alerts';
 import { buildCommandGrid } from './command-grid';
 import { buildControlGroups } from './control-groups';
@@ -39,7 +40,7 @@ export function buildHud(): HTMLElement {
     'div',
     { class: 'paused-banner', hidden: true, role: 'status' },
     icon('pause'),
-    h('span', null, 'Paused'),
+    h('span', { class: 'paused-title' }, 'Paused'),
     h('span', { class: 'paused-hint' }, 'Press ', h('kbd', null, 'P'), ' to resume')
   );
 
@@ -59,7 +60,7 @@ export function buildHud(): HTMLElement {
     h('div', { class: 'dock-right' }, buildAlerts())
   );
 
-  return h('div', { id: 'hud-root', class: 'hud-root' }, top, pausedBanner, dock, consoleEl);
+  return h('div', { id: 'hud-root', class: 'hud-root' }, h('div', { class: 'hud-vignette', 'aria-hidden': 'true' }), top, buildAgeBanner(), pausedBanner, dock, consoleEl);
 }
 
 function togglePause(): void {

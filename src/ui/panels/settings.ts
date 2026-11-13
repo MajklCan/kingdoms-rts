@@ -9,6 +9,7 @@ import type { AudioChannel } from '../../render/audio/audio-manager';
 import { h, readStorage, writeStorage } from '../dom';
 import { getScene } from '../game-bridge';
 import { icon } from '../icons/icon';
+import { syncPixelScale } from '../skin/pixel-scale';
 import { createModal, type Modal } from './modal';
 
 export type SettingsTab = 'audio' | 'game' | 'controls';
@@ -99,6 +100,7 @@ export function applyStoredUiScale(): void {
   const v = Number(readStorage(UI_SCALE_KEY) ?? '1');
   const scale = Number.isFinite(v) && v >= 0.8 && v <= 1.5 ? v : 1;
   document.documentElement.style.setProperty('--ui-user-scale', String(scale));
+  syncPixelScale();
 }
 
 function fill(input: HTMLInputElement): void {

@@ -1,5 +1,5 @@
 /**
- * Alerts: heraldic toasts on the right edge for things that need attention
+ * Alerts: wax-sealed parchment notes on the right edge for things that need attention
  * (under attack, building finished or lost, age reached, research done, not
  * enough resources, population capped). Everything comes typed from the
  * scene's alert feed (already rate-limited per fight); toasts with a location
@@ -60,6 +60,19 @@ const ICON: Record<UiAlertKind, IconName> = {
   population: 'pop',
   denied: 'stop',
   info: 'info',
+};
+/** Wax colour of the seal pressed onto each note. */
+const SEAL: Record<UiAlertKind, 'red' | 'gold' | 'grey'> = {
+  attack: 'red',
+  'building-lost': 'red',
+  'building-complete': 'gold',
+  'unit-trained': 'gold',
+  'research-complete': 'gold',
+  'age-up': 'gold',
+  resources: 'red',
+  population: 'red',
+  denied: 'grey',
+  info: 'grey',
 };
 /** Kinds that also ping the minimap. */
 const PINGED: ReadonlySet<UiAlertKind> = new Set<UiAlertKind>(['attack', 'building-lost']);
@@ -137,7 +150,7 @@ export function pushAlert(alert: HudAlert): void {
       class: `toast toast-${alert.kind}${located ? ' is-located' : ''}`,
       'aria-label': located ? `${text}. Jump to location.` : null,
     },
-    h('span', { class: 'toast-seal', 'aria-hidden': 'true' }, icon(ICON[alert.kind])),
+    h('span', { class: `toast-seal seal-${SEAL[alert.kind]}`, 'aria-hidden': 'true' }, icon(ICON[alert.kind])),
     h('span', { class: 'toast-text' }, text),
     h('span', { class: 'toast-count' }),
     located ? h('span', { class: 'toast-jump', 'aria-hidden': 'true' }, icon('eye')) : null

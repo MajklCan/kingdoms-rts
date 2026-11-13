@@ -3,7 +3,8 @@
 
 .scroll-panel {
   width: min(58rem, 100%);
-  max-height: calc(100vh - 4rem);
+  /* The stage pads 1.75rem above and 3.25rem below. */
+  max-height: calc(100dvh - 5.25rem);
   display: flex;
   flex-direction: column;
   padding: 1.4rem 1.8rem 1.6rem;
@@ -89,7 +90,7 @@ fieldset legend.field-label {
 .map-option {
   position: relative;
   display: block;
-  cursor: pointer;
+  cursor: var(--cur-default);
 }
 
 .map-option input {
@@ -97,15 +98,15 @@ fieldset legend.field-label {
   opacity: 0;
   inset: 0;
   margin: 0;
-  cursor: pointer;
+  cursor: var(--cur-default);
 }
 
 .map-option-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.5rem 0.75rem 0.5rem 1rem;
-  border-radius: var(--radius-sm);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem 0.4rem 0.6rem;
   background: rgba(255, 251, 238, 0.35);
   box-shadow: inset 0 0 0 1px rgba(156, 132, 87, 0.55);
   transition: background var(--dur-fast), box-shadow var(--dur-fast);
@@ -123,6 +124,29 @@ fieldset legend.field-label {
 .map-option input:focus-visible + .map-option-body {
   outline: 2px solid var(--red-600);
   outline-offset: 2px;
+}
+
+.map-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+/* Terrain preview in a thin iron mount. */
+.map-thumb-frame {
+  display: block;
+  width: 4.75rem;
+  height: 2.75rem;
+  padding: calc(2 * var(--px));
+  background: #120c06;
+  box-shadow: 0 0 0 var(--px) #5a4527, inset 0 0 0 var(--px) #000;
+}
+
+.map-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .map-option-name {
@@ -164,7 +188,6 @@ fieldset legend.field-label {
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
   background: rgba(255, 251, 238, 0.55);
   box-shadow: inset 0 0 0 1px rgba(156, 132, 87, 0.6);
   min-width: 0;
@@ -243,12 +266,11 @@ fieldset legend.field-label {
 
 .mission-item {
   display: grid;
-  grid-template-columns: 2.2rem 1fr auto;
+  grid-template-columns: calc(18 * var(--px)) 1fr auto;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.55rem 0.7rem;
+  padding: 0.5rem 0.7rem 0.5rem 0.5rem;
   border: 0;
-  border-radius: var(--radius-sm);
   text-align: left;
   color: var(--ink-900);
   background: rgba(255, 251, 238, 0.35);
@@ -265,18 +287,26 @@ fieldset legend.field-label {
   box-shadow: inset 0 0 0 2px var(--red-600), inset 0.3rem 0 0 var(--red-600);
 }
 
+/* Each chronicle is sealed in red wax; the chosen one in gold. */
 .mission-num {
   display: grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
-  border-radius: 50%;
-  font-family: var(--font-display);
+  width: calc(18 * var(--px));
+  height: calc(18 * var(--px));
+  font-family: var(--font-num);
   font-weight: 700;
   font-size: var(--fs-sm);
-  color: var(--gold-100);
-  background: radial-gradient(circle at 40% 30%, var(--red-500), var(--red-800));
-  box-shadow: inset 0 0 0 2px var(--gold-400);
+  color: #fde6cf;
+  text-shadow: 0 var(--px) 0 rgba(60, 8, 10, 0.8);
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 var(--px) 0 rgba(10, 7, 5, 0.45));
+}
+
+.mission-item[aria-selected="true"] .mission-num {
+  background-image: var(--tex-seal-gold);
+  color: #3a2a06;
+  text-shadow: none;
 }
 
 .mission-item-body {
@@ -315,10 +345,32 @@ fieldset legend.field-label {
   min-height: 0;
   overflow: auto;
   padding: 1rem 1.2rem;
-  border-radius: var(--radius-sm);
   background: rgba(255, 251, 238, 0.5);
   box-shadow: inset 0 0 0 1px rgba(156, 132, 87, 0.55);
   max-height: min(26rem, calc(100vh - 16rem));
+}
+
+/* The battlefield, as the scouts drew it. */
+.briefing-map {
+  float: right;
+  margin: 0 0 0.6rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.briefing-map .map-thumb-frame {
+  width: 10rem;
+  height: 5.75rem;
+}
+
+.briefing-map figcaption {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
 .briefing-title {
@@ -356,10 +408,10 @@ fieldset legend.field-label {
 /* Illuminated initial, only when the text opens with a letter. */
 .briefing-text.has-initial::first-letter {
   float: left;
-  margin: 0.08em 0.12em 0 0;
-  font-family: var(--font-display);
+  margin: 0.06em 0.12em 0 0;
+  font-family: var(--font-title);
   font-weight: 700;
-  font-size: 2.6em;
+  font-size: 2.8em;
   line-height: 0.85;
   color: var(--red-600);
 }
@@ -451,7 +503,7 @@ fieldset legend.field-label {
 }
 
 .advanced summary {
-  cursor: pointer;
+  cursor: var(--cur-default);
   font-family: var(--font-display);
   font-size: var(--fs-xs);
   font-weight: 700;

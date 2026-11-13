@@ -8,9 +8,24 @@
 import type { GameScene } from '../../render/game-scene';
 import { h, plainDashes } from '../dom';
 import { onGameMessage, panToTile, type GameMessage } from '../game-bridge';
+import { attachTip } from './tooltip';
 
 const MAX_LINES = 4;
 const LINE_TTL = 9000;
+/** Lines kept for the idle console after they fade from the log. */
+const HISTORY = 3;
+
+export interface ChronicleLine {
+  text: string;
+  tone: GameMessage['tone'];
+}
+
+const history: ChronicleLine[] = [];
+
+/** The last few messages, newest last (the idle selection panel shows them). */
+export function recentEvents(): readonly ChronicleLine[] {
+  return history;
+}
 
 let logEl: HTMLElement | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -23,10 +38,12 @@ export function buildEventLog(): HTMLElement {
 
 export function logLine(text: string, tone: GameMessage['tone'] = 'info', at?: GameMessage['at']): void {
   if (!logEl) return;
+  history.push({ text, tone });
+  while (history.length > HISTORY) history.shift();
   const el = h('li', { class: `event-line tone-${tone}`, 'data-tone': tone }, plainDashes(text));
   if (at) {
     el.classList.add('is-located');
-    el.title = 'Show on the map';
+    attachTip(el, () => ({ title: 'Show on the map', body: 'Click to move the camera there.' }));
     el.addEventListener('click', () => {
       const scene = activeScene;
       if (scene) panToTile(scene, at.x, at.y);
@@ -56,4 +73,5 @@ export function updateEventLog(scene: GameScene, now: number): void {
 export function resetEventLog(): void {
   for (const line of lines) line.el.remove();
   lines.length = 0;
+  history.length = 0;
 }

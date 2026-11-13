@@ -107,8 +107,8 @@ export function buildCommandGrid(): HTMLElement {
       'button',
       { type: 'button', class: 'cmd-cell is-empty', tabindex: '-1', 'aria-hidden': 'true' },
       icon('info', 'cmd-icon'),
-      h('span', { class: 'cmd-key' }),
-      h('span', { class: 'cmd-queue' })
+      h('kbd', { class: 'cmd-key', 'aria-hidden': 'true' }),
+      h('span', { class: 'cmd-queue num' })
     );
     cell.addEventListener('click', (ev) => onCellClick(ev, i));
     attachTip(cell, () => {
@@ -133,7 +133,7 @@ export function buildCommandGrid(): HTMLElement {
     ev.preventDefault();
     cells[target]!.focus();
   });
-  return h('section', { class: 'console-commands frame-wood', 'aria-label': 'Commands' }, h('div', { class: 'cmd-inner inlay' }, grid));
+  return h('section', { class: 'console-commands', 'aria-label': 'Commands' }, h('div', { class: 'cmd-inner' }, grid));
 }
 
 export function updateCommandGrid(scene: GameScene): void {

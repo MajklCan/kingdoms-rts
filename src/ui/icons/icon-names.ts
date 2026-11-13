@@ -78,6 +78,7 @@ export const ICON_NAMES = [
   'town-center',
   'victory',
   'villager',
+  'wall',
   'wood',
 ] as const;
 

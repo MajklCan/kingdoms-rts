@@ -1,5 +1,6 @@
-/* Full screen overlays above the HUD: the game over chronicle and the
-   developer panel (dev builds only, toggled with the backtick key). */
+/* Full screen overlays above the HUD: the game over chronicle (a cloth
+   banner dropping over a parchment ledger), the connection lost notice and
+   the developer panel (dev builds only, toggled with the backtick key). */
 
 .gameover {
   position: fixed;
@@ -8,74 +9,142 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem 1.5rem;
   pointer-events: auto;
   background: radial-gradient(70% 70% at 50% 45%, rgba(15, 10, 6, 0.55), rgba(5, 3, 1, 0.9));
   animation: fade-in var(--dur-slow) var(--ease-out);
 }
 
+.gameover-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(46rem, 100%);
+  max-height: calc(100dvh - 2.5rem);
+  outline: none;
+}
+
+/* The proclamation: crimson and gold for a victory, torn ash for a defeat
+   (cloth slices 10 top, 8 sides, 20 bottom for the dagged hem). */
+.go-banner {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 20rem;
+  margin-bottom: calc(-14 * var(--px));
+  padding: calc(12 * var(--px)) 2.6rem calc(24 * var(--px));
+  text-align: center;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-cloth-victory) 10 8 20 8 fill / calc(10 * var(--px)) calc(8 * var(--px)) calc(20 * var(--px)) calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(4 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+  animation: go-drop 760ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.go-banner.is-defeat {
+  border-image-source: var(--tex-cloth-defeat);
+}
+
+.go-banner-emblem {
+  display: grid;
+  place-items: center;
+  width: calc(20 * var(--px));
+  height: calc(20 * var(--px));
+  color: #3a2a06;
+  background: var(--tex-seal-gold) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+
+.go-banner.is-defeat .go-banner-emblem {
+  color: #f2eee6;
+  background-image: var(--tex-seal-grey);
+}
+
+.go-banner-emblem .icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.go-banner-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold-200);
+  text-shadow: 0 var(--px) 0 #2a0508;
+}
+
+.go-banner.is-defeat .go-banner-eyebrow {
+  color: #d9d2c6;
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.go-title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 4.5rem;
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: 0.01em;
+}
+
+.go-title.victory {
+  color: var(--gold-100);
+  text-shadow: 0 calc(2 * var(--px)) 0 #2a0508, 0 0 1.2rem rgba(246, 221, 134, 0.35);
+}
+
+.go-title.defeat {
+  color: #e9e3d8;
+  text-shadow: 0 calc(2 * var(--px)) 0 #000;
+}
+
+/* On parchment (connection lost) the defeat title is ink red. */
+.gameover-card .go-title.defeat {
+  color: var(--red-600);
+  text-shadow: none;
+}
+
+/* Two-word titles ("Connection lost") would overflow the card at full size. */
+.go-title.is-long {
+  font-size: var(--fs-3xl);
+}
+
 .gameover-card {
-  width: min(40rem, 100%);
-  max-height: calc(100vh - 3rem);
+  width: 100%;
+  min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.45rem;
-  padding: 1.8rem 2rem 1.6rem;
+  padding: calc(16 * var(--px)) 1.8rem 1.4rem;
   text-align: center;
+  animation: go-sheet 420ms var(--ease-out) 180ms both;
+}
+
+#connection-lost .gameover-card {
+  width: min(36rem, 100%);
+  padding-top: 1.6rem;
   animation: modal-in var(--dur-slow) var(--ease-out);
 }
 
 .go-emblem {
   display: grid;
   place-items: center;
-  width: 5rem;
-  height: 5rem;
-  border-radius: 50%;
-  color: var(--gold-100);
-  box-shadow: inset 0 0 0 2px var(--gold-300), inset 0 0 0 5px rgba(0, 0, 0, 0.35), 0 0.4rem 1rem rgba(0, 0, 0, 0.35);
+  width: calc(24 * var(--px));
+  height: calc(24 * var(--px));
+  color: #fde6cf;
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
 }
 
 .go-emblem .icon {
-  width: 2.8rem;
-  height: 2.8rem;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
-}
-
-.go-emblem.is-victory {
-  background: radial-gradient(circle at 40% 30%, #f6dd86, #c9a227 55%, #6b4f10);
-  color: #3a2706;
-}
-
-.go-emblem.is-defeat {
-  background: radial-gradient(circle at 40% 30%, #8d2a2a, #4a0d12 70%);
-}
-
-.go-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-hero);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  line-height: 1;
-}
-
-.go-title.victory {
-  color: #8a6a1c;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 0.3rem 0.8rem rgba(138, 106, 28, 0.35);
-}
-
-.go-title.defeat {
-  color: var(--red-600);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-/* Two-word titles ("Connection lost") would overflow the card at hero size. */
-.go-title.is-long {
-  font-size: var(--fs-3xl);
-  letter-spacing: 0.08em;
+  width: 2rem;
+  height: 2rem;
 }
 
 .go-sub {
@@ -87,42 +156,67 @@
 
 .gameover-card .ornament-rule {
   width: 70%;
-  margin: 0.4rem 0;
+  margin: 0.3rem 0;
+}
+
+/* Ledger: three columns of the match's exact counters. */
+.go-ledgers {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 1.2rem;
+  text-align: left;
+}
+
+.go-ledger-title {
+  margin: 0 0 0.25rem;
+  padding-bottom: 0.2rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6c0f17;
+  border-bottom: calc(2 * var(--px)) solid rgba(108, 15, 23, 0.55);
 }
 
 .go-stats {
-  width: 100%;
   margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.35rem 1.4rem;
-  text-align: left;
+  display: flex;
+  flex-direction: column;
 }
 
 .go-stat {
   display: grid;
-  grid-template-columns: 1.4rem minmax(0, 1fr) auto;
+  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.1rem;
-  border-bottom: 1px dotted rgba(138, 106, 28, 0.45);
+  gap: 0.4rem;
+  padding: 0.22rem 0.1rem;
+  border-bottom: var(--px) dotted rgba(138, 106, 28, 0.55);
+}
+
+.go-stat:nth-child(odd) {
+  background: rgba(255, 251, 238, 0.35);
 }
 
 .go-stat-icon {
-  color: var(--red-600);
+  width: 1rem;
+  height: 1rem;
+  color: var(--ink-muted);
 }
 
 .go-stat dt {
   font-size: var(--fs-sm);
   color: var(--ink-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .go-stat dd {
   margin: 0;
-  font-family: var(--font-display);
   font-size: var(--fs-md);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
   color: var(--ink-900);
 }
 
@@ -131,7 +225,30 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.7rem;
-  margin-top: 1rem;
+  margin-top: 0.9rem;
+}
+
+@keyframes go-drop {
+  0% { transform: translateY(-120vh); }
+  100% { transform: none; }
+}
+
+@keyframes go-sheet {
+  from { opacity: 0; transform: translateY(1rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .go-banner,
+  .gameover-card {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .go-ledgers {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Developer panel */
@@ -142,12 +259,15 @@
   z-index: var(--z-dev);
   width: 15.5rem;
   padding: 0.6rem 0.7rem 0.7rem;
-  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   color: #d9f0d0;
-  background: rgba(8, 12, 8, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(120, 200, 110, 0.45), 0 0.5rem 1.2rem rgba(0, 0, 0, 0.6);
+  background: rgba(8, 12, 8, 0.92);
+  background-clip: padding-box;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.6));
   pointer-events: auto;
 }
 
@@ -215,7 +335,7 @@
 }
 
 .dev-btn[disabled] {
-  cursor: not-allowed;
+  cursor: var(--cur-forbidden);
   opacity: 0.45;
 }
 

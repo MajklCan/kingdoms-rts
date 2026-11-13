@@ -20,6 +20,7 @@ import { updateObjectives } from './panels/objectives';
 import { renderTechTree } from './panels/tech-tree';
 import { updateConnectionLost } from './screens/connection-lost';
 import { updateGameOver } from './screens/game-over';
+import { updateCursor } from './skin/cursors';
 
 function tick(now: number): void {
   requestAnimationFrame(tick);
@@ -41,6 +42,7 @@ function tick(now: number): void {
   updateObjectives(scene);
   updateGameOver(scene);
   updateConnectionLost();
+  updateCursor(scene, now);
 }
 
 export function startHudLoop(): void {
