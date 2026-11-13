@@ -89,11 +89,12 @@ type BakeBounds = NonNullable<VoxelBakeOptions['bounds']>;
 export const VOXEL_TEAM_PLAYERS = [1, 2] as const;
 
 /**
- * On-screen scale applied to every voxel unit sprite. 0.72 puts a villager at
- * about 22 px, close to a Blender door (0.52 tile, about 20 px at 1x), so units
- * sit at the scale of the pre-rendered buildings.
+ * On-screen scale applied to every voxel unit sprite. 0.82 puts a villager at
+ * about 25 px against a Blender door of about 20 px (0.52 tile): a touch
+ * larger than true scale, the usual RTS exaggeration that keeps units
+ * readable next to big detailed buildings and trees.
  */
-export const VOXEL_UNIT_SCALE = 0.72;
+export const VOXEL_UNIT_SCALE = 0.82;
 
 export const VOXEL_KEYS = {
   DARK_TC_PREFIX: 'voxel-dark-tc-p',
