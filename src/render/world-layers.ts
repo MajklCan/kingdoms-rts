@@ -5,6 +5,8 @@
  *   terrain   baked terrain chunks (Blender tiles, or the flat-colour bake)
  *   decor     render-only scatter (grass tufts, flowers, rocks, reeds)
  *   shadows   ground shadows of every entity + unit contact blobs
+ *   groundFx  VFX lying on the ground: cloud shadows, scorch marks, dust
+ *             rings, fallen units (WorldFx), so units walk over them
  *   ground    in-world UI on the ground plane: rally flags, build ghost
  *             footprint, the back half of selection rings
  *   fog       fog of war over the ground (explored dim + unexplored black)
@@ -26,6 +28,7 @@ export interface WorldLayers {
   terrain: Phaser.GameObjects.Container;
   decor: Phaser.GameObjects.Container;
   shadows: Phaser.GameObjects.Container;
+  groundFx: Phaser.GameObjects.Container;
   ground: Phaser.GameObjects.Container;
   fog: Phaser.GameObjects.Container;
   entities: EntityLayer;
@@ -46,12 +49,13 @@ export function createWorldLayers(scene: Phaser.Scene): WorldLayers {
   const terrain = child();
   const decor = child();
   const shadows = child();
+  const groundFx = child();
   const ground = child();
   const fog = child();
   const entities = new EntityLayer(child());
   const overlay = child();
   const effects = child();
-  return { root, terrain, decor, shadows, ground, fog, entities, overlay, effects };
+  return { root, terrain, decor, shadows, groundFx, ground, fog, entities, overlay, effects };
 }
 
 /** Add a fresh Graphics object to a layer (later additions draw on top). */

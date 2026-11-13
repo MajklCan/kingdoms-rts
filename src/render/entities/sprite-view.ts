@@ -9,6 +9,7 @@
  * `mix(rgb, teamColour * shade, coverage)` and stays in the atlas batch.
  */
 
+import { TINT_ADD, TINT_MULTIPLY } from '../effects/fx-constants';
 import type { ShadowRef, SpriteRef } from '../sprites/sprite-source';
 import type { EntityLayer } from './entity-layer';
 
@@ -27,6 +28,8 @@ export class SpriteView {
   private shadowRef: ShadowRef | undefined;
   private current: SpriteRef;
   private tint: number | null = null;
+  /** Additive hit-flash colour, 0 = none. Wins over `tint` while set. */
+  private flash = 0;
   private alpha = 1;
 
   constructor(
@@ -92,15 +95,48 @@ export class SpriteView {
   setTint(tint: number): void {
     if (tint === this.tint) return;
     this.tint = tint;
-    this.sprite.setTint(tint);
+    this.applySpriteTint();
     this.applyMaskTint();
   }
 
   clearTint(): void {
     if (this.tint === null) return;
     this.tint = null;
-    this.sprite.clearTint();
+    this.applySpriteTint();
     this.applyMaskTint();
+  }
+
+  /**
+   * Additive flash (hit feedback): `color` is added to the art, 0 turns it
+   * off and restores the regular tint.
+   */
+  setFlash(color: number): void {
+    if (color === this.flash) return;
+    this.flash = color;
+    this.applySpriteTint();
+    this.applyMaskTint();
+  }
+
+  /** Texture, frame, origin, scale and position of the base sprite (death / collapse copies). */
+  snapshot(): SpriteSnapshot {
+    const s = this.sprite;
+    const mask = this.mask && this.current.teamMask
+      ? { frame: this.current.teamMask.frame, tint: this.current.teamMask.tint }
+      : undefined;
+    return {
+      texture: s.texture.key,
+      frame: s.frame.name,
+      x: s.x,
+      y: s.y,
+      originX: s.originX,
+      originY: s.originY,
+      scale: s.scaleX,
+      flipX: s.flipX,
+      depth: s.depth,
+      alpha: this.alpha,
+      top: this.current.top,
+      mask,
+    };
   }
 
   /** Tint when given, plain colours when null. */
@@ -156,11 +192,46 @@ export class SpriteView {
     this.shadow.setAlpha((ref.alpha ?? 1) * this.alpha);
   }
 
+  private applySpriteTint(): void {
+    if (this.flash !== 0) {
+      this.sprite.setTint(this.flash).setTintMode(TINT_ADD);
+    } else if (this.tint !== null) {
+      this.sprite.setTint(this.tint).setTintMode(TINT_MULTIPLY);
+    } else {
+      this.sprite.clearTint();
+    }
+  }
+
   private applyMaskTint(): void {
     const maskRef = this.current.teamMask;
     if (!this.mask || !maskRef) return;
-    this.mask.setTint(this.tint === null ? maskRef.tint : multiplyColor(maskRef.tint, this.tint));
+    const base = this.tint === null ? maskRef.tint : multiplyColor(maskRef.tint, this.tint);
+    this.mask.setTint(this.flash === 0 ? base : addColor(base, this.flash));
   }
+}
+
+export interface SpriteSnapshot {
+  texture: string;
+  frame: string | number;
+  x: number;
+  y: number;
+  originX: number;
+  originY: number;
+  scale: number;
+  flipX: boolean;
+  depth: number;
+  alpha: number;
+  top: number;
+  /** Team-colour mask frame (same texture) and its tint, when drawn. */
+  mask?: { frame?: string; tint: number };
+}
+
+/** Per-channel saturating add of two 0xRRGGBB colours. */
+export function addColor(a: number, b: number): number {
+  const r = Math.min(255, ((a >> 16) & 0xff) + ((b >> 16) & 0xff));
+  const g = Math.min(255, ((a >> 8) & 0xff) + ((b >> 8) & 0xff));
+  const bl = Math.min(255, (a & 0xff) + (b & 0xff));
+  return (r << 16) | (g << 8) | bl;
 }
 
 /** Per-channel multiply of two 0xRRGGBB colours (how a tint darkens a team colour). */

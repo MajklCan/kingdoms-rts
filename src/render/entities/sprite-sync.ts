@@ -14,7 +14,9 @@ export class SpriteSync<K> {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly layers: SpriteViewLayers,
-    private readonly onRemove?: (key: K) => void
+    private readonly onRemove?: (key: K) => void,
+    /** Called with the view still alive, right before an unshown key is destroyed. */
+    private readonly onBeforeRemove?: (key: K, view: SpriteView) => void
   ) {}
 
   begin(): void {
@@ -37,6 +39,7 @@ export class SpriteSync<K> {
   end(): void {
     for (const [key, view] of this.views) {
       if (this.seen.has(key)) continue;
+      this.onBeforeRemove?.(key, view);
       view.destroy();
       this.views.delete(key);
       this.onRemove?.(key);
@@ -49,6 +52,10 @@ export class SpriteSync<K> {
 
   entries(): IterableIterator<[K, SpriteView]> {
     return this.views.entries();
+  }
+
+  allViews(): IterableIterator<SpriteView> {
+    return this.views.values();
   }
 
   countBySource(source: SpriteRef['source']): number {
