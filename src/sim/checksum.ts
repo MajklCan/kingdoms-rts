@@ -1,5 +1,5 @@
 /**
- * Deterministic world checksum — the desync oracle for lockstep multiplayer.
+ * Deterministic world checksum - the desync oracle for lockstep multiplayer.
  *
  * Lockstep clients each run their own sim; if any client's state differs by a
  * single bit they silently diverge ("desync") and the match is ruined. This
@@ -8,7 +8,7 @@
  *
  * Rules:
  *  - Hash ONLY sim-deterministic state. The `Selected` component is client-local
- *    (each player selects different units) and is deliberately EXCLUDED — it is
+ *    (each player selects different units) and is deliberately EXCLUDED - it is
  *    not part of the shared simulation.
  *  - Entities are visited in ascending eid order so the hash is independent of
  *    query iteration order.
@@ -17,7 +17,7 @@
  *    absolute eids for identical state. We hash each entity's CANONICAL index
  *    (its rank in ascending-eid order) instead, and remap stored eid references
  *    (targets, sites) through the same canonical map. The checksum is therefore
- *    invariant to eid allocation — true for both in-process comparisons and
+ *    invariant to eid allocation - true for both in-process comparisons and
  *    real cross-machine lockstep.
  *  - Floats are hashed by their exact IEEE-754 bits, not their decimal value.
  */
@@ -154,7 +154,7 @@ export function checksumWorld(world: SimWorld): number {
   h.int(world.nextNetId);
   h.bit(world.paused);
 
-  // Resource banks, population, ages, techs — ascending player order.
+  // Resource banks, population, ages, techs - ascending player order.
   for (const bank of world.resources) {
     for (let i = 0; i < bank.length; i++) h.u32(bank[i]);
   }
@@ -220,7 +220,7 @@ export function checksumWorld(world: SimWorld): number {
     h.u32(feature.size ?? 0);
   }
 
-  // Entities — ascending eid so the order is query-independent. Hash canonical
+  // Entities - ascending eid so the order is query-independent. Hash canonical
   // index (rank), not the absolute eid (see header note). `canon` remaps a
   // stored eid reference to its rank; missing/invalid refs hash to a sentinel.
   const eids = [...positionQuery(ecs)].sort((a, b) => a - b);
@@ -444,9 +444,4 @@ export function checksumWorld(world: SimWorld): number {
   }
 
   return h.value;
-}
-
-/** Hex string form, handy for logs and wire frames. */
-export function checksumHex(world: SimWorld): string {
-  return checksumWorld(world).toString(16).padStart(8, '0');
 }

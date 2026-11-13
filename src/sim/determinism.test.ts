@@ -260,7 +260,7 @@ describe('self-describing commands', () => {
 
     // Own unit advanced meaningfully toward the destination.
     expect(distTo(mine, dest)).toBeLessThan(mineStartDist - 1);
-    // Enemy unit ignored the command — stayed put.
+    // Enemy unit ignored the command - stayed put.
     const enemyMoved = Math.hypot(
       Position.x[enemy] - enemyStart.x,
       Position.y[enemy] - enemyStart.y
@@ -283,7 +283,7 @@ describe('self-describing commands', () => {
     // explicit world: self-describing command (network path)
     explicit.inputs.push({ type: 'cmdMove', playerId: 1, eids: [e1], to: dest });
     // select-based world: mark unit Selected, then legacy selection-relative
-    // command — this resolves to the same eid + LOCAL_PLAYER_ID internally.
+    // command - this resolves to the same eid + LOCAL_PLAYER_ID internally.
     addComponent(selectBased.ecs, Selected, s1);
     selectBased.inputs.push({ type: 'moveSelected', to: dest });
 

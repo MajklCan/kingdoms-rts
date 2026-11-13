@@ -1,5 +1,5 @@
 /**
- * Static game definitions — buildings + units. Hard-coded TypeScript tables for now;
+ * Static game definitions - buildings + units. Hard-coded TypeScript tables for now;
  * will migrate to JSON data files in Phase 9 (DataRegistry).
  *
  * Cost units: integer resource amounts.
@@ -25,7 +25,7 @@ export interface BuildingDef {
   popProvided: number;
   /** Footprint in tiles (1×1 for Phase 6; real 3×3 etc. comes later). */
   footprint: { w: number; h: number };
-  /** Render half-width as a fraction of TILE_W/2 — visual scale. */
+  /** Render half-width as a fraction of TILE_W/2 - visual scale. */
   visualScale: number;
   /** Fill color for the building body. */
   color: number;
@@ -64,7 +64,7 @@ export interface UnitDef {
   trainAt: string; // building id
 }
 
-/** Building defIds — index into BUILDING_TABLE. Keep in sync. */
+/** Building defIds - index into BUILDING_TABLE. Keep in sync. */
 export const BuildingDefId = {
   TOWN_CENTER: 0,
   HOUSE: 1,
@@ -92,7 +92,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     cost: { food: 0, wood: 275, gold: 0, stone: 100 },
     buildTimeTicks: 0, // pre-placed in Phase 6
     popProvided: 5,
-    /** 3×3 tiles — matches the rendered footprint of the voxel TC sprite. */
+    /** 3×3 tiles - matches the rendered footprint of the voxel TC sprite. */
     footprint: { w: 3, h: 3 },
     visualScale: 1.8,
     color: 0x2e86de,
@@ -140,7 +140,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     cost: { food: 0, wood: 160, gold: 0, stone: 0 },
     buildTimeTicks: Math.round(SIM.TICK_HZ * 30),
     popProvided: 0,
-    /** 2×2 tiles — the barracks sprite is wide. */
+    /** 2×2 tiles - the barracks sprite is wide. */
     footprint: { w: 2, h: 2 },
     visualScale: 1.1,
     color: 0x5d4037,
@@ -294,7 +294,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
   },
 ];
 
-/** Unit defIds — index into UNIT_TABLE. */
+/** Unit defIds - index into UNIT_TABLE. */
 export const UnitDefId = {
   VILLAGER: 0,
   /** Legacy id retained for old saves; no current building trains it. */
@@ -410,7 +410,7 @@ export type AgeIdValue = (typeof AgeId)[keyof typeof AgeId];
 export interface AgeDef {
   id: AgeIdValue;
   name: string;
-  /** Cost to advance INTO this age. Dark is the starting age — cost ignored. */
+  /** Cost to advance INTO this age. Dark is the starting age - cost ignored. */
   advanceCost: CostTuple;
   /** Ticks needed to advance into this age. */
   advanceTicks: number;
@@ -437,7 +437,7 @@ export function getUnitDef(defId: number): UnitDef | null {
   return UNIT_TABLE[defId] ?? null;
 }
 
-/** Cost check — returns true iff the player can afford. */
+/** Cost check - returns true iff the player can afford. */
 export function canAfford(
   bank: Int32Array,
   cost: CostTuple

@@ -425,7 +425,7 @@ describe('campaign missions', () => {
     expect(countBuilding(BuildingDefId.FOUNDRY)).toBe(1);
     expect(countBuilding(BuildingDefId.LUMBER_CAMP)).toBe(1);
     expect(countBuilding(BuildingDefId.STONE_QUARRY)).toBe(1);
-    // Gold is mandatory for the gunman rebuild loop — the base must ship a mine.
+    // Gold is mandatory for the gunman rebuild loop - the base must ship a mine.
     expect(countBuilding(BuildingDefId.GOLD_MINE)).toBe(1);
     expect(countBuilding(BuildingDefId.HOUSE)).toBeGreaterThanOrEqual(6);
     expect(countBuilding(BuildingDefId.FARM)).toBeGreaterThanOrEqual(2);
@@ -473,7 +473,7 @@ describe('campaign missions', () => {
     expect(liveEnemies()).toHaveLength(0);
     expect(world.campaign?.scriptedWaveIndex).toBe(0);
 
-    // Wave 1 — infantry through the dry central gap (no cavalry yet).
+    // Wave 1 - infantry through the dry central gap (no cavalry yet).
     forceNextWave();
     expect(world.campaign?.scriptedWaveIndex).toBe(1);
     let enemies = liveEnemies();
@@ -483,17 +483,17 @@ describe('campaign missions', () => {
     expect(enemies.filter((eid) => AttackMoveGoal.active[eid] === 1 && world.paths.has(eid)).length)
       .toBeGreaterThanOrEqual(enemies.length - 3);
 
-    // Wave 2 — cavalry through the muddy flank.
+    // Wave 2 - cavalry through the muddy flank.
     forceNextWave();
     expect(world.campaign?.scriptedWaveIndex).toBe(2);
     expect(countTag(liveEnemies(), ScoutCavalryTag)).toBeGreaterThanOrEqual(16);
 
-    // Wave 3 — heavier middle push that now includes hand-gunners.
+    // Wave 3 - heavier middle push that now includes hand-gunners.
     forceNextWave();
     expect(world.campaign?.scriptedWaveIndex).toBe(3);
     expect(countTag(liveEnemies(), GunmanTag)).toBeGreaterThanOrEqual(4);
 
-    // Wave 4 — the squeeze: both fronts at once (more cavalry AND more pikemen).
+    // Wave 4 - the squeeze: both fronts at once (more cavalry AND more pikemen).
     const beforeW4 = liveEnemies();
     const cavBefore = countTag(beforeW4, ScoutCavalryTag);
     const spearBefore = countTag(beforeW4, SpearmanTag);
@@ -503,7 +503,7 @@ describe('campaign missions', () => {
     expect(countTag(afterW4, ScoutCavalryTag)).toBeGreaterThan(cavBefore);
     expect(countTag(afterW4, SpearmanTag)).toBeGreaterThan(spearBefore);
 
-    // Wave 5 — final combined assault; no further reinforcements scheduled.
+    // Wave 5 - final combined assault; no further reinforcements scheduled.
     forceNextWave();
     expect(world.campaign?.scriptedWaveIndex).toBe(5);
     expect(world.campaign?.nextReinforcementTick).toBe(Number.MAX_SAFE_INTEGER);
@@ -567,7 +567,7 @@ describe('campaign missions', () => {
     const count = (eids: number[], tag: Parameters<typeof hasComponent>[1]) =>
       eids.filter((eid) => hasComponent(world.ecs, tag, eid)).length;
 
-    // Barbed-wire belts replace the old walls — walkable slow tiles strung across the field.
+    // Barbed-wire belts replace the old walls - walkable slow tiles strung across the field.
     expect(world.map.tiles.reduce((n, t) => n + (t === TileType.BARBED_WIRE ? 1 : 0), 0))
       .toBeGreaterThan(MAP.WIDTH);
 
@@ -631,7 +631,7 @@ describe('campaign missions', () => {
     expect(new Set(deadTrees.map((eid) => Math.floor(Position.y[eid] / 8))).size)
       .toBeGreaterThanOrEqual(6);
 
-    // The flanks are sealed dirt/mud — there is NOTHING walkable outside the central
+    // The flanks are sealed dirt/mud - there is NOTHING walkable outside the central
     // corridor, so the assault can't simply skirt the lines and rush the bunker.
     // (walkability: 1 = blocked, 0 = walkable.)
     const cx = Math.round(MAP.WIDTH * 0.5);

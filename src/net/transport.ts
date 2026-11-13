@@ -1,5 +1,5 @@
 /**
- * Transport — the wire between a client and the lockstep relay. Abstracted so
+ * Transport - the wire between a client and the lockstep relay. Abstracted so
  * the session doesn't care whether frames travel over a real WebSocket or an
  * in-process test double.
  */

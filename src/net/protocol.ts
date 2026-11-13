@@ -9,7 +9,7 @@
 
 import type { SimInput } from '@sim/world';
 
-/** Protocol version — bump on any breaking wire-format change. */
+/** Protocol version - bump on any breaking wire-format change. */
 export const PROTOCOL_VERSION = 1;
 
 /** Ticks of input delay: a command issued now executes this many ticks later
@@ -52,19 +52,45 @@ export function encode(msg: ClientMessage | ServerMessage): string {
   return JSON.stringify(msg);
 }
 
-export function decodeClient(raw: string): ClientMessage | null {
-  try {
-    const m = JSON.parse(raw) as ClientMessage;
-    return m && typeof m.t === 'string' ? m : null;
-  } catch {
-    return null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const isInt = (value: unknown): value is number => Number.isInteger(value);
+const isNum = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+function isPlayerSlots(value: unknown): value is PlayerSlot[] {
+  return Array.isArray(value) && value.every((p) => isRecord(p) && isInt(p.playerId) && typeof p.name === 'string');
+}
+
+/** Structural check of a relay frame. The commands inside `turn` are
+ *  validated later, per command, by sanitizeTurnCommands (commands.ts). */
+function isServerMessage(m: Record<string, unknown>): boolean {
+  switch (m.t) {
+    case 'joined':
+      return isInt(m.v) && typeof m.room === 'string' && isInt(m.playerId) && typeof m.isHost === 'boolean' && isPlayerSlots(m.players);
+    case 'roster':
+      return isPlayerSlots(m.players);
+    case 'start':
+      return isNum(m.seed) && isPlayerSlots(m.players);
+    case 'turn':
+      return isInt(m.playerId) && isInt(m.forTick) && m.forTick >= 0 && Array.isArray(m.cmds);
+    case 'checksum':
+      return isInt(m.playerId) && isInt(m.tick) && isNum(m.hash);
+    case 'peer-left':
+      return isInt(m.playerId);
+    case 'error':
+      return typeof m.message === 'string';
+    default:
+      return false;
   }
 }
 
+/** Parse a relay frame; null for anything that is not a well-formed ServerMessage. */
 export function decodeServer(raw: string): ServerMessage | null {
   try {
-    const m = JSON.parse(raw) as ServerMessage;
-    return m && typeof m.t === 'string' ? m : null;
+    const m: unknown = JSON.parse(raw);
+    return isRecord(m) && isServerMessage(m) ? (m as unknown as ServerMessage) : null;
   } catch {
     return null;
   }

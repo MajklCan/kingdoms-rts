@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Lockstep, type ReadyTick } from './lockstep';
+import { Lockstep, MAX_SEND_AHEAD_TICKS, type ReadyTick } from './lockstep';
 import type { SimInput } from '@sim/world';
 
 /** Drive two lockstep peers through `iterations` synchronized loop steps with a
@@ -47,7 +47,7 @@ describe('lockstep scheduler', () => {
     const a = new Lockstep(1, [2], 3);
     const b = new Lockstep(2, [1], 3);
     // First iteration: warm-up ticks 0,1,2 are ready, and the first packet
-    // targets tick 3 — delivered with zero latency here, so tick 3 too.
+    // targets tick 3 - delivered with zero latency here, so tick 3 too.
     const pa = a.nextSendPacket();
     const pb = b.nextSendPacket();
     b.receivePeerTurn(1, pa.forTick, pa.cmds);
@@ -90,14 +90,40 @@ describe('lockstep scheduler', () => {
       dropped.push(pb); // withhold from A
     }
     const beforeExec = a.currentExecTick;
-    expect(a.drainReadyTicks()).toEqual([]); // stalled — no B packets
+    expect(a.drainReadyTicks()).toEqual([]); // stalled - no B packets
     expect(a.isStalled()).toBe(true);
     expect(a.currentExecTick).toBe(beforeExec);
 
-    // Deliver the withheld packets — A catches up over the 3 stalled ticks.
+    // Deliver the withheld packets - A catches up over the 3 stalled ticks.
     for (const p of dropped) a.receivePeerTurn(2, p.forTick, p.cmds);
     const caughtUp = a.drainReadyTicks();
     expect(caughtUp.length).toBe(3);
     expect(a.currentExecTick).toBe(beforeExec + 3);
+  });
+
+  it('stops sending once the send window is full and resumes as execution advances', () => {
+    const a = new Lockstep(1, [2], 4);
+    const sendAll = () => {
+      let sent = 0;
+      while (sent < 200 && a.canSend()) {
+        a.nextSendPacket();
+        sent++;
+      }
+      return sent;
+    };
+    // The peer is silent: only the input-delay window plus the cap goes out.
+    expect(sendAll()).toBe(MAX_SEND_AHEAD_TICKS);
+    expect(a.drainReadyTicks().length).toBe(4); // warm-up ticks need no packets
+    expect(sendAll()).toBe(4);
+    for (let tick = 4; tick < 8; tick++) a.receivePeerTurn(2, tick, []);
+    expect(a.drainReadyTicks().length).toBe(4);
+    expect(sendAll()).toBe(4);
+  });
+
+  it('ignores turns for malformed ticks', () => {
+    const a = new Lockstep(1, [2], 4);
+    a.receivePeerTurn(2, Number.NaN, [stop(2)]);
+    a.receivePeerTurn(2, 4.5, [stop(2)]);
+    expect(a.debugSnapshot().bufferedTicks).toBe(0);
   });
 });
