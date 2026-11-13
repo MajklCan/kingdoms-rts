@@ -8,7 +8,7 @@
  * is written for players: no entity ids, coordinates or debug wording.
  */
 
-import { ERROR as SFX_ERROR } from '../audio/sound-map';
+import { COMMAND_MOVE, ERROR as SFX_ERROR } from '../audio/sound-map';
 import type { EffectsLayer } from '../effects/effects-layer';
 import { ORDER_MARKER_EFFECT, type OrderMarkerKind } from '../effects/order-marker';
 import type { GameAudio } from '../game-audio';
@@ -77,6 +77,9 @@ export class CommandFeedback {
 
   /** Ground marker where an order lands (tile coordinates). */
   orderMarker(kind: OrderMarkerKind, tileX: number, tileY: number): void {
+    // Unit orders get a bark or blip from GameAudio; a rally point has no
+    // unit to speak, so it gets the order blip here.
+    if (kind === 'rally') this.audio.playUi(COMMAND_MOVE);
     this.effects.spawn(ORDER_MARKER_EFFECT, { x: tileX, y: tileY }, { params: { kind } });
   }
 

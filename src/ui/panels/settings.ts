@@ -28,6 +28,7 @@ const CHANNELS: ReadonlyArray<{ channel: AudioChannel | 'master'; label: string 
   { channel: 'sfx', label: 'Effects' },
   { channel: 'voices', label: 'Voices' },
   { channel: 'ambience', label: 'Ambience' },
+  { channel: 'ui', label: 'Interface' },
 ];
 
 const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
