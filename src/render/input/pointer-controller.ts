@@ -7,7 +7,8 @@
  * released outside the canvas (or over DOM HUD) still completes.
  */
 
-import { Owner, Position, Resource, ResourceKindId } from '@sim/components';
+import { Building, Owner, Position, Resource, ResourceKindId } from '@sim/components';
+import { hasComponent } from 'bitecs';
 import {
   clearSelection,
   findEntityNear,
@@ -50,8 +51,25 @@ export class PointerController {
       commands: PlayerCommands;
       placement: BuildPlacement;
       audio: GameAudio;
+      /** Building whose sprite pixels cover a layer-local point (tall art). */
+      pickBuilding?: (localX: number, localY: number) => number | null;
     }
   ) {}
+
+  /**
+   * Entity under the pointer: the sim's tile pick, except that a building
+   * drawn over that point (a roof or tower top over a tile further back) wins
+   * against another building, and fills in when the tile pick finds nothing.
+   */
+  private pickEntity(pointer: Phaser.Input.Pointer, tileX: number, tileY: number): number | null {
+    const world = this.ctx.world;
+    const picked = findEntityNear(world, tileX, tileY, 0.7);
+    const root = this.ctx.layers.root;
+    const drawn = this.deps.pickBuilding?.(pointer.worldX - root.x, pointer.worldY - root.y) ?? null;
+    if (drawn === null) return picked;
+    if (picked === null || (picked !== drawn && hasComponent(world.ecs, Building, picked))) return drawn;
+    return picked;
+  }
 
   install(): void {
     const scene = this.ctx.scene;
@@ -101,21 +119,21 @@ export class PointerController {
     if (this.deps.placement.handlePointerDown(pointer, tx, ty)) return;
 
     if (pointer.rightButtonDown()) {
-      this.onRightClick(tx, ty, tileX, tileY);
+      this.onRightClick(pointer, tx, ty, tileX, tileY);
     } else if (pointer.leftButtonDown()) {
       this.onLeftClick(pointer, tx, ty, tileX, tileY);
     }
   }
 
   /** Priority: visible enemy -> attack; explored resource -> hint; else move. */
-  private onRightClick(tx: number, ty: number, tileX: number, tileY: number): void {
+  private onRightClick(pointer: Phaser.Input.Pointer, tx: number, ty: number, tileX: number, tileY: number): void {
     const world = this.ctx.world;
     const { commands, audio } = this.deps;
     if (!isInsideMap(tx, ty)) {
       setLastEvent(`right-click outside map (${tx},${ty})`);
       return;
     }
-    const targetEid = findEntityNear(world, tileX, tileY, 0.7);
+    const targetEid = this.pickEntity(pointer, tileX, tileY);
     if (
       targetEid !== null &&
       this.ctx.isEntityVisible(targetEid) &&
@@ -167,7 +185,7 @@ export class PointerController {
       return;
     }
 
-    const picked = findEntityNear(world, tileX, tileY, 0.7);
+    const picked = this.pickEntity(pointer, tileX, tileY);
     const eid = picked !== null && this.ctx.isEntityVisible(picked) ? picked : null;
     if (eid !== null && this.ctx.isOwnUnit(eid) && this.isDoubleClickOnSameUnit(eid)) {
       const n = selectUnitsOfSameKindInRadius(

@@ -50,6 +50,26 @@ export function buildingScreenPosition(world: SimWorld, eid: number): ScreenPos 
   return tileToScreenElev(world, anchor.x, anchor.y);
 }
 
+/**
+ * Screen offset from a footprint's centre to the bottom corner of its
+ * diamond (where Blender art is anchored), for a w x h tile footprint.
+ */
+export function footprintBottomOffset(w: number, h: number): ScreenPos {
+  return { x: (w - h) * (ISO.TILE_W / 4), y: (w + h) * (ISO.TILE_H / 4) };
+}
+
+/** Where a sprite goes: its anchor point for a footprint centred on `center`. */
+export function spriteAnchorPoint(
+  anchor: 'footprint' | 'center',
+  center: ScreenPos,
+  w = 1,
+  h = 1
+): ScreenPos {
+  if (anchor === 'center') return center;
+  const off = footprintBottomOffset(w, h);
+  return { x: center.x + off.x, y: center.y + off.y };
+}
+
 export interface SelectionEllipse {
   yOffset: number;
   width: number;

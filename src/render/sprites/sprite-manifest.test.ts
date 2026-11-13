@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { BUILDING_TABLE } from '@sim/defs';
+import manifestJson from '../../../public/assets/sprites/manifest.json';
 import { EMPTY_SPRITE_MANIFEST, atlasTextureKey, parseSpriteManifest } from './sprite-manifest';
+
+const variant = (frame: string, extra: Record<string, unknown> = {}) => ({
+  atlas: 'kr-buildings-0',
+  frame,
+  anchor: [64, 120],
+  size: [128, 128],
+  ...extra,
+});
 
 describe('parseSpriteManifest', () => {
   it('treats a missing manifest as empty without problems', () => {
@@ -13,56 +23,55 @@ describe('parseSpriteManifest', () => {
     expect(problems).toHaveLength(1);
   });
 
-  it('keeps valid atlases and entries', () => {
+  it('keeps valid assets and drops invalid variants with a problem each', () => {
     const { manifest, problems } = parseSpriteManifest({
-      version: 2,
-      atlases: [{ key: 'b', image: 'b.png', json: 'b.json' }],
-      sprites: {
-        'building:HOUSE': {
-          atlas: 'b',
-          frame: 'house-{age}',
-          originY: 0.8,
-          scale: 0.5,
-          teamMask: { frame: 'house-mask' },
-        },
-        'unit:ARCHER': { atlas: 'b', frame: 'archer-{anim}-{frame}', frames: { move: 4 } },
-      },
-    });
-    expect(problems).toEqual([]);
-    expect(manifest.version).toBe(2);
-    expect(manifest.atlases).toEqual([{ key: 'b', image: 'b.png', json: 'b.json' }]);
-    expect(manifest.sprites['building:HOUSE']).toEqual({
-      atlas: 'b',
-      frame: 'house-{age}',
-      originY: 0.8,
+      version: 1,
       scale: 0.5,
-      teamMask: { atlas: 'b', frame: 'house-mask' },
-    });
-    expect(manifest.sprites['unit:ARCHER'].frames).toEqual({ move: 4 });
-  });
-
-  it('drops invalid parts and reports each one', () => {
-    const { manifest, problems } = parseSpriteManifest({
-      atlases: [
-        { key: 'a', image: 'a.png', json: 'a.json' },
-        { key: 'a', image: 'dup.png', json: 'dup.json' },
-        { key: 'x' },
-      ],
-      sprites: {
-        'building:HOUSE': { atlas: 'missing', frame: 'h' },
-        'building:MILL': { atlas: 'a' },
-        'building:FARM': { atlas: 'a', frame: 'farm', originX: 'left', teamMask: { frame: 'm', atlas: 'nope' } },
-        'unit:ARCHER': { atlas: 'a', frame: 'archer', frames: { move: 0, idle: 2 } },
+      tile: { w: 64, h: 32, elevationStepPx: 4 },
+      eraOrder: ['dark', 'castle', 'gunpowder'],
+      atlases: [{ key: 'kr-buildings-0', image: 'buildings-0.png', json: 'buildings-0.json' }],
+      assets: {
+        'building.house': {
+          kind: 'building',
+          defId: 'HOUSE',
+          footprint: [1, 1],
+          default: 'dark',
+          variants: {
+            dark: variant('house_dark', { mask: 'house_dark__mask', shadow: 'house_dark__shadow' }),
+            castle: { atlas: 'kr-buildings-0', frame: 'house_castle' },
+          },
+        },
+        'building.broken': { kind: 'building', footprint: [1, 1], default: 'x', variants: { x: { frame: 1 } } },
       },
     });
-    expect(manifest.atlases.map((a) => a.key)).toEqual(['a']);
-    expect(Object.keys(manifest.sprites).sort()).toEqual(['building:FARM', 'unit:ARCHER']);
-    expect(manifest.sprites['building:FARM']).toEqual({ atlas: 'a', frame: 'farm' });
-    expect(manifest.sprites['unit:ARCHER'].frames).toEqual({ idle: 2 });
-    expect(problems).toHaveLength(7);
+    expect(manifest.scale).toBe(0.5);
+    expect(manifest.elevationStepPx).toBe(4);
+    expect(manifest.eraOrder).toEqual(['dark', 'castle', 'gunpowder']);
+    expect(Object.keys(manifest.assets)).toEqual(['building.house']);
+    expect(Object.keys(manifest.assets['building.house'].variants)).toEqual(['dark']);
+    expect(manifest.assets['building.house'].variants.dark.mask).toBe('house_dark__mask');
+    expect(problems.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('namespaces atlas texture keys away from voxel keys', () => {
-    expect(atlasTextureKey('buildings')).toBe('sprite-atlas:buildings');
+  it('parses the shipped Blender manifest without problems', () => {
+    const { manifest, problems } = parseSpriteManifest(manifestJson);
+    expect(problems).toEqual([]);
+    expect(manifest.atlases.map((a) => a.key)).toContain('kr-terrain-0');
+    for (const id of ['terrain.grass', 'terrain.transition', 'terrain.cliff_earth', 'resource.tree']) {
+      expect(manifest.assets[id], id).toBeDefined();
+    }
+  });
+
+  it('has art for every building with the sim footprint', () => {
+    const { manifest } = parseSpriteManifest(manifestJson);
+    for (const def of BUILDING_TABLE) {
+      const asset = Object.values(manifest.assets).find((a) => a.kind === 'building' && a.defId === def.id);
+      expect(asset, def.id).toBeDefined();
+      expect(asset?.footprint, def.id).toEqual([def.footprint.w, def.footprint.h]);
+    }
+  });
+
+  it('prefixes atlas texture keys', () => {
+    expect(atlasTextureKey('kr-buildings-0')).toBe('sprite-atlas:kr-buildings-0');
   });
 });

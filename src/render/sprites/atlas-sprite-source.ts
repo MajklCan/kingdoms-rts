@@ -1,180 +1,152 @@
 /**
- * Sprite source backed by pre-rendered atlases from the sprite manifest.
- *
- * Each query maps to an ordered list of sprite ids, most specific first, e.g.
- * a castle-age town centre tries `building:TOWN_CENTER:CASTLE` then
- * `building:TOWN_CENTER`. The first id with a manifest entry whose frame
- * exists in the loaded atlas wins; if none does, the query returns null and
- * the registry falls back to voxels.
+ * Sprite source backed by the Blender atlases (via {@link ArtCatalog}).
+ * Answers buildings (per era, construction stage, farm stage, wall shape),
+ * rubble, resources (species, snow / dead trees, depletion looks), stumps and
+ * the linden landmark. Units and rock spires have no atlas art: null, so the
+ * registry falls back to voxels.
  */
 
-import { AgeId, BUILDING_TABLE, UNIT_TABLE } from '@sim/defs';
+import { AgeId, BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { ResourceKindId } from '@sim/components';
-import {
-  atlasTextureKey,
-  type SpriteEntryDef,
-  type SpriteManifest,
-} from './sprite-manifest';
+import { MapFeatureKind } from '@sim/map-gen';
+import { tileHash } from '../tile-hash';
+import type { ArtCatalog, ArtFrame } from './art-catalog';
 import type {
   BuildingSpriteQuery,
   MapFeatureSpriteQuery,
   ResourceSpriteQuery,
   SpriteRef,
   SpriteSource,
-  UnitSpriteQuery,
 } from './sprite-source';
 
-/** The texture questions the atlas source needs answered (Phaser-free for tests). */
-export interface AtlasFrameLookup {
-  hasFrame(textureKey: string, frame: string): boolean;
-}
+const ERA_NAMES: ReadonlyMap<number, string> = new Map(
+  Object.entries(AgeId).map(([name, value]) => [value, name.toLowerCase()])
+);
 
-export function phaserFrameLookup(textures: Phaser.Textures.TextureManager): AtlasFrameLookup {
-  return {
-    hasFrame: (key, frame) => textures.exists(key) && textures.get(key).has(frame),
-  };
-}
+const CONIFERS = ['spruce_a', 'spruce_b', 'pine'] as const;
+const BROADLEAVES = ['oak', 'beech', 'birch', 'linden', 'oak', 'beech'] as const;
 
-type PatternVars = Readonly<Record<string, string | number | undefined>>;
+/** Resource kind -> pile asset with full / half / low looks. */
+const PILE_ASSETS: Readonly<Record<number, string>> = {
+  [ResourceKindId.FOOD]: 'resource.berry_bush',
+  [ResourceKindId.GOLD]: 'resource.gold',
+  [ResourceKindId.STONE]: 'resource.stone',
+};
 
-const AGE_NAMES = invert(AgeId);
-const RESOURCE_NAMES = invert(ResourceKindId);
+/** The linden landmark is a bigger, older linden. */
+const LINDEN_LANDMARK_SCALE = 1.35;
 
 export class AtlasSpriteSource implements SpriteSource {
-  private readonly entries: ReadonlyMap<string, SpriteEntryDef>;
-  private readonly categories: ReadonlySet<string>;
-  private readonly cache = new Map<string, SpriteRef | null>();
+  private readonly cache = new Map<string, SpriteRef>();
 
   constructor(
-    manifest: SpriteManifest,
-    private readonly lookup: AtlasFrameLookup,
+    private readonly art: ArtCatalog,
     private readonly teamColors: readonly number[]
-  ) {
-    this.entries = new Map(Object.entries(manifest.sprites));
-    this.categories = new Set([...this.entries.keys()].map((id) => id.split(':')[0]));
-  }
+  ) {}
 
   get isEmpty(): boolean {
-    return this.entries.size === 0;
-  }
-
-  get entryCount(): number {
-    return this.entries.size;
+    return this.art.assetCount === 0;
   }
 
   building(query: BuildingSpriteQuery): SpriteRef | null {
-    if (!this.categories.has('building')) return null;
-    const name = BUILDING_TABLE[query.defId]?.id;
-    if (!name) return null;
-    const age = AGE_NAMES.get(query.age);
-    const ids = [
-      query.variant ? `building:${name}:${query.variant}` : null,
-      age ? `building:${name}:${age}` : null,
-      `building:${name}`,
-    ];
-    return this.resolve(ids, {
-      age: age?.toLowerCase(),
-      player: query.playerId,
-      variant: query.variant,
-    }, query.playerId);
-  }
+    const defKey = BUILDING_TABLE[query.defId]?.id;
+    const assetId = defKey ? this.art.buildingAssetId(defKey) : undefined;
+    const asset = assetId ? this.art.asset(assetId) : undefined;
+    if (!assetId || !asset) return null;
 
-  unit(query: UnitSpriteQuery): SpriteRef | null {
-    if (!this.categories.has('unit')) return null;
-    const name = UNIT_TABLE[query.unitDefId]?.id;
-    if (!name) return null;
-    return this.resolve([`unit:${name}:${query.anim}`, `unit:${name}`], {
-      player: query.playerId,
-      facing: query.facing,
-      anim: query.anim,
-      frame: query.frame,
-    }, query.playerId);
-  }
-
-  unitFrameCount(unitDefId: number, anim: string): number {
-    if (!this.categories.has('unit')) return 0;
-    const name = UNIT_TABLE[unitDefId]?.id;
-    if (!name) return 0;
-    const entry = this.entries.get(`unit:${name}:${anim}`) ?? this.entries.get(`unit:${name}`);
-    return entry?.frames?.[anim] ?? 0;
-  }
-
-  resource(query: ResourceSpriteQuery): SpriteRef | null {
-    if (!this.categories.has('resource')) return null;
-    const name = RESOURCE_NAMES.get(query.kind);
-    if (!name) return null;
-    const ids = [query.variant ? `resource:${name}:${query.variant}` : null, `resource:${name}`];
-    return this.resolve(ids, { variant: query.variant }, 0);
-  }
-
-  mapFeature(query: MapFeatureSpriteQuery): SpriteRef | null {
-    if (!this.categories.has('feature')) return null;
-    const name = query.kind.toUpperCase();
-    return this.resolve([`feature:${name}:${query.size}`, `feature:${name}`], {
-      size: query.size,
-    }, 0);
-  }
-
-  private resolve(
-    ids: ReadonlyArray<string | null>,
-    vars: PatternVars,
-    playerId: number
-  ): SpriteRef | null {
-    for (const id of ids) {
-      if (!id) continue;
-      const entry = this.entries.get(id);
-      if (!entry) continue;
-      const frame = fillPattern(entry.frame, vars);
-      const maskFrame = entry.teamMask ? fillPattern(entry.teamMask.frame, vars) : '';
-      const cacheKey = `${id}|${frame}|${maskFrame}|${playerId}`;
-      let ref = this.cache.get(cacheKey);
-      if (ref === undefined) {
-        ref = this.buildRef(entry, frame, maskFrame, playerId);
-        this.cache.set(cacheKey, ref);
-      }
-      if (ref) return ref;
+    let frame: ArtFrame | null;
+    let teamed = true;
+    if (query.construction !== undefined && asset.construction) {
+      frame = this.art.stageFrame(asset.construction, query.construction);
+      teamed = false;
+    } else if (query.defId === BuildingDefId.FARM) {
+      frame = this.art.frame(assetId, query.farmStage ?? asset.default) ?? this.art.defaultFrame(assetId);
+    } else {
+      const era = ERA_NAMES.get(query.age) ?? 'dark';
+      frame = query.wallMask === undefined
+        ? this.art.eraFrame(assetId, era)
+        : this.art.eraFrame(assetId, era, String(query.wallMask & 15));
     }
+    return frame ? this.ref(frame, teamed ? query.playerId : -1) : null;
+  }
+
+  rubble(defId: number): SpriteRef | null {
+    const defKey = BUILDING_TABLE[defId]?.id;
+    const assetId = defKey ? this.art.buildingAssetId(defKey) : undefined;
+    const rubbleId = assetId ? this.art.asset(assetId)?.rubble : undefined;
+    const frame = rubbleId ? this.art.defaultFrame(rubbleId) : null;
+    return frame ? this.ref(frame, -1) : null;
+  }
+
+  unit(): SpriteRef | null {
     return null;
   }
 
-  private buildRef(
-    entry: SpriteEntryDef,
-    frame: string,
-    maskFrame: string,
-    playerId: number
-  ): SpriteRef | null {
-    const texture = atlasTextureKey(entry.atlas);
-    if (!this.lookup.hasFrame(texture, frame)) return null;
+  unitFrameCount(): number {
+    return 0;
+  }
+
+  resource(query: ResourceSpriteQuery): SpriteRef | null {
+    if (query.kind === ResourceKindId.WOOD) {
+      const frame = this.treeFrame(query);
+      return frame ? this.ref(frame, -1) : null;
+    }
+    const pile = PILE_ASSETS[query.kind];
+    if (!pile) return null;
+    const frame = this.art.amountFrame(pile, query.remaining ?? 1);
+    return frame ? this.ref(frame, -1) : null;
+  }
+
+  stump(conifer: boolean): SpriteRef | null {
+    const frame = this.art.frame('resource.stump', conifer ? 'conifer' : 'broadleaf');
+    return frame ? this.ref(frame, -1) : null;
+  }
+
+  mapFeature(query: MapFeatureSpriteQuery): SpriteRef | null {
+    if (query.kind !== MapFeatureKind.LINDEN_TREE) return null;
+    const frame = this.art.frame('resource.tree', 'linden');
+    return frame ? this.ref(frame, -1, LINDEN_LANDMARK_SCALE) : null;
+  }
+
+  private treeFrame(query: ResourceSpriteQuery): ArtFrame | null {
+    const hash = tileHash(Math.round(query.x), Math.round(query.y), 0x7ee);
+    if (query.variant === 'dead') return this.art.defaultFrame('resource.tree_dead');
+    if (query.variant === 'snow') return this.art.pickFrame('resource.tree_snow', hash);
+    const species = query.variant === 'broadleaf'
+      ? BROADLEAVES[hash % BROADLEAVES.length]
+      : CONIFERS[hash % CONIFERS.length];
+    return this.art.frame('resource.tree', species) ?? this.art.pickFrame('resource.tree', hash);
+  }
+
+  /** `playerId` -1 = no team mask. */
+  private ref(frame: ArtFrame, playerId: number, scaleMul = 1): SpriteRef {
+    const key = `${frame.texture}|${frame.frame}|${playerId}|${scaleMul}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+    const scale = frame.scale * scaleMul;
     const ref: SpriteRef = {
-      texture,
-      frame,
-      originX: entry.originX ?? 0.5,
-      originY: entry.originY ?? 0.5,
-      scale: entry.scale ?? 1,
+      texture: frame.texture,
+      frame: frame.frame,
+      originX: frame.originX,
+      originY: frame.originY,
+      scale,
+      anchor: 'footprint',
+      top: frame.top * scaleMul,
       source: 'atlas',
     };
-    if (entry.teamMask) {
-      const maskTexture = atlasTextureKey(entry.teamMask.atlas ?? entry.atlas);
-      if (this.lookup.hasFrame(maskTexture, maskFrame)) {
-        ref.teamMask = {
-          texture: maskTexture,
-          frame: maskFrame,
-          tint: this.teamColors[playerId] ?? 0xffffff,
-        };
-      }
+    if (frame.mask && playerId >= 0) {
+      ref.teamMask = { texture: frame.texture, frame: frame.mask, tint: this.teamColors[playerId] ?? 0xffffff };
     }
+    if (frame.shadow) {
+      ref.shadow = {
+        texture: frame.texture,
+        frame: frame.shadow,
+        originX: frame.originX,
+        originY: frame.originY,
+        scale,
+      };
+    }
+    this.cache.set(key, ref);
     return ref;
   }
-}
-
-/** Replace `{name}` placeholders; unknown or undefined placeholders become ''. */
-export function fillPattern(pattern: string, vars: PatternVars): string {
-  return pattern.replace(/\{(\w+)\}/g, (_match, name: string) => {
-    const value = vars[name];
-    return value === undefined ? '' : String(value);
-  });
-}
-
-function invert(table: Readonly<Record<string, number>>): ReadonlyMap<number, string> {
-  return new Map(Object.entries(table).map(([name, value]) => [value, name]));
 }

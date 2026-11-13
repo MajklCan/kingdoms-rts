@@ -15,7 +15,7 @@ export class EntityLayer {
     this.dirty = true;
   }
 
-  setDepth(child: Phaser.GameObjects.Sprite, depth: number): void {
+  setDepth(child: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image, depth: number): void {
     if (child.depth === depth) return;
     child.setDepth(depth);
     this.dirty = true;

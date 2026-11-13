@@ -5,8 +5,7 @@
  */
 
 import type { SpriteRef } from '../sprites/sprite-source';
-import type { EntityLayer } from './entity-layer';
-import { SpriteView } from './sprite-view';
+import { SpriteView, type SpriteViewLayers } from './sprite-view';
 
 export class SpriteSync<K> {
   private readonly views = new Map<K, SpriteView>();
@@ -14,7 +13,7 @@ export class SpriteSync<K> {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly layer: EntityLayer,
+    private readonly layers: SpriteViewLayers,
     private readonly onRemove?: (key: K) => void
   ) {}
 
@@ -26,7 +25,7 @@ export class SpriteSync<K> {
     this.seen.add(key);
     let view = this.views.get(key);
     if (!view) {
-      view = new SpriteView(this.scene, this.layer, ref, x, y);
+      view = new SpriteView(this.scene, this.layers, ref, x, y);
       this.views.set(key, view);
     } else {
       view.apply(ref);
