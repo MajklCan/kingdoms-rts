@@ -9,6 +9,8 @@
  * from voxel bakes (and the flat-colour terrain bake).
  */
 
+import { queueUnitManifest } from './unit-manifest';
+
 export const SPRITE_ASSET_BASE = 'assets/sprites/';
 export const SPRITE_MANIFEST_KEY = 'sprite-manifest';
 const SPRITE_MANIFEST_FILE = 'manifest.json';
@@ -195,6 +197,8 @@ function parseVariant(raw: unknown, atlasKeys: ReadonlySet<string>): ArtVariant 
  * scene's preload(); the loader keeps running until the atlases are in.
  */
 export function queueSpriteManifest(load: Phaser.Loader.LoaderPlugin): void {
+  // Units ship their own manifest + atlases (scripts/blender/render_units.py).
+  queueUnitManifest(load);
   load.once(
     `filecomplete-json-${SPRITE_MANIFEST_KEY}`,
     (_key: string, _type: string, data: unknown) => {

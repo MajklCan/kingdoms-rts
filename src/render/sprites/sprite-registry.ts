@@ -17,19 +17,26 @@ import type {
   ResourceSpriteQuery,
   SpriteRef,
   SpriteSource,
+  UnitArtInfo,
   UnitSpriteQuery,
 } from './sprite-source';
+import { UnitAtlasSource, unitFrameLookup } from './unit-atlas-source';
+import { readUnitManifest } from './unit-manifest';
 import { VoxelSpriteSource } from './voxel-sprite-source';
 
 /** `Phaser.Textures.FilterMode.LINEAR`, without a runtime Phaser import (tests run headless). */
 export const LINEAR_FILTER = 0 as Phaser.Textures.FilterMode;
+/** `Phaser.Textures.FilterMode.NEAREST`: unit atlases are 1x pixel art. */
+export const NEAREST_FILTER = 1 as Phaser.Textures.FilterMode;
 
 export class SpriteSourceRegistry implements SpriteSource {
   constructor(
     private readonly fallback: SpriteSource,
     private readonly override: SpriteSource | null = null,
     /** Atlas art catalog (null = voxels only). */
-    readonly art: ArtCatalog | null = null
+    readonly art: ArtCatalog | null = null,
+    /** Pre-rendered unit atlases (units-manifest.json), asked first for units. */
+    private readonly units: SpriteSource | null = null
   ) {}
 
   /** Manifest assets available to the atlas source (debug / introspection). */
@@ -46,12 +53,17 @@ export class SpriteSourceRegistry implements SpriteSource {
   }
 
   unit(query: UnitSpriteQuery): SpriteRef | null {
-    return this.override?.unit(query) ?? this.fallback.unit(query);
+    return this.units?.unit(query) ?? this.override?.unit(query) ?? this.fallback.unit(query);
   }
 
   unitFrameCount(unitDefId: number, anim: string): number {
+    if (this.units?.unitArt?.(unitDefId)) return this.units.unitFrameCount(unitDefId, anim);
     const overridden = this.override?.unitFrameCount(unitDefId, anim) ?? 0;
     return overridden > 0 ? overridden : this.fallback.unitFrameCount(unitDefId, anim);
+  }
+
+  unitArt(unitDefId: number): UnitArtInfo | null {
+    return this.units?.unitArt?.(unitDefId) ?? null;
   }
 
   resource(query: ResourceSpriteQuery): SpriteRef | null {
@@ -84,7 +96,21 @@ export function createSpriteRegistry(scene: Phaser.Scene): SpriteSourceRegistry 
   }
   const art = new ArtCatalog(manifest, phaserFrameLookup(scene.textures));
   const atlas = new AtlasSpriteSource(art, TEAM_COLORS);
+  const units = createUnitAtlasSource(scene);
   return atlas.isEmpty
-    ? new SpriteSourceRegistry(voxel)
-    : new SpriteSourceRegistry(voxel, atlas, art);
+    ? new SpriteSourceRegistry(voxel, null, null, units)
+    : new SpriteSourceRegistry(voxel, atlas, art, units);
+}
+
+/** Unit atlases from units-manifest.json (null when absent), nearest-filtered 1x pixel art. */
+export function createUnitAtlasSource(scene: Phaser.Scene): UnitAtlasSource | null {
+  const manifest = readUnitManifest(scene.cache);
+  if (manifest.units.length === 0) return null;
+  const keys = manifest.atlases.map((a) => a.key);
+  for (const key of keys) {
+    const tex = atlasTextureKey(key);
+    if (scene.textures.exists(tex)) scene.textures.get(tex).setFilter(NEAREST_FILTER);
+  }
+  const source = new UnitAtlasSource(manifest, unitFrameLookup(scene.textures, keys), TEAM_COLORS);
+  return source.isEmpty ? null : source;
 }
