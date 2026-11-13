@@ -1,0 +1,169 @@
+/* Design tokens: the single place to tune the art direction.
+   Theme: Bohemian illuminated manuscript. Carved walnut frames, gilded trim,
+   parchment inlays, iron-gall ink and vermilion seals. Every size is in rem
+   and the root font size scales with the viewport (see base.css), so the
+   whole UI keeps its proportions from a 13" laptop up to 4K. */
+:root {
+  /* Wood (frames, bars, consoles) */
+  --wood-950: #0f0a06;
+  --wood-900: #1a110a;
+  --wood-850: #22170d;
+  --wood-800: #2c1e11;
+  --wood-700: #3d2a17;
+  --wood-600: #57391e;
+  --wood-500: #7a5230;
+
+  /* Gilding */
+  --gold-100: #fbefc4;
+  --gold-200: #f6dd86;
+  --gold-300: #e7c45a;
+  --gold-400: #c9a227;
+  --gold-500: #a8841c;
+  --gold-600: #8a6a1c;
+  --gold-700: #5f4810;
+
+  /* Parchment (scrolls, modals, tooltips) */
+  --parchment-50: #f8efd8;
+  --parchment-100: #f3e7c8;
+  --parchment-200: #e6d5ad;
+  --parchment-300: #d8c293;
+  --parchment-400: #cdb486;
+  --parchment-600: #9c8457;
+
+  /* Ink */
+  --ink-900: #241a0e;
+  --ink-700: #3e2f1b;
+  --ink-500: #5e4a2c;
+
+  /* Vermilion / seal red */
+  --red-300: #e0645a;
+  --red-500: #98202c;
+  --red-600: #7c1620;
+  --red-800: #560c12;
+
+  /* Text on dark surfaces (all >= 4.5:1 on --wood-900) */
+  --text-hi: #fbf3dc;
+  --text: #efe2c3;
+  --text-muted: #c4b08a;
+  --text-dim: #a89570;
+  --text-on-gold: #2a1d08;
+
+  /* Text on parchment (all >= 4.5:1 on --parchment-200) */
+  --ink-text: var(--ink-900);
+  --ink-muted: #5a4527;
+
+  /* Semantic */
+  --hp-high: #6fbf4a;
+  --hp-mid: #e3b23c;
+  --hp-low: #d9483b;
+  --ok: #8fd16a;
+  --warn: #f0b84a;
+  --danger: #ff7a6b;
+  --danger-ink: #8c1b1b;
+  --info: #9cc7f0;
+  --focus-ring: #ffe58a;
+
+  /* Teams (match TEAM_COLORS in src/config.ts) */
+  --team-0: #b0a68a;
+  --team-1: #2e86de;
+  --team-2: #ee5253;
+  --team-1-light: #7db8f2;
+  --team-2-light: #ff9a9a;
+
+  /* Resources (icon tints) */
+  --res-food: #f2c14e;
+  --res-wood: #c98a4b;
+  --res-gold: #ffd75e;
+  --res-stone: #c3c9cf;
+  --res-pop: #e8dcc0;
+
+  /* Type */
+  --font-display: "Cinzel", "Trajan Pro", "Palatino Linotype", Palatino, "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  --font-body: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-ui: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale (rem, 1rem = 16px at 1280x720) */
+  --fs-2xs: 0.625rem;
+  --fs-xs: 0.6875rem;
+  --fs-sm: 0.8125rem;
+  --fs-md: 0.9375rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  --fs-3xl: 3rem;
+  --fs-hero: 4.75rem;
+  --lh-tight: 1.15;
+  --lh-body: 1.45;
+  --tracking-caps: 0.14em;
+
+  /* Spacing */
+  --space-1: 0.125rem;
+  --space-2: 0.25rem;
+  --space-3: 0.5rem;
+  --space-4: 0.75rem;
+  --space-5: 1rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 3rem;
+
+  /* Radii */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.625rem;
+  --radius-round: 999px;
+
+  /* Borders */
+  --border-gold: 1px solid var(--gold-600);
+  --border-gold-bright: 1px solid var(--gold-400);
+  --border-ink: 1px solid rgba(36, 26, 14, 0.45);
+
+  /* Shadows */
+  --shadow-inset-bevel: inset 0 1px 0 rgba(255, 233, 170, 0.18), inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  --shadow-panel: 0 0.25rem 1rem rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 1.5rem 4rem rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.6);
+  --shadow-glow-gold: 0 0 0.75rem rgba(246, 221, 134, 0.35);
+  --shadow-text: 0 1px 0 rgba(0, 0, 0, 0.85);
+
+  /* Surfaces */
+  --surface-wood: linear-gradient(180deg, var(--wood-700) 0%, var(--wood-800) 38%, var(--wood-900) 100%);
+  --surface-wood-flat: var(--wood-850);
+  --surface-sunken: rgba(8, 5, 2, 0.55);
+  --surface-parchment: radial-gradient(120% 90% at 50% 40%, var(--parchment-100) 0%, var(--parchment-200) 62%, var(--parchment-300) 100%);
+  --surface-gold: linear-gradient(180deg, var(--gold-200) 0%, var(--gold-400) 48%, var(--gold-600) 100%);
+  --surface-seal: linear-gradient(180deg, var(--red-500) 0%, var(--red-600) 55%, var(--red-800) 100%);
+  --grain: url("/assets/ui/grain.svg");
+
+  /* Layers */
+  --z-hud: 20;
+  --z-hud-float: 30;
+  --z-panel: 60;
+  --z-modal: 200;
+  --z-gameover: 300;
+  --z-menu: 400;
+  --z-loading: 500;
+  --z-tooltip: 600;
+  --z-dev: 700;
+  --z-boot: 800;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 420ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* HUD geometry */
+  --hud-top-h: 2.5rem;
+  --hud-bottom-h: 10.5rem;
+  --cmd-cell: 3rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-med: 0ms;
+    --dur-slow: 0ms;
+  }
+}
