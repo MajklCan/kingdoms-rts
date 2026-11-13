@@ -1,0 +1,19 @@
+/* UI stylesheet entry. Order matters only where selectors overlap; it
+   mirrors the original inline order from index.html. */
+@import './tokens.css';
+@import './base.css';
+@import './resource-bar.css';
+@import './resource-icons.css';
+@import './save-load.css';
+@import './tech-tree.css';
+@import './mission-panel.css';
+@import './audio-settings.css';
+@import './minimap.css';
+@import './bottom-hud.css';
+@import './selection-panel.css';
+@import './event-ticker.css';
+@import './action-grid.css';
+@import './debug-overlay.css';
+@import './game-over.css';
+@import './title-screen.css';
+@import './multiplayer-lobby.css';

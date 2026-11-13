@@ -1,0 +1,32 @@
+/* ─── Minimap (top-right) ────────────────────────────────────────── */
+#minimap-panel {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  width: 184px;
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-sunken) 100%);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px;
+  z-index: 90;
+  box-shadow: var(--shadow-panel);
+}
+#minimap-panel .header {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-gold-light);
+  opacity: 0.85;
+  margin-bottom: 4px;
+  padding: 0 2px;
+  display: flex;
+  justify-content: space-between;
+}
+#minimap-canvas {
+  display: block;
+  background: #0a0810;
+  border: 1px solid var(--color-border-dim);
+  cursor: crosshair;
+  image-rendering: pixelated;
+}

@@ -1,0 +1,26 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-night);
+  color: var(--color-gold);
+  font-family: var(--font-ui);
+  overflow: hidden;
+}
+
+#game-root {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Critical for sharp visuals: tells the browser to use nearest-neighbour
+   scaling instead of bilinear when the canvas is scaled to fit the
+   viewport. Without this, even with pixelArt mode inside Phaser, the
+   canvas element itself is browser-blurred on most displays. */
+#game-root canvas {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
