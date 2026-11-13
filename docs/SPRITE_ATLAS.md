@@ -22,7 +22,8 @@ the game's pixel-art NEAREST default would shred.
 | `sprites/sprite-manifest.ts` | Parses and validates the Blender manifest |
 | `sprites/art-catalog.ts` | Phaser-free lookup: exact variant, nearest earlier era, construction stage by progress, pile look by amount, hashed pick. Only returns frames that exist in a loaded atlas |
 | `sprites/atlas-sprite-source.ts` | Answers building / rubble / resource / stump / map feature queries from the catalog |
-| `sprites/voxel-sprite-source.ts` | Voxel bakes; units always, everything else as fallback |
+| `sprites/unit-atlas-source.ts` | Units from `units-manifest.json` (see [UNIT_SPRITES.md](UNIT_SPRITES.md)) |
+| `sprites/voxel-sprite-source.ts` | Voxel bakes; machine gun and mortar always, everything else as fallback |
 | `sprites/sprite-registry.ts` | Atlas first, voxel per query; exposes the catalog as `registry.art` for terrain and decor |
 | `terrain/` | Terrain chunk bake, transitions, cliffs, water loop, decor scatter |
 
@@ -40,7 +41,7 @@ the game's pixel-art NEAREST default would shred.
 | Gold, stone, berries | `resource.gold` / `resource.stone` / `resource.berry_bush`, look by remaining fraction (`full` / `half` / `low`) |
 | Linden landmark | `resource.tree` `linden` at 1.35x |
 | Rock spire | `decor.rocks` `boulder` scaled to the 2x2 / 4x4 footprint (no spire art yet) |
-| Units | no art: voxel |
+| Units | `units-manifest.json` frames `<unit>/<anim>/<facing>/<frame>` ([UNIT_SPRITES.md](UNIT_SPRITES.md)); machine gun and mortar stay voxel |
 | Terrain `TileType` | `terrain.<name>` via `TILE_TERRAIN` in `terrain/terrain-art.ts`; GRASS also draws `meadow` in noise patches, BRIDGE as `bridge_x` / `bridge_y`, BARBED_WIRE as `mud` with wire drawn on top |
 
 ## Placement
