@@ -42,6 +42,16 @@ export interface ArtVariant {
   frameIndex?: number;
   /** Fence decor: axis the fence runs along. */
   connections?: string;
+  /** Whole-sprite pose frames drawn instead of the base (tree sway: swayl, swayr). */
+  poses?: Readonly<Record<string, string>>;
+  /** Looping frames of animated parts drawn over the base (flag, sails), same size and anchor. */
+  overlays?: Readonly<Record<string, readonly ArtOverlayFrame[]>>;
+}
+
+/** One frame of an animated part overlay, with its optional team mask. */
+export interface ArtOverlayFrame {
+  frame: string;
+  mask?: string;
 }
 
 export interface ArtAsset {
@@ -183,6 +193,22 @@ function parseVariant(raw: unknown, atlasKeys: ReadonlySet<string>): ArtVariant 
   if (isNonEmptyString(raw.mask)) variant.mask = raw.mask;
   if (isNonEmptyString(raw.shadow)) variant.shadow = raw.shadow;
   if (isNonEmptyString(raw.connections)) variant.connections = raw.connections;
+  if (isRecord(raw.poses)) {
+    const poses = Object.entries(raw.poses).filter((e): e is [string, string] => isNonEmptyString(e[1]));
+    if (poses.length > 0) variant.poses = Object.fromEntries(poses);
+  }
+  if (isRecord(raw.overlays)) {
+    const overlays: Record<string, ArtOverlayFrame[]> = {};
+    for (const [group, frames] of Object.entries(raw.overlays)) {
+      if (!Array.isArray(frames)) continue;
+      const parsed = frames.flatMap((f: unknown): ArtOverlayFrame[] => {
+        if (!isRecord(f) || !isNonEmptyString(f.frame)) return [];
+        return [isNonEmptyString(f.mask) ? { frame: f.frame, mask: f.mask } : { frame: f.frame }];
+      });
+      if (parsed.length > 0) overlays[group] = parsed;
+    }
+    if (Object.keys(overlays).length > 0) variant.overlays = overlays;
+  }
   for (const field of ['progress', 'amount', 'frameIndex'] as const) {
     const value = raw[field];
     if (typeof value === 'number' && Number.isFinite(value)) variant[field] = value;

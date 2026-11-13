@@ -2,19 +2,10 @@
  "version": 1,
  "generator": "scripts/blender/render_all.py + scripts/pack_sprites.py",
  "doc": "docs/BLENDER_SPRITE_PIPELINE.md",
- "grade": {
-  "version": 1,
-  "lift": 0.5,
-  "power": 1.4,
-  "saturation": 1.07,
-  "warm": [
-   1.03,
-   1.0,
-   0.955
-  ]
- },
- "renderScale": 2,
- "scale": 0.5,
+ "style": "A",
+ "grade": "render-time (kr_lib.grade_a)",
+ "renderScale": 1,
+ "scale": 1.0,
  "tile": {
   "w": 64,
   "h": 32,
@@ -34,7 +25,12 @@
   "mask": "RGB = colour frame luma * 1.25 (grey shading), alpha = team colour coverage; tint (multiply) with the team colour and draw over the frame with normal blending, same sourceSize and anchor",
   "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",
   "sun": "from screen top-left, shadows fall to the screen right",
-  "gameToBlender": "game tile +x = Blender +X, game tile +y = Blender -Y, 1 tile = 1 Blender unit"
+  "gameToBlender": "game tile +x = Blender +X, game tile +y = Blender -Y, 1 tile = 1 Blender unit",
+  "poses": "variant.poses[name] = whole-sprite frame drawn instead of the base (tree sway: swayl, swayr)",
+  "overlays": "variant.overlays[group] = looping frames (+ team mask) drawn over the base with the same sourceSize and anchor (flag: banners, sails: windmill blades)",
+  "foam": "terrain.foam '<transition key>.<frame>': shore foam ring outside that transition mask, drawn on water tiles under the land",
+  "edge": "terrain.edge ao_mx / ao_my (lower tile, back neighbour higher), rim_px / rim_py (raised tile, front neighbour lower)",
+  "bridgeRail": "terrain.bridge_rail '<edge>' overlay drawn after a bridge tile on its open sides"
  },
  "atlases": [
   {
@@ -42,40 +38,40 @@
    "image": "buildings-0.png",
    "json": "buildings-0.json",
    "size": [
-    4096,
-    2447
+    2048,
+    1269
    ],
-   "frames": 210
+   "frames": 535
   },
   {
    "key": "kr-decor-0",
    "image": "decor-0.png",
    "json": "decor-0.json",
    "size": [
-    1023,
-    407
+    511,
+    131
    ],
-   "frames": 58
+   "frames": 68
   },
   {
    "key": "kr-nature-0",
    "image": "nature-0.png",
    "json": "nature-0.json",
    "size": [
-    2048,
-    697
+    1019,
+    508
    ],
-   "frames": 42
+   "frames": 68
   },
   {
    "key": "kr-terrain-0",
    "image": "terrain-0.png",
    "json": "terrain-0.json",
    "size": [
-    2016,
-    2046
+    1024,
+    1023
    ],
-   "frames": 198
+   "frames": 286
   }
  ],
  "assets": {
@@ -90,29 +86,85 @@
      "atlas": "kr-buildings-0",
      "frame": "archery_range_dark",
      "anchor": [
-      184,
-      209
+      97,
+      106
      ],
      "size": [
-      368,
-      215
+      194,
+      109
      ],
      "mask": "archery_range_dark__mask",
-     "shadow": "archery_range_dark__shadow"
+     "shadow": "archery_range_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "archery_range_dark__flag0",
+        "mask": "archery_range_dark__flag0__mask"
+       },
+       {
+        "frame": "archery_range_dark__flag1",
+        "mask": "archery_range_dark__flag1__mask"
+       },
+       {
+        "frame": "archery_range_dark__flag2",
+        "mask": "archery_range_dark__flag2__mask"
+       },
+       {
+        "frame": "archery_range_dark__flag3",
+        "mask": "archery_range_dark__flag3__mask"
+       },
+       {
+        "frame": "archery_range_dark__flag4",
+        "mask": "archery_range_dark__flag4__mask"
+       },
+       {
+        "frame": "archery_range_dark__flag5",
+        "mask": "archery_range_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "archery_range_castle",
      "anchor": [
-      184,
-      209
+      97,
+      106
      ],
      "size": [
-      368,
-      215
+      194,
+      109
      ],
      "mask": "archery_range_castle__mask",
-     "shadow": "archery_range_castle__shadow"
+     "shadow": "archery_range_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "archery_range_castle__flag0",
+        "mask": "archery_range_castle__flag0__mask"
+       },
+       {
+        "frame": "archery_range_castle__flag1",
+        "mask": "archery_range_castle__flag1__mask"
+       },
+       {
+        "frame": "archery_range_castle__flag2",
+        "mask": "archery_range_castle__flag2__mask"
+       },
+       {
+        "frame": "archery_range_castle__flag3",
+        "mask": "archery_range_castle__flag3__mask"
+       },
+       {
+        "frame": "archery_range_castle__flag4",
+        "mask": "archery_range_castle__flag4__mask"
+       },
+       {
+        "frame": "archery_range_castle__flag5",
+        "mask": "archery_range_castle__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "ARCHERY_RANGE",
@@ -135,43 +187,127 @@
      "atlas": "kr-buildings-0",
      "frame": "barracks_dark",
      "anchor": [
-      304,
-      246
+      157,
+      125
      ],
      "size": [
-      608,
-      252
+      314,
+      129
      ],
      "mask": "barracks_dark__mask",
-     "shadow": "barracks_dark__shadow"
+     "shadow": "barracks_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "barracks_dark__flag0",
+        "mask": "barracks_dark__flag0__mask"
+       },
+       {
+        "frame": "barracks_dark__flag1",
+        "mask": "barracks_dark__flag1__mask"
+       },
+       {
+        "frame": "barracks_dark__flag2",
+        "mask": "barracks_dark__flag2__mask"
+       },
+       {
+        "frame": "barracks_dark__flag3",
+        "mask": "barracks_dark__flag3__mask"
+       },
+       {
+        "frame": "barracks_dark__flag4",
+        "mask": "barracks_dark__flag4__mask"
+       },
+       {
+        "frame": "barracks_dark__flag5",
+        "mask": "barracks_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "barracks_castle",
      "anchor": [
-      304,
-      246
+      157,
+      125
      ],
      "size": [
-      608,
-      252
+      314,
+      129
      ],
      "mask": "barracks_castle__mask",
-     "shadow": "barracks_castle__shadow"
+     "shadow": "barracks_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "barracks_castle__flag0",
+        "mask": "barracks_castle__flag0__mask"
+       },
+       {
+        "frame": "barracks_castle__flag1",
+        "mask": "barracks_castle__flag1__mask"
+       },
+       {
+        "frame": "barracks_castle__flag2",
+        "mask": "barracks_castle__flag2__mask"
+       },
+       {
+        "frame": "barracks_castle__flag3",
+        "mask": "barracks_castle__flag3__mask"
+       },
+       {
+        "frame": "barracks_castle__flag4",
+        "mask": "barracks_castle__flag4__mask"
+       },
+       {
+        "frame": "barracks_castle__flag5",
+        "mask": "barracks_castle__flag5__mask"
+       }
+      ]
+     }
     },
     "gunpowder": {
      "atlas": "kr-buildings-0",
      "frame": "barracks_gunpowder",
      "anchor": [
-      304,
-      246
+      157,
+      125
      ],
      "size": [
-      608,
-      252
+      314,
+      129
      ],
      "mask": "barracks_gunpowder__mask",
-     "shadow": "barracks_gunpowder__shadow"
+     "shadow": "barracks_gunpowder__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "barracks_gunpowder__flag0",
+        "mask": "barracks_gunpowder__flag0__mask"
+       },
+       {
+        "frame": "barracks_gunpowder__flag1",
+        "mask": "barracks_gunpowder__flag1__mask"
+       },
+       {
+        "frame": "barracks_gunpowder__flag2",
+        "mask": "barracks_gunpowder__flag2__mask"
+       },
+       {
+        "frame": "barracks_gunpowder__flag3",
+        "mask": "barracks_gunpowder__flag3__mask"
+       },
+       {
+        "frame": "barracks_gunpowder__flag4",
+        "mask": "barracks_gunpowder__flag4__mask"
+       },
+       {
+        "frame": "barracks_gunpowder__flag5",
+        "mask": "barracks_gunpowder__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "BARRACKS",
@@ -195,43 +331,126 @@
      "atlas": "kr-buildings-0",
      "frame": "defensive_tower_dark",
      "anchor": [
-      269,
-      248
+      144,
+      129
      ],
      "size": [
-      538,
-      269
+      288,
+      140
      ],
      "mask": "defensive_tower_dark__mask",
-     "shadow": "defensive_tower_dark__shadow"
+     "shadow": "defensive_tower_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "defensive_tower_dark__flag0",
+        "mask": "defensive_tower_dark__flag0__mask"
+       },
+       {
+        "frame": "defensive_tower_dark__flag1",
+        "mask": "defensive_tower_dark__flag1__mask"
+       },
+       {
+        "frame": "defensive_tower_dark__flag2",
+        "mask": "defensive_tower_dark__flag2__mask"
+       },
+       {
+        "frame": "defensive_tower_dark__flag3",
+        "mask": "defensive_tower_dark__flag3__mask"
+       },
+       {
+        "frame": "defensive_tower_dark__flag4",
+        "mask": "defensive_tower_dark__flag4__mask"
+       },
+       {
+        "frame": "defensive_tower_dark__flag5",
+        "mask": "defensive_tower_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "defensive_tower_castle",
      "anchor": [
-      276,
-      254
+      144,
+      129
      ],
      "size": [
-      552,
-      275
+      288,
+      140
      ],
-     "mask": "defensive_tower_castle__mask",
-     "shadow": "defensive_tower_castle__shadow"
+     "shadow": "defensive_tower_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "defensive_tower_castle__flag0",
+        "mask": "defensive_tower_castle__flag0__mask"
+       },
+       {
+        "frame": "defensive_tower_castle__flag1",
+        "mask": "defensive_tower_castle__flag1__mask"
+       },
+       {
+        "frame": "defensive_tower_castle__flag2",
+        "mask": "defensive_tower_castle__flag2__mask"
+       },
+       {
+        "frame": "defensive_tower_castle__flag3",
+        "mask": "defensive_tower_castle__flag3__mask"
+       },
+       {
+        "frame": "defensive_tower_castle__flag4",
+        "mask": "defensive_tower_castle__flag4__mask"
+       },
+       {
+        "frame": "defensive_tower_castle__flag5",
+        "mask": "defensive_tower_castle__flag5__mask"
+       }
+      ]
+     }
     },
     "gunpowder": {
      "atlas": "kr-buildings-0",
      "frame": "defensive_tower_gunpowder",
      "anchor": [
-      276,
-      254
+      144,
+      129
      ],
      "size": [
-      552,
-      275
+      288,
+      140
      ],
      "mask": "defensive_tower_gunpowder__mask",
-     "shadow": "defensive_tower_gunpowder__shadow"
+     "shadow": "defensive_tower_gunpowder__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "defensive_tower_gunpowder__flag0",
+        "mask": "defensive_tower_gunpowder__flag0__mask"
+       },
+       {
+        "frame": "defensive_tower_gunpowder__flag1",
+        "mask": "defensive_tower_gunpowder__flag1__mask"
+       },
+       {
+        "frame": "defensive_tower_gunpowder__flag2",
+        "mask": "defensive_tower_gunpowder__flag2__mask"
+       },
+       {
+        "frame": "defensive_tower_gunpowder__flag3",
+        "mask": "defensive_tower_gunpowder__flag3__mask"
+       },
+       {
+        "frame": "defensive_tower_gunpowder__flag4",
+        "mask": "defensive_tower_gunpowder__flag4__mask"
+       },
+       {
+        "frame": "defensive_tower_gunpowder__flag5",
+        "mask": "defensive_tower_gunpowder__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "DEFENSIVE_TOWER",
@@ -255,12 +474,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_depleted",
      "anchor": [
-      142,
-      162
+      73,
+      83
      ],
      "size": [
-      284,
-      168
+      146,
+      86
      ],
      "mask": "farm_depleted__mask",
      "shadow": "farm_depleted__shadow"
@@ -269,12 +488,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_growing",
      "anchor": [
-      142,
-      162
+      73,
+      83
      ],
      "size": [
-      284,
-      168
+      146,
+      86
      ],
      "mask": "farm_growing__mask",
      "shadow": "farm_growing__shadow"
@@ -283,12 +502,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_ripe",
      "anchor": [
-      142,
-      162
+      73,
+      83
      ],
      "size": [
-      284,
-      168
+      146,
+      86
      ],
      "mask": "farm_ripe__mask",
      "shadow": "farm_ripe__shadow"
@@ -297,12 +516,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_sown",
      "anchor": [
-      142,
-      162
+      73,
+      83
      ],
      "size": [
-      284,
-      168
+      146,
+      86
      ],
      "mask": "farm_sown__mask",
      "shadow": "farm_sown__shadow"
@@ -330,15 +549,43 @@
      "atlas": "kr-buildings-0",
      "frame": "foundry_gunpowder",
      "anchor": [
-      250,
-      296
+      128,
+      150
      ],
      "size": [
-      500,
-      302
+      256,
+      153
      ],
      "mask": "foundry_gunpowder__mask",
-     "shadow": "foundry_gunpowder__shadow"
+     "shadow": "foundry_gunpowder__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "foundry_gunpowder__flag0",
+        "mask": "foundry_gunpowder__flag0__mask"
+       },
+       {
+        "frame": "foundry_gunpowder__flag1",
+        "mask": "foundry_gunpowder__flag1__mask"
+       },
+       {
+        "frame": "foundry_gunpowder__flag2",
+        "mask": "foundry_gunpowder__flag2__mask"
+       },
+       {
+        "frame": "foundry_gunpowder__flag3",
+        "mask": "foundry_gunpowder__flag3__mask"
+       },
+       {
+        "frame": "foundry_gunpowder__flag4",
+        "mask": "foundry_gunpowder__flag4__mask"
+       },
+       {
+        "frame": "foundry_gunpowder__flag5",
+        "mask": "foundry_gunpowder__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "FOUNDRY",
@@ -360,29 +607,83 @@
      "atlas": "kr-buildings-0",
      "frame": "gold_mine_dark",
      "anchor": [
-      139,
-      144
+      95,
+      92
      ],
      "size": [
-      278,
-      180
+      190,
+      95
      ],
-     "mask": "gold_mine_dark__mask",
-     "shadow": "gold_mine_dark__shadow"
+     "shadow": "gold_mine_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "gold_mine_dark__flag0",
+        "mask": "gold_mine_dark__flag0__mask"
+       },
+       {
+        "frame": "gold_mine_dark__flag1",
+        "mask": "gold_mine_dark__flag1__mask"
+       },
+       {
+        "frame": "gold_mine_dark__flag2",
+        "mask": "gold_mine_dark__flag2__mask"
+       },
+       {
+        "frame": "gold_mine_dark__flag3",
+        "mask": "gold_mine_dark__flag3__mask"
+       },
+       {
+        "frame": "gold_mine_dark__flag4",
+        "mask": "gold_mine_dark__flag4__mask"
+       },
+       {
+        "frame": "gold_mine_dark__flag5",
+        "mask": "gold_mine_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "gold_mine_castle",
      "anchor": [
-      139,
-      144
+      95,
+      92
      ],
      "size": [
-      278,
-      180
+      190,
+      95
      ],
-     "mask": "gold_mine_castle__mask",
-     "shadow": "gold_mine_castle__shadow"
+     "shadow": "gold_mine_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "gold_mine_castle__flag0",
+        "mask": "gold_mine_castle__flag0__mask"
+       },
+       {
+        "frame": "gold_mine_castle__flag1",
+        "mask": "gold_mine_castle__flag1__mask"
+       },
+       {
+        "frame": "gold_mine_castle__flag2",
+        "mask": "gold_mine_castle__flag2__mask"
+       },
+       {
+        "frame": "gold_mine_castle__flag3",
+        "mask": "gold_mine_castle__flag3__mask"
+       },
+       {
+        "frame": "gold_mine_castle__flag4",
+        "mask": "gold_mine_castle__flag4__mask"
+       },
+       {
+        "frame": "gold_mine_castle__flag5",
+        "mask": "gold_mine_castle__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "GOLD_MINE",
@@ -405,26 +706,53 @@
      "atlas": "kr-buildings-0",
      "frame": "house_dark",
      "anchor": [
-      172,
-      158
+      87,
+      81
      ],
      "size": [
-      344,
-      168
+      174,
+      87
      ],
-     "mask": "house_dark__mask",
-     "shadow": "house_dark__shadow"
+     "shadow": "house_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "house_dark__flag0",
+        "mask": "house_dark__flag0__mask"
+       },
+       {
+        "frame": "house_dark__flag1",
+        "mask": "house_dark__flag1__mask"
+       },
+       {
+        "frame": "house_dark__flag2",
+        "mask": "house_dark__flag2__mask"
+       },
+       {
+        "frame": "house_dark__flag3",
+        "mask": "house_dark__flag3__mask"
+       },
+       {
+        "frame": "house_dark__flag4",
+        "mask": "house_dark__flag4__mask"
+       },
+       {
+        "frame": "house_dark__flag5",
+        "mask": "house_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "house_castle",
      "anchor": [
-      172,
-      158
+      87,
+      81
      ],
      "size": [
-      344,
-      168
+      174,
+      87
      ],
      "mask": "house_castle__mask",
      "shadow": "house_castle__shadow"
@@ -433,12 +761,12 @@
      "atlas": "kr-buildings-0",
      "frame": "house_gunpowder",
      "anchor": [
-      172,
-      158
+      87,
+      81
      ],
      "size": [
-      344,
-      168
+      174,
+      87
      ],
      "mask": "house_gunpowder__mask",
      "shadow": "house_gunpowder__shadow"
@@ -465,29 +793,83 @@
      "atlas": "kr-buildings-0",
      "frame": "lumber_camp_dark",
      "anchor": [
-      125,
-      127
+      65,
+      65
      ],
      "size": [
-      250,
-      140
+      130,
+      74
      ],
-     "mask": "lumber_camp_dark__mask",
-     "shadow": "lumber_camp_dark__shadow"
+     "shadow": "lumber_camp_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "lumber_camp_dark__flag0",
+        "mask": "lumber_camp_dark__flag0__mask"
+       },
+       {
+        "frame": "lumber_camp_dark__flag1",
+        "mask": "lumber_camp_dark__flag1__mask"
+       },
+       {
+        "frame": "lumber_camp_dark__flag2",
+        "mask": "lumber_camp_dark__flag2__mask"
+       },
+       {
+        "frame": "lumber_camp_dark__flag3",
+        "mask": "lumber_camp_dark__flag3__mask"
+       },
+       {
+        "frame": "lumber_camp_dark__flag4",
+        "mask": "lumber_camp_dark__flag4__mask"
+       },
+       {
+        "frame": "lumber_camp_dark__flag5",
+        "mask": "lumber_camp_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "lumber_camp_castle",
      "anchor": [
-      125,
-      127
+      65,
+      65
      ],
      "size": [
-      250,
-      140
+      130,
+      74
      ],
-     "mask": "lumber_camp_castle__mask",
-     "shadow": "lumber_camp_castle__shadow"
+     "shadow": "lumber_camp_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "lumber_camp_castle__flag0",
+        "mask": "lumber_camp_castle__flag0__mask"
+       },
+       {
+        "frame": "lumber_camp_castle__flag1",
+        "mask": "lumber_camp_castle__flag1__mask"
+       },
+       {
+        "frame": "lumber_camp_castle__flag2",
+        "mask": "lumber_camp_castle__flag2__mask"
+       },
+       {
+        "frame": "lumber_camp_castle__flag3",
+        "mask": "lumber_camp_castle__flag3__mask"
+       },
+       {
+        "frame": "lumber_camp_castle__flag4",
+        "mask": "lumber_camp_castle__flag4__mask"
+       },
+       {
+        "frame": "lumber_camp_castle__flag5",
+        "mask": "lumber_camp_castle__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "LUMBER_CAMP",
@@ -510,43 +892,226 @@
      "atlas": "kr-buildings-0",
      "frame": "mill_dark",
      "anchor": [
-      226,
-      242
+      114,
+      126
      ],
      "size": [
-      452,
-      248
+      228,
+      129
      ],
-     "mask": "mill_dark__mask",
-     "shadow": "mill_dark__shadow"
+     "shadow": "mill_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "mill_dark__flag0",
+        "mask": "mill_dark__flag0__mask"
+       },
+       {
+        "frame": "mill_dark__flag1",
+        "mask": "mill_dark__flag1__mask"
+       },
+       {
+        "frame": "mill_dark__flag2",
+        "mask": "mill_dark__flag2__mask"
+       },
+       {
+        "frame": "mill_dark__flag3",
+        "mask": "mill_dark__flag3__mask"
+       },
+       {
+        "frame": "mill_dark__flag4",
+        "mask": "mill_dark__flag4__mask"
+       },
+       {
+        "frame": "mill_dark__flag5",
+        "mask": "mill_dark__flag5__mask"
+       }
+      ],
+      "sails": [
+       {
+        "frame": "mill_dark__sails0",
+        "mask": "mill_dark__sails0__mask"
+       },
+       {
+        "frame": "mill_dark__sails1",
+        "mask": "mill_dark__sails1__mask"
+       },
+       {
+        "frame": "mill_dark__sails2",
+        "mask": "mill_dark__sails2__mask"
+       },
+       {
+        "frame": "mill_dark__sails3",
+        "mask": "mill_dark__sails3__mask"
+       },
+       {
+        "frame": "mill_dark__sails4",
+        "mask": "mill_dark__sails4__mask"
+       },
+       {
+        "frame": "mill_dark__sails5",
+        "mask": "mill_dark__sails5__mask"
+       },
+       {
+        "frame": "mill_dark__sails6",
+        "mask": "mill_dark__sails6__mask"
+       },
+       {
+        "frame": "mill_dark__sails7",
+        "mask": "mill_dark__sails7__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "mill_castle",
      "anchor": [
-      226,
-      242
+      114,
+      126
      ],
      "size": [
-      452,
-      248
+      228,
+      129
      ],
-     "mask": "mill_castle__mask",
-     "shadow": "mill_castle__shadow"
+     "shadow": "mill_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "mill_castle__flag0",
+        "mask": "mill_castle__flag0__mask"
+       },
+       {
+        "frame": "mill_castle__flag1",
+        "mask": "mill_castle__flag1__mask"
+       },
+       {
+        "frame": "mill_castle__flag2",
+        "mask": "mill_castle__flag2__mask"
+       },
+       {
+        "frame": "mill_castle__flag3",
+        "mask": "mill_castle__flag3__mask"
+       },
+       {
+        "frame": "mill_castle__flag4",
+        "mask": "mill_castle__flag4__mask"
+       },
+       {
+        "frame": "mill_castle__flag5",
+        "mask": "mill_castle__flag5__mask"
+       }
+      ],
+      "sails": [
+       {
+        "frame": "mill_castle__sails0",
+        "mask": "mill_castle__sails0__mask"
+       },
+       {
+        "frame": "mill_castle__sails1",
+        "mask": "mill_castle__sails1__mask"
+       },
+       {
+        "frame": "mill_castle__sails2",
+        "mask": "mill_castle__sails2__mask"
+       },
+       {
+        "frame": "mill_castle__sails3",
+        "mask": "mill_castle__sails3__mask"
+       },
+       {
+        "frame": "mill_castle__sails4",
+        "mask": "mill_castle__sails4__mask"
+       },
+       {
+        "frame": "mill_castle__sails5",
+        "mask": "mill_castle__sails5__mask"
+       },
+       {
+        "frame": "mill_castle__sails6",
+        "mask": "mill_castle__sails6__mask"
+       },
+       {
+        "frame": "mill_castle__sails7",
+        "mask": "mill_castle__sails7__mask"
+       }
+      ]
+     }
     },
     "gunpowder": {
      "atlas": "kr-buildings-0",
      "frame": "mill_gunpowder",
      "anchor": [
-      226,
-      242
+      114,
+      126
      ],
      "size": [
-      452,
-      248
+      228,
+      129
      ],
-     "mask": "mill_gunpowder__mask",
-     "shadow": "mill_gunpowder__shadow"
+     "shadow": "mill_gunpowder__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "mill_gunpowder__flag0",
+        "mask": "mill_gunpowder__flag0__mask"
+       },
+       {
+        "frame": "mill_gunpowder__flag1",
+        "mask": "mill_gunpowder__flag1__mask"
+       },
+       {
+        "frame": "mill_gunpowder__flag2",
+        "mask": "mill_gunpowder__flag2__mask"
+       },
+       {
+        "frame": "mill_gunpowder__flag3",
+        "mask": "mill_gunpowder__flag3__mask"
+       },
+       {
+        "frame": "mill_gunpowder__flag4",
+        "mask": "mill_gunpowder__flag4__mask"
+       },
+       {
+        "frame": "mill_gunpowder__flag5",
+        "mask": "mill_gunpowder__flag5__mask"
+       }
+      ],
+      "sails": [
+       {
+        "frame": "mill_gunpowder__sails0",
+        "mask": "mill_gunpowder__sails0__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails1",
+        "mask": "mill_gunpowder__sails1__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails2",
+        "mask": "mill_gunpowder__sails2__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails3",
+        "mask": "mill_gunpowder__sails3__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails4",
+        "mask": "mill_gunpowder__sails4__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails5",
+        "mask": "mill_gunpowder__sails5__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails6",
+        "mask": "mill_gunpowder__sails6__mask"
+       },
+       {
+        "frame": "mill_gunpowder__sails7",
+        "mask": "mill_gunpowder__sails7__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "MILL",
@@ -570,29 +1135,85 @@
      "atlas": "kr-buildings-0",
      "frame": "stable_dark",
      "anchor": [
-      194,
-      207
+      98,
+      105
      ],
      "size": [
-      388,
-      213
+      196,
+      108
      ],
      "mask": "stable_dark__mask",
-     "shadow": "stable_dark__shadow"
+     "shadow": "stable_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "stable_dark__flag0",
+        "mask": "stable_dark__flag0__mask"
+       },
+       {
+        "frame": "stable_dark__flag1",
+        "mask": "stable_dark__flag1__mask"
+       },
+       {
+        "frame": "stable_dark__flag2",
+        "mask": "stable_dark__flag2__mask"
+       },
+       {
+        "frame": "stable_dark__flag3",
+        "mask": "stable_dark__flag3__mask"
+       },
+       {
+        "frame": "stable_dark__flag4",
+        "mask": "stable_dark__flag4__mask"
+       },
+       {
+        "frame": "stable_dark__flag5",
+        "mask": "stable_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "stable_castle",
      "anchor": [
-      194,
-      207
+      98,
+      105
      ],
      "size": [
-      388,
-      213
+      196,
+      108
      ],
      "mask": "stable_castle__mask",
-     "shadow": "stable_castle__shadow"
+     "shadow": "stable_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "stable_castle__flag0",
+        "mask": "stable_castle__flag0__mask"
+       },
+       {
+        "frame": "stable_castle__flag1",
+        "mask": "stable_castle__flag1__mask"
+       },
+       {
+        "frame": "stable_castle__flag2",
+        "mask": "stable_castle__flag2__mask"
+       },
+       {
+        "frame": "stable_castle__flag3",
+        "mask": "stable_castle__flag3__mask"
+       },
+       {
+        "frame": "stable_castle__flag4",
+        "mask": "stable_castle__flag4__mask"
+       },
+       {
+        "frame": "stable_castle__flag5",
+        "mask": "stable_castle__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "STABLE",
@@ -615,29 +1236,83 @@
      "atlas": "kr-buildings-0",
      "frame": "stone_quarry_dark",
      "anchor": [
-      133,
-      135
+      93,
+      89
      ],
      "size": [
-      266,
-      147
+      186,
+      97
      ],
-     "mask": "stone_quarry_dark__mask",
-     "shadow": "stone_quarry_dark__shadow"
+     "shadow": "stone_quarry_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "stone_quarry_dark__flag0",
+        "mask": "stone_quarry_dark__flag0__mask"
+       },
+       {
+        "frame": "stone_quarry_dark__flag1",
+        "mask": "stone_quarry_dark__flag1__mask"
+       },
+       {
+        "frame": "stone_quarry_dark__flag2",
+        "mask": "stone_quarry_dark__flag2__mask"
+       },
+       {
+        "frame": "stone_quarry_dark__flag3",
+        "mask": "stone_quarry_dark__flag3__mask"
+       },
+       {
+        "frame": "stone_quarry_dark__flag4",
+        "mask": "stone_quarry_dark__flag4__mask"
+       },
+       {
+        "frame": "stone_quarry_dark__flag5",
+        "mask": "stone_quarry_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "stone_quarry_castle",
      "anchor": [
-      133,
-      135
+      93,
+      89
      ],
      "size": [
-      266,
-      147
+      186,
+      97
      ],
-     "mask": "stone_quarry_castle__mask",
-     "shadow": "stone_quarry_castle__shadow"
+     "shadow": "stone_quarry_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "stone_quarry_castle__flag0",
+        "mask": "stone_quarry_castle__flag0__mask"
+       },
+       {
+        "frame": "stone_quarry_castle__flag1",
+        "mask": "stone_quarry_castle__flag1__mask"
+       },
+       {
+        "frame": "stone_quarry_castle__flag2",
+        "mask": "stone_quarry_castle__flag2__mask"
+       },
+       {
+        "frame": "stone_quarry_castle__flag3",
+        "mask": "stone_quarry_castle__flag3__mask"
+       },
+       {
+        "frame": "stone_quarry_castle__flag4",
+        "mask": "stone_quarry_castle__flag4__mask"
+       },
+       {
+        "frame": "stone_quarry_castle__flag5",
+        "mask": "stone_quarry_castle__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "STONE_QUARRY",
@@ -660,43 +1335,127 @@
      "atlas": "kr-buildings-0",
      "frame": "town_center_dark",
      "anchor": [
-      348,
-      369
+      180,
+      186
      ],
      "size": [
-      696,
-      375
+      360,
+      189
      ],
      "mask": "town_center_dark__mask",
-     "shadow": "town_center_dark__shadow"
+     "shadow": "town_center_dark__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "town_center_dark__flag0",
+        "mask": "town_center_dark__flag0__mask"
+       },
+       {
+        "frame": "town_center_dark__flag1",
+        "mask": "town_center_dark__flag1__mask"
+       },
+       {
+        "frame": "town_center_dark__flag2",
+        "mask": "town_center_dark__flag2__mask"
+       },
+       {
+        "frame": "town_center_dark__flag3",
+        "mask": "town_center_dark__flag3__mask"
+       },
+       {
+        "frame": "town_center_dark__flag4",
+        "mask": "town_center_dark__flag4__mask"
+       },
+       {
+        "frame": "town_center_dark__flag5",
+        "mask": "town_center_dark__flag5__mask"
+       }
+      ]
+     }
     },
     "castle": {
      "atlas": "kr-buildings-0",
      "frame": "town_center_castle",
      "anchor": [
-      348,
-      369
+      180,
+      186
      ],
      "size": [
-      696,
-      375
+      360,
+      189
      ],
      "mask": "town_center_castle__mask",
-     "shadow": "town_center_castle__shadow"
+     "shadow": "town_center_castle__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "town_center_castle__flag0",
+        "mask": "town_center_castle__flag0__mask"
+       },
+       {
+        "frame": "town_center_castle__flag1",
+        "mask": "town_center_castle__flag1__mask"
+       },
+       {
+        "frame": "town_center_castle__flag2",
+        "mask": "town_center_castle__flag2__mask"
+       },
+       {
+        "frame": "town_center_castle__flag3",
+        "mask": "town_center_castle__flag3__mask"
+       },
+       {
+        "frame": "town_center_castle__flag4",
+        "mask": "town_center_castle__flag4__mask"
+       },
+       {
+        "frame": "town_center_castle__flag5",
+        "mask": "town_center_castle__flag5__mask"
+       }
+      ]
+     }
     },
     "gunpowder": {
      "atlas": "kr-buildings-0",
      "frame": "town_center_gunpowder",
      "anchor": [
-      348,
-      369
+      180,
+      186
      ],
      "size": [
-      696,
-      375
+      360,
+      189
      ],
      "mask": "town_center_gunpowder__mask",
-     "shadow": "town_center_gunpowder__shadow"
+     "shadow": "town_center_gunpowder__shadow",
+     "overlays": {
+      "flag": [
+       {
+        "frame": "town_center_gunpowder__flag0",
+        "mask": "town_center_gunpowder__flag0__mask"
+       },
+       {
+        "frame": "town_center_gunpowder__flag1",
+        "mask": "town_center_gunpowder__flag1__mask"
+       },
+       {
+        "frame": "town_center_gunpowder__flag2",
+        "mask": "town_center_gunpowder__flag2__mask"
+       },
+       {
+        "frame": "town_center_gunpowder__flag3",
+        "mask": "town_center_gunpowder__flag3__mask"
+       },
+       {
+        "frame": "town_center_gunpowder__flag4",
+        "mask": "town_center_gunpowder__flag4__mask"
+       },
+       {
+        "frame": "town_center_gunpowder__flag5",
+        "mask": "town_center_gunpowder__flag5__mask"
+       }
+      ]
+     }
     }
    },
    "defId": "TOWN_CENTER",
@@ -720,12 +1479,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_00",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_00__shadow",
      "connections": 0,
@@ -735,12 +1494,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_01",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_01__shadow",
      "connections": 1,
@@ -750,12 +1509,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_02",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_02__shadow",
      "connections": 2,
@@ -765,12 +1524,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_03",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_03__shadow",
      "connections": 3,
@@ -780,12 +1539,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_04",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_04__shadow",
      "connections": 4,
@@ -795,12 +1554,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_05",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_05__shadow",
      "connections": 5,
@@ -810,12 +1569,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_06",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_06__shadow",
      "connections": 6,
@@ -825,12 +1584,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_07",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_07__shadow",
      "connections": 7,
@@ -840,12 +1599,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_08",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_08__shadow",
      "connections": 8,
@@ -855,12 +1614,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_09",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_09__shadow",
      "connections": 9,
@@ -870,12 +1629,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_10",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_10__shadow",
      "connections": 10,
@@ -885,12 +1644,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_11",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_11__shadow",
      "connections": 11,
@@ -900,12 +1659,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_12",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_12__shadow",
      "connections": 12,
@@ -915,12 +1674,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_13",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_13__shadow",
      "connections": 13,
@@ -930,12 +1689,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_14",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_14__shadow",
      "connections": 14,
@@ -945,12 +1704,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_dark_15",
      "anchor": [
-      134,
-      133
+      69,
+      68
      ],
      "size": [
-      268,
-      139
+      138,
+      71
      ],
      "shadow": "wall_dark_15__shadow",
      "connections": 15,
@@ -960,12 +1719,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_00",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_00__shadow",
      "connections": 0,
@@ -975,12 +1734,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_01",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_01__shadow",
      "connections": 1,
@@ -990,12 +1749,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_02",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_02__shadow",
      "connections": 2,
@@ -1005,12 +1764,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_03",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_03__shadow",
      "connections": 3,
@@ -1020,12 +1779,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_04",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_04__shadow",
      "connections": 4,
@@ -1035,12 +1794,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_05",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_05__shadow",
      "connections": 5,
@@ -1050,12 +1809,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_06",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_06__shadow",
      "connections": 6,
@@ -1065,12 +1824,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_07",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_07__shadow",
      "connections": 7,
@@ -1080,12 +1839,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_08",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_08__shadow",
      "connections": 8,
@@ -1095,12 +1854,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_09",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_09__shadow",
      "connections": 9,
@@ -1110,12 +1869,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_10",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_10__shadow",
      "connections": 10,
@@ -1125,12 +1884,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_11",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_11__shadow",
      "connections": 11,
@@ -1140,12 +1899,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_12",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_12__shadow",
      "connections": 12,
@@ -1155,12 +1914,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_13",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_13__shadow",
      "connections": 13,
@@ -1170,12 +1929,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_14",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_14__shadow",
      "connections": 14,
@@ -1185,12 +1944,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_castle_15",
      "anchor": [
-      134,
-      133
+      70,
+      69
      ],
      "size": [
-      268,
-      139
+      140,
+      72
      ],
      "shadow": "wall_castle_15__shadow",
      "connections": 15,
@@ -1200,12 +1959,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_00",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_00__shadow",
      "connections": 0,
@@ -1215,12 +1974,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_01",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_01__shadow",
      "connections": 1,
@@ -1230,12 +1989,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_02",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_02__shadow",
      "connections": 2,
@@ -1245,12 +2004,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_03",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_03__shadow",
      "connections": 3,
@@ -1260,12 +2019,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_04",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_04__shadow",
      "connections": 4,
@@ -1275,12 +2034,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_05",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_05__shadow",
      "connections": 5,
@@ -1290,12 +2049,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_06",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_06__shadow",
      "connections": 6,
@@ -1305,12 +2064,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_07",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_07__shadow",
      "connections": 7,
@@ -1320,12 +2079,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_08",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_08__shadow",
      "connections": 8,
@@ -1335,12 +2094,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_09",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_09__shadow",
      "connections": 9,
@@ -1350,12 +2109,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_10",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_10__shadow",
      "connections": 10,
@@ -1365,12 +2124,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_11",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_11__shadow",
      "connections": 11,
@@ -1380,12 +2139,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_12",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_12__shadow",
      "connections": 12,
@@ -1395,12 +2154,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_13",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_13__shadow",
      "connections": 13,
@@ -1410,12 +2169,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_14",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_14__shadow",
      "connections": 14,
@@ -1425,12 +2184,12 @@
      "atlas": "kr-buildings-0",
      "frame": "wall_gunpowder_15",
      "anchor": [
-      130,
-      127
+      67,
+      65
      ],
      "size": [
-      260,
-      133
+      134,
+      69
      ],
      "shadow": "wall_gunpowder_15__shadow",
      "connections": 15,
@@ -1453,12 +2212,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_1x1_0",
      "anchor": [
-      153,
-      147
+      79,
+      75
      ],
      "size": [
-      306,
-      163
+      158,
+      83
      ],
      "shadow": "construction_1x1_0__shadow",
      "progress": 0.0
@@ -1467,12 +2226,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_1x1_1",
      "anchor": [
-      153,
-      147
+      79,
+      75
      ],
      "size": [
-      306,
-      163
+      158,
+      83
      ],
      "shadow": "construction_1x1_1__shadow",
      "progress": 0.34
@@ -1481,12 +2240,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_1x1_2",
      "anchor": [
-      153,
-      147
+      79,
+      75
      ],
      "size": [
-      306,
-      163
+      158,
+      83
      ],
      "shadow": "construction_1x1_2__shadow",
      "progress": 0.67
@@ -1510,12 +2269,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_2x2_0",
      "anchor": [
-      246,
-      246
+      125,
+      124
      ],
      "size": [
-      492,
-      264
+      250,
+      133
      ],
      "shadow": "construction_2x2_0__shadow",
      "progress": 0.0
@@ -1524,12 +2283,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_2x2_1",
      "anchor": [
-      246,
-      246
+      125,
+      124
      ],
      "size": [
-      492,
-      264
+      250,
+      133
      ],
      "shadow": "construction_2x2_1__shadow",
      "progress": 0.34
@@ -1538,12 +2297,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_2x2_2",
      "anchor": [
-      246,
-      246
+      125,
+      124
      ],
      "size": [
-      492,
-      264
+      250,
+      133
      ],
      "shadow": "construction_2x2_2__shadow",
      "progress": 0.67
@@ -1567,12 +2326,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_3x3_0",
      "anchor": [
-      341,
-      345
+      173,
+      174
      ],
      "size": [
-      682,
-      364
+      346,
+      184
      ],
      "shadow": "construction_3x3_0__shadow",
      "progress": 0.0
@@ -1581,12 +2340,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_3x3_1",
      "anchor": [
-      341,
-      345
+      173,
+      174
      ],
      "size": [
-      682,
-      364
+      346,
+      184
      ],
      "shadow": "construction_3x3_1__shadow",
      "progress": 0.34
@@ -1595,12 +2354,12 @@
      "atlas": "kr-buildings-0",
      "frame": "construction_3x3_2",
      "anchor": [
-      341,
-      345
+      173,
+      174
      ],
      "size": [
-      682,
-      364
+      346,
+      184
      ],
      "shadow": "construction_3x3_2__shadow",
      "progress": 0.67
@@ -1624,12 +2383,12 @@
      "atlas": "kr-decor-0",
      "frame": "barrels",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "barrels__shadow"
     }
@@ -1647,12 +2406,12 @@
      "atlas": "kr-decor-0",
      "frame": "bush_a",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "bush_a__shadow"
     },
@@ -1660,12 +2419,12 @@
      "atlas": "kr-decor-0",
      "frame": "bush_small",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "bush_small__shadow"
     }
@@ -1683,12 +2442,12 @@
      "atlas": "kr-decor-0",
      "frame": "campfire",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "campfire__shadow"
     }
@@ -1706,12 +2465,12 @@
      "atlas": "kr-decor-0",
      "frame": "cart_empty",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "cart_empty__shadow"
     },
@@ -1719,12 +2478,12 @@
      "atlas": "kr-decor-0",
      "frame": "cart_hay",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "cart_hay__shadow"
     },
@@ -1732,12 +2491,12 @@
      "atlas": "kr-decor-0",
      "frame": "cart_logs",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "cart_logs__shadow"
     }
@@ -1755,12 +2514,12 @@
      "atlas": "kr-decor-0",
      "frame": "crates",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "crates__shadow"
     }
@@ -1778,12 +2537,12 @@
      "atlas": "kr-decor-0",
      "frame": "fence_rail_x",
      "anchor": [
-      70,
-      70
+      35,
+      37
      ],
      "size": [
-      140,
-      76
+      70,
+      40
      ],
      "shadow": "fence_rail_x__shadow",
      "connections": "x"
@@ -1792,12 +2551,12 @@
      "atlas": "kr-decor-0",
      "frame": "fence_rail_y",
      "anchor": [
-      70,
-      70
+      35,
+      37
      ],
      "size": [
-      140,
-      76
+      70,
+      40
      ],
      "shadow": "fence_rail_y__shadow",
      "connections": "y"
@@ -1816,12 +2575,12 @@
      "atlas": "kr-decor-0",
      "frame": "fence_wattle_x",
      "anchor": [
-      70,
-      70
+      35,
+      37
      ],
      "size": [
-      140,
-      76
+      70,
+      40
      ],
      "shadow": "fence_wattle_x__shadow",
      "connections": "x"
@@ -1830,12 +2589,12 @@
      "atlas": "kr-decor-0",
      "frame": "fence_wattle_y",
      "anchor": [
-      70,
-      70
+      35,
+      37
      ],
      "size": [
-      140,
-      76
+      70,
+      40
      ],
      "shadow": "fence_wattle_y__shadow",
      "connections": "y"
@@ -1854,14 +2613,18 @@
      "atlas": "kr-decor-0",
      "frame": "fern",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
-     "shadow": "fern__shadow"
+     "shadow": "fern__shadow",
+     "poses": {
+      "swayl": "fern__swayl",
+      "swayr": "fern__swayr"
+     }
     }
    },
    "default": "default"
@@ -1877,12 +2640,12 @@
      "atlas": "kr-decor-0",
      "frame": "flowers_meadow",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "flowers_meadow__shadow"
     },
@@ -1890,12 +2653,12 @@
      "atlas": "kr-decor-0",
      "frame": "flowers_poppy",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "flowers_poppy__shadow"
     }
@@ -1913,40 +2676,52 @@
      "atlas": "kr-decor-0",
      "frame": "grass_tall_a",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
-     "shadow": "grass_tall_a__shadow"
+     "shadow": "grass_tall_a__shadow",
+     "poses": {
+      "swayl": "grass_tall_a__swayl",
+      "swayr": "grass_tall_a__swayr"
+     }
     },
     "b": {
      "atlas": "kr-decor-0",
      "frame": "grass_tall_b",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
-     "shadow": "grass_tall_b__shadow"
+     "shadow": "grass_tall_b__shadow",
+     "poses": {
+      "swayl": "grass_tall_b__swayl",
+      "swayr": "grass_tall_b__swayr"
+     }
     },
     "dry": {
      "atlas": "kr-decor-0",
      "frame": "grass_dry",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
-     "shadow": "grass_dry__shadow"
+     "shadow": "grass_dry__shadow",
+     "poses": {
+      "swayl": "grass_dry__swayl",
+      "swayr": "grass_dry__swayr"
+     }
     }
    },
    "default": "a"
@@ -1962,12 +2737,12 @@
      "atlas": "kr-decor-0",
      "frame": "hay_bales",
      "anchor": [
-      70,
-      76
+      35,
+      40
      ],
      "size": [
-      140,
-      82
+      70,
+      43
      ],
      "shadow": "hay_bales__shadow"
     },
@@ -1975,12 +2750,12 @@
      "atlas": "kr-decor-0",
      "frame": "haystack",
      "anchor": [
-      70,
-      76
+      35,
+      40
      ],
      "size": [
-      140,
-      82
+      70,
+      43
      ],
      "shadow": "haystack__shadow"
     }
@@ -1998,14 +2773,18 @@
      "atlas": "kr-decor-0",
      "frame": "reeds",
      "anchor": [
-      70,
-      70
+      35,
+      36
      ],
      "size": [
-      140,
-      76
+      70,
+      39
      ],
-     "shadow": "reeds__shadow"
+     "shadow": "reeds__shadow",
+     "poses": {
+      "swayl": "reeds__swayl",
+      "swayr": "reeds__swayr"
+     }
     }
    },
    "default": "default"
@@ -2021,12 +2800,12 @@
      "atlas": "kr-decor-0",
      "frame": "rocks_boulder",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "rocks_boulder__shadow"
     },
@@ -2034,12 +2813,12 @@
      "atlas": "kr-decor-0",
      "frame": "rocks_medium",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "rocks_medium__shadow"
     },
@@ -2047,12 +2826,12 @@
      "atlas": "kr-decor-0",
      "frame": "rocks_slabs",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "rocks_slabs__shadow"
     },
@@ -2060,12 +2839,12 @@
      "atlas": "kr-decor-0",
      "frame": "rocks_small",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "rocks_small__shadow"
     }
@@ -2083,12 +2862,12 @@
      "atlas": "kr-decor-0",
      "frame": "signpost",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "signpost__shadow"
     }
@@ -2106,12 +2885,12 @@
      "atlas": "kr-decor-0",
      "frame": "wayside_shrine",
      "anchor": [
-      70,
-      84
+      35,
+      44
      ],
      "size": [
-      140,
-      90
+      70,
+      47
      ],
      "shadow": "wayside_shrine__shadow"
     }
@@ -2129,12 +2908,12 @@
      "atlas": "kr-decor-0",
      "frame": "well",
      "anchor": [
-      70,
-      74
+      35,
+      39
      ],
      "size": [
-      140,
-      80
+      70,
+      42
      ],
      "shadow": "well__shadow"
     }
@@ -2152,17 +2931,80 @@
      "atlas": "kr-decor-0",
      "frame": "woodpile",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "woodpile__shadow"
     }
    },
    "default": "default"
+  },
+  "feature.linden": {
+   "kind": "feature",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-nature-0",
+     "frame": "landmark_linden",
+     "anchor": [
+      127,
+      115
+     ],
+     "size": [
+      254,
+      131
+     ],
+     "shadow": "landmark_linden__shadow",
+     "poses": {
+      "swayl": "landmark_linden__swayl",
+      "swayr": "landmark_linden__swayr"
+     }
+    }
+   },
+   "default": "default"
+  },
+  "feature.rock_spire": {
+   "kind": "feature",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "2": {
+     "atlas": "kr-nature-0",
+     "frame": "rock_spire_2",
+     "anchor": [
+      141,
+      144
+     ],
+     "size": [
+      282,
+      147
+     ],
+     "shadow": "rock_spire_2__shadow"
+    },
+    "4": {
+     "atlas": "kr-nature-0",
+     "frame": "rock_spire_4",
+     "anchor": [
+      200,
+      232
+     ],
+     "size": [
+      400,
+      235
+     ],
+     "shadow": "rock_spire_4__shadow"
+    }
+   },
+   "default": "2"
   },
   "resource.berry_bush": {
    "kind": "resource",
@@ -2175,12 +3017,12 @@
      "atlas": "kr-nature-0",
      "frame": "berry_bush_full",
      "anchor": [
-      70,
-      75
+      35,
+      39
      ],
      "size": [
-      140,
-      81
+      70,
+      42
      ],
      "shadow": "berry_bush_full__shadow",
      "amount": 1.0
@@ -2189,12 +3031,12 @@
      "atlas": "kr-nature-0",
      "frame": "berry_bush_half",
      "anchor": [
-      70,
-      75
+      35,
+      39
      ],
      "size": [
-      140,
-      81
+      70,
+      42
      ],
      "shadow": "berry_bush_half__shadow",
      "amount": 0.5
@@ -2203,12 +3045,12 @@
      "atlas": "kr-nature-0",
      "frame": "berry_bush_low",
      "anchor": [
-      70,
-      75
+      35,
+      39
      ],
      "size": [
-      140,
-      81
+      70,
+      42
      ],
      "shadow": "berry_bush_low__shadow",
      "amount": 0.2
@@ -2228,12 +3070,12 @@
      "atlas": "kr-nature-0",
      "frame": "gold_full",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "gold_full__shadow",
      "amount": 1.0
@@ -2242,12 +3084,12 @@
      "atlas": "kr-nature-0",
      "frame": "gold_half",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "gold_half__shadow",
      "amount": 0.5
@@ -2256,12 +3098,12 @@
      "atlas": "kr-nature-0",
      "frame": "gold_low",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "gold_low__shadow",
      "amount": 0.2
@@ -2281,12 +3123,12 @@
      "atlas": "kr-nature-0",
      "frame": "stone_full",
      "anchor": [
-      70,
-      70
+      35,
+      36
      ],
      "size": [
-      140,
-      76
+      70,
+      39
      ],
      "shadow": "stone_full__shadow",
      "amount": 1.0
@@ -2295,12 +3137,12 @@
      "atlas": "kr-nature-0",
      "frame": "stone_half",
      "anchor": [
-      70,
-      70
+      35,
+      36
      ],
      "size": [
-      140,
-      76
+      70,
+      39
      ],
      "shadow": "stone_half__shadow",
      "amount": 0.5
@@ -2309,12 +3151,12 @@
      "atlas": "kr-nature-0",
      "frame": "stone_low",
      "anchor": [
-      70,
-      70
+      35,
+      36
      ],
      "size": [
-      140,
-      76
+      70,
+      39
      ],
      "shadow": "stone_low__shadow",
      "amount": 0.2
@@ -2334,12 +3176,12 @@
      "atlas": "kr-nature-0",
      "frame": "stump_broadleaf",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "stump_broadleaf__shadow"
     },
@@ -2347,12 +3189,12 @@
      "atlas": "kr-nature-0",
      "frame": "stump_conifer",
      "anchor": [
-      70,
-      70
+      35,
+      35
      ],
      "size": [
-      140,
-      76
+      70,
+      38
      ],
      "shadow": "stump_conifer__shadow"
     }
@@ -2370,92 +3212,120 @@
      "atlas": "kr-nature-0",
      "frame": "tree_beech",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_beech__shadow"
+     "shadow": "tree_beech__shadow",
+     "poses": {
+      "swayl": "tree_beech__swayl",
+      "swayr": "tree_beech__swayr"
+     }
     },
     "birch": {
      "atlas": "kr-nature-0",
      "frame": "tree_birch",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_birch__shadow"
+     "shadow": "tree_birch__shadow",
+     "poses": {
+      "swayl": "tree_birch__swayl",
+      "swayr": "tree_birch__swayr"
+     }
     },
     "linden": {
      "atlas": "kr-nature-0",
      "frame": "tree_linden",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_linden__shadow"
+     "shadow": "tree_linden__shadow",
+     "poses": {
+      "swayl": "tree_linden__swayl",
+      "swayr": "tree_linden__swayr"
+     }
     },
     "oak": {
      "atlas": "kr-nature-0",
      "frame": "tree_oak",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_oak__shadow"
+     "shadow": "tree_oak__shadow",
+     "poses": {
+      "swayl": "tree_oak__swayl",
+      "swayr": "tree_oak__swayr"
+     }
     },
     "pine": {
      "atlas": "kr-nature-0",
      "frame": "tree_pine",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_pine__shadow"
+     "shadow": "tree_pine__shadow",
+     "poses": {
+      "swayl": "tree_pine__swayl",
+      "swayr": "tree_pine__swayr"
+     }
     },
     "spruce_a": {
      "atlas": "kr-nature-0",
      "frame": "tree_spruce_a",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_spruce_a__shadow"
+     "shadow": "tree_spruce_a__shadow",
+     "poses": {
+      "swayl": "tree_spruce_a__swayl",
+      "swayr": "tree_spruce_a__swayr"
+     }
     },
     "spruce_b": {
      "atlas": "kr-nature-0",
      "frame": "tree_spruce_b",
      "anchor": [
-      212,
-      202
+      110,
+      103
      ],
      "size": [
-      424,
-      216
+      220,
+      111
      ],
-     "shadow": "tree_spruce_b__shadow"
+     "shadow": "tree_spruce_b__shadow",
+     "poses": {
+      "swayl": "tree_spruce_b__swayl",
+      "swayr": "tree_spruce_b__swayr"
+     }
     }
    },
    "resource": "WOOD",
@@ -2472,12 +3342,12 @@
      "atlas": "kr-nature-0",
      "frame": "tree_dead",
      "anchor": [
-      147,
-      153
+      75,
+      78
      ],
      "size": [
-      294,
-      159
+      150,
+      81
      ],
      "shadow": "tree_dead__shadow"
     }
@@ -2496,27 +3366,35 @@
      "atlas": "kr-nature-0",
      "frame": "tree_snow_a",
      "anchor": [
-      205,
-      198
+      107,
+      101
      ],
      "size": [
-      410,
-      204
+      214,
+      104
      ],
-     "shadow": "tree_snow_a__shadow"
+     "shadow": "tree_snow_a__shadow",
+     "poses": {
+      "swayl": "tree_snow_a__swayl",
+      "swayr": "tree_snow_a__swayr"
+     }
     },
     "b": {
      "atlas": "kr-nature-0",
      "frame": "tree_snow_b",
      "anchor": [
-      205,
-      198
+      107,
+      101
      ],
      "size": [
-      410,
-      204
+      214,
+      104
      ],
-     "shadow": "tree_snow_b__shadow"
+     "shadow": "tree_snow_b__shadow",
+     "poses": {
+      "swayl": "tree_snow_b__swayl",
+      "swayr": "tree_snow_b__swayr"
+     }
     }
    },
    "resource": "WOOD",
@@ -2533,12 +3411,12 @@
      "atlas": "kr-buildings-0",
      "frame": "rubble_1x1",
      "anchor": [
-      70,
-      72
+      35,
+      37
      ],
      "size": [
-      140,
-      80
+      70,
+      41
      ],
      "shadow": "rubble_1x1__shadow"
     }
@@ -2556,12 +3434,12 @@
      "atlas": "kr-buildings-0",
      "frame": "rubble_2x2",
      "anchor": [
-      134,
-      135
+      67,
+      70
      ],
      "size": [
-      268,
-      141
+      134,
+      73
      ],
      "shadow": "rubble_2x2__shadow"
     }
@@ -2579,17 +3457,75 @@
      "atlas": "kr-buildings-0",
      "frame": "rubble_3x3",
      "anchor": [
-      198,
-      198
+      99,
+      100
      ],
      "size": [
-      396,
-      204
+      198,
+      103
      ],
      "shadow": "rubble_3x3__shadow"
     }
    },
    "default": "default"
+  },
+  "terrain.bridge_rail": {
+   "kind": "overlay",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "mx": {
+     "atlas": "kr-terrain-0",
+     "frame": "bridge_rail_mx",
+     "anchor": [
+      36,
+      44
+     ],
+     "size": [
+      72,
+      46
+     ]
+    },
+    "my": {
+     "atlas": "kr-terrain-0",
+     "frame": "bridge_rail_my",
+     "anchor": [
+      36,
+      44
+     ],
+     "size": [
+      72,
+      46
+     ]
+    },
+    "px": {
+     "atlas": "kr-terrain-0",
+     "frame": "bridge_rail_px",
+     "anchor": [
+      36,
+      44
+     ],
+     "size": [
+      72,
+      46
+     ]
+    },
+    "py": {
+     "atlas": "kr-terrain-0",
+     "frame": "bridge_rail_py",
+     "anchor": [
+      36,
+      44
+     ],
+     "size": [
+      72,
+      46
+     ]
+    }
+   },
+   "default": "mx"
   },
   "terrain.bridge_x": {
    "kind": "terrain",
@@ -2602,12 +3538,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2615,12 +3551,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2628,12 +3564,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2641,12 +3577,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -2666,12 +3602,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2679,12 +3615,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2692,12 +3628,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2705,12 +3641,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -2730,24 +3666,24 @@
      "atlas": "kr-terrain-0",
      "frame": "cliff_earth_left",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "left_lip": {
      "atlas": "kr-terrain-0",
      "frame": "cliff_earth_left_lip",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right": {
@@ -2755,11 +3691,11 @@
      "frame": "cliff_earth_right",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right_lip": {
@@ -2767,11 +3703,11 @@
      "frame": "cliff_earth_right_lip",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     }
    },
@@ -2789,24 +3725,24 @@
      "atlas": "kr-terrain-0",
      "frame": "cliff_rock_left",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "left_lip": {
      "atlas": "kr-terrain-0",
      "frame": "cliff_rock_left_lip",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right": {
@@ -2814,11 +3750,11 @@
      "frame": "cliff_rock_right",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right_lip": {
@@ -2826,11 +3762,11 @@
      "frame": "cliff_rock_right_lip",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     }
    },
@@ -2848,12 +3784,12 @@
      "atlas": "kr-terrain-0",
      "frame": "cliff_sand_left",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right": {
@@ -2861,11 +3797,11 @@
      "frame": "cliff_sand_right",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     }
    },
@@ -2883,24 +3819,24 @@
      "atlas": "kr-terrain-0",
      "frame": "cliff_snow_left",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "left_lip": {
      "atlas": "kr-terrain-0",
      "frame": "cliff_snow_left_lip",
      "anchor": [
-      64,
-      32
+      32,
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right": {
@@ -2908,11 +3844,11 @@
      "frame": "cliff_snow_right",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     },
     "right_lip": {
@@ -2920,11 +3856,11 @@
      "frame": "cliff_snow_right_lip",
      "anchor": [
       0,
-      32
+      16
      ],
      "size": [
-      64,
-      40
+      32,
+      20
      ]
     }
    },
@@ -2942,12 +3878,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2955,12 +3891,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2968,12 +3904,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2981,12 +3917,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -2994,12 +3930,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3007,12 +3943,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3020,12 +3956,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3033,12 +3969,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3046,12 +3982,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3059,12 +3995,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3072,12 +4008,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3085,12 +4021,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3098,12 +4034,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3111,12 +4047,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3124,12 +4060,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3137,12 +4073,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -3150,6 +4086,458 @@
    "tileType": "DIRT",
    "period": 4,
    "default": "0"
+  },
+  "terrain.edge": {
+   "kind": "overlay",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "ao_mx": {
+     "atlas": "kr-terrain-0",
+     "frame": "edge_ao_mx",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "ao_my": {
+     "atlas": "kr-terrain-0",
+     "frame": "edge_ao_my",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "rim_px": {
+     "atlas": "kr-terrain-0",
+     "frame": "edge_rim_px",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "rim_py": {
+     "atlas": "kr-terrain-0",
+     "frame": "edge_rim_py",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    }
+   },
+   "default": "ao_mx"
+  },
+  "terrain.foam": {
+   "kind": "foam",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "corner_mx_my.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_mx_my_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_mx_my.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_mx_my_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_mx_py.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_mx_py_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_mx_py.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_mx_py_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_px_my.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_px_my_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_px_my.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_px_my_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_px_py.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_px_py_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "corner_px_py.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_corner_px_py_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_mx.0.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_mx_0_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_mx.0.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_mx_0_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_mx.1.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_mx_1_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_mx.1.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_mx_1_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_mx.2.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_mx_2_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_mx.2.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_mx_2_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_my.0.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_my_0_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_my.0.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_my_0_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_my.1.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_my_1_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_my.1.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_my_1_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_my.2.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_my_2_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_my.2.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_my_2_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_px.0.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_px_0_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_px.0.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_px_0_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_px.1.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_px_1_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_px.1.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_px_1_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_px.2.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_px_2_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_px.2.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_px_2_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_py.0.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_py_0_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_py.0.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_py_0_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_py.1.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_py_1_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_py.1.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_py_1_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_py.2.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_py_2_f0",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    },
+    "edge_py.2.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "foam_edge_py_2_f1",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ]
+    }
+   },
+   "default": "corner_mx_my.0"
   },
   "terrain.forest": {
    "kind": "terrain",
@@ -3162,12 +4550,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3175,12 +4563,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3188,12 +4576,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3201,12 +4589,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3214,12 +4602,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3227,12 +4615,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3240,12 +4628,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3253,12 +4641,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3266,12 +4654,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3279,12 +4667,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3292,12 +4680,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3305,12 +4693,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3318,12 +4706,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3331,12 +4719,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3344,12 +4732,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3357,12 +4745,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -3382,12 +4770,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3395,12 +4783,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3408,12 +4796,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3421,12 +4809,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3434,12 +4822,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3447,12 +4835,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3460,12 +4848,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3473,12 +4861,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3486,12 +4874,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3499,12 +4887,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3512,12 +4900,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3525,12 +4913,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3538,12 +4926,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3551,12 +4939,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3564,12 +4952,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3577,12 +4965,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -3602,12 +4990,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3615,12 +5003,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3628,12 +5016,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3641,18 +5029,174 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_04",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_05",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_06",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_07",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_08",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_09",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_10",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_11",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_12",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_13",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_14",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_ice_15",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
      ],
      "frameIndex": 0
     }
    },
    "tileType": "ICE",
-   "period": 2,
+   "period": 4,
    "default": "0"
   },
   "terrain.meadow": {
@@ -3666,12 +5210,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3679,12 +5223,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3692,12 +5236,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3705,12 +5249,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3718,12 +5262,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3731,12 +5275,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3744,12 +5288,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3757,12 +5301,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3770,12 +5314,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3783,12 +5327,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3796,12 +5340,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3809,12 +5353,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3822,12 +5366,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3835,12 +5379,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3848,12 +5392,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3861,12 +5405,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -3886,12 +5430,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3899,12 +5443,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3912,12 +5456,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3925,12 +5469,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3938,12 +5482,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3951,12 +5495,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3964,12 +5508,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3977,12 +5521,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -3990,12 +5534,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4003,12 +5547,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4016,12 +5560,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4029,12 +5573,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4042,12 +5586,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4055,12 +5599,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4068,12 +5612,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4081,12 +5625,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -4106,12 +5650,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4119,12 +5663,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4132,12 +5676,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4145,18 +5689,174 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_04",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_05",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_06",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_07",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_08",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_09",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_10",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_11",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_12",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_13",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_14",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_packed_snow_15",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
      ],
      "frameIndex": 0
     }
    },
    "tileType": "PACKED_SNOW",
-   "period": 2,
+   "period": 4,
    "default": "0"
   },
   "terrain.sand": {
@@ -4170,12 +5870,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4183,12 +5883,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4196,12 +5896,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4209,12 +5909,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4222,12 +5922,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4235,12 +5935,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4248,12 +5948,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4261,12 +5961,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4274,12 +5974,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4287,12 +5987,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4300,12 +6000,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4313,12 +6013,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4326,12 +6026,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4339,12 +6039,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4352,12 +6052,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4365,12 +6065,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -4390,12 +6090,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4403,12 +6103,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4416,12 +6116,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4429,18 +6129,174 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_04",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_05",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_06",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_07",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_08",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_09",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_10",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_11",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_12",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_13",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_14",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_15",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
      ],
      "frameIndex": 0
     }
    },
    "tileType": "SNOW",
-   "period": 2,
+   "period": 4,
    "default": "0"
   },
   "terrain.snow_forest": {
@@ -4454,12 +6310,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4467,12 +6323,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4480,12 +6336,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4493,18 +6349,174 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "4": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_04",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "5": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_05",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "6": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_06",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "7": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_07",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "8": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_08",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "9": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_09",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "10": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_10",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "11": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_11",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "12": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_12",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "13": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_13",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "14": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_14",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
+     ],
+     "frameIndex": 0
+    },
+    "15": {
+     "atlas": "kr-terrain-0",
+     "frame": "terrain_snow_forest_15",
+     "anchor": [
+      36,
+      34
+     ],
+     "size": [
+      72,
+      36
      ],
      "frameIndex": 0
     }
    },
    "tileType": "SNOW_FOREST",
-   "period": 2,
+   "period": 4,
    "default": "0"
   },
   "terrain.stone": {
@@ -4518,12 +6530,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_00",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4531,12 +6543,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_01",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4544,12 +6556,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_02",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4557,12 +6569,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_03",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4570,12 +6582,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_04",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4583,12 +6595,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_05",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4596,12 +6608,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_06",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4609,12 +6621,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_07",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4622,12 +6634,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_08",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4635,12 +6647,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_09",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4648,12 +6660,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_10",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4661,12 +6673,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_11",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4674,12 +6686,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_12",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4687,12 +6699,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_13",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4700,12 +6712,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_14",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4713,12 +6725,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_15",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     }
@@ -4738,192 +6750,192 @@
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_mx_my",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "corner_mx_py": {
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_mx_py",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "corner_px_my": {
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_px_my",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "corner_px_py": {
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_px_py",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_mx.0": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_mx_0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_mx.1": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_mx_1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_mx.2": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_mx_2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_my.0": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_my_0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_my.1": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_my_1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_my.2": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_my_2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_px.0": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_px_0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_px.1": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_px_1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_px.2": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_px_2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_py.0": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_py_0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_py.1": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_py_1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     },
     "edge_py.2": {
      "atlas": "kr-terrain-0",
      "frame": "transition_edge_py_2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ]
     }
    },
@@ -4940,12 +6952,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -4953,12 +6965,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -4966,12 +6978,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -4979,12 +6991,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     },
@@ -4992,12 +7004,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5005,12 +7017,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5018,12 +7030,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5031,12 +7043,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     },
@@ -5044,12 +7056,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5057,12 +7069,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5070,12 +7082,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5083,12 +7095,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     },
@@ -5096,12 +7108,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5109,12 +7121,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5122,12 +7134,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5135,12 +7147,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     }
@@ -5160,12 +7172,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5173,12 +7185,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5186,12 +7198,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5199,12 +7211,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     },
@@ -5212,12 +7224,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5225,12 +7237,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5238,12 +7250,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5251,12 +7263,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     },
@@ -5264,12 +7276,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5277,12 +7289,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5290,12 +7302,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5303,12 +7315,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     },
@@ -5316,12 +7328,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f0",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 0
     },
@@ -5329,12 +7341,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f1",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 1
     },
@@ -5342,12 +7354,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f2",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 2
     },
@@ -5355,12 +7367,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f3",
      "anchor": [
-      72,
-      68
+      36,
+      34
      ],
      "size": [
-      144,
-      72
+      72,
+      36
      ],
      "frameIndex": 3
     }

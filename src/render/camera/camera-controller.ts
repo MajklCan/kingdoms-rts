@@ -9,16 +9,32 @@ import { buildingQuery, unitQuery } from '@sim/world';
 import { isTextEntryActive } from '../input/text-entry';
 import type { SceneContext } from '../scene-context';
 
-export const INITIAL_ZOOM = 1.3;
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 2.5;
-/** Step for keyboard +/-. */
+/**
+ * The art is pixel art at 1x (style A voxels), so the camera only uses zoom
+ * levels that scale every texel by a fixed pattern: integer and half steps.
+ * `grid` is the world-pixel scroll granularity that keeps that pattern still
+ * while panning (zoom p/q needs scroll in multiples of q), so nothing shimmers.
+ */
+const ZOOM_STEPS: ReadonlyArray<{ zoom: number; grid: number }> = [
+  { zoom: 0.5, grid: 2 },
+  { zoom: 0.75, grid: 4 },
+  { zoom: 1, grid: 1 },
+  { zoom: 1.5, grid: 2 },
+  { zoom: 2, grid: 1 },
+  { zoom: 2.5, grid: 2 },
+];
+export const INITIAL_ZOOM = 1.5;
+/** Step for keyboard +/- (any delta this big moves one zoom level). */
 export const ZOOM_KEY_STEP = 0.1;
 /** Wheel-pixel to zoom-delta multiplier. Smaller = gentler. */
 const ZOOM_WHEEL_SCALE = 0.0012;
 /** Cap on one wheel event's zoom delta, so Mac trackpad swipes (many large
  *  deltaY events) cannot jump the camera. */
 const ZOOM_WHEEL_CLAMP = 0.05;
+/** Accumulated wheel delta that moves one zoom level. */
+const ZOOM_WHEEL_NOTCH = 0.12;
+/** Minimum time between two wheel-driven level changes (trackpads fire in bursts). */
+const ZOOM_WHEEL_COOLDOWN_MS = 140;
 /** WASD pan speed in px per frame. */
 const PAN_SPEED = 6;
 
@@ -26,6 +42,12 @@ type PanKeys = Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
 
 export class CameraController {
   zoom = INITIAL_ZOOM;
+  /** Wheel delta not yet spent on a level change. */
+  private wheelAcc = 0;
+  private lastWheelStep = -Infinity;
+  /** Sub-grid scroll left over by the snap, so slow pans still move. */
+  private restX = 0;
+  private restY = 0;
 
   constructor(private readonly ctx: SceneContext) {}
 
@@ -51,11 +73,29 @@ export class CameraController {
 
   /**
    * Change zoom by `delta`, optionally keeping the world point under
-   * (anchorWorldX, anchorWorldY) at the same screen position. Clamped.
+   * (anchorWorldX, anchorWorldY) at the same screen position. The result
+   * snaps to {@link ZOOM_STEPS}: a key-sized delta moves at least one level
+   * (toward the nearest level to `zoom + delta`), small wheel deltas
+   * accumulate until they add up to a notch.
    */
   applyZoom(delta: number, anchorWorldX?: number, anchorWorldY?: number): void {
     const cam = this.camera;
-    const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + delta));
+    const index = nearestStep(this.zoom);
+    let target = index;
+    if (Math.abs(delta) >= ZOOM_KEY_STEP - 1e-9) {
+      this.wheelAcc = 0;
+      target = nearestStep(this.zoom + delta);
+      if (target === index) target = index + Math.sign(delta);
+    } else {
+      this.wheelAcc += delta;
+      const now = this.ctx.scene.time.now;
+      if (Math.abs(this.wheelAcc) < ZOOM_WHEEL_NOTCH || now - this.lastWheelStep < ZOOM_WHEEL_COOLDOWN_MS) return;
+      target = index + Math.sign(this.wheelAcc);
+      this.wheelAcc = 0;
+      this.lastWheelStep = now;
+    }
+    target = Math.max(0, Math.min(ZOOM_STEPS.length - 1, target));
+    const newZoom = ZOOM_STEPS[target].zoom;
     if (newZoom === this.zoom) return;
     if (anchorWorldX !== undefined && anchorWorldY !== undefined) {
       const oldZoom = this.zoom;
@@ -69,18 +109,40 @@ export class CameraController {
       cam.setZoom(newZoom);
       this.zoom = newZoom;
     }
+    this.snapScroll();
   }
 
-  /** WASD panning; skipped while a text field has focus. */
+  /** WASD panning (skipped while a text field has focus), then the pixel snap. */
   update(): void {
-    if (isTextEntryActive()) return;
-    const keys = this.ctx.scene.input.keyboard?.addKeys('W,A,S,D', false) as PanKeys | undefined;
-    if (!keys) return;
+    const keys = isTextEntryActive()
+      ? undefined
+      : (this.ctx.scene.input.keyboard?.addKeys('W,A,S,D', false) as PanKeys | undefined);
     const cam = this.camera;
-    if (keys.W.isDown) cam.scrollY -= PAN_SPEED;
-    if (keys.S.isDown) cam.scrollY += PAN_SPEED;
-    if (keys.A.isDown) cam.scrollX -= PAN_SPEED;
-    if (keys.D.isDown) cam.scrollX += PAN_SPEED;
+    if (keys) {
+      if (keys.W.isDown) cam.scrollY -= PAN_SPEED;
+      if (keys.S.isDown) cam.scrollY += PAN_SPEED;
+      if (keys.A.isDown) cam.scrollX -= PAN_SPEED;
+      if (keys.D.isDown) cam.scrollX += PAN_SPEED;
+    }
+    this.snapScroll();
+  }
+
+  /**
+   * Keep the scroll on the zoom level's pixel grid, so every texel keeps its
+   * screen size pattern while panning (no shimmer). Sub-grid moves made by
+   * other code (drag, edge scroll, centerOn) are kept in a remainder.
+   */
+  private snapScroll(): void {
+    const cam = this.camera;
+    const grid = ZOOM_STEPS[nearestStep(this.zoom)].grid;
+    const tx = cam.scrollX + this.restX;
+    const ty = cam.scrollY + this.restY;
+    const sx = Math.round(tx / grid) * grid;
+    const sy = Math.round(ty / grid) * grid;
+    this.restX = tx - sx;
+    this.restY = ty - sy;
+    if (cam.scrollX !== sx) cam.scrollX = sx;
+    if (cam.scrollY !== sy) cam.scrollY = sy;
   }
 
   /** Centre the viewport on tile (tx, ty), on top of the terrain there. */
@@ -140,4 +202,13 @@ export class CameraController {
     const spawn = world.map.spawns[playerId];
     if (spawn) this.panToTile(spawn.x, spawn.y);
   }
+}
+
+/** Index of the zoom level closest to `zoom`. */
+function nearestStep(zoom: number): number {
+  let best = 0;
+  for (let i = 1; i < ZOOM_STEPS.length; i++) {
+    if (Math.abs(ZOOM_STEPS[i].zoom - zoom) < Math.abs(ZOOM_STEPS[best].zoom - zoom)) best = i;
+  }
+  return best;
 }

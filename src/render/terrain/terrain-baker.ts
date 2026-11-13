@@ -52,15 +52,28 @@ export interface TerrainBakeOptions {
   animFrames: number;
 }
 
-/** Bleed kept on tile edges shared with a same-height neighbour, in diamond units. */
+/** Bleed kept on tile edges shared with a same-height neighbour, in diamond units (smooth art). */
 const EDGE_BLEED = 0.12;
 const HALF_W = ISO.TILE_W / 2;
 const HALF_H = ISO.TILE_H / 2;
+/** Headroom above a tile for overlays that stick up (bridge rails). */
+const OVERLAY_HEADROOM = 12;
+const WATER: ReadonlySet<string> = new Set(['water', 'water_shallow']);
+/** Bridge decks and the edges their rails run along (the open sides). */
+const RAIL_EDGES: Readonly<Record<string, ReadonlyArray<readonly [number, number, string]>>> = {
+  bridge_x: [[0, -1, 'my'], [0, 1, 'py']],
+  bridge_y: [[-1, 0, 'mx'], [1, 0, 'px']],
+};
 
 export class TerrainBaker {
   private readonly scratchT: CanvasRenderingContext2D;
   private readonly scratchN: CanvasRenderingContext2D;
   private readonly scratchM: CanvasRenderingContext2D;
+  /**
+   * Style A pixel art (drawn at 1x): every pixel belongs to exactly one tile,
+   * so tiles are clipped to their pixel staircase and never smoothed.
+   */
+  private readonly pixelArt: boolean;
 
   constructor(
     private readonly map: MapData,
@@ -69,9 +82,10 @@ export class TerrainBaker {
     private readonly resolve: AtlasFrameResolver,
     private readonly opts: TerrainBakeOptions
   ) {
-    this.scratchT = context2d(1, 1);
-    this.scratchN = context2d(1, 1);
-    this.scratchM = context2d(1, 1);
+    this.pixelArt = art.scale >= 1;
+    this.scratchT = context2d(1, 1, this.pixelArt);
+    this.scratchN = context2d(1, 1, this.pixelArt);
+    this.scratchM = context2d(1, 1, this.pixelArt);
   }
 
   /** Bake the tiles x0..x1-1, y0..y1-1. Null when the range has no tiles. */
@@ -90,7 +104,7 @@ export class TerrainBaker {
       const steps = Math.max(this.dropTo(x, y + 1, x, y), this.dropTo(x + 1, y, x, y));
       minX = Math.min(minX, b.x - HALF_W - 6);
       maxX = Math.max(maxX, b.x + HALF_W + 6);
-      minY = Math.min(minY, b.y - ISO.TILE_H - 4);
+      minY = Math.min(minY, b.y - ISO.TILE_H - OVERLAY_HEADROOM);
       maxY = Math.max(maxY, b.y + steps * ISO.VPER + 6);
       if (ANIMATED_TERRAIN.has(this.nameAt(x, y))) animated = true;
     }
@@ -102,9 +116,11 @@ export class TerrainBaker {
     const frameCount = animated ? this.opts.animFrames : 1;
     const frames: HTMLCanvasElement[] = [];
     for (let f = 0; f < frameCount; f++) {
-      const ctx = context2d(Math.ceil(width * s), Math.ceil(height * s));
+      const ctx = context2d(Math.ceil(width * s), Math.ceil(height * s), this.pixelArt);
       ctx.setTransform(s, 0, 0, s, -ox * s, -oy * s);
       for (const [x, y] of tiles) this.drawTile(ctx, x, y, f);
+      // Rails stick up over the tiles behind and beside: after every deck.
+      for (const [x, y] of tiles) this.drawRails(ctx, x, y);
       frames.push(ctx.canvas);
     }
     return { x: ox, y: oy, width, height, frames };
@@ -142,12 +158,13 @@ export class TerrainBaker {
     const h = Math.ceil(tile.variant.size[1] * k * s);
     const ax = tile.variant.anchor[0] * k;
     const ay = tile.variant.anchor[1] * k;
-    const t = resetContext(this.scratchT, w, h, s);
+    const t = resetContext(this.scratchT, w, h, s, this.pixelArt);
     this.drawFrame(t, tile, ax, ay);
+    const self = this.nameAt(x, y);
     for (const transition of tileTransitions(this.names, x, y)) {
       const neighbour = this.tileFrame(transition.neighbour, x, y, frame);
       if (!neighbour) continue;
-      const m = resetContext(this.scratchM, w, h, s);
+      const m = resetContext(this.scratchM, w, h, s, this.pixelArt);
       let masked = false;
       for (const key of transition.masks) {
         const mask = this.art.frame('terrain.transition', key);
@@ -156,7 +173,11 @@ export class TerrainBaker {
         masked = true;
       }
       if (!masked) continue;
-      const n = resetContext(this.scratchN, w, h, s);
+      if (WATER.has(self) && !WATER.has(transition.neighbour) && transition.neighbour !== 'ice') {
+        // Shore: a foam ring just outside the land mask, under the land.
+        this.drawAtop(t, transition.masks.map((key) => `${key}.${frame % 2}`), 'terrain.foam', ax, ay);
+      }
+      const n = resetContext(this.scratchN, w, h, s, this.pixelArt);
       this.drawFrame(n, neighbour, ax, ay);
       n.setTransform(1, 0, 0, 1, 0, 0);
       n.globalCompositeOperation = 'destination-in';
@@ -168,7 +189,44 @@ export class TerrainBaker {
       t.globalCompositeOperation = 'source-over';
       t.setTransform(s, 0, 0, s, 0, 0);
     }
+    this.drawAtop(t, this.edgeAccents(x, y), 'terrain.edge', ax, ay);
     return t;
+  }
+
+  /** Elevation accents: contact shade at a cliff foot, lit rim on a raised edge. */
+  private edgeAccents(x: number, y: number): string[] {
+    const e = this.elevation(x, y);
+    const at = (nx: number, ny: number): number => (inside(nx, ny) ? this.elevation(nx, ny) : 0);
+    const keys: string[] = [];
+    if (at(x - 1, y) > e) keys.push('ao_mx');
+    if (at(x, y - 1) > e) keys.push('ao_my');
+    if (e > 0 && at(x + 1, y) < e) keys.push('rim_px');
+    if (e > 0 && at(x, y + 1) < e) keys.push('rim_py');
+    return keys;
+  }
+
+  /** Draw frames of `asset` over the tile scratch, only where the tile already has pixels. */
+  private drawAtop(t: CanvasRenderingContext2D, keys: readonly string[], asset: string, ax: number, ay: number): void {
+    if (keys.length === 0) return;
+    t.globalCompositeOperation = 'source-atop';
+    for (const key of keys) {
+      const f = this.art.frame(asset, key);
+      if (f) this.drawFrame(t, f, ax, ay);
+    }
+    t.globalCompositeOperation = 'source-over';
+  }
+
+  /** Railings along the open sides of a bridge deck. */
+  private drawRails(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const edges = RAIL_EDGES[this.nameAt(x, y)];
+    if (!edges) return;
+    const b = this.bottomCorner(x, y);
+    for (const [dx, dy, key] of edges) {
+      const n = inside(x + dx, y + dy) ? this.nameAt(x + dx, y + dy) : null;
+      if (n !== null && RAIL_EDGES[n]) continue;
+      const rail = this.art.frame('terrain.bridge_rail', key);
+      if (rail) this.drawFrame(ctx, rail, b.x, b.y);
+    }
   }
 
   /** Stacked cliff steps under the front edges, down to the lower neighbour. */
@@ -195,6 +253,10 @@ export class TerrainBaker {
    * map border are cut exactly, so the bleed never paints over a cliff face.
    */
   private clipTile(ctx: CanvasRenderingContext2D, x: number, y: number, b: { x: number; y: number }): void {
+    if (this.pixelArt) {
+      clipPixelDiamond(ctx, b.x, b.y - HALF_H);
+      return;
+    }
     const e = this.elevation(x, y);
     const kOf = (nx: number, ny: number): number =>
       inside(nx, ny) && this.elevation(nx, ny) === e ? EDGE_BLEED : 0;
@@ -277,15 +339,34 @@ function inside(x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < MAP.WIDTH && y < MAP.HEIGHT;
 }
 
-function context2d(width: number, height: number): CanvasRenderingContext2D {
+/**
+ * Clip to the pixels whose centres lie inside the 64x32 diamond centred on
+ * (cx, cy) (integer). Neighbouring diamonds partition the plane exactly, so
+ * pixel-art tiles meet without overlap or gaps and the clip has no soft edge.
+ */
+export function clipPixelDiamond(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.beginPath();
+  for (let row = 0; row < ISO.TILE_H; row++) {
+    const m = row < HALF_H ? HALF_H - 1 - row : row - HALF_H;
+    const w = HALF_W - 1 - 2 * m;
+    ctx.rect(cx - w, cy - HALF_H + row, 2 * w, 1);
+  }
+  ctx.clip();
+}
+
+function context2d(width: number, height: number, pixelArt = false): CanvasRenderingContext2D {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, width);
   canvas.height = Math.max(1, height);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas unavailable');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  smoothing(ctx, pixelArt);
   return ctx;
+}
+
+function smoothing(ctx: CanvasRenderingContext2D, pixelArt: boolean): void {
+  ctx.imageSmoothingEnabled = !pixelArt;
+  if (!pixelArt) ctx.imageSmoothingQuality = 'high';
 }
 
 /** Clear (resizing when needed) and scale a scratch context. */
@@ -293,14 +374,14 @@ function resetContext(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  scale: number
+  scale: number,
+  pixelArt = false
 ): CanvasRenderingContext2D {
   const canvas = ctx.canvas;
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    smoothing(ctx, pixelArt);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'source-over';
