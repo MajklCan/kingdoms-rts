@@ -28,7 +28,6 @@ import {
   clamp,
   compareDeterministicEids,
   compareGridPos,
-  removeSimEntity,
   sortedEids,
 } from '../core/entities';
 import { gatherCueForKind, pushSoundCue } from '../core/events';
@@ -133,6 +132,10 @@ function gatheringActive(world: SimWorld, eid: number): void {
     return;
   }
 
+  // Emptied earlier this tick by another gatherer: resourceDepletionSystem
+  // removes it and moves this gatherer on later in the same tick.
+  if (Resource.amount[target] <= 0) return;
+
   // Tick down the cooldown; emit a gather increment when it hits 0.
   if (Gatherer.cooldown[eid] > 0) {
     Gatherer.cooldown[eid] -= 1;
@@ -149,11 +152,8 @@ function gatheringActive(world: SimWorld, eid: number): void {
   Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
   pushSoundCue(world, gatherCueForKind(kind), Position.x[eid], Position.y[eid], Owner.player[eid]);
 
-  // If resource is now empty, retarget on next tick via WALKING_TO branch.
-  if (Resource.amount[target] <= 0) {
-    removeSimEntity(world, target);
-    Gatherer.targetEid[eid] = -1;
-  }
+  // An emptied node stays until resourceDepletionSystem removes it later this
+  // tick and retargets everyone still bound to it (this gatherer included).
 
   // If carry full, head home.
   if (ResourceCarry.amount[eid] >= VILLAGER_CARRY_CAPACITY) {

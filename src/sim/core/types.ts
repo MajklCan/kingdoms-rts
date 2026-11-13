@@ -172,6 +172,8 @@ export type GameEvent =
   | { kind: 'buildingCompleted'; tick: number; playerId: number; buildingDefId: number; eid: number; x: number; y: number }
   | { kind: 'researchCompleted'; tick: number; playerId: number; techId: TechIdValue }
   | { kind: 'ageAdvanced'; tick: number; playerId: number; ageId: number }
+  /** A resource node ran dry and was removed (trees leave a stump in render). */
+  | { kind: 'resourceDepleted'; tick: number; eid: number; resourceKind: number; x: number; y: number }
   | {
       kind: 'entityDestroyed';
       tick: number;
