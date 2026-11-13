@@ -88,14 +88,16 @@ def wall_banner(b: B, side: str, x0: float, y0: float, x1: float, y1: float, t: 
         s = -1 if side == "-y" else 1
         cx = x0 + (x1 - x0) * t
         pts = [(cx + u, z_top + v) for u, v in prof]
-        b.side_prism(pts, yy + s * 0.004, yy + s * 0.014, "team", axis="y")
+        with b.anim("hang", top=z_top, normal=(0.0, float(s)), len=h, pivot=(cx, yy, z_top)):
+            b.side_prism(pts, yy + s * 0.004, yy + s * 0.014, "team", axis="y")
         b.beam((cx - w / 2 - 0.02, yy + s * 0.02, z_top + 0.005), (cx + w / 2 + 0.02, yy + s * 0.02, z_top + 0.005), 0.012, rod_m)
     else:
         xx = x1 if side == "+x" else x0
         s = 1 if side == "+x" else -1
         cy = y0 + (y1 - y0) * t
         pts = [(cy + u, z_top + v) for u, v in prof]
-        b.side_prism(pts, xx + s * 0.004, xx + s * 0.014, "team", axis="x")
+        with b.anim("hang", top=z_top, normal=(float(s), 0.0), len=h, pivot=(xx, cy, z_top)):
+            b.side_prism(pts, xx + s * 0.004, xx + s * 0.014, "team", axis="x")
         b.beam((xx + s * 0.02, cy - w / 2 - 0.02, z_top + 0.005), (xx + s * 0.02, cy + w / 2 + 0.02, z_top + 0.005), 0.012, rod_m)
 
 

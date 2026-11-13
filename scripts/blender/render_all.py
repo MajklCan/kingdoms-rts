@@ -3,7 +3,11 @@
 Headless:
     /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup \
         -P scripts/blender/render_all.py -- [--families buildings,nature] [--only house] \
-        [--samples 96] [--no-pack] [--no-blend]
+        [--style A|smooth] [--samples N] [--no-pack] [--no-blend]
+
+--style A (default) voxelises every sprite onto the global style A lattice
+and renders at 1x with no anti-aliasing; --style smooth keeps the previous
+anti-aliased 2x look.
 
 Inside a live Blender (MCP execute_blender_code):
     import sys; sys.argv = ["blender", "--", "--only", "house"]
@@ -42,13 +46,15 @@ def _args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--families", default=",".join(FAMILIES))
     p.add_argument("--only", default=None, help="substring filter on job names")
-    p.add_argument("--samples", type=int, default=96)
+    p.add_argument("--style", default="A", choices=sorted(kr_lib.STYLES),
+                   help="A = hi-res voxel diorama (default), smooth = previous anti-aliased 2x look")
+    p.add_argument("--samples", type=int, default=None, help="override the style's sample count")
     p.add_argument("--no-pack", action="store_true")
     p.add_argument("--no-blend", action="store_true")
     return p.parse_args(argv)
 
 
-def run_family(family: str, only: str | None, samples: int, save_blend: bool) -> list[dict]:
+def run_family(family: str, only: str | None, samples: int | None, save_blend: bool) -> list[dict]:
     mod = importlib.import_module(family)
     importlib.reload(mod)
     custom = hasattr(mod, "render")  # families that slice/compose their own frames (terrain)
@@ -67,6 +73,8 @@ def run_family(family: str, only: str | None, samples: int, save_blend: bool) ->
     print(f"[{family}] {len(records)} sprites in {time.time() - t0:.1f}s")
     for rec in records:
         rec["family"] = family
+        rec["style"] = kr_lib.STYLE
+        rec["renderScale"] = kr_lib.RENDER_SCALE
         for k, v in list(rec["files"].items()):
             rec["files"][k] = os.path.relpath(v, kr_lib.REPO_ROOT)
     rec_path = os.path.join(out_dir, "records.json")
@@ -87,6 +95,10 @@ def run_family(family: str, only: str | None, samples: int, save_blend: bool) ->
 
 def main() -> None:
     args = _args()
+    kr_lib.configure(args.style)
+    for mod in ("kr_voxel", "kr_kit", "bld_common", "nature", "decor", "buildings", "terrain"):
+        if mod in sys.modules:  # live Blender re-runs: pick up the new style
+            importlib.reload(sys.modules[mod])
     fams = [f.strip() for f in args.families.split(",") if f.strip()]
     for fam in fams:
         run_family(fam, args.only, args.samples, not args.no_blend)

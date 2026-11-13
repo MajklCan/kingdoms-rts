@@ -337,10 +337,69 @@ def ore_pile(col, rng, kind: str, amount: float) -> None:
 # ---------------------------------------------------------------------------
 
 
+def rock_spire(col, rng, size: int) -> None:
+    """Map feature: a cluster of weathered rock columns over a size x size footprint."""
+    b = B(col, rng)
+    rock = _m("rock_spire", ROCK)
+    warm = _m("rock_warm", ROCK_WARM)
+    moss = _m("leaf_bush", LEAF["bush"])
+    s = float(size)
+    # scree and boulders around the foot
+    for _ in range(int(9 * s)):
+        a = rng.uniform(0, math.tau)
+        r = rng.uniform(0.28, 0.46) * s
+        rad = rng.uniform(0.06, 0.13) * math.sqrt(s)
+        o = clump(b, (math.cos(a) * r, math.sin(a) * r, rad * 0.2), rad, rock if rng.random() < 0.7 else warm,
+                  scale=(1.2, 1.0, 0.6), rough=0.5, subdiv=2)
+        for p in o.data.polygons:
+            p.use_smooth = False
+    # columns: stacked, slightly offset, tapering rock drums
+    n = 3 if size <= 2 else 7
+    for i in range(n):
+        if i == 0:
+            cx, cy = rng.uniform(-0.05, 0.05) * s, rng.uniform(-0.05, 0.05) * s
+            h = (1.25 if size <= 2 else 0.95) * s
+            r0 = 0.24 * s if size <= 2 else 0.16 * s
+        else:
+            a = rng.uniform(0, math.tau)
+            d = rng.uniform(0.12, 0.3) * s
+            cx, cy = math.cos(a) * d, math.sin(a) * d
+            h = rng.uniform(0.45, 0.85) * s * (1.0 if size <= 2 else 0.8)
+            r0 = rng.uniform(0.12, 0.18) * s * (1.0 if size <= 2 else 0.7)
+        # one weathered, leaning column (tapered prism, roughened), plus a few ledges
+        x = cx + rng.uniform(-0.06, 0.06) * s
+        y = cy + rng.uniform(-0.06, 0.06) * s
+        z = h
+        core = b.cyl((cx, cy, 0.0), (x, y, h), r0, rock if i % 3 else warm, r2=r0 * 0.5, segs=7)
+        b.roughen(core, 0.035 * s, 0.14 * s, 2)
+        for _ in range(2 if size <= 2 else 1):
+            t = rng.uniform(0.25, 0.7)
+            a = rng.uniform(0, math.tau)
+            r = r0 * (1.0 - 0.5 * t)
+            lx = cx + (x - cx) * t + math.cos(a) * r * 0.8
+            ly = cy + (y - cy) * t + math.sin(a) * r * 0.8
+            o = clump(b, (lx, ly, h * t), r * 0.55, warm if rng.random() < 0.5 else rock, scale=(1.2, 1.0, 0.5),
+                      rough=0.4, subdiv=2)
+            for p in o.data.polygons:
+                p.use_smooth = False
+        # a cap of moss on some tops
+        if rng.random() < 0.6:
+            clump(b, (x, y, z + 0.02), r0 * 0.5, moss, scale=(1.0, 1.0, 0.35), rough=0.6, subdiv=2)
+
+
+def landmark_linden(col, rng) -> None:
+    """Map feature: an old, oversized linden (drawn instead of a scaled tree)."""
+    broadleaf(col, rng, "linden")
+    for ob in col.objects:
+        ob.scale = (1.4, 1.4, 1.4)
+
+
 def _job(name: str, fn, asset: str, variant: str, kind: str = "resource", group: str | None = None, **meta) -> Job:
     d = {"asset": asset, "variant": variant, "kind": kind, "footprint": 1}
     d.update(meta)
-    return Job(name, fn, (1, 1), group=group or asset, meta=d)
+    # standing trees get two sway poses (style A), drawn by the engine as a 3 frame sway
+    poses = ("swayl", "swayr") if name.startswith("tree_") and name != "tree_dead" else ()
+    return Job(name, fn, (1, 1), group=group or asset, meta=d, poses=poses)
 
 
 def jobs(only: str | None = None) -> list[Job]:
@@ -365,6 +424,11 @@ def jobs(only: str | None = None) -> list[Job]:
                         resource="GOLD", amount=amt))
         out.append(_job(f"stone_{label}", lambda c, r, a=amt: ore_pile(c, r, "stone", a), "resource.stone", label,
                         resource="STONE", amount=amt))
+    for size in (2, 4):
+        out.append(Job(f"rock_spire_{size}", lambda c, r, s=size: rock_spire(c, r, s), (size, size),
+                       meta={"asset": "feature.rock_spire", "variant": str(size), "kind": "feature", "footprint": size}))
+    out.append(Job("landmark_linden", landmark_linden, (1, 1), poses=("swayl", "swayr"),
+                   meta={"asset": "feature.linden", "variant": "default", "kind": "feature", "footprint": 1}))
     if only:
         keys = [k.strip() for k in only.split(",")]
         out = [j for j in out if any(k in j.name for k in keys)]
