@@ -311,10 +311,11 @@ def ground_field(kind: str, period: int, frame: int = 0, frames: int = 1) -> Fie
         f.tip = np.broadcast_to(hexc(0xf7fafd), (n, n, 3)).copy()
         f.body = np.broadcast_to(hexc(0xc6d4e4), (n, n, 3)).copy()
         if kind == "snow_forest":
-            needles = pnoise(i, j, n, 16, 75) > 0.55
-            f.ground = mix(f.ground, 0x6a6244, (needles & (hash01(i, j, 16) < 0.18)) * 0.8)
-            sc.twig(4, 0x4a3a28)
-            sc.column(2, (1, 2), 0x3e5a3a, 0x2c4430, where=f.height == 0)
+            # sparse and soft: dense dark needles read as dirt speckle in game
+            needles = pnoise(i, j, n, 16, 75) > 0.6
+            f.ground = mix(f.ground, 0x8a8670, (needles & (hash01(i, j, 16) < 0.08)) * 0.6)
+            sc.twig(1.5, 0x6a5a48)
+            sc.column(1.2, (1, 2), 0x4a6a46, 0x36503a, where=f.height == 0)
         else:
             sc.column(0.6, (1, 1), 0x9a9a98, 0x6e7072, where=f.height == 0)
     elif kind == "packed_snow":
@@ -522,10 +523,12 @@ def cliff_face(recipe: str, side: str, lip: bool) -> np.ndarray:
     _name, (dark, mid, light), lip_c, lip_tip = next(c for c in CLIFFS if c[0] == recipe)
     fw, fh = TILE_W // 2, TILE_H // 2 + STEP_PX
     ys, xs = np.mgrid[0:fh, 0:fw]
+    # Top edge follows the pixel diamond's lower edges exactly (a lone column
+    # at each end, then pairs), or the step leaves 1 px holes along the rim.
     if side == "left":
         layer = ys - (xs + 1) // 2
     else:
-        layer = ys - TILE_H // 2 + xs // 2
+        layer = ys - TILE_H // 2 + (xs + 1) // 2
     inside = (layer >= 0) & (layer < STEP_PX)
     c = xs  # voxel column along the face
     seed = 7 if side == "left" else 9
@@ -642,8 +645,9 @@ def edge_shade() -> dict[str, np.ndarray]:
     ci, cj = _frame_cells()
     out = {}
     for key, ring, rgb, alphas in (
-        ("ao_mx", ci, 0x101820, (110, 60)),
-        ("ao_my", cj, 0x101820, (110, 60)),
+        # soft and warm: a strong navy line read as a dotted outline on grass
+        ("ao_mx", ci, 0x1c2414, (52, 24)),
+        ("ao_my", cj, 0x1c2414, (52, 24)),
         ("rim_px", CELLS - 1 - ci, 0xfff6d8, (70, 0)),
         ("rim_py", CELLS - 1 - cj, 0xfff6d8, (70, 0)),
     ):

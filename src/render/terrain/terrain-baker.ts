@@ -58,6 +58,8 @@ const HALF_W = ISO.TILE_W / 2;
 const HALF_H = ISO.TILE_H / 2;
 /** Headroom above a tile for overlays that stick up (bridge rails). */
 const OVERLAY_HEADROOM = 12;
+/** Chunk origins snap to this many px (see bakeChunk). */
+const CHUNK_ALIGN = 4;
 const WATER: ReadonlySet<string> = new Set(['water', 'water_shallow']);
 /** Bridge decks and the edges their rails run along (the open sides). */
 const RAIL_EDGES: Readonly<Record<string, ReadonlyArray<readonly [number, number, string]>>> = {
@@ -88,14 +90,18 @@ export class TerrainBaker {
     this.scratchM = context2d(1, 1, this.pixelArt);
   }
 
-  /** Bake the tiles x0..x1-1, y0..y1-1. Null when the range has no tiles. */
+  /**
+   * Bake the tiles x0..x1-1, y0..y1-1 (one cell of a square chunk grid).
+   * Null when the range has no tiles.
+   */
   bakeChunk(x0: number, y0: number, x1: number, y1: number): TerrainChunkBake | null {
     const tiles: Array<[number, number]> = [];
     for (let y = y0; y < Math.min(y1, MAP.HEIGHT); y++) {
       for (let x = x0; x < Math.min(x1, MAP.WIDTH); x++) tiles.push([x, y]);
     }
     if (tiles.length === 0) return null;
-    tiles.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0]);
+    tiles.sort(painterOrder);
+    const under = this.seamUnderlay(x0, y0, x1, y1);
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     let animated = false;
@@ -108,9 +114,12 @@ export class TerrainBaker {
       maxY = Math.max(maxY, b.y + steps * ISO.VPER + 6);
       if (ANIMATED_TERRAIN.has(this.nameAt(x, y))) animated = true;
     }
+    for (const [x, y] of under) if (ANIMATED_TERRAIN.has(this.nameAt(x, y))) animated = true;
     const s = this.opts.scale;
-    const ox = Math.floor(minX);
-    const oy = Math.floor(minY);
+    // Chunk origins on a 4 px grid, so every chunk rounds to screen pixels
+    // the same way at the fractional zoom steps (0.5, 0.75, 1.5, 2.5).
+    const ox = Math.floor(minX / CHUNK_ALIGN) * CHUNK_ALIGN;
+    const oy = Math.floor(minY / CHUNK_ALIGN) * CHUNK_ALIGN;
     const width = Math.ceil(maxX) - ox;
     const height = Math.ceil(maxY) - oy;
     const frameCount = animated ? this.opts.animFrames : 1;
@@ -118,12 +127,37 @@ export class TerrainBaker {
     for (let f = 0; f < frameCount; f++) {
       const ctx = context2d(Math.ceil(width * s), Math.ceil(height * s), this.pixelArt);
       ctx.setTransform(s, 0, 0, s, -ox * s, -oy * s);
+      for (const [x, y] of under) this.drawTile(ctx, x, y, f);
       for (const [x, y] of tiles) this.drawTile(ctx, x, y, f);
       // Rails stick up over the tiles behind and beside: after every deck.
       for (const [x, y] of tiles) this.drawRails(ctx, x, y);
       frames.push(ctx.canvas);
     }
     return { x: ox, y: oy, width, height, frames };
+  }
+
+  /**
+   * The ring of tiles just outside a chunk that belong to chunks drawn after
+   * it. They go under the chunk's own tiles, so its transparent margin along
+   * those seams holds the neighbour's pixels. At a fractional zoom a screen
+   * pixel can sample exactly on a seam, where each chunk may round to the
+   * other's (transparent) texel; the underlay keeps that pixel opaque. The
+   * later chunk paints over the underlay, so it never shows otherwise.
+   */
+  private seamUnderlay(x0: number, y0: number, x1: number, y1: number): Array<[number, number]> {
+    const size = x1 - x0;
+    const cx = Math.floor(x0 / size);
+    const cy = Math.floor(y0 / size);
+    const out: Array<[number, number]> = [];
+    for (let y = Math.max(0, y0 - 1); y <= Math.min(y1, MAP.HEIGHT - 1); y++) {
+      for (let x = Math.max(0, x0 - 1); x <= Math.min(x1, MAP.WIDTH - 1); x++) {
+        if (x >= x0 && x < x1 && y >= y0 && y < y1) continue;
+        const tx = Math.floor(x / size);
+        const ty = Math.floor(y / size);
+        if (painterOrder([tx, ty], [cx, cy]) > 0) out.push([x, y]);
+      }
+    }
+    return out.sort(painterOrder);
   }
 
   private drawTile(ctx: CanvasRenderingContext2D, x: number, y: number, frame: number): void {
@@ -333,6 +367,11 @@ export class TerrainBaker {
   private nameAt(x: number, y: number): string {
     return this.names[y * MAP.WIDTH + x] ?? 'grass';
   }
+}
+
+/** Back-to-front order of tiles (or chunks): by x+y, then x. */
+function painterOrder(a: readonly [number, number], b: readonly [number, number]): number {
+  return a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0];
 }
 
 function inside(x: number, y: number): boolean {

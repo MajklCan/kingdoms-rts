@@ -25,6 +25,8 @@ import argparse
 import importlib
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 
@@ -105,6 +107,12 @@ def main() -> None:
     if not args.no_pack:
         pack = os.path.join(kr_lib.REPO_ROOT, "scripts", "pack_sprites.py")
         if os.path.exists(pack):
+            # Prefer the system python: Pillow does the 256 colour quantize,
+            # Blender's bundled python (OpenImageIO) writes full colour.
+            py = shutil.which("python3")
+            if py and subprocess.run([py, "-c", "import PIL, numpy"], capture_output=True).returncode == 0:
+                subprocess.run([py, pack], check=True)
+                return
             sys.argv = [pack]
             ns: dict = {"__name__": "__main__", "__file__": pack}
             with open(pack) as fh:
