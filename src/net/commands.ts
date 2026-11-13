@@ -11,7 +11,8 @@
  *   raw bitECS eids differ between clients.
  *
  * Selection-relative SimInput types read the local Selected component, so they
- * never go on the wire: the caller translates them into cmd* first.
+ * never go on the wire: MultiplayerSession.sendCommand translates them into
+ * cmd* first (toSelfDescribingInput in the sim), and receivers drop them.
  */
 
 import { entityForNetId, netIdForEntity, type SimInput, type SimWorld } from '@sim/world';
@@ -52,7 +53,7 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   setArmyRallyPoint: { x: 'num', y: 'num' },
   placeBuilding: { defId: 'int', x: 'num', y: 'num' },
   trainUnit: { atEid: 'int', defId: 'int', count: 'optInt' },
-  cancelProduction: { atEid: 'int' },
+  cancelProduction: { atEid: 'int', slot: 'optInt' },
   advanceAge: {},
   researchTech: { techId: 'string' },
 };

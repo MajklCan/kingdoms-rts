@@ -4,12 +4,21 @@
  * networked match is in progress (the free-running render accumulator must NOT
  * step the sim in multiplayer; it only renders + interpolates).
  *
- * Lifecycle: lobby → (host) start → playing → (desync | peer-left | ended).
+ * Lifecycle: lobby -> (host) start -> playing -> (desync | peer-left |
+ * disconnected | left). There is no reconnect: every state after playing is
+ * terminal and the UI returns to the menu.
  */
 
 import { SIM } from '../config';
 import { checksumWorld } from '@sim/checksum';
-import { LOCAL_PLAYER_ID, createSimWorld, step, type SimInput, type SimWorld } from '@sim/world';
+import {
+  LOCAL_PLAYER_ID,
+  createSimWorld,
+  step,
+  toSelfDescribingInput,
+  type SimInput,
+  type SimWorld,
+} from '@sim/world';
 import { ChecksumLedger, type ChecksumComparison } from './checksum-ledger';
 import {
   decodeInputFromWire,
@@ -34,7 +43,9 @@ export type SessionState =
   | 'playing'
   | 'desync'
   | 'peer-left'
-  | 'disconnected';
+  | 'disconnected'
+  /** We left on purpose (leave()). Terminal; the transport is closed. */
+  | 'left';
 
 export interface SessionCallbacks {
   onStateChange?: (state: SessionState) => void;
@@ -150,7 +161,7 @@ export class MultiplayerSession {
     transport.onMessage((msg) => this.handle(msg));
     transport.onClose((info) => {
       this.recordEvent('transport-close', infoToDebug(info));
-      this.setState('disconnected');
+      if (this.state !== 'left') this.setState('disconnected');
     });
   }
 
@@ -161,13 +172,26 @@ export class MultiplayerSession {
     this.transport.send({ t: 'start', seed });
   }
 
-  /** Issue a local, already self-describing command. It is scheduled for a
-   *  future tick and applied identically on every client. Commands peers would
-   *  reject (selection-relative, malformed, another player's id) are dropped
-   *  here too, so the local client never applies what its peers drop. */
+  /** Leave the room for good: closes the transport (the relay tells the peer)
+   *  and parks the session in the terminal 'left' state. Idempotent. */
+  leave(): void {
+    if (this.state === 'left') return;
+    this.recordEvent('leave');
+    this.setState('left');
+    this.lockstep = null;
+    this.transport.close();
+  }
+
+  /** Issue a local command. Selection-relative inputs are first translated
+   *  into their self-describing cmd* form from the local selection (the same
+   *  translation the render command layer uses). The command is scheduled for
+   *  a future tick and applied identically on every client. Commands peers
+   *  would reject (malformed, another player's id) are dropped here too, so
+   *  the local client never applies what its peers drop. */
   sendCommand(input: SimInput): void {
     if (!this.world) return;
-    const encoded = isWireCommandType(input.type) ? encodeInputForWire(this.world, input) : input;
+    const described = toSelfDescribingInput(this.world, this.localPlayerId, input);
+    const encoded = isWireCommandType(described.type) ? encodeInputForWire(this.world, described) : described;
     const cmd = sanitizeWireCommand(this.localPlayerId, encoded);
     if (!cmd) {
       this.recordEvent('command-rejected', inputDebug(input));
@@ -308,6 +332,7 @@ export class MultiplayerSession {
   }
 
   private handle(msg: ServerMessage): void {
+    if (this.state === 'left') return;
     switch (msg.t) {
       case 'joined':
         this.localPlayerId = msg.playerId;
