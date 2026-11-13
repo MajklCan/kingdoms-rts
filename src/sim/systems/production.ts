@@ -32,7 +32,7 @@ import {
   spawnSpearman,
   spawnVillager,
 } from '../factories/units';
-import { isMovableEntity } from '../world';
+import { isMovableEntity } from '../input/formation';
 import {
   countQueuedWorksiteWorkers,
   countWorksiteWorkers,

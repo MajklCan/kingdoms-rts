@@ -22,7 +22,7 @@ import { canUnitOccupyMovementTarget, canUnitSqueezeAlongDiagonalPath } from '..
 import { workerContactCrowdPenalty } from '../core/navigation';
 import { movableQuery } from '../core/queries';
 import type { MovementStuckState, SimWorld } from '../core/types';
-import { clearFormationSpeedCap } from '../world';
+import { clearFormationSpeedCap } from '../input/unit-orders';
 import { isEconomicWorker, unitSeparationSystem } from './separation';
 import { isTileInMap } from './visibility';
 

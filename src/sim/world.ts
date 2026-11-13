@@ -3,6 +3,7 @@
  * render, net, debug and tests build against. Implementation lives in:
  *   core/      world shape, constants, entity ids, queries, world creation
  *   factories/ spawn helpers and the late-game preset fixture
+ *   input/     applyInput command handlers
  *   systems/   per-tick systems
  * Keep this file a barrel: add new code to the module that owns it.
  */
@@ -78,6 +79,7 @@ export {
   spawnTownCenter,
 } from './factories/buildings';
 export { createLateGameTestWorld } from './factories/late-game';
+export { playerFormationFacing, playerFormationMode } from './input/formation';
 export {
   createVisibilityState,
   createVisibilityStates,
@@ -94,42 +96,30 @@ export {
 export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
 export { getWorksiteWorkerSlots } from './systems/worksites';
 
-import { addComponent, hasComponent } from 'bitecs';
+import { hasComponent } from 'bitecs';
 import { MAP, SIM } from '../config';
 import {
   ArcherTag,
   AttackMoveGoal,
   AttackTarget,
-  BuildOrder,
   Building,
   CannonTag,
   Combat,
   ConstructionSite,
-  Cooldown,
-  DeadTag,
-  Gatherer,
-  GathererStateId,
   GunmanTag,
   Health,
-  MachineGunTag,
   Owner,
   PopulationCost,
   Position,
-  Resource,
-  ResourceCarry,
   type ResourceKind,
   ResourceKindId,
   ResourceWorksite,
   ScoutCavalryTag,
   SpearmanTag,
-  Speed,
   UnitKind,
   UnitStance,
   UnitStanceId,
-  type UnitStanceValue,
-  Velocity,
   VillagerTag,
-  WorksiteWorker,
 } from './components';
 import {
   AGE_TABLE,
@@ -165,14 +155,9 @@ import {
 } from './tech-tree';
 import { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
 import { applyStartingResources, createAgeState, createSimWorld } from './core/create-world';
-import { isLiveEntity, removeSimEntity, sortedEids } from './core/entities';
+import { isLiveEntity, removeSimEntity } from './core/entities';
 import { pushAiEvent } from './core/events';
-import {
-  canUnitOccupy,
-  distToBuildingEdge,
-  findSpawnSpot,
-  markFootprintBlocked,
-} from './core/grid';
+import { distToBuildingEdge, findSpawnSpot, markFootprintBlocked } from './core/grid';
 import {
   findBuildingAt,
   findEntityNear,
@@ -182,14 +167,8 @@ import {
 } from './core/lookup';
 import { pathTo } from './core/navigation';
 import { countPendingPopCap, countQueuedPopCost, recalculatePlayerPopCap } from './core/population';
-import {
-  buildingQuery,
-  resourceQuery,
-  selectedQuery,
-  townCenterQuery,
-  unitQuery,
-} from './core/queries';
-import type { AiDifficulty, AiPlayerState, CampaignState, SimInput, SimWorld } from './core/types';
+import { buildingQuery, resourceQuery, townCenterQuery, unitQuery } from './core/queries';
+import type { AiDifficulty, AiPlayerState, CampaignState, SimWorld } from './core/types';
 import { spawnFoundation, spawnResource, spawnTownCenter } from './factories/buildings';
 import {
   findPresetUnitSpot,
@@ -201,19 +180,28 @@ import {
   spawnPresetUnits,
 } from './factories/late-game';
 import { spawnScoutCavalry, spawnVillager } from './factories/units';
+import { applyInput } from './input/apply-input';
+import { canPlaceBuildingAt } from './input/buildings';
+import { formationDestinations, isMovableEntity } from './input/formation';
+import {
+  applyFormationSpeedCap,
+  clearCombatOrders,
+  clearFormationSpeedCap,
+  clearWorkOrders,
+  setUnitHoldAnchor,
+} from './input/unit-orders';
 import { ageProgressionSystem, applyAdvanceAge, applyResearchTech } from './systems/age-tech';
 import { combatSystem } from './systems/combat';
 import { constructionSystem } from './systems/construction';
 import { cleanupSystem, deathSystem } from './systems/death';
-import { dropoffSystem, routeToNearestDropOff } from './systems/dropoff';
+import { dropoffSystem } from './systems/dropoff';
 import { forestRegrowthSystem } from './systems/forest-regrowth';
-import { gatheringSystem, startGatheringResource } from './systems/gathering';
+import { gatheringSystem } from './systems/gathering';
 import { movementSystem } from './systems/movement';
-import { applyCancelProduction, applyTrainUnit, productionSystem } from './systems/production';
+import { productionSystem } from './systems/production';
 import { cannonImpactSystem, projectileImpactSystem } from './systems/projectiles';
 import { isTargetInAttackRange, isValidHostileTarget, targetingSystem } from './systems/targeting';
 import {
-  isEntityVisibleTo,
   isTileInMap,
   revealMapForPlayer,
   updatePlayerVisibility,
@@ -224,7 +212,6 @@ import {
   countQueuedWorksiteWorkers,
   countWorksiteWorkers,
   getWorksiteWorkerSlots,
-  markWorksiteWorkersDead,
   resourceWorksiteSystem,
   worksiteUsesResourceNodes,
 } from './systems/worksites';
@@ -266,15 +253,7 @@ const ZBOROV_BUNKER_FRAC = 0.19;
 const ZBOROV_PLAYER_BUNKER_FRAC = 0.81;
 const ZBOROV_PLAYER_LINE_FRAC = 0.70;
 const ZBOROV_MG_OFFSETS = [-13, -4, 4, 13];
-const FORMATION_MODE_FREE = 0;
-const FORMATION_MODE_LINE = 1;
-const FORMATION_MODE_COMPACT = 2;
-const FORMATION_MODE_MIN = FORMATION_MODE_FREE;
-const FORMATION_MODE_MAX = FORMATION_MODE_COMPACT;
-export const FORMATION_MODE_DEFAULT = FORMATION_MODE_FREE;
-const FORMATION_FACING_STEPS = 8;
-export const FORMATION_FACING_DEFAULT = 0;
-const FORMATION_MAX_COLUMNS = 12;
+export const FORMATION_MODE_LINE = 1;
 const AI_DEFENSE_RADIUS = 11;
 const AI_DEFENSE_ORDER_RADIUS = 18;
 const AI_STAGE_RADIUS = 3.5;
@@ -1979,780 +1958,6 @@ export function step(world: SimWorld): void {
   winConditionSystem(world);
 
   world.tick += 1;
-}
-
-function applyInput(world: SimWorld, input: SimInput): void {
-  switch (input.type) {
-    case 'moveSelected':
-      applyMoveSelected(world, input.to);
-      return;
-    case 'gatherSelected':
-      applyGatherSelected(world, input.targetEid);
-      return;
-    case 'stopSelected':
-      applyStopSelected(world);
-      return;
-    case 'toggleSelectedUnitStance':
-      applyToggleSelectedUnitStance(world);
-      return;
-    case 'setSelectedUnitStance':
-      applySetSelectedUnitStance(world, input.stance);
-      return;
-    case 'setFormationMode':
-      applySetFormationMode(world, input.mode);
-      return;
-    case 'adjustFormationMode':
-      applyAdjustFormationMode(world, input.delta);
-      return;
-    case 'rotateSelectedFormation':
-      applyRotateSelectedFormation(world, input.delta);
-      return;
-    case 'reformSelectedFormation':
-      applyReformSelectedFormation(world);
-      return;
-    case 'attackSelected':
-      applyAttackSelected(world, input.targetEid);
-      return;
-    case 'attackMoveSelected':
-      applyAttackMoveSelected(world, input.to);
-      return;
-    case 'cmdMove':
-      applyMoveCommand(world, input.playerId, input.eids, input.to);
-      return;
-    case 'cmdGather':
-      applyGatherCommand(world, input.playerId, input.eids, input.targetEid);
-      return;
-    case 'cmdStop':
-      applyStopCommand(world, input.playerId, input.eids);
-      return;
-    case 'cmdToggleStance':
-      applyToggleStanceCommand(world, input.playerId, input.eids);
-      return;
-    case 'cmdAttack':
-      applyAttackCommand(world, input.playerId, input.eids, input.targetEid);
-      return;
-    case 'cmdAttackMove':
-      applyAttackMoveCommand(world, input.playerId, input.eids, input.to);
-      return;
-    case 'setArmyRallyPoint':
-      applySetArmyRallyPoint(world, input.playerId, input.x, input.y);
-      return;
-    case 'placeBuilding':
-      applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId);
-      return;
-    case 'removeSelectedBuildings':
-      applyRemoveSelectedBuildings(world, input.playerId);
-      return;
-    case 'cmdRemoveBuildings':
-      applyRemoveBuildingsCommand(world, input.playerId, input.eids);
-      return;
-    case 'cmdSetStance':
-      applySetStanceCommand(world, input.playerId, input.eids, input.stance);
-      return;
-    case 'cmdSetFormationMode':
-      applySetFormationModeCommand(world, input.playerId, input.eids, input.mode);
-      return;
-    case 'cmdAdjustFormationMode':
-      applyAdjustFormationModeCommand(world, input.playerId, input.eids, input.delta);
-      return;
-    case 'cmdRotateFormation':
-      applyRotateFormationCommand(world, input.playerId, input.eids, input.delta);
-      return;
-    case 'cmdReformFormation':
-      applyReformFormationCommand(world, input.playerId, input.eids);
-      return;
-    case 'trainUnit':
-      if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
-      applyTrainUnit(world, input.atEid, input.defId, input.count);
-      return;
-    case 'cancelProduction':
-      if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
-      applyCancelProduction(world, input.atEid);
-      return;
-    case 'advanceAge':
-      applyAdvanceAge(world, input.playerId);
-      return;
-    case 'researchTech':
-      applyResearchTech(world, input.playerId, input.techId);
-      return;
-  }
-}
-
-/** Selected entities the local player owns. All command handlers route
- *  through this so the player can't command enemy or gaia units. */
-function commandableSelection(world: SimWorld): number[] {
-  const out: number[] = [];
-  for (const eid of selectedQuery(world.ecs)) {
-    if (hasComponent(world.ecs, WorksiteWorker, eid)) continue;
-    if (Owner.player[eid] === LOCAL_PLAYER_ID) out.push(eid);
-  }
-  return out;
-}
-
-/** Validate a network/explicit eid list: keep only live entities the
- *  commanding player owns and that are commandable (not worksite workers, not
- *  dead). This is the trust boundary for commands arriving over the wire — a
- *  peer must not be able to move another player's units. Iteration order
- *  follows the supplied list, then is unused for ordering-sensitive mutations
- *  because callers that care re-sort (e.g. formationDestinations). */
-function ownedCommandableEids(world: SimWorld, playerId: number, eids: number[]): number[] {
-  const out: number[] = [];
-  const seen = new Set<number>();
-  for (const eid of eids) {
-    if (seen.has(eid)) continue;
-    seen.add(eid);
-    if (!hasComponent(world.ecs, Owner, eid)) continue;
-    if (Owner.player[eid] !== playerId) continue;
-    if (hasComponent(world.ecs, WorksiteWorker, eid)) continue;
-    if (hasComponent(world.ecs, DeadTag, eid)) continue;
-    out.push(eid);
-  }
-  return out;
-}
-
-/** Does `playerId` own building/unit `eid`? Trust boundary for commands that
- *  target a single global eid (trainUnit, cancelProduction). */
-function ownsCommandTarget(world: SimWorld, playerId: number, eid: number): boolean {
-  return hasComponent(world.ecs, Owner, eid) && Owner.player[eid] === playerId;
-}
-
-/** Cancel the combat side of a unit's current orders. Used whenever a
- *  non-attack command is issued so units don't keep chasing whatever they
- *  were last fighting. */
-function clearCombatOrders(world: SimWorld, eid: number): void {
-  if (hasComponent(world.ecs, AttackTarget, eid)) {
-    AttackTarget.targetEid[eid] = -1;
-    AttackTarget.retainGoal[eid] = 0;
-  }
-  if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-    AttackMoveGoal.active[eid] = 0;
-  }
-  if (hasComponent(world.ecs, Cooldown, eid)) {
-    // Don't zero the cooldown — that would let units fire instantly on a
-    // new aggro acquire. Keep it as-is.
-  }
-  world.cannonWindups.delete(eid);
-  clearFormationSpeedCap(world, eid);
-}
-
-/** Cancel the gathering / building side. Mirror of clearCombatOrders. */
-export function clearWorkOrders(world: SimWorld, eid: number): void {
-  if (hasComponent(world.ecs, Gatherer, eid)) {
-    Gatherer.state[eid] = GathererStateId.IDLE;
-    Gatherer.targetEid[eid] = -1;
-    Gatherer.cooldown[eid] = 0;
-  }
-  if (hasComponent(world.ecs, BuildOrder, eid)) {
-    BuildOrder.targetEid[eid] = -1;
-  }
-}
-
-export function clearFormationSpeedCap(world: SimWorld, eid: number): void {
-  world.formationSpeedCaps.delete(eid);
-}
-
-function setUnitHoldAnchor(world: SimWorld, eid: number, x = Position.x[eid], y = Position.y[eid]): void {
-  if (!hasComponent(world.ecs, UnitStance, eid)) return;
-  UnitStance.anchorX[eid] = x;
-  UnitStance.anchorY[eid] = y;
-}
-
-function applyFormationSpeedCap(world: SimWorld, eids: number[]): void {
-  for (const eid of eids) clearFormationSpeedCap(world, eid);
-  if (eids.length <= 1) return;
-  let speedCap = Infinity;
-  for (const eid of eids) {
-    if (!hasComponent(world.ecs, Speed, eid)) continue;
-    speedCap = Math.min(speedCap, Speed.value[eid]);
-  }
-  if (!Number.isFinite(speedCap)) return;
-  for (const eid of eids) {
-    if (Speed.value[eid] > speedCap) {
-      world.formationSpeedCaps.set(eid, speedCap);
-    }
-  }
-}
-
-function applyAttackSelected(world: SimWorld, targetEid: number): void {
-  applyAttackCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
-}
-
-function applyAttackCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  targetEid: number
-): void {
-  if (!hasComponent(world.ecs, Health, targetEid)) return;
-  if (Health.hp[targetEid] <= 0) return;
-  if (!isEntityVisibleTo(world, playerId, targetEid)) return;
-  for (const eid of ownedCommandableEids(world, playerId, eids)) {
-    if (!hasComponent(world.ecs, Combat, eid)) continue;
-    if (!hasComponent(world.ecs, AttackTarget, eid)) continue;
-    if (Owner.player[eid] === Owner.player[targetEid]) continue; // no friendly fire
-    const inRange = isTargetInAttackRange(world, eid, targetEid);
-    const canReach =
-      inRange ||
-      (isMovableEntity(world, eid) &&
-        pathTo(world, eid, Position.x[targetEid], Position.y[targetEid]));
-    if (!canReach) continue;
-
-    AttackTarget.targetEid[eid] = targetEid;
-    // retainGoal = 1 means "the user explicitly told me to attack THIS unit",
-    // which exempts the chase from the auto-aggro leash. The player gave a
-    // direct order; honour it until the target dies, the player issues a new
-    // order, or the target gets out of pathing range.
-    AttackTarget.retainGoal[eid] = 1;
-    if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-      AttackMoveGoal.active[eid] = 0;
-    }
-    world.cannonWindups.delete(eid);
-    clearFormationSpeedCap(world, eid);
-    clearWorkOrders(world, eid);
-    if (inRange) world.paths.delete(eid);
-  }
-}
-
-function applyAttackMoveSelected(world: SimWorld, to: GridPos): void {
-  applyAttackMoveCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
-}
-
-function applyAttackMoveCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  to: GridPos
-): void {
-  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
-    isMovableEntity(world, eid)
-  );
-  const mode = playerFormationMode(world, playerId);
-  const destinations = formationModeUsesSlots(mode)
-    ? formationDestinations(world, units, to, mode)
-    : units.map((eid) => ({ eid, dest: to }));
-  const ordered: number[] = [];
-  for (const { eid, dest } of destinations) {
-    if (!hasComponent(world.ecs, Combat, eid)) continue;
-    if (!formationModeUsesSlots(mode)) clearFormationSpeedCap(world, eid);
-    if (!pathTo(world, eid, dest.x, dest.y)) continue;
-    AttackTarget.targetEid[eid] = -1;
-    AttackTarget.retainGoal[eid] = 0;
-    world.cannonWindups.delete(eid);
-    // Store the real attack-move destination so the unit can resume walking
-    // toward it after killing whatever they engage along the way.
-    if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-      AttackMoveGoal.active[eid] = 1;
-      AttackMoveGoal.x[eid] = dest.x;
-      AttackMoveGoal.y[eid] = dest.y;
-    }
-    setUnitHoldAnchor(world, eid, dest.x, dest.y);
-    clearWorkOrders(world, eid);
-    ordered.push(eid);
-  }
-  if (formationModeUsesSlots(mode)) {
-    applyFormationSpeedCap(world, ordered);
-  }
-}
-
-function applyMoveSelected(world: SimWorld, to: GridPos): void {
-  applyMoveCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
-}
-
-function applyMoveCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  to: GridPos
-): void {
-  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
-    isMovableEntity(world, eid)
-  );
-  const mode = playerFormationMode(world, playerId);
-  const destinations = formationModeUsesSlots(mode)
-    ? formationDestinations(world, units, to, mode)
-    : units.map((eid) => ({ eid, dest: to }));
-  const ordered: number[] = [];
-  for (const { eid, dest } of destinations) {
-    if (!formationModeUsesSlots(mode)) clearFormationSpeedCap(world, eid);
-    if (!pathTo(world, eid, dest.x, dest.y)) continue;
-    // Move overrides any combat, gather, or build state.
-    clearCombatOrders(world, eid);
-    clearWorkOrders(world, eid);
-    setUnitHoldAnchor(world, eid, dest.x, dest.y);
-    ordered.push(eid);
-  }
-  if (formationModeUsesSlots(mode)) {
-    applyFormationSpeedCap(world, ordered);
-  }
-}
-
-/** SP convenience: reshape the local player's current selection. */
-function applyReformSelectedFormation(world: SimWorld): void {
-  applyReformFormationCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
-}
-
-/**
- * Re-pack a player's selected military into their current formation shape,
- * centered on the group. Network-safe: operates only on the supplied eids that
- * the player actually owns, and reads that player's own formation mode/facing.
- */
-function applyReformFormationCommand(world: SimWorld, playerId: number, eids: number[]): void {
-  const units = ownedCommandableEids(world, playerId, eids).filter(
-    (eid) => hasComponent(world.ecs, UnitStance, eid) && isMovableEntity(world, eid)
-  );
-  if (units.length <= 1) return;
-  const mode = playerFormationMode(world, playerId);
-  if (!formationModeUsesSlots(mode)) {
-    for (const eid of units) clearFormationSpeedCap(world, eid);
-    return;
-  }
-
-  const center = formationCenter(units);
-  const facing = formationFacingVector(playerFormationFacing(world, playerId));
-  const ordered: number[] = [];
-  for (const { eid, dest } of formationDestinations(world, units, center, mode, facing)) {
-    if (!pathTo(world, eid, dest.x, dest.y)) continue;
-    clearCombatOrders(world, eid);
-    clearWorkOrders(world, eid);
-    setUnitHoldAnchor(world, eid, dest.x, dest.y);
-    ordered.push(eid);
-  }
-  applyFormationSpeedCap(world, ordered);
-}
-
-function applySetArmyRallyPoint(
-  world: SimWorld,
-  playerId: number,
-  x: number,
-  y: number
-): void {
-  if (playerId <= 0 || playerId >= world.armyRallyPoints.length) return;
-  const spot = findSpawnSpot(world, x, y, 4);
-  if (!spot) return;
-  world.armyRallyPoints[playerId] = spot;
-}
-
-export function isMovableEntity(world: SimWorld, eid: number): boolean {
-  return (
-    hasComponent(world.ecs, Position, eid) &&
-    hasComponent(world.ecs, Velocity, eid) &&
-    hasComponent(world.ecs, Speed, eid)
-  );
-}
-
-function formationCenter(units: number[]): GridPos {
-  const center = units.reduce(
-    (acc, eid) => {
-      acc.x += Position.x[eid];
-      acc.y += Position.y[eid];
-      return acc;
-    },
-    { x: 0, y: 0 }
-  );
-  return {
-    x: Math.round(center.x / units.length),
-    y: Math.round(center.y / units.length),
-  };
-}
-
-function formationDestinations(
-  world: SimWorld,
-  units: number[],
-  to: GridPos,
-  formationMode = FORMATION_MODE_DEFAULT,
-  facing?: { x: number; y: number }
-): Array<{ eid: number; dest: GridPos }> {
-  if (units.length <= 1) {
-    return units.map((eid) => ({ eid, dest: to }));
-  }
-
-  const sorted = [...units].sort((a, b) => {
-    const rank = formationRank(world, a) - formationRank(world, b);
-    if (rank !== 0) return rank;
-    return a - b;
-  });
-
-  const center = sorted.reduce(
-    (acc, eid) => {
-      acc.x += Position.x[eid];
-      acc.y += Position.y[eid];
-      return acc;
-    },
-    { x: 0, y: 0 }
-  );
-  center.x /= sorted.length;
-  center.y /= sorted.length;
-
-  let dirX = facing?.x ?? (to.x - center.x);
-  let dirY = facing?.y ?? (to.y - center.y);
-  const dirLen = Math.hypot(dirX, dirY);
-  if (dirLen < 0.001) {
-    const defaultFacing = formationFacingVector(FORMATION_FACING_DEFAULT);
-    dirX = defaultFacing.x;
-    dirY = defaultFacing.y;
-  } else {
-    dirX /= dirLen;
-    dirY /= dirLen;
-  }
-  const sideX = -dirY;
-  const sideY = dirX;
-  const mode = clampFormationMode(formationMode);
-  const spacing = formationSpacing(mode);
-  const columns = formationColumnCount(sorted.length, mode);
-  const rowCount = Math.ceil(sorted.length / columns);
-  const reserved = new Set<string>();
-
-  const out: Array<{ eid: number; dest: GridPos }> = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const eid = sorted[i];
-    const row = Math.floor(i / columns);
-    const col = i % columns;
-    const rowStart = row * columns;
-    const rowSize = Math.min(columns, sorted.length - rowStart);
-    const sideOffset = (col - (rowSize - 1) / 2) * spacing;
-    const forwardOffset = ((rowCount - 1) / 2 - row) * spacing;
-    const desired = {
-      x: Math.round(to.x + dirX * forwardOffset + sideX * sideOffset),
-      y: Math.round(to.y + dirY * forwardOffset + sideY * sideOffset),
-    };
-    const dest = findFormationDestination(world, desired, reserved);
-    if (dest) out.push({ eid, dest });
-  }
-  return out;
-}
-
-function clampFormationMode(mode: number): number {
-  if (!Number.isFinite(mode)) return FORMATION_MODE_DEFAULT;
-  return Math.max(
-    FORMATION_MODE_MIN,
-    Math.min(FORMATION_MODE_MAX, Math.trunc(mode))
-  );
-}
-
-/** Current formation shape for a player (clamped, default-safe). */
-export function playerFormationMode(world: SimWorld, playerId: number): number {
-  return clampFormationMode(world.formationModes[playerId] ?? FORMATION_MODE_DEFAULT);
-}
-
-/** Current formation facing for a player (normalized, default-safe). */
-export function playerFormationFacing(world: SimWorld, playerId: number): number {
-  return normalizeFormationFacing(world.formationFacings[playerId] ?? FORMATION_FACING_DEFAULT);
-}
-
-function formationModeUsesSlots(mode: number): boolean {
-  return clampFormationMode(mode) !== FORMATION_MODE_FREE;
-}
-
-function normalizeFormationFacing(facing: number): number {
-  if (!Number.isFinite(facing)) return FORMATION_FACING_DEFAULT;
-  return ((Math.trunc(facing) % FORMATION_FACING_STEPS) + FORMATION_FACING_STEPS) %
-    FORMATION_FACING_STEPS;
-}
-
-function formationFacingVector(facing: number): { x: number; y: number } {
-  const angle = Math.PI / 2 + normalizeFormationFacing(facing) * (Math.PI * 2 / FORMATION_FACING_STEPS);
-  return {
-    x: Math.cos(angle),
-    y: Math.sin(angle),
-  };
-}
-
-function formationColumnCount(count: number, mode: number): number {
-  const maxColumns = Math.min(FORMATION_MAX_COLUMNS, count);
-  if (count <= 2) return count;
-  const lineColumns = Math.max(
-    2,
-    Math.min(maxColumns, count <= 10 ? count : Math.ceil(count / 2))
-  );
-  const squareColumns = Math.max(
-    2,
-    Math.min(maxColumns, Math.ceil(Math.sqrt(count)))
-  );
-  if (mode === FORMATION_MODE_COMPACT) return squareColumns;
-  return lineColumns;
-}
-
-function formationSpacing(mode: number): number {
-  switch (mode) {
-    case FORMATION_MODE_LINE: return 1.45;
-    case FORMATION_MODE_COMPACT: return 1.04;
-    default: return 1.2;
-  }
-}
-
-function formationRank(world: SimWorld, eid: number): number {
-  if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return 0;
-  if (hasComponent(world.ecs, SpearmanTag, eid)) return 1;
-  if (hasComponent(world.ecs, VillagerTag, eid)) return 2;
-  if (hasComponent(world.ecs, ArcherTag, eid)) return 3;
-  if (hasComponent(world.ecs, MachineGunTag, eid)) return 4;
-  return 4;
-}
-
-function findFormationDestination(
-  world: SimWorld,
-  desired: GridPos,
-  reserved: Set<string>
-): GridPos | null {
-  for (let r = 0; r <= 3; r++) {
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-        const x = desired.x + dx;
-        const y = desired.y + dy;
-        const key = `${x},${y}`;
-        if (reserved.has(key)) continue;
-        if (!canUnitOccupy(world, x, y)) continue;
-        if (findResourceAt(world, x, y, 0.6) !== null) continue;
-        reserved.add(key);
-        return { x, y };
-      }
-    }
-  }
-  return null;
-}
-
-function applyGatherSelected(world: SimWorld, targetEid: number): void {
-  applyGatherCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
-}
-
-function applyGatherCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  targetEid: number
-): void {
-  if (!hasComponent(world.ecs, Resource, targetEid)) return;
-  if (Resource.amount[targetEid] <= 0) return;
-
-  const kind = Resource.kind[targetEid] as ResourceKind;
-  for (const eid of ownedCommandableEids(world, playerId, eids)) {
-    if (!hasComponent(world.ecs, Gatherer, eid)) continue;
-    clearCombatOrders(world, eid);
-    if (
-      ResourceCarry.amount[eid] > 0 &&
-      ResourceCarry.kind[eid] !== kind
-    ) {
-      // Force a drop-off run first; gathering system will route us to TC.
-      Gatherer.targetEid[eid] = targetEid;
-      Gatherer.state[eid] = GathererStateId.RETURNING;
-      Gatherer.cooldown[eid] = 0;
-      routeToNearestDropOff(world, eid);
-      continue;
-    }
-    startGatheringResource(world, eid, targetEid);
-  }
-}
-
-function applyStopSelected(world: SimWorld): void {
-  applyStopCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
-}
-
-function applyStopCommand(world: SimWorld, playerId: number, eids: number[]): void {
-  for (const eid of ownedCommandableEids(world, playerId, eids)) {
-    world.paths.delete(eid);
-    clearFormationSpeedCap(world, eid);
-    clearCombatOrders(world, eid);
-    clearWorkOrders(world, eid);
-    setUnitHoldAnchor(world, eid);
-  }
-}
-
-function applyToggleSelectedUnitStance(world: SimWorld): void {
-  applyToggleStanceCommand(world, LOCAL_PLAYER_ID, commandableSelection(world));
-}
-
-function applyToggleStanceCommand(world: SimWorld, playerId: number, eids: number[]): void {
-  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
-    hasComponent(world.ecs, UnitStance, eid)
-  );
-  if (units.length === 0) return;
-
-  const allHolding = units.every((eid) =>
-    UnitStance.stance[eid] === UnitStanceId.HOLD_POSITION
-  );
-  const nextStance = allHolding
-    ? UnitStanceId.AUTO_DEFEND
-    : UnitStanceId.HOLD_POSITION;
-
-  for (const eid of units) {
-    UnitStance.stance[eid] = nextStance;
-    if (nextStance === UnitStanceId.HOLD_POSITION) {
-      setUnitHoldAnchor(world, eid);
-      clearNonExplicitCombatTarget(world, eid);
-    }
-  }
-}
-
-/** SP convenience: set the local player's selected units' stance. */
-function applySetSelectedUnitStance(world: SimWorld, stance: UnitStanceValue): void {
-  applySetStanceCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), stance);
-}
-
-/** Network-safe stance set: only the player's own stance-capable eids. */
-function applySetStanceCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  stance: UnitStanceValue
-): void {
-  if (stance !== UnitStanceId.AUTO_DEFEND && stance !== UnitStanceId.HOLD_POSITION) return;
-  const units = ownedCommandableEids(world, playerId, eids).filter((eid) =>
-    hasComponent(world.ecs, UnitStance, eid)
-  );
-  if (units.length === 0) return;
-
-  for (const eid of units) {
-    UnitStance.stance[eid] = stance;
-    if (stance === UnitStanceId.HOLD_POSITION) {
-      setUnitHoldAnchor(world, eid);
-      clearNonExplicitCombatTarget(world, eid);
-    }
-  }
-}
-
-/** SP convenience: nudge the local player's formation mode by delta. */
-function applyAdjustFormationMode(world: SimWorld, delta: number): void {
-  applyAdjustFormationModeCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), delta);
-}
-
-function applyAdjustFormationModeCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  delta: number
-): void {
-  if (!Number.isFinite(delta) || delta === 0) return;
-  applySetFormationModeCommand(world, playerId, eids, playerFormationMode(world, playerId) + delta);
-}
-
-/** SP convenience: set the local player's formation mode. */
-function applySetFormationMode(world: SimWorld, mode: number): void {
-  applySetFormationModeCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), mode);
-}
-
-/** Network-safe: set a player's own formation mode, then re-pack their group. */
-function applySetFormationModeCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  mode: number
-): void {
-  world.formationModes[playerId] = clampFormationMode(mode);
-  applyReformFormationCommand(world, playerId, eids);
-}
-
-/** SP convenience: rotate the local player's formation facing by delta. */
-function applyRotateSelectedFormation(world: SimWorld, delta: number): void {
-  applyRotateFormationCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), delta);
-}
-
-/** Network-safe: rotate a player's own formation facing, then re-pack. */
-function applyRotateFormationCommand(
-  world: SimWorld,
-  playerId: number,
-  eids: number[],
-  delta: number
-): void {
-  if (!Number.isFinite(delta) || delta === 0) return;
-  world.formationFacings[playerId] = normalizeFormationFacing(
-    playerFormationFacing(world, playerId) + delta
-  );
-  applyReformFormationCommand(world, playerId, eids);
-}
-
-export function clearNonExplicitCombatTarget(world: SimWorld, eid: number): void {
-  if (!hasComponent(world.ecs, AttackTarget, eid)) return;
-  if (AttackTarget.targetEid[eid] < 0) return;
-  if (AttackTarget.retainGoal[eid] === 1) return;
-
-  AttackTarget.targetEid[eid] = -1;
-  AttackTarget.retainGoal[eid] = 0;
-  world.paths.delete(eid);
-  world.cannonWindups.delete(eid);
-}
-
-function applyRemoveSelectedBuildings(world: SimWorld, playerId: number): void {
-  for (const eid of sortedEids(world, selectedQuery(world.ecs))) {
-    if (!isRemovableBuilding(world, eid, playerId)) continue;
-    markWorksiteWorkersDead(world, eid);
-    addComponent(world.ecs, DeadTag, eid);
-  }
-}
-
-/** Self-describing (network-safe) building removal: the sender resolves the
- *  exact building eids, and we validate ownership here so a peer can replay it
- *  identically. Ascending eid order keeps the mutation order deterministic. */
-function applyRemoveBuildingsCommand(world: SimWorld, playerId: number, eids: number[]): void {
-  for (const eid of [...eids].sort((a, b) => a - b)) {
-    if (!isRemovableBuilding(world, eid, playerId)) continue;
-    markWorksiteWorkersDead(world, eid);
-    addComponent(world.ecs, DeadTag, eid);
-  }
-}
-
-function isRemovableBuilding(world: SimWorld, eid: number, playerId: number): boolean {
-  if (!hasComponent(world.ecs, Building, eid)) return false;
-  if (!hasComponent(world.ecs, Owner, eid) || Owner.player[eid] !== playerId) return false;
-  if (Health.hp[eid] <= 0) return false;
-  return Building.defId[eid] !== BuildingDefId.TOWN_CENTER;
-}
-
-function applyPlaceBuilding(
-  world: SimWorld,
-  defId: number,
-  x: number,
-  y: number,
-  playerId: number
-): void {
-  const def = getBuildingDef(defId);
-  if (!def) return;
-  if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return;
-
-  const bank = world.resources[playerId];
-  if (!bank || !canAfford(bank, def.cost)) return;
-  if (!isBuildingUnlocked(world, playerId, defId)) return;
-
-  if (!canPlaceBuildingAt(world, def, x, y)) return;
-
-  spend(bank, def.cost);
-  spawnFoundation(world, defId, x, y, playerId);
-}
-
-export function canPlaceBuildingAt(
-  world: SimWorld,
-  def: BuildingDef,
-  x: number,
-  y: number
-): boolean {
-  if (
-    worksiteUsesResourceNodes(def) &&
-    findNearestResource(
-      world,
-      x,
-      y,
-      def.harvestKind as ResourceKind,
-      def.harvestRadius ?? 6
-    ) === null
-  ) {
-    return false;
-  }
-
-  const fw = def.footprint.w;
-  const fh = def.footprint.h;
-  const x0 = x - Math.floor(fw / 2);
-  const y0 = y - Math.floor(fh / 2);
-  for (let dy = 0; dy < fh; dy++) {
-    for (let dx = 0; dx < fw; dx++) {
-      const tx = x0 + dx;
-      const ty = y0 + dy;
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
-      if (world.map.walkability[ty][tx] !== 0) return false;
-      if (findResourceAt(world, tx, ty, 0.6) !== null) return false;
-      if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;
-    }
-  }
-  return true;
 }
 
 function zborovAssaultSystem(world: SimWorld): void {

@@ -29,7 +29,7 @@ import {
   movableQuery,
 } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { clearFormationSpeedCap } from '../world';
+import { clearFormationSpeedCap } from '../input/unit-orders';
 import { markWorksiteWorkersDead } from './worksites';
 
 export function deathSystem(world: SimWorld): void {

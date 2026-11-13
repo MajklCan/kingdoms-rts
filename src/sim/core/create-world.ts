@@ -15,8 +15,6 @@ import { spawnArcher, spawnScoutCavalry, spawnSpearman } from '../factories/unit
 import { edgeProximity01, trySpawnTreeAt } from '../systems/forest-regrowth';
 import { createVisibilityStates, updatePlayerVisibility } from '../systems/visibility';
 import {
-  FORMATION_FACING_DEFAULT,
-  FORMATION_MODE_DEFAULT,
   LOCAL_GOLD_DEPOSIT_AMOUNT,
   LOCAL_STONE_DEPOSIT_AMOUNT,
   TREE_RESOURCE_AMOUNT,
@@ -26,6 +24,8 @@ import {
 } from '../world';
 import {
   AI_PLAYER_ID,
+  FORMATION_FACING_DEFAULT,
+  FORMATION_MODE_DEFAULT,
   LOCAL_PLAYER_ID,
   MAX_PLAYERS,
   TREE_EDGE_BAND_TILES,

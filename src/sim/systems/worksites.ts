@@ -36,7 +36,8 @@ import { pathToBuildingContact } from '../core/navigation';
 import { resourceWorksiteQuery, worksiteWorkerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnVillager } from '../factories/units';
-import { aiResourceWorksiteCanStillProduce, clearFormationSpeedCap } from '../world';
+import { clearFormationSpeedCap } from '../input/unit-orders';
+import { aiResourceWorksiteCanStillProduce } from '../world';
 import { findNearestDropOffEid, routeToNearestDropOff } from './dropoff';
 import { routeFarmWorkerToNextPatch, routeToNearestReachableResource } from './gathering';
 

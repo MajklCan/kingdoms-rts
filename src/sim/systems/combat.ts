@@ -31,12 +31,12 @@ import { sortedEids } from '../core/entities';
 import { pathTo } from '../core/navigation';
 import { combatQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
+import { isMovableEntity } from '../input/formation';
 import {
   clearFormationSpeedCap,
   clearNonExplicitCombatTarget,
   clearWorkOrders,
-  isMovableEntity,
-} from '../world';
+} from '../input/unit-orders';
 import {
   cannonProjectileTravelTicks,
   mortarProjectileTravelTicks,

@@ -21,7 +21,8 @@ import { distToBuildingEdge } from '../core/grid';
 import { pathTo } from '../core/navigation';
 import { combatQuery, damageableQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { clearFormationSpeedCap, clearNonExplicitCombatTarget, isMovableEntity } from '../world';
+import { isMovableEntity } from '../input/formation';
+import { clearFormationSpeedCap, clearNonExplicitCombatTarget } from '../input/unit-orders';
 import { isEntityVisibleTo } from './visibility';
 
 const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
