@@ -46,6 +46,8 @@ export type SimInput =
   // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
+  /** Wall foundations along the 4-connected line (x0, y0) -> (x1, y1), integer tiles. */
+  | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number }
   | { type: 'removeSelectedBuildings'; playerId: number }
   | { type: 'trainUnit'; atEid: number; defId: number; count?: number; playerId?: number }
   /** Cancel queue entry `slot` (0 = the one training now). Without a slot the

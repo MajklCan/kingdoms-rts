@@ -25,8 +25,9 @@
  * shifts) that are NOT real desyncs. The session / transport / lockstep wiring is
  * covered separately by mp-smoke.test.ts.
  *
- * Two buildings (ARCHERY_RANGE, WALL) are gated `false` in isBuildingUnlocked and
- * are intentionally NOT placeable via the command path - asserted as such.
+ * ARCHERY_RANGE is gated `false` in isBuildingUnlocked and intentionally NOT
+ * placeable via the command path - asserted as such. Walls are placed both as a
+ * single tile and as a line through the wire validator.
  */
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
@@ -108,6 +109,7 @@ function zeroComponentStores(): void {
 }
 import { AgeId, BuildingDefId } from '@sim/defs';
 import { TechId } from '@sim/tech-tree';
+import { sanitizeWireCommand } from './commands';
 
 // ───────────────────────────── op-log driver ─────────────────────────────
 // Drives one deterministic world while recording an exact, replayable op timeline
@@ -336,6 +338,29 @@ function placeAndConfirm(d: Driver, pid: number, defId: number, clear = 2): numb
   return after.length > before ? after[after.length - 1] : null;
 }
 
+/** A short wall line next to the player's town center, sent through the wire
+ *  validator; returns how many tiles went up. */
+function placeWallLineAndConfirm(d: Driver, pid: number): number {
+  const w = d.world;
+  const tc = ownTownCenter(w, pid);
+  if (tc === undefined) return 0;
+  const before = buildingsOfDef(w, pid, BuildingDefId.WALL).length;
+  const tile = findFreeTile(w, Position.x[tc], Position.y[tc], 1);
+  if (!tile) return 0;
+  const cmd = sanitizeWireCommand(pid, {
+    type: 'placeWallLine',
+    playerId: pid,
+    x0: tile.x - 2,
+    y0: tile.y,
+    x1: tile.x + 2,
+    y1: tile.y,
+  });
+  if (!cmd) return 0;
+  d.push(cmd);
+  d.step(3);
+  return buildingsOfDef(w, pid, BuildingDefId.WALL).length - before;
+}
+
 /** Mineral worksites (gold mine, stone quarry) must sit within harvestRadius of a
  *  matching resource node, so search for a clear footprint tile near the node. */
 function placeMineralWorksite(d: Driver, pid: number, defId: number, kind: number): number | null {
@@ -462,10 +487,15 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('build:defensive_tower', placeAndConfirm(d, pid, BuildingDefId.DEFENSIVE_TOWER, 1) !== null);
     }
 
-    // ── Code-gap probe: ARCHERY_RANGE + WALL gated false → must NOT place ───────
+    // ── Code-gap probe: ARCHERY_RANGE gated false → must NOT place ──────────────
     for (const pid of PLAYERS) {
       mark('codegap:archery_range_unplaceable', placeAndConfirm(d, pid, BuildingDefId.ARCHERY_RANGE, 2) === null);
-      mark('codegap:wall_unplaceable', placeAndConfirm(d, pid, BuildingDefId.WALL, 1) === null);
+    }
+
+    // ── Walls: one tile via placeBuilding, a line via the wire placeWallLine ───
+    for (const pid of PLAYERS) {
+      mark('build:wall', placeAndConfirm(d, pid, BuildingDefId.WALL, 1) !== null);
+      mark('build:wall_line', placeWallLineAndConfirm(d, pid) >= 3);
     }
 
     finishConstruction(d);

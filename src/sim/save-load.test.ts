@@ -60,6 +60,7 @@ describe('save/load', () => {
     const playerBuildings = countOwnedBuildingsByDef(world, 1);
 
     const playerUsableDefIds = Object.values(BuildingDefId)
+      // Walls are player-usable but not part of the fixed late-game fixture.
       .filter((defId) => defId !== BuildingDefId.WALL && defId !== BuildingDefId.ARCHERY_RANGE);
     for (const defId of playerUsableDefIds) {
       expect(playerBuildings.has(defId)).toBe(true);

@@ -58,12 +58,12 @@ src/
     factories/         spawn helpers (military units are a MilitaryUnitSpec table), late-game fixture
     input/             applyInput switch + command handlers (orders, formations, buildings)
     systems/           one file per tick system (visibility, production, combat, movement, ...)
-    ai/                computer player: difficulty, snapshot, brain, economy, military, attack
+    ai/                computer player: difficulty, snapshot, brain, economy, military, attack, breach (picks the wall to knock down)
     missions/          campaign world setup + scripted mission runtime (one file per mission)
     maps/              map generators; map-gen.ts is their barrel
     save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
-    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE + canAfford/spend/refund
+    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE, WALL_TIERS (palisade/stone/brick per age) + canAfford/spend/refund
     tech-tree.ts       TECH_TREE nodes + pure prereq/age helpers
     campaign.ts        2 missions: SIEGE_OF_BRNO, BATTLE_OF_BILA_HORA
     pathfinding.ts     EasyStar wrapper, LOS smoothing, nearest-walkable fallback

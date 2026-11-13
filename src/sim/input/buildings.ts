@@ -13,6 +13,7 @@ import { selectedQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnFoundation } from '../factories/buildings';
 import { markWorksiteWorkersDead, worksiteUsesResourceNodes } from '../systems/worksites';
+import { applyPlaceWallLine } from './walls';
 
 export function applyRemoveSelectedBuildings(world: SimWorld, playerId: number): void {
   for (const eid of sortedEids(world, selectedQuery(world.ecs))) {
@@ -50,6 +51,11 @@ export function applyPlaceBuilding(
   const def = getBuildingDef(defId);
   if (!def) return;
   if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return;
+  if (defId === BuildingDefId.WALL) {
+    // A one-tile line: same tier cost, hp and unit check as a dragged line.
+    applyPlaceWallLine(world, playerId, x, y, x, y);
+    return;
+  }
 
   const bank = world.resources[playerId];
   if (!bank || !canAfford(bank, def.cost)) return;

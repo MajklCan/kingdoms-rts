@@ -61,6 +61,15 @@ function builtHp(siteEid: number, progress: number, total: number): number {
   return Math.max(1, Math.floor(Health.hpMax[siteEid] * frac));
 }
 
+/** Change a foundation's max hp (wall age-up) without turning the jump into damage or healing. */
+export function setFoundationMaxHp(siteEid: number, hpMax: number): void {
+  const total = Math.max(1, ConstructionSite.totalTicks[siteEid]);
+  const progress = ConstructionSite.progress[siteEid];
+  const deficit = Math.max(0, builtHp(siteEid, progress, total) - Health.hp[siteEid]);
+  Health.hpMax[siteEid] = hpMax;
+  Health.hp[siteEid] = Math.max(1, builtHp(siteEid, progress, total) - deficit);
+}
+
 export function finaliseBuilding(world: SimWorld, siteEid: number): void {
   const defId = ConstructionSite.defId[siteEid];
   const def = getBuildingDef(defId);
@@ -92,9 +101,11 @@ export function finaliseBuilding(world: SimWorld, siteEid: number): void {
     addComponent(world.ecs, TownCenterTag, siteEid);
   }
   attachBuildingCombat(world, siteEid, def);
-  // Heal foundation up to full HP on completion.
-  Health.hp[siteEid] = def.hp;
-  Health.hpMax[siteEid] = def.hp;
+  // Heal foundation up to full HP on completion. The foundation's max hp is
+  // the def's, except for walls, whose max follows the owner's age tier.
+  const maxHp = Health.hpMax[siteEid] > 0 ? Health.hpMax[siteEid] : def.hp;
+  Health.hp[siteEid] = maxHp;
+  Health.hpMax[siteEid] = maxHp;
   // Apply pop cap bonus.
   const popProvided = getBuildingPopProvided(world, playerId, defId);
   if (popProvided > 0) recalculatePlayerPopCap(world, playerId);

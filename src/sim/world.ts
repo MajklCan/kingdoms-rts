@@ -71,6 +71,14 @@ export { findIdleVillagers, isIdleVillager } from './core/idle-villagers';
 export { clonePlayerStats, emptyPlayerStats } from './core/match-stats';
 export { getMapSeed, legacyMapSeed, normalizeMapSeed } from './core/map-seed';
 export {
+  WALL_LINE_MAX_TILES,
+  getBuildingBuildTicks,
+  getBuildingCost,
+  getBuildingDisplayName,
+  getPlayerWallTier,
+  wallLineTiles,
+} from './core/walls';
+export {
   isSelectionRelativeInput,
   selectedCommandableEids,
   toSelfDescribingInput,
