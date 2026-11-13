@@ -61,7 +61,9 @@ export interface UnitDef {
   cost: CostTuple;
   trainTimeTicks: number;
   popCost: number;
-  trainAt: string; // building id
+  /** Building id named in "select a ... to train" hints. Producers are the
+   *  buildings whose `trains` lists the unit (archers: barracks and range). */
+  trainAt: string;
 }
 
 /** Building defIds - index into BUILDING_TABLE. Keep in sync. */
@@ -98,7 +100,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x2e86de,
     isDropOff: true,
     dropOffMask: 0b1111,
-    trains: [],
+    trains: ['VILLAGER'],
   },
   {
     id: 'HOUSE',
@@ -160,7 +162,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x8e6d3b,
     isDropOff: false,
     dropOffMask: 0,
-    trains: [],
+    trains: ['ARCHER'],
   },
   {
     id: 'STABLE',

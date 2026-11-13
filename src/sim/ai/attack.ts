@@ -256,6 +256,7 @@ function aiAttackTargetPriority(world: SimWorld, eid: number): number {
   if (hasComponent(world.ecs, ResourceWorksite, eid)) return 0;
   if (
     defId === BuildingDefId.BARRACKS ||
+    defId === BuildingDefId.ARCHERY_RANGE ||
     defId === BuildingDefId.STABLE ||
     defId === BuildingDefId.FOUNDRY
   ) return 1;

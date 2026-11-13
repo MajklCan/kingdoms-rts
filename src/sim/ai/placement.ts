@@ -62,7 +62,6 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
     return true;
   }
 
-  if (unitDef.trainAt !== producerDef.id) return false;
   if (!producerDef.trains.includes(unitDef.id)) return false;
   if (!isUnitUnlocked(world, playerId, defId)) return false;
   if (

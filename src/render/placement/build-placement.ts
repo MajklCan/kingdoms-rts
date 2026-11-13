@@ -42,6 +42,7 @@ export type BuildMode =
   | 'GOLD_MINE'
   | 'STONE_QUARRY'
   | 'BARRACKS'
+  | 'ARCHERY_RANGE'
   | 'STABLE'
   | 'FOUNDRY'
   | 'DEFENSIVE_TOWER'
@@ -55,6 +56,7 @@ export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   GOLD_MINE: BuildingDefId.GOLD_MINE,
   STONE_QUARRY: BuildingDefId.STONE_QUARRY,
   BARRACKS: BuildingDefId.BARRACKS,
+  ARCHERY_RANGE: BuildingDefId.ARCHERY_RANGE,
   STABLE: BuildingDefId.STABLE,
   FOUNDRY: BuildingDefId.FOUNDRY,
   DEFENSIVE_TOWER: BuildingDefId.DEFENSIVE_TOWER,
