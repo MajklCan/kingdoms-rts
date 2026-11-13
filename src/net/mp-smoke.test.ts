@@ -20,6 +20,7 @@ import { MAP, SIM } from '../config';
 import { checksumWorld } from '@sim/checksum';
 import {
   buildingQuery,
+  createSimWorld,
   findBuildingAt,
   findResourceAt,
   netIdForEntity,
@@ -31,8 +32,9 @@ import {
   type SimInput,
   type SimWorld,
 } from '@sim/world';
-import { Building, Owner, Position, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
-import { BuildingDefId, UnitDefId } from '@sim/defs';
+import { Building, Owner, Position, UnitKind, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
+import { AgeId, BuildingDefId, UnitDefId } from '@sim/defs';
+import { MapId } from '@sim/map-gen';
 import { createAllTechSet } from '@sim/tech-tree';
 import { MultiplayerSession, type SessionCallbacks } from './session';
 import type { Transport, TransportCloseInfo } from './transport';
@@ -562,6 +564,46 @@ describe('multiplayer lobby + transport', () => {
     expect(capB.desync, `B ${capB.desyncInfo}`).toBe(false);
     expect(capA.world!.tick).toBe(capB.world!.tick);
     expect(checksumWorld(capA.world!)).toBe(checksumWorld(capB.world!));
+  });
+
+  it('starts from the skirmish start, symmetric for both seats, with no AI', () => {
+    const relay = new RelayShim();
+    const tA = new PairedTransport(relay);
+    const tB = new PairedTransport(relay);
+    const capA = makeCapture();
+    const capB = makeCapture();
+    const sessA = new MultiplayerSession(tA, 'room', 'A', callbacks(capA));
+    const sessB = new MultiplayerSession(tB, 'room', 'B', callbacks(capB));
+    tA.fireOpen();
+    tB.fireOpen();
+    sessA.start(777);
+    const mp = capA.world!;
+    expect(mp.tick).toBe(0);
+
+    // Same world as the default skirmish menu pick; only the seats differ.
+    const skirmish = createSimWorld(777, { startingAge: AgeId.DARK, mapId: MapId.RIVERLANDS, aiDifficulty: 'medium' });
+    skirmish.humanPlayers = new Set([1, 2]);
+    skirmish.paused = mp.paused;
+    expect(checksumWorld(mp)).toBe(checksumWorld(skirmish));
+    expect(checksumWorld(capB.world!)).toBe(checksumWorld(mp));
+
+    const kit = (pid: number) => ({
+      units: ownedUnits(mp, pid).map((e) => UnitKind.kind[e]).sort(),
+      buildings: ownedBuildings(mp, pid).map((e) => Building.defId[e]).sort(),
+      bank: [...mp.resources[pid]],
+      age: mp.ages[pid].current,
+      techs: [...mp.researchedTechs[pid]].sort(),
+      pop: { ...mp.population[pid] },
+    });
+    expect(kit(2)).toEqual(kit(1));
+
+    // Nobody issues a command: a running AI would have built for seat 2 by now.
+    for (let i = 0; i < 600; i++) {
+      sessA.update(SIM.TICK_MS);
+      sessB.update(SIM.TICK_MS);
+    }
+    expect(mp.tick).toBeGreaterThan(500);
+    expect(ownedBuildings(mp, 2)).toHaveLength(kit(1).buildings.length);
   });
 
   it('recovers from a throttled multiplayer timer wake with a bounded catch-up batch', () => {
