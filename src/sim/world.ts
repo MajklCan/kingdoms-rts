@@ -91,8 +91,10 @@ export {
   tileVisibilityIndex,
   updatePlayerVisibility,
 } from './systems/visibility';
+export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
+export { getWorksiteWorkerSlots } from './systems/worksites';
 
-import { addComponent, hasComponent, removeComponent } from 'bitecs';
+import { addComponent, hasComponent } from 'bitecs';
 import { MAP, SIM } from '../config';
 import {
   ArcherTag,
@@ -105,8 +107,6 @@ import {
   ConstructionSite,
   Cooldown,
   DeadTag,
-  DropOff,
-  FoundationTag,
   Gatherer,
   GathererStateId,
   GunmanTag,
@@ -115,10 +115,8 @@ import {
   MachineGunTag,
   MortarTag,
   Owner,
-  PathTarget,
   PopulationCost,
   Position,
-  Producer,
   Resource,
   ResourceCarry,
   type ResourceKind,
@@ -127,13 +125,10 @@ import {
   ScoutCavalryTag,
   SpearmanTag,
   Speed,
-  TownCenterTag,
   UnitKind,
   UnitStance,
   UnitStanceId,
   type UnitStanceValue,
-  VILLAGER_CARRY_CAPACITY,
-  VILLAGER_GATHER_COOLDOWN,
   Velocity,
   VillagerTag,
   WorksiteWorker,
@@ -165,35 +160,18 @@ import {
   TechId,
   type TechIdValue,
   createAllTechSet,
-  createStartingTechSet,
   createStartingTechSetForAge,
   hasTech,
   isBuildingUnlocked,
   isUnitUnlocked,
   techDef,
-  techPrereqsMet,
   techStatus,
-  worksiteWorkerSlotsForKind,
 } from './tech-tree';
 import { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
+import { applyStartingResources, createAgeState, createSimWorld } from './core/create-world';
+import { deterministicEidKey, isLiveEntity, removeSimEntity, sortedEids } from './core/entities';
+import { pushAiEvent, pushSoundCue } from './core/events';
 import {
-  applyStartingResources,
-  createAgeState,
-  createSimWorld,
-  isResourceTerrainTile,
-} from './core/create-world';
-import {
-  clamp,
-  compareDeterministicEids,
-  compareGridPos,
-  deterministicEidKey,
-  isLiveEntity,
-  removeSimEntity,
-  sortedEids,
-} from './core/entities';
-import { gatherCueForKind, pushAiEvent, pushSoundCue } from './core/events';
-import {
-  buildingFootprintRect,
   canUnitOccupy,
   distToBuildingEdge,
   findSpawnSpot,
@@ -205,19 +183,12 @@ import {
   findNearestResource,
   findOwnedTownCenter,
   findResourceAt,
-  hasMapFeatureAt,
 } from './core/lookup';
-import {
-  buildingApproachCandidates,
-  pathTo,
-  pathToBuildingContact,
-  pathToResourceContact,
-} from './core/navigation';
+import { pathTo } from './core/navigation';
 import {
   countPendingPopCap,
   countQueuedPopCost,
   getBuildingPopProvided,
-  getHousePopProvided,
   recalculatePlayerPopCap,
 } from './core/population';
 import {
@@ -225,17 +196,12 @@ import {
   combatQuery,
   damageableQuery,
   deadQuery,
-  dropOffQuery,
-  foundationQuery,
   gathererQuery,
   movableQuery,
-  producerQuery,
   resourceQuery,
-  resourceWorksiteQuery,
   selectedQuery,
   townCenterQuery,
   unitQuery,
-  worksiteWorkerQuery,
 } from './core/queries';
 import type {
   AiDifficulty,
@@ -246,12 +212,7 @@ import type {
   SimInput,
   SimWorld,
 } from './core/types';
-import {
-  attachBuildingCombat,
-  spawnFoundation,
-  spawnResource,
-  spawnTownCenter,
-} from './factories/buildings';
+import { spawnFoundation, spawnResource, spawnTownCenter } from './factories/buildings';
 import {
   findPresetUnitSpot,
   hasEnemyEntityNear,
@@ -261,17 +222,14 @@ import {
   spawnPresetUnitAt,
   spawnPresetUnits,
 } from './factories/late-game';
-import {
-  spawnArcher,
-  spawnCannon,
-  spawnGunman,
-  spawnMachineGun,
-  spawnMortar,
-  spawnScoutCavalry,
-  spawnSpearman,
-  spawnVillager,
-} from './factories/units';
+import { spawnScoutCavalry, spawnVillager } from './factories/units';
+import { ageProgressionSystem, applyAdvanceAge, applyResearchTech } from './systems/age-tech';
+import { constructionSystem } from './systems/construction';
+import { dropoffSystem, routeToNearestDropOff } from './systems/dropoff';
+import { forestRegrowthSystem } from './systems/forest-regrowth';
+import { gatheringSystem, startGatheringResource } from './systems/gathering';
 import { movementSystem } from './systems/movement';
+import { applyCancelProduction, applyTrainUnit, productionSystem } from './systems/production';
 import {
   isEntityVisibleTo,
   isTileInMap,
@@ -279,33 +237,18 @@ import {
   updatePlayerVisibility,
   visibilitySystem,
 } from './systems/visibility';
+import {
+  countQueuedWorksiteWorkers,
+  countWorksiteWorkers,
+  getWorksiteWorkerSlots,
+  markWorksiteWorkersDead,
+  resourceWorksiteSystem,
+  worksiteUsesResourceNodes,
+} from './systems/worksites';
 
 export const TREE_RESOURCE_AMOUNT = 100;
 export const LOCAL_GOLD_DEPOSIT_AMOUNT = 650;
 export const LOCAL_STONE_DEPOSIT_AMOUNT = 600;
-const REGENERATED_TREE_AMOUNT = 80;
-export const TREE_EDGE_BAND_TILES = 10;
-const TREE_REGEN_INTERVAL_TICKS = SIM.TICK_HZ * 4;
-const TREE_REGEN_CANDIDATES_PER_PASS = 32;
-const TREE_REGEN_RADIUS = 4;
-export const TREE_REGEN_BUILDING_CLEARANCE = 4;
-const TREE_REGEN_MAX_WOOD_NODES = 360;
-const TREE_REGEN_BASE_CHANCE = 0.002;
-const TREE_REGEN_CHANCE_PER_NEARBY_TREE = 0.006;
-const TREE_REGEN_EDGE_PRESSURE_BONUS = 2.5;
-const TREE_REGEN_MAX_CHANCE = 0.08;
-export const RESOURCE_GATHER_DISTANCE = 0.55;
-const DROP_OFF_EDGE_DISTANCE = 0.24;
-const WORKSITE_FALLBACK_DROP_OFF_RADIUS = 4;
-const DROP_OFF_DEPOSIT_TICKS = Math.round(SIM.TICK_HZ * 0.5);
-export const FARM_WORK_EDGE_DISTANCE = 0.65;
-const FARM_WORK_PATCH_INSET = 0.38;
-const FARM_WORK_CYCLE_TICKS = Math.round(SIM.TICK_HZ * 2.4);
-const FARM_MIN_WORK_CYCLE_TICKS = Math.round(SIM.TICK_HZ * 2);
-const FARM_BASE_FOOD_PER_WORK_CYCLE = 2;
-const FARM_YIELDS_I_FOOD_PER_WORK_CYCLE = 3;
-const FARM_YIELDS_II_FOOD_PER_WORK_CYCLE = 4;
-const MILL_FOOD_DEPOSIT_BONUS_MULTIPLIER = 0.5;
 const BILA_HORA_ENEMY_OPENING_WAIT_TICKS = SIM.TICK_HZ * 15;
 const KUTNA_HORA_FIRST_WAVE_TICKS = SIM.TICK_HZ * 30;
 const KUTNA_HORA_WAVE_INTERVAL_TICKS = SIM.TICK_HZ * 65;
@@ -1988,80 +1931,6 @@ function spawnBrnoDefenders(world: SimWorld, trackedObjectiveEids: Record<string
   }
 }
 
-export function edgeProximity01(x: number, y: number): number {
-  const edgeDistance = Math.min(x, y, MAP.WIDTH - 1 - x, MAP.HEIGHT - 1 - y);
-  if (edgeDistance >= TREE_EDGE_BAND_TILES) return 0;
-  return (TREE_EDGE_BAND_TILES - edgeDistance) / TREE_EDGE_BAND_TILES;
-}
-
-export function trySpawnTreeAt(
-  world: SimWorld,
-  x: number,
-  y: number,
-  amount: number,
-  buildingClearance: number
-): number | null {
-  if (!canTreeGrowAt(world, x, y, buildingClearance)) return null;
-  return spawnResource(world, ResourceKindId.WOOD, x, y, amount);
-}
-
-function canTreeGrowAt(
-  world: SimWorld,
-  x: number,
-  y: number,
-  buildingClearance: number
-): boolean {
-  if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return false;
-  if (world.map.walkability[y][x] !== 0) return false;
-  const tile = world.map.tiles[y * MAP.WIDTH + x];
-  if (!isResourceTerrainTile(tile)) return false;
-  if (
-    tile !== TileType.GRASS
-    && tile !== TileType.FOREST
-    && tile !== TileType.SNOW
-    && tile !== TileType.SNOW_FOREST
-  ) return false;
-  if (hasMapFeatureAt(world, x, y, 0.6)) return false;
-  if (findResourceAt(world, x, y, 0.6) !== null) return false;
-  return !isNearBuilding(world, x, y, buildingClearance);
-}
-
-function isNearBuilding(
-  world: SimWorld,
-  x: number,
-  y: number,
-  clearance: number
-): boolean {
-  for (const eid of buildingQuery(world.ecs)) {
-    if (hasComponent(world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
-    if (distToBuildingEdge(world, x, y, eid) < clearance) return true;
-  }
-  return false;
-}
-
-function countWoodNodes(world: SimWorld): number {
-  let count = 0;
-  for (const eid of resourceQuery(world.ecs)) {
-    if (Resource.kind[eid] === ResourceKindId.WOOD && Resource.amount[eid] > 0) count++;
-  }
-  return count;
-}
-
-function countNearbyTrees(
-  world: SimWorld,
-  x: number,
-  y: number,
-  radius: number
-): number {
-  let count = 0;
-  for (const eid of resourceQuery(world.ecs)) {
-    if (Resource.kind[eid] !== ResourceKindId.WOOD) continue;
-    if (Resource.amount[eid] <= 0) continue;
-    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) count++;
-  }
-  return count;
-}
-
 /**
  * Advance the sim by one fixed tick. Inputs queued since the last tick are applied first,
  * then the gatherer state machine ticks, then movement applies any pending paths.
@@ -2237,105 +2106,6 @@ function applyInput(world: SimWorld, input: SimInput): void {
     case 'researchTech':
       applyResearchTech(world, input.playerId, input.techId);
       return;
-  }
-}
-
-function applyAdvanceAge(world: SimWorld, playerId: number): void {
-  const age = world.ages[playerId];
-  if (!age) return;
-  if (age.progress >= 0) return; // already advancing
-  if (age.current >= AGE_TABLE.length - 1) return; // at max
-  const nextDef = getAgeDef(age.current + 1);
-  if (!nextDef) return;
-  if (nextDef.id === AgeId.GUNPOWDER && isCampaignTechLocked(world, TechId.GUNPOWDER_AGE)) return;
-  // Total War is scaffolded for unit testing and cheats, but has no live tech path yet.
-  if (nextDef.id === AgeId.TOTAL_WAR) return;
-  if (nextDef.id === AgeId.CASTLE && !canStartCastleAge(world, playerId)) return;
-  if (nextDef.id === AgeId.GUNPOWDER && !canStartGunpowderAge(world, playerId)) return;
-  const bank = world.resources[playerId];
-  if (!bank || !canAfford(bank, nextDef.advanceCost)) return;
-  spend(bank, nextDef.advanceCost);
-  age.progress = 0;
-  age.totalTicks = nextDef.advanceTicks;
-}
-
-function applyResearchTech(world: SimWorld, playerId: number, techId: TechIdValue): void {
-  const tech = techDef(techId);
-  if (!tech) return;
-  if (isCampaignTechLocked(world, techId)) return;
-  if (hasTech(world, playerId, techId)) return;
-  if (!techPrereqsMet(world, playerId, tech)) return;
-  const bank = world.resources[playerId];
-  if (!bank || !canAfford(bank, tech.cost)) return;
-
-  if (techId === TechId.CASTLE_AGE || techId === TechId.GUNPOWDER_AGE) {
-    const age = world.ages[playerId];
-    const targetAge = techId === TechId.CASTLE_AGE ? AgeId.CASTLE : AgeId.GUNPOWDER;
-    if (!age || age.progress >= 0 || age.current >= targetAge) return;
-    spend(bank, tech.cost);
-    age.progress = 0;
-    age.totalTicks = AGE_TABLE[targetAge].advanceTicks;
-    return;
-  }
-
-  const previousHousePop = getHousePopProvided(world, playerId);
-  spend(bank, tech.cost);
-  if (!world.researchedTechs[playerId]) {
-    world.researchedTechs[playerId] = createStartingTechSet();
-  }
-  world.researchedTechs[playerId].add(techId);
-  if (techId === TechId.HOUSING_I || techId === TechId.HOUSING_II) {
-    applyHousingPopUpgrade(world, playerId, previousHousePop);
-  }
-}
-
-function applyHousingPopUpgrade(
-  world: SimWorld,
-  playerId: number,
-  previousHousePop: number
-): void {
-  const nextHousePop = getHousePopProvided(world, playerId);
-  const delta = nextHousePop - previousHousePop;
-  if (delta <= 0) return;
-  let completedHouses = 0;
-  for (const eid of buildingQuery(world.ecs)) {
-    if (Owner.player[eid] !== playerId) continue;
-    if (Building.defId[eid] !== BuildingDefId.HOUSE) continue;
-    if (hasComponent(world.ecs, ConstructionSite, eid)) continue;
-    completedHouses++;
-  }
-  if (completedHouses <= 0) return;
-  recalculatePlayerPopCap(world, playerId);
-}
-
-export function canStartCastleAge(world: SimWorld, playerId: number): boolean {
-  const castleTech = techDef(TechId.CASTLE_AGE);
-  return castleTech ? techPrereqsMet(world, playerId, castleTech) : false;
-}
-
-export function canStartGunpowderAge(world: SimWorld, playerId: number): boolean {
-  if (isCampaignTechLocked(world, TechId.GUNPOWDER_AGE)) return false;
-  const gunpowderTech = techDef(TechId.GUNPOWDER_AGE);
-  return gunpowderTech ? techPrereqsMet(world, playerId, gunpowderTech) : false;
-}
-
-function isCampaignTechLocked(world: SimWorld, techId: TechIdValue): boolean {
-  return world.campaign?.lockedTechs.includes(techId) ?? false;
-}
-
-/** Advance any in-flight age progressions by one tick. */
-function ageProgressionSystem(world: SimWorld): void {
-  for (let p = 0; p < world.ages.length; p++) {
-    const age = world.ages[p];
-    if (age.progress < 0) continue;
-    age.progress += 1;
-    if (age.progress >= age.totalTicks) {
-      age.current += 1;
-      age.progress = -1;
-      age.totalTicks = 0;
-      // Non-spatial fanfare; render plays it only for the local player.
-      pushSoundCue(world, 'age_up', 0, 0, p);
-    }
   }
 }
 
@@ -2593,7 +2363,7 @@ function applySetArmyRallyPoint(
   world.armyRallyPoints[playerId] = spot;
 }
 
-function isMovableEntity(world: SimWorld, eid: number): boolean {
+export function isMovableEntity(world: SimWorld, eid: number): boolean {
   return (
     hasComponent(world.ecs, Position, eid) &&
     hasComponent(world.ecs, Velocity, eid) &&
@@ -3014,658 +2784,6 @@ export function canPlaceBuildingAt(
     }
   }
   return true;
-}
-
-function applyTrainUnit(
-  world: SimWorld,
-  atEid: number,
-  defId: number,
-  count = 1
-): void {
-  const numericCount = Number.isFinite(count) ? count : 1;
-  const requested = Math.max(1, Math.min(5, Math.trunc(numericCount)));
-  for (let i = 0; i < requested; i++) {
-    if (!applyTrainUnitOnce(world, atEid, defId)) return;
-  }
-}
-
-function applyTrainUnitOnce(world: SimWorld, atEid: number, defId: number): boolean {
-  if (!hasComponent(world.ecs, Producer, atEid)) return false;
-  const unitDef = getUnitDef(defId);
-  if (!unitDef) return false;
-  if (!hasComponent(world.ecs, Building, atEid)) return false;
-  const producerDef = getBuildingDef(Building.defId[atEid]);
-  if (!producerDef) return false;
-  const playerId = Owner.player[atEid];
-  const bank = world.resources[playerId];
-  if (!bank) return false;
-  const queue = world.productionQueues.get(atEid) ?? [];
-  const isWorksiteWorker =
-    defId === UnitDefId.VILLAGER &&
-    hasComponent(world.ecs, ResourceWorksite, atEid);
-
-  if (isWorksiteWorker) {
-    const slots = getWorksiteWorkerSlots(world, atEid);
-    const occupied = countWorksiteWorkers(world, atEid) + countQueuedWorksiteWorkers(world, atEid);
-    if (occupied >= slots) return false;
-    if (queue.length >= 2) return false;
-    if (!canAfford(bank, unitDef.cost)) return false;
-    spend(bank, unitDef.cost);
-    queue.push(defId);
-    world.productionQueues.set(atEid, queue);
-    return true;
-  }
-
-  if (unitDef.trainAt !== producerDef.id) return false;
-  if (!producerDef.trains.includes(unitDef.id)) return false;
-  if (!isUnitUnlocked(world, playerId, defId)) return false;
-  if (!canAfford(bank, unitDef.cost)) return false;
-
-  const pop = world.population[playerId];
-  // Will the spawned unit exceed cap? (Front-of-queue spawns immediately when ready.)
-  // We allow queueing past current cap only if pop.cap can grow (Houses). For
-  // simplicity, block queueing if even the existing queue + pop.current >= cap.
-  if (pop.current + countQueuedPopCost(world, playerId) + unitDef.popCost > pop.cap) return false;
-
-  spend(bank, unitDef.cost);
-  queue.push(defId);
-  world.productionQueues.set(atEid, queue);
-  return true;
-}
-
-function applyCancelProduction(world: SimWorld, atEid: number): void {
-  const queue = world.productionQueues.get(atEid);
-  if (!queue || queue.length === 0) return;
-  // Pop the most recently-queued (back) and refund.
-  const cancelled = queue.pop();
-  if (cancelled === undefined) return;
-  const def = getUnitDef(cancelled);
-  if (!def) return;
-  const playerId = Owner.player[atEid];
-  const bank = world.resources[playerId];
-  if (bank) refund(bank, def.cost);
-  // If we cancelled the currently-training (front) slot, reset progress.
-  if (queue.length === 0) {
-    Producer.currentProgress[atEid] = 0;
-  }
-}
-
-/**
- * Gatherer state machine. Drives the canonical AoE2 villager loop:
- *   IDLE → (assigned) → WALKING_TO → (arrived) → GATHERING →
- *     (full or depleted) → RETURNING → (at drop-off) → DEPOSITING →
- *       (0.5s handoff) → WALKING_TO (if resource alive) or IDLE
- */
-function gatheringSystem(world: SimWorld): void {
-  const ents = sortedEids(world, gathererQuery(world.ecs));
-  for (const eid of ents) {
-    const state = Gatherer.state[eid];
-    switch (state) {
-      case GathererStateId.IDLE:
-        // Nothing to do. Sit still.
-        break;
-
-      case GathererStateId.WALKING_TO:
-        gatheringWalkingTo(world, eid);
-        break;
-
-      case GathererStateId.GATHERING:
-        gatheringActive(world, eid);
-        break;
-
-      case GathererStateId.RETURNING:
-        gatheringReturning(world, eid);
-        break;
-
-      case GathererStateId.DEPOSITING:
-        // Handled by dropoffSystem, which transitions us forward.
-        break;
-    }
-  }
-}
-
-function constructionSystem(world: SimWorld): void {
-  const sites = sortedEids(world, foundationQuery(world.ecs));
-  for (const siteEid of sites) {
-    const total = Math.max(1, ConstructionSite.totalTicks[siteEid]);
-    ConstructionSite.progress[siteEid] += 1;
-    const frac = Math.min(1, ConstructionSite.progress[siteEid] / total);
-    Health.hp[siteEid] = Math.max(1, Math.floor(Health.hpMax[siteEid] * frac));
-    if (ConstructionSite.progress[siteEid] >= total) {
-      finaliseBuilding(world, siteEid);
-    }
-  }
-}
-
-export function finaliseBuilding(world: SimWorld, siteEid: number): void {
-  const defId = ConstructionSite.defId[siteEid];
-  const def = getBuildingDef(defId);
-  if (!def) return;
-  const playerId = Owner.player[siteEid];
-  pushSoundCue(world, 'build_complete', Position.x[siteEid], Position.y[siteEid], playerId);
-
-  removeComponent(world.ecs, ConstructionSite, siteEid);
-  removeComponent(world.ecs, FoundationTag, siteEid);
-
-  // Attach role-specific components based on the def.
-  if (def.isDropOff) {
-    addComponent(world.ecs, DropOff, siteEid);
-    DropOff.acceptsMask[siteEid] = def.dropOffMask;
-  }
-  if (def.trains.length > 0 || def.harvestKind !== undefined) {
-    addComponent(world.ecs, Producer, siteEid);
-    Producer.currentProgress[siteEid] = 0;
-  }
-  if (def.harvestKind !== undefined) {
-    addComponent(world.ecs, ResourceWorksite, siteEid);
-    ResourceWorksite.kind[siteEid] = def.harvestKind;
-    ResourceWorksite.assignedWorkers[siteEid] = 0;
-    ResourceWorksite.freeWorkersSpawned[siteEid] = 0;
-    ResourceWorksite.progress[siteEid] = 0;
-    trySpawnInitialWorksiteWorker(world, siteEid);
-  }
-  if (defId === BuildingDefId.TOWN_CENTER) {
-    addComponent(world.ecs, TownCenterTag, siteEid);
-  }
-  attachBuildingCombat(world, siteEid, def);
-  // Heal foundation up to full HP on completion.
-  Health.hp[siteEid] = def.hp;
-  Health.hpMax[siteEid] = def.hp;
-  // Apply pop cap bonus.
-  const popProvided = getBuildingPopProvided(world, playerId, defId);
-  if (popProvided > 0) recalculatePlayerPopCap(world, playerId);
-}
-
-function resourceWorksiteSystem(world: SimWorld): void {
-  const sites = sortedEids(world, resourceWorksiteQuery(world.ecs));
-  for (const siteEid of sites) {
-    if (hasComponent(world.ecs, ConstructionSite, siteEid)) continue;
-    if (Health.hp[siteEid] <= 0) continue;
-
-    const def = getBuildingDef(Building.defId[siteEid]);
-    if (!def || def.harvestKind === undefined) continue;
-
-    trySpawnInitialWorksiteWorker(world, siteEid);
-    ResourceWorksite.assignedWorkers[siteEid] = countWorksiteWorkers(world, siteEid);
-
-    const kind = def.harvestKind as ResourceKind;
-    const radius = def.harvestRadius ?? 6;
-    if (Building.defId[siteEid] === BuildingDefId.FARM) {
-      runFarmWorksite(world, siteEid, def);
-      continue;
-    }
-    if (!worksiteUsesResourceNodes(def)) {
-      runSelfProducingWorksite(world, siteEid, def, kind);
-      continue;
-    }
-
-    const target = findNearestResource(
-      world,
-      Position.x[siteEid],
-      Position.y[siteEid],
-      kind,
-      radius
-    );
-    if (target === null) {
-      continue;
-    }
-
-    assignWorksiteHarvestOrders(world, siteEid, kind, radius);
-  }
-}
-
-function worksiteUsesResourceNodes(def: BuildingDef): boolean {
-  return def.harvestKind !== undefined && def.requiresNearbyResource !== false;
-}
-
-function runFarmWorksite(world: SimWorld, siteEid: number, def: BuildingDef): void {
-  const workTicks = farmWorkCycleTicks(world, siteEid, def);
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
-    if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
-    if (Health.hp[worker] <= 0) continue;
-    Gatherer.targetEid[worker] = siteEid;
-    if (ResourceCarry.amount[worker] > 0) {
-      ResourceCarry.kind[worker] = ResourceKindId.FOOD;
-    }
-    if (
-      ResourceCarry.amount[worker] >= VILLAGER_CARRY_CAPACITY ||
-      Gatherer.state[worker] === GathererStateId.RETURNING ||
-      Gatherer.state[worker] === GathererStateId.DEPOSITING
-    ) {
-      if (Gatherer.state[worker] !== GathererStateId.DEPOSITING) {
-        Gatherer.state[worker] = GathererStateId.RETURNING;
-        routeToNearestDropOff(world, worker);
-      }
-      continue;
-    }
-
-    if (Gatherer.state[worker] === GathererStateId.BUILDING) {
-      const dist = distToBuildingEdge(world, Position.x[worker], Position.y[worker], siteEid);
-      if (dist > FARM_WORK_EDGE_DISTANCE) {
-        routeFarmWorkerToNextPatch(world, worker, siteEid);
-        continue;
-      }
-      if (Gatherer.cooldown[worker] > 0) {
-        Gatherer.cooldown[worker] -= 1;
-        continue;
-      }
-      ResourceCarry.kind[worker] = ResourceKindId.FOOD;
-      ResourceCarry.amount[worker] = Math.min(
-        VILLAGER_CARRY_CAPACITY,
-        ResourceCarry.amount[worker] + farmFoodPerWorkCycle(world, siteEid)
-      );
-      if (ResourceCarry.amount[worker] >= VILLAGER_CARRY_CAPACITY) {
-        Gatherer.state[worker] = GathererStateId.RETURNING;
-        routeToNearestDropOff(world, worker);
-      } else {
-        routeFarmWorkerToNextPatch(world, worker, siteEid);
-      }
-      continue;
-    }
-
-    const atFarmEdge =
-      distToBuildingEdge(world, Position.x[worker], Position.y[worker], siteEid) <=
-      FARM_WORK_EDGE_DISTANCE;
-    if (Gatherer.state[worker] === GathererStateId.WALKING_TO_BUILD && world.paths.has(worker)) {
-      continue;
-    }
-    if (Gatherer.state[worker] === GathererStateId.WALKING_TO_BUILD && atFarmEdge) {
-      world.paths.delete(worker);
-      Gatherer.state[worker] = GathererStateId.BUILDING;
-      Gatherer.cooldown[worker] = workTicks;
-      continue;
-    }
-    if (Gatherer.state[worker] !== GathererStateId.WALKING_TO_BUILD || !world.paths.has(worker)) {
-      if (!routeFarmWorkerToNextPatch(world, worker, siteEid) && atFarmEdge) {
-        Gatherer.state[worker] = GathererStateId.BUILDING;
-        Gatherer.cooldown[worker] = workTicks;
-      }
-    }
-  }
-}
-
-function farmWorkCycleTicks(_world: SimWorld, _siteEid: number, def: BuildingDef): number {
-  const base = Math.max(FARM_WORK_CYCLE_TICKS, def.harvestRateTicks ?? FARM_WORK_CYCLE_TICKS);
-  return Math.max(FARM_MIN_WORK_CYCLE_TICKS, base);
-}
-
-function farmFoodPerWorkCycle(world: SimWorld, siteEid: number): number {
-  const playerId = Owner.player[siteEid];
-  if (hasTech(world, playerId, TechId.FARMS_II)) return FARM_YIELDS_II_FOOD_PER_WORK_CYCLE;
-  if (hasTech(world, playerId, TechId.FARMS)) return FARM_YIELDS_I_FOOD_PER_WORK_CYCLE;
-  return FARM_BASE_FOOD_PER_WORK_CYCLE;
-}
-
-function runSelfProducingWorksite(
-  world: SimWorld,
-  siteEid: number,
-  def: BuildingDef,
-  kind: ResourceKind
-): void {
-  const activeWorkers = assignSelfProducingWorksiteWorkers(world, siteEid);
-  if (activeWorkers <= 0) return;
-  const bank = world.resources[Owner.player[siteEid]];
-  if (!bank) return;
-
-  const rateTicks = worksiteProductionRateTicks(world, siteEid, def, kind);
-  ResourceWorksite.progress[siteEid] += activeWorkers;
-  while (ResourceWorksite.progress[siteEid] >= rateTicks) {
-    ResourceWorksite.progress[siteEid] -= rateTicks;
-    bank[kind] += 1;
-  }
-}
-
-function assignSelfProducingWorksiteWorkers(world: SimWorld, siteEid: number): number {
-  let activeWorkers = 0;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
-    if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
-    if (Health.hp[worker] <= 0) continue;
-    Gatherer.targetEid[worker] = siteEid;
-    ResourceCarry.amount[worker] = 0;
-    const dist = distToBuildingEdge(world, Position.x[worker], Position.y[worker], siteEid);
-    if (dist > DROP_OFF_EDGE_DISTANCE) {
-      Gatherer.state[worker] = GathererStateId.WALKING_TO_BUILD;
-      if (!world.paths.has(worker)) {
-        pathToBuildingContact(world, worker, siteEid);
-      }
-      continue;
-    }
-    world.paths.delete(worker);
-    Gatherer.state[worker] = GathererStateId.BUILDING;
-    Gatherer.cooldown[worker] = 0;
-    activeWorkers++;
-  }
-  return activeWorkers;
-}
-
-function worksiteProductionRateTicks(
-  _world: SimWorld,
-  _siteEid: number,
-  def: BuildingDef,
-  _kind: ResourceKind
-): number {
-  const base = Math.max(1, def.harvestRateTicks ?? SIM.TICK_HZ);
-  return base;
-}
-
-function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number): void {
-  if (ResourceWorksite.freeWorkersSpawned[siteEid] > 0) {
-    if (Owner.player[siteEid] !== AI_PLAYER_ID || countWorksiteWorkers(world, siteEid) > 0) return;
-    const def = getBuildingDef(Building.defId[siteEid]);
-    if (def && worksiteUsesResourceNodes(def) && !aiResourceWorksiteCanStillProduce(world, siteEid, def)) {
-      return;
-    }
-    spawnWorksiteWorker(world, siteEid);
-    return;
-  }
-  const slots = getWorksiteWorkerSlots(world, siteEid);
-  if (slots <= 0 || countWorksiteWorkers(world, siteEid) >= slots) {
-    ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
-    return;
-  }
-  if (spawnWorksiteWorker(world, siteEid) !== null) {
-    ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
-  }
-}
-
-export function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | null {
-  let current = countWorksiteWorkers(world, siteEid);
-  const offsets = [
-    [0, 1],
-    [1, 0],
-    [-1, 0],
-    [0, -1],
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
-  ];
-  for (let attempt = 0; attempt < offsets.length; attempt++) {
-    const [dx, dy] = offsets[current % offsets.length];
-    const spot = findSpawnSpot(
-      world,
-      Position.x[siteEid] + dx,
-      Position.y[siteEid] + dy,
-      4
-    );
-    current++;
-    if (!spot) continue;
-    const worker = spawnVillager(world, spot.x, spot.y, Owner.player[siteEid], 0);
-    addComponent(world.ecs, WorksiteWorker, worker);
-    WorksiteWorker.siteEid[worker] = siteEid;
-    return worker;
-  }
-  return null;
-}
-
-export function countWorksiteWorkers(world: SimWorld, siteEid: number): number {
-  let count = 0;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
-    if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
-    if (Health.hp[worker] <= 0) continue;
-    count++;
-  }
-  return count;
-}
-
-function countQueuedWorksiteWorkers(world: SimWorld, siteEid: number): number {
-  const queue = world.productionQueues.get(siteEid);
-  if (!queue) return 0;
-  return queue.filter((defId) => defId === UnitDefId.VILLAGER).length;
-}
-
-export function getWorksiteWorkerSlots(world: SimWorld, siteEid: number): number {
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return 0;
-  const def = getBuildingDef(Building.defId[siteEid]);
-  const baseSlots = def?.workerSlots ?? 1;
-  return Math.min(
-    baseSlots,
-    worksiteWorkerSlotsForKind(
-      world,
-      Owner.player[siteEid],
-      ResourceWorksite.kind[siteEid]
-    )
-  );
-}
-
-function assignWorksiteHarvestOrders(
-  world: SimWorld,
-  siteEid: number,
-  kind: ResourceKind,
-  radius: number
-): void {
-  const claimedTargets = countClaimedWorksiteResourceTargets(world, siteEid, kind);
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
-    if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
-    if (Health.hp[worker] <= 0) continue;
-    if (ResourceCarry.amount[worker] > 0) {
-      const dropOff = findNearestDropOffEid(world, worker);
-      if (dropOff !== null && Gatherer.state[worker] === GathererStateId.IDLE) {
-        Gatherer.state[worker] = GathererStateId.RETURNING;
-        routeToNearestDropOff(world, worker);
-      }
-      continue;
-    }
-    const targetValid =
-      Gatherer.targetEid[worker] >= 0 &&
-      hasComponent(world.ecs, Resource, Gatherer.targetEid[worker]) &&
-      Resource.kind[Gatherer.targetEid[worker]] === kind &&
-      Resource.amount[Gatherer.targetEid[worker]] > 0;
-    if (targetValid && Gatherer.state[worker] !== GathererStateId.IDLE) {
-      const target = Gatherer.targetEid[worker];
-      const stalled =
-        Gatherer.state[worker] === GathererStateId.WALKING_TO &&
-        !world.paths.has(worker) &&
-        Math.hypot(Position.x[worker] - Position.x[target], Position.y[worker] - Position.y[target]) >
-          RESOURCE_GATHER_DISTANCE;
-      const duplicateTarget = (claimedTargets.get(target) ?? 0) > 1;
-      if (!stalled && !duplicateTarget) continue;
-      if (duplicateTarget) {
-        claimedTargets.set(target, (claimedTargets.get(target) ?? 1) - 1);
-      }
-    }
-
-    const avoidedTargets = new Set<number>();
-    for (const [target, count] of claimedTargets) {
-      if (count > 0) avoidedTargets.add(target);
-    }
-    if (routeToNearestReachableResource(
-      world,
-      worker,
-      kind,
-      radius,
-      Position.x[siteEid],
-      Position.y[siteEid],
-      avoidedTargets
-    )) {
-      const assignedTarget = Gatherer.targetEid[worker];
-      if (assignedTarget >= 0) {
-        claimedTargets.set(assignedTarget, (claimedTargets.get(assignedTarget) ?? 0) + 1);
-      }
-    }
-  }
-}
-
-function countClaimedWorksiteResourceTargets(
-  world: SimWorld,
-  siteEid: number,
-  kind: ResourceKind
-): Map<number, number> {
-  const claimed = new Map<number, number>();
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
-    if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
-    if (Health.hp[worker] <= 0) continue;
-    if (ResourceCarry.amount[worker] > 0) continue;
-    if (Gatherer.state[worker] === GathererStateId.IDLE) continue;
-    const target = Gatherer.targetEid[worker];
-    if (
-      target < 0 ||
-      !hasComponent(world.ecs, Resource, target) ||
-      Resource.kind[target] !== kind ||
-      Resource.amount[target] <= 0
-    ) {
-      continue;
-    }
-    claimed.set(target, (claimed.get(target) ?? 0) + 1);
-  }
-  return claimed;
-}
-
-function forestRegrowthSystem(world: SimWorld): void {
-  if (world.tick === 0 || world.tick % TREE_REGEN_INTERVAL_TICKS !== 0) return;
-  if (countWoodNodes(world) >= TREE_REGEN_MAX_WOOD_NODES) return;
-
-  for (let i = 0; i < TREE_REGEN_CANDIDATES_PER_PASS; i++) {
-    if (countWoodNodes(world) >= TREE_REGEN_MAX_WOOD_NODES) return;
-
-    const x = world.rng.int(MAP.WIDTH);
-    const y = world.rng.int(MAP.HEIGHT);
-    if (!canTreeGrowAt(world, x, y, TREE_REGEN_BUILDING_CLEARANCE)) continue;
-
-    const nearbyTrees = countNearbyTrees(world, x, y, TREE_REGEN_RADIUS);
-    const tile = world.map.tiles[y * MAP.WIDTH + x];
-    const forestTileBonus = tile === TileType.FOREST || tile === TileType.SNOW_FOREST ? 1 : 0;
-    const edgeBonus = edgeProximity01(x, y) * TREE_REGEN_EDGE_PRESSURE_BONUS;
-    const growthPressure = nearbyTrees + forestTileBonus + edgeBonus;
-    if (growthPressure <= 0) continue;
-
-    const chance = Math.min(
-      TREE_REGEN_MAX_CHANCE,
-      TREE_REGEN_BASE_CHANCE + growthPressure * TREE_REGEN_CHANCE_PER_NEARBY_TREE
-    );
-    if (world.rng.next() < chance) {
-      trySpawnTreeAt(
-        world,
-        x,
-        y,
-        REGENERATED_TREE_AMOUNT,
-        TREE_REGEN_BUILDING_CLEARANCE
-      );
-    }
-  }
-}
-
-function productionSystem(world: SimWorld): void {
-  const ents = sortedEids(world, producerQuery(world.ecs));
-  for (const eid of ents) {
-    const queue = world.productionQueues.get(eid);
-    if (!queue || queue.length === 0) {
-      Producer.currentProgress[eid] = 0;
-      continue;
-    }
-    const trainingDefId = queue[0];
-    const def = getUnitDef(trainingDefId);
-    if (!def) {
-      queue.shift();
-      continue;
-    }
-    Producer.currentProgress[eid] += 1;
-    if (Producer.currentProgress[eid] >= def.trainTimeTicks) {
-      if (
-        trainingDefId === UnitDefId.VILLAGER &&
-        hasComponent(world.ecs, ResourceWorksite, eid)
-      ) {
-        const slots = getWorksiteWorkerSlots(world, eid);
-        const bank = world.resources[Owner.player[eid]];
-        if (countWorksiteWorkers(world, eid) >= slots) {
-          if (bank) refund(bank, def.cost);
-          queue.shift();
-          Producer.currentProgress[eid] = 0;
-          continue;
-        }
-        const worker = spawnWorksiteWorker(world, eid);
-        if (worker !== null) {
-          queue.shift();
-          Producer.currentProgress[eid] = 0;
-        } else {
-          Producer.currentProgress[eid] = def.trainTimeTicks;
-        }
-        continue;
-      }
-
-      // Spawn unit at rally point (south of the building for now).
-      const px = Position.x[eid];
-      const py = Position.y[eid];
-      // Find a free tile near building.
-      const candidates: GridPos[] = [
-        { x: px + 1, y: py + 1 },
-        { x: px - 1, y: py + 1 },
-        { x: px + 1, y: py - 1 },
-        { x: px - 1, y: py - 1 },
-        { x: px, y: py + 2 },
-        { x: px + 2, y: py },
-      ];
-      // Find a walkable spawn location near the producer. Spawning inside a
-      // blocked tile (e.g. the producer's own 3×3 footprint) traps the new
-      // unit at a blocked start, so pathfinding from it fails silently.
-      let spawnedEid: number | null = null;
-      for (const c of candidates) {
-        const spot = findSpawnSpot(world, c.x, c.y, 4);
-        if (!spot) continue;
-        if (trainingDefId === UnitDefId.VILLAGER) {
-          spawnedEid = spawnVillager(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.ARCHER) {
-          spawnedEid = spawnArcher(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.SPEARMAN) {
-          spawnedEid = spawnSpearman(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.SCOUT_CAVALRY) {
-          spawnedEid = spawnScoutCavalry(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.GUNMAN) {
-          spawnedEid = spawnGunman(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.CANNON) {
-          spawnedEid = spawnCannon(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.MACHINE_GUN) {
-          spawnedEid = spawnMachineGun(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-        if (trainingDefId === UnitDefId.MORTAR) {
-          spawnedEid = spawnMortar(world, spot.x, spot.y, Owner.player[eid]);
-          break;
-        }
-      }
-      if (spawnedEid !== null) {
-        pushSoundCue(world, 'unit_ready', Position.x[eid], Position.y[eid], Owner.player[eid]);
-        issueProductionRallyOrder(world, eid, spawnedEid);
-        queue.shift();
-        Producer.currentProgress[eid] = 0;
-      } else {
-        // Pop blocked — try again next tick.
-        Producer.currentProgress[eid] = def.trainTimeTicks; // pin at full
-      }
-    }
-  }
-}
-
-function issueProductionRallyOrder(
-  world: SimWorld,
-  producerEid: number,
-  unitEid: number
-): void {
-  if (!hasComponent(world.ecs, Building, producerEid)) return;
-  if (!isArmyProducerDefId(Building.defId[producerEid])) return;
-  const playerId = Owner.player[producerEid];
-  const rally = world.armyRallyPoints[playerId];
-  if (!rally) return;
-  if (!isMovableEntity(world, unitEid)) return;
-  pathTo(world, unitEid, rally.x, rally.y);
-}
-
-function isArmyProducerDefId(defId: number): boolean {
-  return defId === BuildingDefId.BARRACKS ||
-    defId === BuildingDefId.STABLE ||
-    defId === BuildingDefId.FOUNDRY;
 }
 
 interface TargetScore {
@@ -4486,19 +3604,6 @@ function cleanupSystem(world: SimWorld): void {
   }
 }
 
-function markWorksiteWorkersDead(world: SimWorld, siteEid: number): void {
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
-    if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
-    addComponent(world.ecs, DeadTag, worker);
-    Gatherer.targetEid[worker] = -1;
-    Gatherer.state[worker] = GathererStateId.IDLE;
-    world.paths.delete(worker);
-    clearFormationSpeedCap(world, worker);
-  }
-  ResourceWorksite.assignedWorkers[siteEid] = 0;
-}
-
 function zborovAssaultSystem(world: SimWorld): void {
   const campaign = world.campaign;
   if (!campaign) return;
@@ -5160,7 +4265,7 @@ function countAiEffectiveEconomyBuildings(
   ).length;
 }
 
-function aiResourceWorksiteCanStillProduce(
+export function aiResourceWorksiteCanStillProduce(
   world: SimWorld,
   eid: number,
   def: BuildingDef
@@ -6597,361 +5702,5 @@ function winConditionSystem(world: SimWorld): void {
     world.outcome = { state: 'victory', winnerPlayerId: 2, mode: 'conquest' };
   } else if (p2 === 0 && p1 > 0) {
     world.outcome = { state: 'victory', winnerPlayerId: 1, mode: 'conquest' };
-  }
-}
-
-function gatheringWalkingTo(world: SimWorld, eid: number): void {
-  const target = Gatherer.targetEid[eid];
-  if (target < 0 || !hasComponent(world.ecs, Resource, target)) {
-    Gatherer.state[eid] = GathererStateId.IDLE;
-    return;
-  }
-  if (Resource.amount[target] <= 0) {
-    // Resource depleted en route — try to retarget to nearest of same kind.
-    const kind = Resource.kind[target] as ResourceKind;
-    // Auto-retarget after a node depletes: stay within ~15 tiles of the
-    // villager rather than scouring the whole map. This is what stops the
-    // AI's berry-gatherers from walking across the river to the human's
-    // berries once their own deplete.
-    if (
-      !routeWorksiteWorkerToResource(world, eid, kind) &&
-      !routeToNearestReachableResource(world, eid, kind, 15)
-    ) {
-      Gatherer.state[eid] = GathererStateId.IDLE;
-      Gatherer.targetEid[eid] = -1;
-    }
-    return;
-  }
-
-  const dx = Position.x[eid] - Position.x[target];
-  const dy = Position.y[eid] - Position.y[target];
-  if (Math.hypot(dx, dy) <= RESOURCE_GATHER_DISTANCE) {
-    // Arrived at the resource node. Keep this tight so harvesting animations
-    // visually connect with the trunk / rock / bush rather than swinging at air.
-    Gatherer.state[eid] = GathererStateId.GATHERING;
-    Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
-    world.paths.delete(eid);
-  }
-  // Otherwise the path is in motion via movementSystem.
-}
-
-function gatheringActive(world: SimWorld, eid: number): void {
-  const target = Gatherer.targetEid[eid];
-  if (target < 0 || !hasComponent(world.ecs, Resource, target)) {
-    // Resource removed under us — pick nearest of same kind if we have a hint.
-    const carryKind = ResourceCarry.amount[eid] > 0
-      ? (ResourceCarry.kind[eid] as ResourceKind)
-      : null;
-    if (carryKind !== null) {
-      if (
-        routeWorksiteWorkerToResource(world, eid, carryKind) ||
-        routeToNearestReachableResource(world, eid, carryKind, 15)
-      ) return;
-    }
-    Gatherer.state[eid] = GathererStateId.IDLE;
-    Gatherer.targetEid[eid] = -1;
-    return;
-  }
-
-  // Tick down the cooldown; emit a gather increment when it hits 0.
-  if (Gatherer.cooldown[eid] > 0) {
-    Gatherer.cooldown[eid] -= 1;
-    return;
-  }
-
-  const kind = Resource.kind[target] as ResourceKind;
-  // Refill or initialise carry slot.
-  if (ResourceCarry.amount[eid] === 0) {
-    ResourceCarry.kind[eid] = kind;
-  }
-  ResourceCarry.amount[eid] += 1;
-  Resource.amount[target] -= 1;
-  Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
-  pushSoundCue(world, gatherCueForKind(kind), Position.x[eid], Position.y[eid], Owner.player[eid]);
-
-  // If resource is now empty, retarget on next tick via WALKING_TO branch.
-  if (Resource.amount[target] <= 0) {
-    removeSimEntity(world, target);
-    Gatherer.targetEid[eid] = -1;
-  }
-
-  // If carry full, head home.
-  if (ResourceCarry.amount[eid] >= VILLAGER_CARRY_CAPACITY) {
-    Gatherer.state[eid] = GathererStateId.RETURNING;
-    Gatherer.cooldown[eid] = 0;
-    routeToNearestDropOff(world, eid);
-  }
-}
-
-function gatheringReturning(world: SimWorld, eid: number): void {
-  // Make sure we have an active path toward a drop-off.
-  if (!world.paths.has(eid)) {
-    routeToNearestDropOff(world, eid);
-    if (!world.paths.has(eid) && tryFallbackWorksiteDeposit(world, eid)) return;
-  }
-  const dropOff = findNearestDropOffEid(world, eid);
-  if (dropOff === null) {
-    tryFallbackWorksiteDeposit(world, eid);
-    return;
-  }
-  // Footprint-aware arrival: require the worker to reach a final contact point
-  // close to the wall, not merely the center of an adjacent tile.
-  const dist = distToBuildingEdge(world, Position.x[eid], Position.y[eid], dropOff);
-  if (dist <= DROP_OFF_EDGE_DISTANCE) {
-    Gatherer.state[eid] = GathererStateId.DEPOSITING;
-    Gatherer.cooldown[eid] = DROP_OFF_DEPOSIT_TICKS;
-    world.paths.delete(eid);
-  }
-}
-
-function tryFallbackWorksiteDeposit(world: SimWorld, worker: number): boolean {
-  if (!hasComponent(world.ecs, WorksiteWorker, worker)) return false;
-  const siteEid = WorksiteWorker.siteEid[worker];
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
-  if (!hasComponent(world.ecs, DropOff, siteEid)) return false;
-  if (Health.hp[siteEid] <= 0) return false;
-  const carryAmt = ResourceCarry.amount[worker];
-  if (carryAmt <= 0) return false;
-  const carryKind = ResourceCarry.kind[worker] as ResourceKind;
-  if ((DropOff.acceptsMask[siteEid] & (1 << carryKind)) === 0) return false;
-  const dist = distToBuildingEdge(world, Position.x[worker], Position.y[worker], siteEid);
-  if (dist > WORKSITE_FALLBACK_DROP_OFF_RADIUS) return false;
-  Gatherer.state[worker] = GathererStateId.DEPOSITING;
-  Gatherer.cooldown[worker] = DROP_OFF_DEPOSIT_TICKS;
-  Gatherer.targetEid[worker] = siteEid;
-  world.paths.delete(worker);
-  return true;
-}
-
-/**
- * Drop-off system. For each gatherer in DEPOSITING state, credit the player bank
- * with their carry and bounce them back to the resource (if it still exists) or IDLE.
- */
-function dropoffSystem(world: SimWorld): void {
-  const ents = sortedEids(world, gathererQuery(world.ecs));
-  for (const eid of ents) {
-    if (Gatherer.state[eid] !== GathererStateId.DEPOSITING) continue;
-    if (Gatherer.cooldown[eid] > 0) {
-      Gatherer.cooldown[eid] -= 1;
-      if (Gatherer.cooldown[eid] > 0) continue;
-    }
-    const carryAmt = ResourceCarry.amount[eid];
-    const carryKind = ResourceCarry.kind[eid] as ResourceKind;
-    const playerId = Owner.player[eid];
-    if (carryAmt > 0 && world.resources[playerId]) {
-      world.resources[playerId][carryKind] += carryAmt + millDropOffFoodBonus(world, eid, carryKind, carryAmt);
-    }
-    ResourceCarry.amount[eid] = 0;
-
-    if (routeWorksiteWorkerAfterDropoff(world, eid, carryKind)) continue;
-
-    // Decide next state: stick with the same resource kind, but only if a
-    // node exists within a reasonable radius of the drop-off — not across
-    // the map. Stops post-deposit villagers from wandering into enemy
-    // territory.
-    if (!routeToNearestReachableResource(world, eid, carryKind, 15)) {
-      Gatherer.state[eid] = GathererStateId.IDLE;
-      Gatherer.targetEid[eid] = -1;
-    }
-  }
-}
-
-function millDropOffFoodBonus(
-  world: SimWorld,
-  worker: number,
-  carryKind: ResourceKind,
-  carryAmt: number
-): number {
-  if (carryKind !== ResourceKindId.FOOD || carryAmt <= 0) return 0;
-  const dropOff = findNearestDropOffEid(world, worker);
-  if (dropOff === null) return 0;
-  if (!hasComponent(world.ecs, Building, dropOff)) return 0;
-  if (Building.defId[dropOff] !== BuildingDefId.MILL) return 0;
-  return Math.max(1, Math.floor(carryAmt * MILL_FOOD_DEPOSIT_BONUS_MULTIPLIER));
-}
-
-function routeWorksiteWorkerAfterDropoff(
-  world: SimWorld,
-  worker: number,
-  kind: ResourceKind
-): boolean {
-  if (!hasComponent(world.ecs, WorksiteWorker, worker)) return false;
-  const siteEid = WorksiteWorker.siteEid[worker];
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
-  if (Health.hp[siteEid] <= 0) return false;
-  if (Building.defId[siteEid] === BuildingDefId.FARM) {
-    return kind === ResourceKindId.FOOD && routeFarmWorkerToNextPatch(world, worker, siteEid);
-  }
-  return routeWorksiteWorkerToResource(world, worker, kind);
-}
-
-function routeWorksiteWorkerToResource(
-  world: SimWorld,
-  worker: number,
-  kind: ResourceKind
-): boolean {
-  if (!hasComponent(world.ecs, WorksiteWorker, worker)) return false;
-  const siteEid = WorksiteWorker.siteEid[worker];
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
-  if (Health.hp[siteEid] <= 0) return false;
-  if (ResourceWorksite.kind[siteEid] !== kind) return false;
-  const def = getBuildingDef(Building.defId[siteEid]);
-  if (!def || !worksiteUsesResourceNodes(def)) return false;
-  return routeToNearestReachableResource(
-    world,
-    worker,
-    kind,
-    def.harvestRadius ?? 6,
-    Position.x[siteEid],
-    Position.y[siteEid]
-  );
-}
-
-function startGatheringResource(world: SimWorld, eid: number, target: number): boolean {
-  if (!hasComponent(world.ecs, Resource, target) || Resource.amount[target] <= 0) {
-    return false;
-  }
-  if (!pathToResourceContact(world, eid, target)) return false;
-  Gatherer.targetEid[eid] = target;
-  const isClose =
-    Math.hypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) <=
-    RESOURCE_GATHER_DISTANCE;
-  Gatherer.cooldown[eid] = isClose ? VILLAGER_GATHER_COOLDOWN : 0;
-  Gatherer.state[eid] = isClose ? GathererStateId.GATHERING : GathererStateId.WALKING_TO;
-  return true;
-}
-
-function routeToNearestReachableResource(
-  world: SimWorld,
-  eid: number,
-  kind: ResourceKind,
-  maxRange: number,
-  originX = Position.x[eid],
-  originY = Position.y[eid],
-  avoidTargets: Set<number> = new Set()
-): boolean {
-  const candidates = resourceQuery(world.ecs)
-    .filter((target) => Resource.kind[target] === kind && Resource.amount[target] > 0)
-    .map((target) => ({
-      target,
-      dist: Math.hypot(Position.x[target] - originX, Position.y[target] - originY),
-    }))
-    .filter((candidate) => candidate.dist <= maxRange)
-    .sort((a, b) => a.dist - b.dist || compareDeterministicEids(world, a.target, b.target));
-
-  for (const { target } of candidates) {
-    if (avoidTargets.has(target)) continue;
-    if (startGatheringResource(world, eid, target)) return true;
-  }
-  for (const { target } of candidates) {
-    if (startGatheringResource(world, eid, target)) return true;
-  }
-  world.paths.delete(eid);
-  return false;
-}
-
-function routeFarmWorkerToNextPatch(world: SimWorld, worker: number, siteEid: number): boolean {
-  if (!hasComponent(world.ecs, Building, siteEid)) return false;
-  const candidates = farmWorkPatchCandidates(world, worker, siteEid);
-  if (candidates.length === 0) return false;
-  const start = ResourceWorksite.progress[siteEid] % candidates.length;
-  for (let i = 0; i < candidates.length; i++) {
-    const index = (start + i) % candidates.length;
-    const candidate = candidates[index];
-    const from = {
-      x: Math.round(Position.x[worker]),
-      y: Math.round(Position.y[worker]),
-    };
-    const path = world.pathfinder.findPath(from, candidate.tile);
-    if (path === null) continue;
-
-    const nextPath: GridPos[] = [...path];
-    const final = nextPath[nextPath.length - 1];
-    if (
-      !final ||
-      Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
-    ) {
-      nextPath.push(candidate.point);
-    }
-
-    if (nextPath.length === 0) {
-      world.paths.delete(worker);
-    } else {
-      world.paths.set(worker, nextPath);
-      PathTarget.x[worker] = Math.round(nextPath[0].x);
-      PathTarget.y[worker] = Math.round(nextPath[0].y);
-    }
-    ResourceWorksite.progress[siteEid] = (index + 1) % candidates.length;
-    Gatherer.targetEid[worker] = siteEid;
-    Gatherer.state[worker] = GathererStateId.WALKING_TO_BUILD;
-    Gatherer.cooldown[worker] = 0;
-    return true;
-  }
-  return false;
-}
-
-function farmWorkPatchCandidates(
-  world: SimWorld,
-  worker: number,
-  siteEid: number
-): Array<{ tile: GridPos; point: GridPos; score: number }> {
-  const def = BUILDING_TABLE[Building.defId[siteEid]];
-  if (!def) return [];
-  const rect = buildingFootprintRect(siteEid, def);
-  const candidates: Array<{ tile: GridPos; point: GridPos; score: number }> = [];
-  const seen = new Set<string>();
-
-  for (const candidate of buildingApproachCandidates(world, worker, siteEid)) {
-    const point = {
-      x: clamp(candidate.point.x, rect.minX + FARM_WORK_PATCH_INSET, rect.maxX - FARM_WORK_PATCH_INSET),
-      y: clamp(candidate.point.y, rect.minY + FARM_WORK_PATCH_INSET, rect.maxY - FARM_WORK_PATCH_INSET),
-    };
-    const key = `${candidate.tile.x},${candidate.tile.y}:${point.x.toFixed(2)},${point.y.toFixed(2)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    candidates.push({
-      tile: candidate.tile,
-      point,
-      score:
-        Math.hypot(Position.x[worker] - point.x, Position.y[worker] - point.y) +
-        candidate.resourcePenalty,
-    });
-  }
-
-  candidates.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
-  return candidates;
-}
-
-function findNearestDropOffEid(world: SimWorld, eid: number): number | null {
-  const player = Owner.player[eid];
-  const carryKind = ResourceCarry.kind[eid] as ResourceKind;
-  const mask = 1 << carryKind;
-  const ents = sortedEids(world, dropOffQuery(world.ecs));
-  let best: number | null = null;
-  let bestDist = Infinity;
-  for (const cand of ents) {
-    if (Owner.player[cand] !== player) continue;
-    if ((DropOff.acceptsMask[cand] & mask) === 0) continue;
-    const d = distToBuildingEdge(world, Position.x[eid], Position.y[eid], cand);
-    if (
-      d < bestDist ||
-      (best !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, cand, best) < 0)
-    ) {
-      bestDist = d;
-      best = cand;
-    }
-  }
-  return best;
-}
-
-function routeToNearestDropOff(world: SimWorld, eid: number): void {
-  const target = findNearestDropOffEid(world, eid);
-  if (target === null) {
-    Gatherer.state[eid] = GathererStateId.IDLE;
-    return;
-  }
-  if (!pathToBuildingContact(world, eid, target)) {
-    pathTo(world, eid, Position.x[target], Position.y[target]);
   }
 }

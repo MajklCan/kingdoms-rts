@@ -18,7 +18,7 @@ import { BUILDING_TABLE } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { deterministicPairAngle } from '../systems/separation';
 import { isTileInMap } from '../systems/visibility';
-import { RESOURCE_GATHER_DISTANCE } from '../world';
+import { RESOURCE_GATHER_DISTANCE } from './constants';
 import { clamp, compareGridPos, sortedEids } from './entities';
 import { buildingFootprintRect } from './grid';
 import { findResourceAt } from './lookup';

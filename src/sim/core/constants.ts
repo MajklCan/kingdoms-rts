@@ -9,4 +9,9 @@ export const LOCAL_PLAYER_ID = 1;
 
 /** Demo soft pop cap per GDD. */
 export const POP_CAP_HARD_LIMIT = 75;
+export const TREE_EDGE_BAND_TILES = 10;
+export const TREE_REGEN_BUILDING_CLEARANCE = 4;
+export const RESOURCE_GATHER_DISTANCE = 0.55;
+export const DROP_OFF_EDGE_DISTANCE = 0.24;
+export const FARM_WORK_EDGE_DISTANCE = 0.65;
 export const AI_PLAYER_ID = 2;

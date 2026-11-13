@@ -24,7 +24,7 @@ import { BUILDING_TABLE, type BuildingDef, BuildingDefId, getBuildingDef } from 
 import { addSimEntity } from '../core/entities';
 import { markFootprintBlocked } from '../core/grid';
 import type { SimWorld } from '../core/types';
-import { finaliseBuilding } from '../world';
+import { finaliseBuilding } from '../systems/construction';
 
 /** Spawn a Resource node (tree, gold pile, stone pile, berry bush). */
 export function spawnResource(

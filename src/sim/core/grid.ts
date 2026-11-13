@@ -8,7 +8,7 @@ import { Building, Gatherer, Position, WorksiteWorker } from '../components';
 import { BUILDING_TABLE, type BuildingDef, BuildingDefId } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { isTileInMap } from '../systems/visibility';
-import { FARM_WORK_EDGE_DISTANCE } from '../world';
+import { FARM_WORK_EDGE_DISTANCE } from './constants';
 import type { SimWorld } from './types';
 
 /** Distance from (fromX, fromY) to the EDGE of the building's occupied tile
