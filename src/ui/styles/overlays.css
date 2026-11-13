@@ -215,7 +215,7 @@
 }
 
 .dev-btn[disabled] {
-  cursor: not-allowed;
+  cursor: var(--cur-forbidden);
   opacity: 0.45;
 }
 

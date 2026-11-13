@@ -9,7 +9,7 @@
  *   orders        issueMapOrder (minimap right-click), reportFailure
  *   alerts        drainUiAlerts / onGameMessage (typed event subscription)
  *   match         getMatchStats (exact, from sim counters) / endMatch
- *   input         setKeyboardEnabled
+ *   input         setKeyboardEnabled, pointerHoverKind (HUD cursor)
  *
  * Built once by GameScene.create(); it pumps the alert feed after every
  * scene update, so the UI only has to drain.
@@ -25,6 +25,8 @@ import {
   Owner,
   Position,
   Producer,
+  Resource,
+  ResourceKindId,
   UnitKind,
 } from '@sim/components';
 import { UNIT_TABLE, getAgeDef, type CostTuple } from '@sim/defs';
@@ -32,12 +34,16 @@ import {
   clearSelection,
   clonePlayerStats,
   emptyPlayerStats,
+  findEntityNear,
   findIdleVillagers,
+  findResourceAt,
+  isEnemyOf,
   selectedQuery,
   setSelected,
   type PlayerMatchStats,
 } from '@sim/world';
 import type { CameraController } from './camera/camera-controller';
+import { isArmyProducerDefId } from './commands/economy';
 import { CommandFeedback, type CommandFailure } from './commands/feedback';
 import type { PlayerCommands } from './commands/player-commands';
 import type { EffectsLayer } from './effects/effects-layer';
@@ -52,12 +58,25 @@ import {
   type TilePoint,
   type UiAlert,
 } from './hud/ui-alerts';
+import type { GameScene } from './game-scene';
 import type { MapOrderKind, PointerController } from './input/pointer-controller';
+import { BUILD_MODE_TO_DEF } from './placement/build-placement';
 import type { SceneContext } from './scene-context';
 
 export type { GameMessage, GameMessageListener, GameMessageTone, TilePoint, UiAlert, UiAlertKind } from './hud/ui-alerts';
 export type { CommandFailure, ResourceName } from './commands/feedback';
 export type { MapOrderKind } from './input/pointer-controller';
+
+/** Cursor intent for the battlefield tile under the pointer (see pointerHoverKind). */
+export type PointerHoverKind =
+  | 'default'
+  | 'attack'
+  | 'gather-wood'
+  | 'gather-mine'
+  | 'gather-food'
+  | 'build'
+  | 'rally'
+  | 'forbidden';
 
 export interface ProductionSlotInfo {
   /** Queue index; 0 is the unit in training. */
@@ -293,5 +312,63 @@ export class UiApi {
   isProducer(eid: number): boolean {
     const ecs = this.ctx.world.ecs;
     return hasComponent(ecs, Producer, eid) && hasComponent(ecs, Building, eid);
+  }
+
+  /** Health as 0..1 for the HUD, or null when the entity has no health. */
+  healthFrac(eid: number): number | null {
+    const ecs = this.ctx.world.ecs;
+    if (!hasComponent(ecs, Health, eid) || Health.hpMax[eid] <= 0) return null;
+    return Math.max(0, Math.min(1, Health.hp[eid] / Health.hpMax[eid]));
+  }
+
+  // ── Pointer hover (HUD cursor) ────────────────────────────────────────────
+
+  /**
+   * What a click on the battlefield tile under the pointer would mean, so the
+   * UI can pick a cursor: an armed placement (accepted or refused), the army
+   * rally pick, a visible enemy, an explored resource or one of our
+   * unfinished buildings. Read-only; mirrors PointerController's priorities.
+   */
+  pointerHoverKind(): PointerHoverKind {
+    const scene = this.ctx.scene as GameScene;
+    const world = this.ctx.world;
+    const me = this.ctx.perspectivePlayerId;
+    const pointer = scene.input.activePointer;
+    const wp = scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const { tx, ty, tileX, tileY } = this.ctx.pickTile(wp.x, wp.y);
+
+    const mode = scene.getBuildMode();
+    if (mode === 'army rally') return 'rally';
+    if (mode !== '-') {
+      const defId = BUILD_MODE_TO_DEF[mode.toUpperCase() as keyof typeof BUILD_MODE_TO_DEF];
+      if (defId === undefined) return 'build';
+      return this.deps.commands.placementFailure(defId, tx, ty) ? 'forbidden' : 'build';
+    }
+
+    const eid = findEntityNear(world, tileX, tileY, 0.7);
+    if (eid !== null && this.ctx.isEntityVisible(eid)) {
+      if (isEnemyOf(world, eid, me)) return this.deps.commands.selectedCommandableCount() > 0 ? 'attack' : 'default';
+      if (this.ownerOf(eid) === me && hasComponent(world.ecs, ConstructionSite, eid)) return 'build';
+    }
+    const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
+    if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
+      const kind = Resource.kind[resourceEid];
+      if (kind === ResourceKindId.WOOD) return 'gather-wood';
+      if (kind === ResourceKindId.FOOD) return 'gather-food';
+      return 'gather-mine';
+    }
+    return this.selectionIsOwnArmyProducers() ? 'rally' : 'default';
+  }
+
+  private selectionIsOwnArmyProducers(): boolean {
+    const ecs = this.ctx.world.ecs;
+    const selected = selectedQuery(ecs);
+    if (selected.length === 0) return false;
+    for (const eid of selected) {
+      if (!hasComponent(ecs, Building, eid) || hasComponent(ecs, ConstructionSite, eid)) return false;
+      if (this.ownerOf(eid) !== this.ctx.perspectivePlayerId) return false;
+      if (!isArmyProducerDefId(Building.defId[eid])) return false;
+    }
+    return true;
   }
 }

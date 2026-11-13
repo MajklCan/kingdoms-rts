@@ -37,10 +37,9 @@ body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  /* Pan gestures only: no pinch zoom, no double-tap zoom. */
+  /* Pan gestures only: no pinch zoom, no double-tap zoom. Labels never
+     turn the pointer into an I-beam (cursors.css). */
   touch-action: pan-x pan-y;
-  /* Labels never turn the pointer into an I-beam. */
-  cursor: default;
 }
 
 img,
@@ -56,15 +55,6 @@ textarea,
 [contenteditable="true"] {
   user-select: text;
   -webkit-user-select: text;
-}
-
-input:not([type]),
-input[type="text"],
-input[type="search"],
-input[type="number"],
-textarea,
-[contenteditable="true"] {
-  cursor: text;
 }
 
 button,
@@ -120,15 +110,17 @@ body:not([data-app-state="menu"]) #menu-root {
   visibility: hidden;
 }
 
-/* Focus: one strong, consistent ring everywhere. */
+/* Focus: one strong, consistent ring everywhere, drawn square like the
+   pixel frames: a gold ring with a dark halo so it reads on wood, parchment
+   and the battlefield alike (at least 2px, 3:1 against both). */
 :focus {
   outline: none;
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(15, 10, 6, 0.85);
+  outline: max(2px, var(--px)) solid var(--focus-ring);
+  outline-offset: var(--px);
+  box-shadow: 0 0 0 calc(var(--px) + max(2px, var(--px)) + var(--px)) rgba(10, 7, 5, 0.9);
 }
 
 .sr-only {
@@ -174,6 +166,7 @@ body:not([data-app-state="menu"]) #menu-root {
 
 #boot-splash .boot-label {
   font-family: var(--font-display);
+  font-weight: 700;
   font-size: var(--fs-sm);
   letter-spacing: 0.32em;
   text-transform: uppercase;

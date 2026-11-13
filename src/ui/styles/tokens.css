@@ -77,10 +77,13 @@
   --res-stone: #c3c9cf;
   --res-pop: #e8dcc0;
 
-  /* Type */
-  --font-display: "Cinzel", "Trajan Pro", "Palatino Linotype", Palatino, "Book Antiqua", "Iowan Old Style", Georgia, serif;
-  --font-body: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-  --font-ui: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  /* Type (faces in fonts.css). Blackletter is for big titles only: anything
+     a player must read quickly uses the readable face, numbers use Bitter. */
+  --font-title: "Grenze Gotisch", "Vollkorn", Georgia, serif;
+  --font-display: "Vollkorn", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: "Vollkorn", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-ui: "Vollkorn", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-num: "Bitter", "Vollkorn", Georgia, serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Type scale (rem, 1rem = 16px at 1280x720) */
@@ -155,9 +158,59 @@
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* HUD geometry */
-  --hud-top-h: 2.5rem;
-  --hud-bottom-h: 10.5rem;
-  --cmd-cell: 3rem;
+  --hud-top-h: 2.625rem;
+  --hud-bottom-h: 12rem;
+  --cmd-cell: 2.625rem;
+
+  /* Skin: pixel textures from scripts/ui/gen_ui_skin.py. --px is one
+     texel in CSS px, always a whole number of device pixels (set by
+     src/ui/skin/pixel-scale.ts from the root font size and DPR); every
+     border-image width and tile size is a multiple of it so the art stays
+     crisp. The fallback matches 1280x720 at DPR 1. */
+  --px: 2px;
+  --tex-wood: url("/assets/ui/skin/wood.png");
+  --tex-wood-dark: url("/assets/ui/skin/wood-dark.png");
+  --tex-parch: url("/assets/ui/skin/parch.png");
+  --tex-parch-dark: url("/assets/ui/skin/parch-dark.png");
+  --tex-frame: url("/assets/ui/skin/frame.png");
+  --tex-frame-thin: url("/assets/ui/skin/frame-thin.png");
+  --tex-frame-gold: url("/assets/ui/skin/frame-gold.png");
+  --tex-strap: url("/assets/ui/skin/strap.png");
+  --tex-slot: url("/assets/ui/skin/slot.png");
+  --tex-well: url("/assets/ui/skin/well.png");
+  --tex-inlay: url("/assets/ui/skin/inlay.png");
+  --tex-portrait: url("/assets/ui/skin/portrait.png");
+  --tex-socket: url("/assets/ui/skin/socket.png");
+  --tex-tile: url("/assets/ui/skin/tile.png");
+  --tex-tile-gold: url("/assets/ui/skin/tile-gold.png");
+  --tex-btn: url("/assets/ui/skin/btn.png");
+  --tex-btn-hover: url("/assets/ui/skin/btn-hover.png");
+  --tex-btn-pressed: url("/assets/ui/skin/btn-pressed.png");
+  --tex-btn-disabled: url("/assets/ui/skin/btn-disabled.png");
+  --tex-btn-active: url("/assets/ui/skin/btn-active.png");
+  --tex-btn-danger: url("/assets/ui/skin/btn-danger.png");
+  --tex-banner: url("/assets/ui/skin/banner.png");
+  --tex-banner-hover: url("/assets/ui/skin/banner-hover.png");
+  --tex-banner-pressed: url("/assets/ui/skin/banner-pressed.png");
+  --tex-banner-disabled: url("/assets/ui/skin/banner-disabled.png");
+  --tex-banner-primary: url("/assets/ui/skin/banner-primary.png");
+  --tex-banner-primary-hover: url("/assets/ui/skin/banner-primary-hover.png");
+  --tex-banner-primary-pressed: url("/assets/ui/skin/banner-primary-pressed.png");
+  --tex-keycap: url("/assets/ui/skin/keycap.png");
+  --tex-plaque: url("/assets/ui/skin/plaque.png");
+  --tex-knob: url("/assets/ui/skin/knob.png");
+  --tex-thumb: url("/assets/ui/skin/thumb.png");
+  --tex-track: url("/assets/ui/skin/track.png");
+  --tex-note: url("/assets/ui/skin/note.png");
+  --tex-tip: url("/assets/ui/skin/tip.png");
+  --tex-ribbon: url("/assets/ui/skin/ribbon.png");
+  --tex-seal: url("/assets/ui/skin/seal.png");
+  --tex-seal-gold: url("/assets/ui/skin/seal-gold.png");
+  --tex-seal-grey: url("/assets/ui/skin/seal-grey.png");
+  --tex-compass: url("/assets/ui/skin/compass.png");
+  --tex-rule: url("/assets/ui/skin/rule.png");
+  --tex-cloth-victory: url("/assets/ui/skin/cloth-victory.png");
+  --tex-cloth-defeat: url("/assets/ui/skin/cloth-defeat.png");
 }
 
 @media (prefers-reduced-motion: reduce) {

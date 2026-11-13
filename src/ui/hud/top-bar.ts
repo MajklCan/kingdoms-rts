@@ -10,6 +10,7 @@ import { h, setAttr, setText } from '../dom';
 import { formatAmount, formatClock, RESOURCE_KEYS, type ResourceKey } from '../format';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
+import { showAgeBanner } from './age-banner';
 import { attachTip } from './tooltip';
 
 export interface TopBarHandlers {
@@ -45,6 +46,8 @@ interface Refs {
 
 let refs: Refs | null = null;
 const lastRes: Partial<Record<ResourceKey, number>> = {};
+/** Age index last seen; the banner drops when it goes up mid-match. */
+let lastAge = -1;
 
 function barButton(id: string, iconName: IconName, label: string, onclick: () => void, extra: Record<string, string> = {}): HTMLButtonElement {
   const btn = h('button', { type: 'button', class: 'icon-btn', id, 'aria-label': label, onclick, ...extra }, icon(iconName));
@@ -56,7 +59,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const resChip = {} as Record<ResourceKey, HTMLElement>;
   const strip = h('div', { class: 'res-strip', role: 'group', 'aria-label': 'Resources' });
   for (const key of RESOURCE_KEYS) {
-    const val = h('span', { class: 'res-val', id: `res-${key}` }, '0');
+    const val = h('span', { class: 'res-val num', id: `res-${key}` }, '0');
     const chip = h(
       'div',
       { class: 'res-chip', 'data-res': key, tabindex: '0', 'aria-label': `${RES_LABEL[key]}` },
@@ -68,14 +71,14 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     resChip[key] = chip;
     strip.append(chip);
   }
-  const pop = h('span', { class: 'res-val', id: 'res-pop' }, '0/0');
+  const pop = h('span', { class: 'res-val num', id: 'res-pop' }, '0/0');
   const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('pop', 'res-icon res-pop'), pop);
   attachTip(popChip, () => ({ title: 'Population', body: 'Units alive out of your housing cap. Build houses to raise the cap.' }));
   strip.append(popChip);
 
   const ageName = h('span', { class: 'age-name', id: 'res-age' }, 'Dark Age');
   const ageBar = h('i');
-  const ageNext = h('span', { class: 'age-next' });
+  const ageNext = h('span', { class: 'age-next num' });
   const ageWrap = h('div', { class: 'age-progress bar', 'aria-hidden': 'true' }, ageBar);
   const plaque = h(
     'div',
@@ -89,7 +92,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     body: ageNext.textContent ? `Advancing: ${ageNext.textContent}` : 'Select your Town Center to advance to the next age.',
   }));
 
-  const clock = h('span', { class: 'clock-val', id: 'match-clock' }, '0:00');
+  const clock = h('span', { class: 'clock-val num', id: 'match-clock' }, '0:00');
   const objectives = barButton('btn-objectives', 'objectives', 'Objectives', handlers.onObjectives, { 'aria-expanded': 'false', 'aria-keyshortcuts': 'O' });
   const tech = barButton('btn-tech', 'tech', 'Technology tree', handlers.onTech, { 'aria-expanded': 'false', 'aria-keyshortcuts': 'K' });
   const speed = h(
@@ -115,7 +118,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   );
 
   refs = { res, resChip, pop, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech };
-  return h('header', { class: 'topbar frame-wood', id: 'resource-bar' }, strip, plaque, right);
+  return h('header', { class: 'topbar', id: 'resource-bar' }, strip, plaque, right);
 }
 
 export function bindSpeedButton(onToggle: () => void): void {
@@ -146,6 +149,8 @@ export function updateTopBar(scene: GameScene): void {
   setAttr(refs.popChip, 'aria-label', `Population ${pop.current} of ${pop.cap}`);
 
   const age = scene.getAge(me);
+  if (lastAge >= 0 && age.current > lastAge) showAgeBanner(age.name);
+  lastAge = age.current;
   setText(refs.ageName, age.name);
   setText(refs.ageNext, age.advancing && age.nextName ? `${age.nextName} ${Math.floor(age.progressFrac * 100)}%` : '');
   refs.ageWrap.classList.toggle('is-active', age.advancing);
@@ -191,4 +196,5 @@ export function setPanelExpanded(which: 'objectives' | 'tech', open: boolean): v
 
 export function resetTopBar(): void {
   for (const key of RESOURCE_KEYS) delete lastRes[key];
+  lastAge = -1;
 }

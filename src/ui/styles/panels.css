@@ -115,7 +115,7 @@
 }
 
 .pause-item[disabled] {
-  cursor: not-allowed;
+  cursor: var(--cur-forbidden);
   color: var(--ink-muted);
   opacity: 0.6;
 }
@@ -475,7 +475,7 @@
 
 .tech-node.is-short,
 .tech-node.is-locked {
-  cursor: not-allowed;
+  cursor: var(--cur-forbidden);
 }
 
 .tech-node.is-locked {

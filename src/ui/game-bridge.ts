@@ -13,6 +13,7 @@ import type {
   GameMessageListener,
   MapOrderKind,
   MatchStatsView,
+  PointerHoverKind,
   ProductionSlotInfo,
   TilePoint,
   UiAlert,
@@ -27,6 +28,7 @@ export type {
   GameMessageTone,
   MapOrderKind,
   MatchStatsView,
+  PointerHoverKind,
   ProductionSlotInfo,
   ResourceName,
   TilePoint,
@@ -93,6 +95,16 @@ export function isOwnedBy(scene: GameScene, eid: number, playerId: number): bool
 
 export function isProducer(scene: GameScene, eid: number): boolean {
   return getUiApi(scene)?.isProducer(eid) ?? false;
+}
+
+/** Health as 0..1, or null for entities without health. */
+export function healthFrac(scene: GameScene, eid: number): number | null {
+  return getUiApi(scene)?.healthFrac(eid) ?? null;
+}
+
+/** Cursor intent for the battlefield tile under the pointer. */
+export function pointerHoverKind(scene: GameScene): PointerHoverKind {
+  return getUiApi(scene)?.pointerHoverKind() ?? 'default';
 }
 
 // --- Idle villagers -----------------------------------------------------------

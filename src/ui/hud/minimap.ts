@@ -107,8 +107,9 @@ export function buildMinimap(): HTMLElement {
   canvas.addEventListener('pointercancel', stop);
   return h(
     'section',
-    { class: 'console-minimap frame-wood', 'aria-label': 'Minimap' },
-    h('div', { class: 'minimap-frame' }, canvas)
+    { class: 'console-minimap', 'aria-label': 'Minimap' },
+    h('div', { class: 'minimap-frame' }, canvas),
+    h('span', { class: 'minimap-compass', 'aria-hidden': 'true' })
   );
 }
 
