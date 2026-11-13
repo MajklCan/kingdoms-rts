@@ -1,30 +1,76 @@
 /**
- * Sim world — the source of truth. A bitECS world plus auxiliary state (paths, RNG,
- * input queue, tick counter, per-player resource banks). The world has NO Phaser
- * imports. Render reads from it; input writes commands to its queue; step() advances it.
+ * Public sim API. Re-exports the stable import surface (`@sim/world`) that
+ * render, net, debug and tests build against. Implementation lives in:
+ *   core/      world shape, constants, entity ids, queries, world creation
+ * Keep this file a barrel: add new code to the module that owns it.
  */
 
-import {
-  addComponent,
-  addEntity,
-  createWorld,
-  defineQuery,
-  hasComponent,
-  removeComponent,
-  removeEntity,
-  type IWorld,
-} from 'bitecs';
+export type {
+  AgeState,
+  AiDifficulty,
+  AiEvent,
+  AiPlan,
+  AiPlayerState,
+  CampaignObjectiveState,
+  CampaignState,
+  CombatEvent,
+  CreateSimWorldOptions,
+  LastSeenBuilding,
+  MatchOutcome,
+  PlayerVisibility,
+  PopState,
+  SimInput,
+  SimWorld,
+  SoundCue,
+  SoundCueKind,
+} from './core/types';
+export { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
+export { addSimEntity, entityForNetId, netIdForEntity, removeSimEntity } from './core/entities';
+export {
+  buildingQuery,
+  combatQuery,
+  damageableQuery,
+  deadQuery,
+  dropOffQuery,
+  foundationQuery,
+  gathererQuery,
+  movableQuery,
+  positionQuery,
+  producerQuery,
+  resourceQuery,
+  resourceWorksiteQuery,
+  selectedQuery,
+  townCenterQuery,
+  unitQuery,
+  worksiteWorkerQuery,
+} from './core/queries';
+export { getBuildingPopProvided } from './core/population';
+export {
+  findBuildingAt,
+  findEntityNear,
+  findNearestResource,
+  findResourceAt,
+  isEnemyOf,
+} from './core/lookup';
+export {
+  clearSelection,
+  pruneHiddenSelectionForPlayer,
+  selectUnitsOfSameKindInRadius,
+  setSelected,
+} from './core/selection';
+
+import { addComponent, createWorld, hasComponent, removeComponent } from 'bitecs';
 import { MAP, SIM } from '../config';
 import {
   ArcherTag,
   AttackMoveGoal,
   AttackTarget,
-  Building,
   BuildOrder,
+  Building,
+  CannonTag,
   Combat,
   ConstructionSite,
   Cooldown,
-  CannonTag,
   DeadTag,
   DropOff,
   DropOffMask,
@@ -36,7 +82,6 @@ import {
   MachineGunDeployment,
   MachineGunTag,
   MortarTag,
-  NetId,
   Owner,
   PathTarget,
   PopulationCost,
@@ -45,10 +90,10 @@ import {
   Producer,
   Resource,
   ResourceCarry,
+  type ResourceKind,
   ResourceKindId,
   ResourceWorksite,
   ScoutCavalryTag,
-  Selected,
   SpearmanTag,
   Speed,
   TownCenterTag,
@@ -56,29 +101,28 @@ import {
   UnitKindId,
   UnitStance,
   UnitStanceId,
+  type UnitStanceValue,
   VILLAGER_CARRY_CAPACITY,
   VILLAGER_GATHER_COOLDOWN,
-  VillagerTag,
   Velocity,
+  VillagerTag,
   WorksiteWorker,
-  type ResourceKind,
-  type UnitStanceValue,
 } from './components';
 import {
   AGE_TABLE,
   AgeId,
-  BUILDING_TABLE,
-  BuildingDefId,
-  UnitDefId,
   type AgeIdValue,
+  BUILDING_TABLE,
   type BuildingDef,
+  BuildingDefId,
+  type CostTuple,
+  UnitDefId,
   canAfford,
   getAgeDef,
   getBuildingDef,
   getUnitDef,
   refund,
   spend,
-  type CostTuple,
 } from './defs';
 import {
   CampaignMissionId,
@@ -86,8 +130,8 @@ import {
   type CampaignObjectiveDef,
   getCampaignMissionDef,
 } from './campaign';
-import { MapId, generateMap, TileType, isZborovMudPatch, type MapData, type MapIdValue } from './map-gen';
-import { Pathfinder, type GridPos } from './pathfinding';
+import { MapId, TileType, generateMap, isZborovMudPatch } from './map-gen';
+import { type GridPos, Pathfinder } from './pathfinding';
 import { Rng } from './rng';
 import {
   TechId,
@@ -103,14 +147,83 @@ import {
   techStatus,
   worksiteWorkerSlotsForKind,
 } from './tech-tree';
+import { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
+import {
+  addSimEntity,
+  clamp,
+  compareDeterministicEids,
+  compareGridPos,
+  deterministicEidKey,
+  isLiveEntity,
+  removeSimEntity,
+  sortedEids,
+} from './core/entities';
+import { gatherCueForKind, pushAiEvent, pushSoundCue } from './core/events';
+import {
+  buildingFootprintRect,
+  canUnitOccupy,
+  canUnitOccupyMovementTarget,
+  canUnitSqueezeAlongDiagonalPath,
+  distToBuildingEdge,
+  findSpawnSpot,
+  markFootprintBlocked,
+} from './core/grid';
+import {
+  findBuildingAt,
+  findEntityNear,
+  findNearestResource,
+  findOwnedTownCenter,
+  findResourceAt,
+  hasMapFeatureAt,
+} from './core/lookup';
+import {
+  buildingApproachCandidates,
+  pathTo,
+  pathToBuildingContact,
+  pathToResourceContact,
+  workerContactCrowdPenalty,
+} from './core/navigation';
+import {
+  countPendingPopCap,
+  countQueuedPopCost,
+  getBuildingPopProvided,
+  getHousePopProvided,
+  recalculatePlayerPopCap,
+} from './core/population';
+import {
+  buildingQuery,
+  combatQuery,
+  damageableQuery,
+  deadQuery,
+  dropOffQuery,
+  foundationQuery,
+  gathererQuery,
+  movableQuery,
+  positionQuery,
+  producerQuery,
+  resourceQuery,
+  resourceWorksiteQuery,
+  selectedQuery,
+  townCenterQuery,
+  unitQuery,
+  worksiteWorkerQuery,
+} from './core/queries';
+import type {
+  AgeState,
+  AiDifficulty,
+  AiPlayerState,
+  CampaignState,
+  CreateSimWorldOptions,
+  LastSeenBuilding,
+  MovementStuckState,
+  PendingCannonImpact,
+  PendingProjectileImpact,
+  PlayerVisibility,
+  PopState,
+  SimInput,
+  SimWorld,
+} from './core/types';
 
-/** Number of players supported (0=Gaia, 1=human, 2=AI). For Stage 0 we use 0 + 1. */
-export const MAX_PLAYERS = 3;
-/** The human player's id. All UI commands route through this. */
-export const LOCAL_PLAYER_ID = 1;
-
-/** Demo soft pop cap per GDD. */
-export const POP_CAP_HARD_LIMIT = 75;
 const TREE_RESOURCE_AMOUNT = 100;
 const LOCAL_GOLD_DEPOSIT_AMOUNT = 650;
 const LOCAL_STONE_DEPOSIT_AMOUNT = 600;
@@ -160,12 +273,11 @@ const TREE_REGEN_BASE_CHANCE = 0.002;
 const TREE_REGEN_CHANCE_PER_NEARBY_TREE = 0.006;
 const TREE_REGEN_EDGE_PRESSURE_BONUS = 2.5;
 const TREE_REGEN_MAX_CHANCE = 0.08;
-const RESOURCE_GATHER_DISTANCE = 0.55;
-const BUILDING_CONTACT_EDGE_GAP = 0.16;
+export const RESOURCE_GATHER_DISTANCE = 0.55;
 const DROP_OFF_EDGE_DISTANCE = 0.24;
 const WORKSITE_FALLBACK_DROP_OFF_RADIUS = 4;
 const DROP_OFF_DEPOSIT_TICKS = Math.round(SIM.TICK_HZ * 0.5);
-const FARM_WORK_EDGE_DISTANCE = 0.65;
+export const FARM_WORK_EDGE_DISTANCE = 0.65;
 const FARM_WORK_PATCH_INSET = 0.38;
 const FARM_WORK_CYCLE_TICKS = Math.round(SIM.TICK_HZ * 2.4);
 const FARM_MIN_WORK_CYCLE_TICKS = Math.round(SIM.TICK_HZ * 2);
@@ -231,7 +343,6 @@ const MACHINE_GUN_DEPLOY_TICKS = Math.round(SIM.TICK_HZ * 1.35);
 // Mortars reuse the cannon's windup + splash + impact machinery, but lob on a
 // higher, slower arc — a longer aim/elevation delay before each shell.
 const MORTAR_WINDUP_TICKS = Math.round(SIM.TICK_HZ * 1.2);
-export const AI_PLAYER_ID = 2;
 const AI_DEFENSE_RADIUS = 11;
 const AI_DEFENSE_ORDER_RADIUS = 18;
 const AI_STAGE_RADIUS = 3.5;
@@ -263,24 +374,6 @@ function isResourceTerrainTile(tile: number): boolean {
   );
 }
 
-function deterministicEidKey(world: SimWorld, eid: number): number {
-  return hasComponent(world.ecs, NetId, eid) ? NetId.value[eid] : eid;
-}
-
-function compareDeterministicEids(world: SimWorld, a: number, b: number): number {
-  const ak = deterministicEidKey(world, a);
-  const bk = deterministicEidKey(world, b);
-  return ak - bk || a - b;
-}
-
-function sortedEids(world: SimWorld, eids: readonly number[]): number[] {
-  return [...eids].sort((a, b) => compareDeterministicEids(world, a, b));
-}
-
-function compareGridPos(a: GridPos, b: GridPos): number {
-  return a.y - b.y || a.x - b.x;
-}
-
 const UNIT_SEPARATION_RADIUS = 0.42;
 const WORKER_SEPARATION_RADIUS = 0.58;
 const UNIT_SEPARATION_MAX_NUDGE = 0.08;
@@ -293,167 +386,8 @@ const STUCK_PROGRESS_EPSILON = 0.025;
 const STUCK_PROGRESS_TICKS = Math.round(SIM.TICK_HZ * 2.5);
 const STUCK_RECOVERY_COOLDOWN_TICKS = Math.round(SIM.TICK_HZ * 3);
 const STUCK_REPATH_RADIUS = 4;
-const WORKER_RESOURCE_CONTACT_GAP = 0.52;
-const WORKER_RESOURCE_CONTACT_SLOT_RADIUS = 0.46;
-const WORKER_RESOURCE_CONTACT_SLOT_UNIT_PENALTY = 18;
-const WORKER_RESOURCE_CONTACT_SLOT_PATH_PENALTY = 12;
-const WORKER_CONTACT_CROWD_RADIUS = 0.72;
-const WORKER_CONTACT_UNIT_PENALTY = 8;
-const WORKER_CONTACT_PATH_PENALTY = 5;
 const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
 const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
-
-export type SimInput =
-  // ── Selection-relative commands (local single-player UX). These read the
-  //    local Selected component + LOCAL_PLAYER_ID, so they are NOT safe to send
-  //    over the wire — a peer has no idea what the sender had selected. The
-  //    network layer must translate these into their self-describing `cmd*`
-  //    equivalents (which carry an explicit playerId + eid list) before sending.
-  | { type: 'moveSelected'; to: GridPos }
-  | { type: 'gatherSelected'; targetEid: number }
-  | { type: 'stopSelected' }
-  | { type: 'toggleSelectedUnitStance' }
-  | { type: 'setSelectedUnitStance'; stance: UnitStanceValue }
-  | { type: 'setFormationMode'; mode: number }
-  | { type: 'adjustFormationMode'; delta: number }
-  | { type: 'rotateSelectedFormation'; delta: number }
-  | { type: 'reformSelectedFormation' }
-  | { type: 'attackSelected'; targetEid: number }
-  | { type: 'attackMoveSelected'; to: GridPos }
-  // ── Self-describing commands. Inside the sim these eids are local raw bitECS
-  //    ids. MultiplayerSession converts them to deterministic NetIds before
-  //    putting commands on the wire, then decodes them back before applyInput().
-  | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
-  | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
-  | { type: 'cmdStop'; playerId: number; eids: number[] }
-  | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
-  | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
-  | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos }
-  | { type: 'cmdRemoveBuildings'; playerId: number; eids: number[] }
-  | { type: 'cmdSetStance'; playerId: number; eids: number[]; stance: UnitStanceValue }
-  | { type: 'cmdSetFormationMode'; playerId: number; eids: number[]; mode: number }
-  | { type: 'cmdAdjustFormationMode'; playerId: number; eids: number[]; delta: number }
-  | { type: 'cmdRotateFormation'; playerId: number; eids: number[]; delta: number }
-  | { type: 'cmdReformFormation'; playerId: number; eids: number[] }
-  // ── Already self-describing (carry playerId or a global building eid).
-  | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
-  | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
-  | { type: 'removeSelectedBuildings'; playerId: number }
-  | { type: 'trainUnit'; atEid: number; defId: number; count?: number; playerId?: number }
-  | { type: 'cancelProduction'; atEid: number; playerId?: number }
-  | { type: 'advanceAge'; playerId: number }
-  | { type: 'researchTech'; playerId: number; techId: TechIdValue };
-
-/** Per-player age progression state. */
-export interface AgeState {
-  current: number;
-  /** Ticks of progress on advance to next age. -1 = not advancing. */
-  progress: number;
-  /** Cached totalTicks for the in-flight advance. 0 when idle. */
-  totalTicks: number;
-}
-
-/** Outcome of the match — set by winConditionSystem when one player loses or wins. */
-export type MatchOutcome =
-  | { state: 'playing' }
-  | { state: 'victory'; winnerPlayerId: number; mode: 'conquest' };
-
-export interface CampaignObjectiveState {
-  id: string;
-  label: string;
-  optional: boolean;
-  completed: boolean;
-}
-
-export interface CampaignState {
-  missionId: CampaignMissionIdValue;
-  name: string;
-  description: string;
-  briefing: string;
-  lockedTechs: TechIdValue[];
-  objectives: CampaignObjectiveState[];
-  trackedObjectiveEids: Record<string, number[]>;
-  enemyAiMode: 'defensive';
-  nextReinforcementTick: number;
-  scriptedWaveIndex?: number;
-  scriptedWaveCount?: number;
-  /** Zborov bite-and-hold: how many trench lines the player has taken so far,
-   *  and the y the player's reinforcements now muster at (advances as lines
-   *  fall). */
-  zborovLinesTaken?: number;
-  zborovForwardY?: number;
-}
-
-export interface PopState {
-  current: number;
-  cap: number;
-}
-
-export interface CombatEvent {
-  type: 'attack';
-  tick: number;
-  attackerEid: number;
-  targetEid: number;
-  attackerKind: number;
-  range: number;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-  phase?: 'windup' | 'fire';
-  windupTicks?: number;
-  projectileTicks?: number;
-}
-
-/** Non-combat sound triggers the render layer plays. Sim appends; render
- *  drains. Output-only (sim never reads it back), so determinism is unaffected
- *  — same contract as combatEvents. Combat fire SFX come from combatEvents;
- *  these cover state transitions that emit no combat event. */
-export type SoundCueKind =
-  | 'gather_wood'
-  | 'gather_stone'
-  | 'gather_gold'
-  | 'gather_food'
-  | 'unit_death'
-  | 'building_destroyed'
-  | 'cannon_impact'
-  | 'build_complete'
-  | 'unit_ready'
-  | 'age_up';
-
-export interface SoundCue {
-  kind: SoundCueKind;
-  /** World tile coords for spatial panning. Ignored for non-spatial cues. */
-  x: number;
-  y: number;
-  /** Owning player — render uses this for fog/local-player filtering. */
-  player: number;
-}
-
-interface CannonWindup {
-  targetEid: number;
-  ticksRemaining: number;
-}
-
-interface PendingCannonImpact {
-  impactTick: number;
-  attackerEid: number;
-  attackerOwner: number;
-  impactX: number;
-  impactY: number;
-  damage: number;
-}
-
-interface PendingProjectileImpact {
-  impactTick: number;
-  attackerEid: number;
-  attackerOwner: number;
-  targetEid: number;
-  damage: number;
-}
-
-export type AiPlan = 'opening' | 'massing' | 'staging' | 'attacking' | 'defending' | 'recovering';
-export type AiDifficulty = 'easy' | 'medium' | 'hard';
 
 interface AiDifficultySettings {
   thinkIntervalTicks: number;
@@ -607,161 +541,6 @@ export function normalizeAiDifficulty(value: unknown): AiDifficulty {
   return value === 'easy' || value === 'hard' ? value : 'medium';
 }
 
-export interface AiPlayerState {
-  plan: AiPlan;
-  nextAttackTick: number;
-  lastAttackTick: number;
-  stageStartedTick: number;
-  rallyPoint: GridPos | null;
-  waveUnitEids: number[];
-  lastAttackEventTick: number;
-  lastDefenseEventTick: number;
-}
-
-export interface AiEvent {
-  tick: number;
-  playerId: number;
-  message: string;
-}
-
-export interface LastSeenBuilding {
-  eid: number;
-  owner: number;
-  defId: number;
-  age: number;
-  x: number;
-  y: number;
-  hp: number;
-  hpMax: number;
-  isFoundation: boolean;
-}
-
-export interface PlayerVisibility {
-  explored: Uint8Array;
-  visible: Uint8Array;
-  lastSeenBuildings: Map<number, LastSeenBuilding>;
-}
-
-interface MovementStuckState {
-  lastDist: number;
-  waypointX: number;
-  waypointY: number;
-  noProgressTicks: number;
-  cooldownTicks: number;
-  attempts: number;
-}
-
-export interface SimWorld {
-  ecs: IWorld;
-  rng: Rng;
-  tick: number;
-  inputs: SimInput[];
-  /** Per-entity remaining path waypoints. Cleared as the unit progresses. */
-  paths: Map<number, GridPos[]>;
-  /** Deterministic command-id mapping for multiplayer wire payloads. */
-  nextNetId: number;
-  netIdToEid: Map<number, number>;
-  /** Transient progress tracking used to sidestep/repath blocked movement. */
-  movementStuck: Map<number, MovementStuckState>;
-  /** Temporary speed caps for selected groups moving as a formation. */
-  formationSpeedCaps: Map<number, number>;
-  /**
-   * Per-player command formation shape: 0 = free, 1 = line, 2 = compact.
-   * Indexed by playerId. Each player's choice is independent so it stays correct
-   * in multiplayer (a peer changing formation must not reshape your army).
-   */
-  formationModes: number[];
-  /**
-   * Per-player command formation facing. Eight 45-degree steps, 0 faces +Y.
-   * Indexed by playerId.
-   */
-  formationFacings: number[];
-  pathfinder: Pathfinder;
-  /** Static map grid (0 walkable, 1+ blocked). */
-  grid: number[][];
-  /**
-   * Per-player resource banks. resources[playerId] = Int32Array of length 4
-   * indexed by ResourceKindId (FOOD/WOOD/GOLD/STONE).
-   */
-  resources: Int32Array[];
-  /** Per-player population state. population[playerId] = { current, cap }. */
-  population: PopState[];
-  /**
-   * Per-building production queues. Each entry is an array of unit defIds
-   * (front = currently training). Front entry's progress lives on
-   * Producer.currentProgress[eid].
-   */
-  productionQueues: Map<number, number[]>;
-  /** Per-player global rally point for units trained from army buildings. */
-  armyRallyPoints: Array<GridPos | null>;
-  /** Per-player age progression. ages[playerId] = AgeState. */
-  ages: AgeState[];
-  /** Per-player researched technologies. */
-  researchedTechs: Array<Set<TechIdValue>>;
-  /** Player map knowledge. visible is rebuilt each tick; explored persists. */
-  visibility: PlayerVisibility[];
-  /** Cheat/debug map reveal flags by player. When true, fog stays fully cleared. */
-  revealedMapPlayers: boolean[];
-  /** Match outcome — set by winConditionSystem. */
-  outcome: MatchOutcome;
-  /** Active campaign mission state. Null in skirmish mode. */
-  campaign: CampaignState | null;
-  /** Render-consumed combat events. Sim appends; render drains. */
-  combatEvents: CombatEvent[];
-  /** Projectile attacks apply damage on impact rather than at fire time. */
-  cannonWindups: Map<number, CannonWindup>;
-  pendingProjectileImpacts: PendingProjectileImpact[];
-  pendingCannonImpacts: PendingCannonImpact[];
-  /** Players controlled by a human. Always includes LOCAL_PLAYER_ID. In a
-   *  multiplayer match the remote player(s) are added here so the AI controller
-   *  is suppressed for them — they're driven by relayed commands instead. */
-  humanPlayers: Set<number>;
-  /** Per-player AI controller state. Null for human/gaia players. */
-  aiPlayers: Array<AiPlayerState | null>;
-  /** Controls AI build cadence, economy scale, and attack wave discipline. */
-  aiDifficulty: AiDifficulty;
-  /** Render-consumed AI event messages. */
-  aiEvents: AiEvent[];
-  /** Render-consumed non-combat sound cues. Sim appends; render drains. */
-  soundCues: SoundCue[];
-  /** When true, step() is a no-op (title screen, pause menu). */
-  paused: boolean;
-  /** Procedurally generated map (terrain tiles + heightmap + bridges + spawns). */
-  map: MapData;
-}
-
-export interface CreateSimWorldOptions {
-  startingAge?: AgeIdValue;
-  mapId?: MapIdValue;
-  aiDifficulty?: AiDifficulty;
-  campaignMissionId?: CampaignMissionIdValue;
-}
-
-export function addSimEntity(world: SimWorld): number {
-  const eid = addEntity(world.ecs);
-  addComponent(world.ecs, NetId, eid);
-  const netId = world.nextNetId++;
-  NetId.value[eid] = netId;
-  world.netIdToEid.set(netId, eid);
-  return eid;
-}
-
-export function removeSimEntity(world: SimWorld, eid: number): void {
-  if (hasComponent(world.ecs, NetId, eid)) {
-    world.netIdToEid.delete(NetId.value[eid]);
-  }
-  removeEntity(world.ecs, eid);
-}
-
-export function netIdForEntity(world: SimWorld, eid: number): number | null {
-  if (!hasComponent(world.ecs, NetId, eid)) return null;
-  return NetId.value[eid];
-}
-
-export function entityForNetId(world: SimWorld, netId: number): number | null {
-  return world.netIdToEid.get(netId) ?? null;
-}
-
 function normalizeStartingAge(ageId: number | undefined): AgeIdValue {
   if (ageId === AgeId.CASTLE) return AgeId.CASTLE;
   if (ageId === AgeId.GUNPOWDER) return AgeId.GUNPOWDER;
@@ -794,33 +573,6 @@ function createAiPlayers(difficulty: AiDifficulty): Array<AiPlayerState | null> 
   );
   states[AI_PLAYER_ID] = createAiPlayerState(0, difficulty);
   return states;
-}
-
-function getHousePopProvided(world: SimWorld, playerId: number): number {
-  if (hasTech(world, playerId, TechId.HOUSING_II)) return 8;
-  if (hasTech(world, playerId, TechId.HOUSING_I)) return 5;
-  return BUILDING_TABLE[BuildingDefId.HOUSE].popProvided;
-}
-
-export function getBuildingPopProvided(
-  world: SimWorld,
-  playerId: number,
-  defId: number
-): number {
-  if (defId === BuildingDefId.HOUSE) return getHousePopProvided(world, playerId);
-  return BUILDING_TABLE[defId]?.popProvided ?? 0;
-}
-
-function recalculatePlayerPopCap(world: SimWorld, playerId: number): void {
-  const pop = world.population[playerId];
-  if (!pop) return;
-  let cap = 0;
-  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
-    if (Owner.player[eid] !== playerId) continue;
-    if (hasComponent(world.ecs, ConstructionSite, eid)) continue;
-    cap += getBuildingPopProvided(world, playerId, Building.defId[eid]);
-  }
-  pop.cap = Math.min(POP_CAP_HARD_LIMIT, cap);
 }
 
 export function createVisibilityState(): PlayerVisibility {
@@ -2621,13 +2373,6 @@ function spawnBrnoDefenders(world: SimWorld, trackedObjectiveEids: Record<string
   }
 }
 
-function findOwnedTownCenter(world: SimWorld, playerId: number): number | null {
-  for (const eid of townCenterQuery(world.ecs)) {
-    if (Owner.player[eid] === playerId && Health.hp[eid] > 0) return eid;
-  }
-  return null;
-}
-
 export function createLateGameTestWorld(): SimWorld {
   const world = createSimWorld(4242);
   world.paused = false;
@@ -3460,13 +3205,6 @@ function canTreeGrowAt(
   return !isNearBuilding(world, x, y, buildingClearance);
 }
 
-function hasMapFeatureAt(world: SimWorld, x: number, y: number, radius: number): boolean {
-  for (const feature of world.map.features) {
-    if (Math.hypot(feature.x - x, feature.y - y) <= radius) return true;
-  }
-  return false;
-}
-
 function isNearBuilding(
   world: SimWorld,
   x: number,
@@ -3590,129 +3328,6 @@ export function spawnCompletedBuilding(
   return eid;
 }
 
-/** Distance from (fromX, fromY) to the EDGE of the building's occupied tile
- *  rectangle. Returns 0 inside the footprint. This mirrors markFootprintBlocked,
- *  including its even-footprint convention where a 2×2 building at (x,y)
- *  occupies tiles (x-1..x, y-1..y). */
-function distToBuildingEdge(
-  world: SimWorld,
-  fromX: number,
-  fromY: number,
-  buildingEid: number
-): number {
-  if (!hasComponent(world.ecs, Building, buildingEid)) {
-    return Math.hypot(
-      fromX - Position.x[buildingEid],
-      fromY - Position.y[buildingEid]
-    );
-  }
-  const def = BUILDING_TABLE[Building.defId[buildingEid]];
-  if (!def) {
-    return Math.hypot(
-      fromX - Position.x[buildingEid],
-      fromY - Position.y[buildingEid]
-    );
-  }
-  const x0 = Math.round(Position.x[buildingEid]) - Math.floor(def.footprint.w / 2);
-  const y0 = Math.round(Position.y[buildingEid]) - Math.floor(def.footprint.h / 2);
-  const minX = x0 - 0.5;
-  const maxX = x0 + def.footprint.w - 0.5;
-  const minY = y0 - 0.5;
-  const maxY = y0 + def.footprint.h - 0.5;
-  const dx = fromX < minX ? minX - fromX : fromX > maxX ? fromX - maxX : 0;
-  const dy = fromY < minY ? minY - fromY : fromY > maxY ? fromY - maxY : 0;
-  return Math.hypot(dx, dy);
-}
-
-/** Find a walkable tile near (cx, cy) for spawning units. Searches outward
- *  in concentric rings up to maxR. Returns the requested tile if walkable,
- *  the nearest walkable otherwise, or null if nothing within range. */
-function findSpawnSpot(
-  world: SimWorld,
-  cx: number,
-  cy: number,
-  maxR = 5
-): { x: number; y: number } | null {
-  const ix = Math.round(cx);
-  const iy = Math.round(cy);
-  if (
-    ix >= 0 && iy >= 0 && ix < MAP.WIDTH && iy < MAP.HEIGHT &&
-    world.map.walkability[iy][ix] === 0
-  ) {
-    return { x: ix, y: iy };
-  }
-  return world.pathfinder.nearestWalkable(
-    Math.max(0, Math.min(MAP.WIDTH - 1, ix)),
-    Math.max(0, Math.min(MAP.HEIGHT - 1, iy)),
-    maxR
-  );
-}
-
-/** Mark / unmark a tile as blocked in the walkability grid. Mutating the
- *  array also updates EasyStar (same array reference). */
-function markTileBlocked(world: SimWorld, x: number, y: number, blocked: boolean): void {
-  const ix = Math.round(x), iy = Math.round(y);
-  if (ix < 0 || iy < 0 || ix >= MAP.WIDTH || iy >= MAP.HEIGHT) return;
-  world.map.walkability[iy][ix] = blocked ? 1 : 0;
-}
-
-/** Mark / unmark a building's full footprint in the walkability grid.
- *  Footprint is centred on (cx, cy). For even widths the extra tile is to
- *  the south/east. Buildings with a 3×3 footprint block 9 tiles total. */
-function markFootprintBlocked(
-  world: SimWorld,
-  cx: number,
-  cy: number,
-  fw: number,
-  fh: number,
-  blocked: boolean
-): void {
-  const x0 = Math.round(cx) - Math.floor(fw / 2);
-  const y0 = Math.round(cy) - Math.floor(fh / 2);
-  for (let dy = 0; dy < fh; dy++) {
-    for (let dx = 0; dx < fw; dx++) {
-      markTileBlocked(world, x0 + dx, y0 + dy, blocked);
-    }
-  }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Queries
-// ────────────────────────────────────────────────────────────────────────────
-
-export const positionQuery = defineQuery([Position]);
-export const movableQuery = defineQuery([Position, Velocity, Speed]);
-export const selectedQuery = defineQuery([Position, Selected]);
-export const gathererQuery = defineQuery([Position, Gatherer, ResourceCarry]);
-export const resourceQuery = defineQuery([Position, Resource]);
-export const dropOffQuery = defineQuery([Position, DropOff, Owner]);
-export const resourceWorksiteQuery = defineQuery([Position, ResourceWorksite, Owner, Building]);
-export const worksiteWorkerQuery = defineQuery([Position, WorksiteWorker, Gatherer, Owner]);
-export const townCenterQuery = defineQuery([Position, TownCenterTag, Owner]);
-export const buildingQuery = defineQuery([Position, Building, Owner]);
-export const foundationQuery = defineQuery([
-  Position,
-  Building,
-  ConstructionSite,
-  Owner,
-]);
-export const producerQuery = defineQuery([Producer, Owner]);
-export const combatQuery = defineQuery([
-  Position,
-  Combat,
-  AttackTarget,
-  Cooldown,
-  Owner,
-  Health,
-]);
-export const damageableQuery = defineQuery([Position, Health, Owner]);
-export const unitQuery = defineQuery([Position, UnitKind, Owner, Health]);
-export const deadQuery = defineQuery([DeadTag]);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Fog of war / player visibility
-// ────────────────────────────────────────────────────────────────────────────
-
 export function tileVisibilityIndex(x: number, y: number): number {
   return y * MAP.WIDTH + x;
 }
@@ -3834,7 +3449,7 @@ function visibilitySystem(world: SimWorld): void {
   }
 }
 
-function isTileInMap(x: number, y: number): boolean {
+export function isTileInMap(x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < MAP.WIDTH && y < MAP.HEIGHT;
 }
 
@@ -3964,16 +3579,6 @@ function snapshotBuilding(world: SimWorld, eid: number): LastSeenBuilding {
   };
 }
 
-export function pruneHiddenSelectionForPlayer(world: SimWorld, playerId: number): void {
-  for (const eid of selectedQuery(world.ecs)) {
-    if (!hasComponent(world.ecs, Owner, eid)) continue;
-    if (Owner.player[eid] === playerId) continue;
-    if (!isEntityVisibleTo(world, playerId, eid)) {
-      removeComponent(world.ecs, Selected, eid);
-    }
-  }
-}
-
 function forEachBuildingFootprintTile(
   defId: number,
   x: number,
@@ -3995,10 +3600,6 @@ function forEachBuildingFootprintTile(
     }
   }
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// step()
-// ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Advance the sim by one fixed tick. Inputs queued since the last tick are applied first,
@@ -5028,10 +4629,6 @@ function applyCancelProduction(world: SimWorld, atEid: number): void {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Systems
-// ────────────────────────────────────────────────────────────────────────────
-
 /**
  * Gatherer state machine. Drives the canonical AoE2 villager loop:
  *   IDLE → (assigned) → WALKING_TO → (arrived) → GATHERING →
@@ -5065,10 +4662,6 @@ function gatheringSystem(world: SimWorld): void {
     }
   }
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// 22 — Construction
-// ────────────────────────────────────────────────────────────────────────────
 
 function constructionSystem(world: SimWorld): void {
   const sites = sortedEids(world, foundationQuery(world.ecs));
@@ -5135,10 +4728,6 @@ function attachBuildingCombat(world: SimWorld, eid: number, def: BuildingDef): v
   AttackTarget.retainGoal[eid] = 0;
   Cooldown.ticksRemaining[eid] = 0;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// 23 — Automatic resource buildings
-// ────────────────────────────────────────────────────────────────────────────
 
 function resourceWorksiteSystem(world: SimWorld): void {
   const sites = sortedEids(world, resourceWorksiteQuery(world.ecs));
@@ -5509,10 +5098,6 @@ function forestRegrowthSystem(world: SimWorld): void {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// 21 — Production
-// ────────────────────────────────────────────────────────────────────────────
-
 function productionSystem(world: SimWorld): void {
   const ents = sortedEids(world, producerQuery(world.ecs));
   for (const eid of ents) {
@@ -5635,10 +5220,6 @@ function isArmyProducerDefId(defId: number): boolean {
     defId === BuildingDefId.STABLE ||
     defId === BuildingDefId.FOUNDRY;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// 50/51/70/71 — Combat
-// ────────────────────────────────────────────────────────────────────────────
 
 interface TargetScore {
   priority: number;
@@ -6471,10 +6052,6 @@ function markWorksiteWorkersDead(world: SimWorld, siteEid: number): void {
   ResourceWorksite.assignedWorkers[siteEid] = 0;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// 09 — Campaign mission state
-// ────────────────────────────────────────────────────────────────────────────
-
 function zborovAssaultSystem(world: SimWorld): void {
   const campaign = world.campaign;
   if (!campaign) return;
@@ -6627,11 +6204,6 @@ function updateCampaignObjectives(world: SimWorld): void {
       pushAiEvent(world, 0, `${objective.label} complete`);
     }
   }
-}
-
-function isLiveEntity(world: SimWorld, eid: number): boolean {
-  return hasComponent(world.ecs, Position, eid) &&
-    (!hasComponent(world.ecs, Health, eid) || Health.hp[eid] > 0);
 }
 
 function bilaHoraOpeningAdvanceSystem(world: SimWorld): void {
@@ -6975,10 +6547,6 @@ function completeCampaignObjective(campaign: CampaignState, id: string): void {
   const objective = campaign.objectives.find((entry) => entry.id === id);
   if (objective) objective.completed = true;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// 10 — AI
-// ────────────────────────────────────────────────────────────────────────────
 
 function aiSystem(world: SimWorld): void {
   // In multiplayer the second player is human; their commands arrive over the
@@ -8300,68 +7868,6 @@ function issueAiAttackOrder(world: SimWorld, eid: number, target: number): void 
   clearFormationSpeedCap(world, eid);
 }
 
-function countQueuedPopCost(world: SimWorld, playerId: number): number {
-  let total = 0;
-  for (const [producerEid, queue] of world.productionQueues) {
-    if (!hasComponent(world.ecs, Owner, producerEid)) continue;
-    if (Owner.player[producerEid] !== playerId) continue;
-    for (const defId of queue) {
-      if (defId === UnitDefId.VILLAGER && hasComponent(world.ecs, ResourceWorksite, producerEid)) {
-        continue;
-      }
-      const def = getUnitDef(defId);
-      total += def?.popCost ?? 0;
-    }
-  }
-  return total;
-}
-
-function countPendingPopCap(world: SimWorld, playerId: number): number {
-  let total = 0;
-  for (const eid of buildingQuery(world.ecs)) {
-    if (Owner.player[eid] !== playerId) continue;
-    if (!hasComponent(world.ecs, ConstructionSite, eid)) continue;
-    total += getBuildingPopProvided(world, playerId, Building.defId[eid]);
-  }
-  return total;
-}
-
-function pushAiEvent(world: SimWorld, playerId: number, message: string): void {
-  world.aiEvents.push({ tick: world.tick, playerId, message });
-  if (world.aiEvents.length > 12) world.aiEvents.splice(0, world.aiEvents.length - 12);
-}
-
-function gatherCueForKind(kind: ResourceKind): SoundCueKind {
-  switch (kind) {
-    case ResourceKindId.WOOD:
-      return 'gather_wood';
-    case ResourceKindId.STONE:
-      return 'gather_stone';
-    case ResourceKindId.GOLD:
-      return 'gather_gold';
-    default:
-      return 'gather_food';
-  }
-}
-
-/** Maximum buffered sound cues. The render layer drains every frame; this cap
- *  only matters in headless runs (tests) where nothing drains — it bounds
- *  memory by dropping the oldest cues. Output-only, so determinism-safe. */
-const MAX_SOUND_CUES = 256;
-
-function pushSoundCue(
-  world: SimWorld,
-  kind: SoundCueKind,
-  x: number,
-  y: number,
-  player: number
-): void {
-  world.soundCues.push({ kind, x, y, player });
-  if (world.soundCues.length > MAX_SOUND_CUES) {
-    world.soundCues.splice(0, world.soundCues.length - MAX_SOUND_CUES);
-  }
-}
-
 function aiQueueUnit(world: SimWorld, atEid: number, defId: number): boolean {
   const unitDef = getUnitDef(defId);
   if (!unitDef) return false;
@@ -9209,7 +8715,7 @@ function isEconomicWorker(world: SimWorld, eid: number): boolean {
     hasComponent(world.ecs, VillagerTag, eid);
 }
 
-function deterministicPairAngle(world: SimWorld, a: number, b: number): number {
+export function deterministicPairAngle(world: SimWorld, a: number, b: number): number {
   const ak = deterministicEidKey(world, a);
   const bk = deterministicEidKey(world, b);
   const hash = Math.imul(ak + 1, 73856093) ^ Math.imul(bk + 1, 19349663);
@@ -9222,186 +8728,6 @@ function tryNudgeUnit(world: SimWorld, eid: number, dx: number, dy: number): voi
   if (!canUnitOccupy(world, nx, ny)) return;
   Position.x[eid] = nx;
   Position.y[eid] = ny;
-}
-
-function canUnitOccupy(world: SimWorld, x: number, y: number): boolean {
-  const tx = Math.round(x);
-  const ty = Math.round(y);
-  if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
-  return world.map.walkability[ty][tx] === 0;
-}
-
-function canUnitSqueezeAlongDiagonalPath(
-  world: SimWorld,
-  x: number,
-  y: number,
-  dirX: number,
-  dirY: number,
-  waypoint: GridPos
-): boolean {
-  if (Math.abs(dirX) < 0.2 || Math.abs(dirY) < 0.2) return false;
-  if (!isTileInMap(Math.round(x), Math.round(y))) return false;
-  return canUnitOccupy(world, waypoint.x, waypoint.y);
-}
-
-function canUnitOccupyMovementTarget(world: SimWorld, eid: number, x: number, y: number): boolean {
-  if (canUnitOccupy(world, x, y)) return true;
-  if (!hasComponent(world.ecs, WorksiteWorker, eid)) return false;
-  const siteEid = WorksiteWorker.siteEid[eid];
-  if (!hasComponent(world.ecs, Building, siteEid)) return false;
-  if (Building.defId[siteEid] !== BuildingDefId.FARM) return false;
-  if (Gatherer.targetEid[eid] !== siteEid) return false;
-  return distToBuildingEdge(world, x, y, siteEid) <= FARM_WORK_EDGE_DISTANCE;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Plan a path for `eid` to (tx, ty) and stash it in world.paths.
- *  Returns `true` if a non-trivial path was produced (caller can safely commit
- *  state transitions). Returns `false` if the destination is unreachable —
- *  caller should leave the unit's previous state alone. */
-function pathTo(world: SimWorld, eid: number, tx: number, ty: number): boolean {
-  const from = {
-    x: Math.round(Position.x[eid]),
-    y: Math.round(Position.y[eid]),
-  };
-  const to = { x: Math.round(tx), y: Math.round(ty) };
-  const path = world.pathfinder.findPath(from, to);
-  if (path === null) return false;
-  if (path.length === 0) {
-    // Same tile — treat as success but no path needed.
-    world.paths.delete(eid);
-    return true;
-  }
-  world.paths.set(eid, path);
-  PathTarget.x[eid] = path[0].x;
-  PathTarget.y[eid] = path[0].y;
-  return true;
-}
-
-function pathToResourceContact(world: SimWorld, eid: number, target: number): boolean {
-  const from = {
-    x: Math.round(Position.x[eid]),
-    y: Math.round(Position.y[eid]),
-  };
-  for (const candidate of resourceApproachCandidates(world, eid, target)) {
-    const path = world.pathfinder.findPath(from, candidate.tile);
-    if (path === null) continue;
-
-    const nextPath: GridPos[] = [...path];
-    const final = nextPath[nextPath.length - 1];
-    if (
-      Math.hypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) >
-        RESOURCE_GATHER_DISTANCE &&
-      (!final || Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01)
-    ) {
-      nextPath.push(candidate.point);
-    }
-
-    if (nextPath.length === 0) {
-      world.paths.delete(eid);
-      return true;
-    }
-    world.paths.set(eid, nextPath);
-    PathTarget.x[eid] = Math.round(nextPath[0].x);
-    PathTarget.y[eid] = Math.round(nextPath[0].y);
-    return true;
-  }
-  return false;
-}
-
-function resourceApproachCandidates(
-  world: SimWorld,
-  eid: number,
-  target: number
-): Array<{ tile: GridPos; point: GridPos; score: number }> {
-  const cx = Math.round(Position.x[target]);
-  const cy = Math.round(Position.y[target]);
-  const out: Array<{ tile: GridPos; point: GridPos; score: number }> = [];
-  const seen = new Set<string>();
-
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const tx = cx + dx;
-      const ty = cy + dy;
-      if (!isTileInMap(tx, ty)) continue;
-      if (world.map.walkability[ty][tx] !== 0) continue;
-      const key = `${tx},${ty}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      let vx = tx - Position.x[target];
-      let vy = ty - Position.y[target];
-      let len = Math.hypot(vx, vy);
-      if (len < 0.001) {
-        const angle = deterministicPairAngle(world, eid, target);
-        vx = Math.cos(angle);
-        vy = Math.sin(angle);
-        len = 1;
-      }
-      vx /= len;
-      vy /= len;
-      const point = {
-        x: Position.x[target] + vx * WORKER_RESOURCE_CONTACT_GAP,
-        y: Position.y[target] + vy * WORKER_RESOURCE_CONTACT_GAP,
-      };
-      out.push({
-        tile: { x: tx, y: ty },
-        point,
-        score:
-          Math.hypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
-          workerContactCrowdPenalty(world, eid, point.x, point.y) +
-          workerResourceContactSlotPenalty(world, eid, target, point.x, point.y),
-      });
-    }
-  }
-
-  out.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
-  return out;
-}
-
-function workerResourceContactSlotPenalty(
-  world: SimWorld,
-  eid: number,
-  target: number,
-  x: number,
-  y: number
-): number {
-  if (!hasComponent(world.ecs, VillagerTag, eid)) return 0;
-  const owner = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : -1;
-  let penalty = 0;
-  for (const other of sortedEids(world, unitQuery(world.ecs))) {
-    if (other === eid) continue;
-    if (Health.hp[other] <= 0) continue;
-    if (!hasComponent(world.ecs, VillagerTag, other)) continue;
-    if (owner >= 0 && Owner.player[other] !== owner) continue;
-    if (!hasComponent(world.ecs, Gatherer, other)) continue;
-    if (Gatherer.targetEid[other] !== target) continue;
-    if (
-      Gatherer.state[other] === GathererStateId.RETURNING ||
-      Gatherer.state[other] === GathererStateId.DEPOSITING
-    ) {
-      continue;
-    }
-
-    const dist = Math.hypot(Position.x[other] - x, Position.y[other] - y);
-    if (dist < WORKER_RESOURCE_CONTACT_SLOT_RADIUS) {
-      penalty += WORKER_RESOURCE_CONTACT_SLOT_UNIT_PENALTY *
-        (1 - dist / WORKER_RESOURCE_CONTACT_SLOT_RADIUS);
-    }
-
-    const path = world.paths.get(other);
-    const final = path?.[path.length - 1];
-    if (!final) continue;
-    const pathDist = Math.hypot(final.x - x, final.y - y);
-    if (pathDist < WORKER_RESOURCE_CONTACT_SLOT_RADIUS) {
-      penalty += WORKER_RESOURCE_CONTACT_SLOT_PATH_PENALTY *
-        (1 - pathDist / WORKER_RESOURCE_CONTACT_SLOT_RADIUS);
-    }
-  }
-  return penalty;
 }
 
 function startGatheringResource(world: SimWorld, eid: number, target: number): boolean {
@@ -9519,218 +8845,6 @@ function farmWorkPatchCandidates(
   return candidates;
 }
 
-function pathToBuildingContact(world: SimWorld, eid: number, buildingEid: number): boolean {
-  const candidates = buildingApproachCandidates(world, eid, buildingEid);
-  for (const candidate of candidates) {
-    const from = {
-      x: Math.round(Position.x[eid]),
-      y: Math.round(Position.y[eid]),
-    };
-    const path = world.pathfinder.findPath(from, candidate.tile);
-    if (path === null) continue;
-
-    const nextPath: GridPos[] = [...path];
-    const final = nextPath[nextPath.length - 1];
-    if (
-      !final ||
-      Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
-    ) {
-      nextPath.push(candidate.point);
-    }
-
-    if (nextPath.length === 0) {
-      world.paths.delete(eid);
-      return true;
-    }
-    world.paths.set(eid, nextPath);
-    PathTarget.x[eid] = Math.round(nextPath[0].x);
-    PathTarget.y[eid] = Math.round(nextPath[0].y);
-    return true;
-  }
-  return false;
-}
-
-function buildingApproachCandidates(
-  world: SimWorld,
-  eid: number,
-  buildingEid: number
-): Array<{ tile: GridPos; point: GridPos; score: number; resourcePenalty: number }> {
-  const def = BUILDING_TABLE[Building.defId[buildingEid]];
-  if (!def) return [];
-  const rect = buildingFootprintRect(buildingEid, def);
-  const out: Array<{ tile: GridPos; point: GridPos; score: number; resourcePenalty: number }> = [];
-
-  for (let ty = rect.tileY0 - 1; ty <= rect.tileY1 + 1; ty++) {
-    for (let tx = rect.tileX0 - 1; tx <= rect.tileX1 + 1; tx++) {
-      if (tx >= rect.tileX0 && tx <= rect.tileX1 && ty >= rect.tileY0 && ty <= rect.tileY1) {
-        continue;
-      }
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) continue;
-      if (world.map.walkability[ty][tx] !== 0) continue;
-
-      const edgeX = clamp(tx, rect.minX, rect.maxX);
-      const edgeY = clamp(ty, rect.minY, rect.maxY);
-      let vx = tx - edgeX;
-      let vy = ty - edgeY;
-      const len = Math.hypot(vx, vy) || 1;
-      vx /= len;
-      vy /= len;
-      const point = {
-        x: edgeX + vx * BUILDING_CONTACT_EDGE_GAP,
-        y: edgeY + vy * BUILDING_CONTACT_EDGE_GAP,
-      };
-      const resourcePenalty = findResourceAt(world, tx, ty, 0.35) === null ? 0 : 20;
-      const crowdPenalty = workerContactCrowdPenalty(world, eid, point.x, point.y);
-      out.push({
-        tile: { x: tx, y: ty },
-        point,
-        resourcePenalty,
-        score:
-          Math.hypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
-          resourcePenalty +
-          crowdPenalty,
-      });
-    }
-  }
-
-  out.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
-  return out;
-}
-
-function workerContactCrowdPenalty(world: SimWorld, eid: number, x: number, y: number): number {
-  let penalty = 0;
-  const owner = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : -1;
-  const requesterIsVillager = hasComponent(world.ecs, VillagerTag, eid);
-  for (const other of sortedEids(world, unitQuery(world.ecs))) {
-    if (other === eid) continue;
-    if (Health.hp[other] <= 0) continue;
-    if (owner >= 0 && Owner.player[other] !== owner) continue;
-    if (requesterIsVillager && hasComponent(world.ecs, VillagerTag, other)) continue;
-
-    const dist = Math.hypot(Position.x[other] - x, Position.y[other] - y);
-    if (dist < WORKER_CONTACT_CROWD_RADIUS) {
-      penalty += WORKER_CONTACT_UNIT_PENALTY * (1 - dist / WORKER_CONTACT_CROWD_RADIUS);
-    }
-
-    const path = world.paths.get(other);
-    const final = path?.[path.length - 1];
-    if (!final) continue;
-    const pathDist = Math.hypot(final.x - x, final.y - y);
-    if (pathDist < WORKER_CONTACT_CROWD_RADIUS) {
-      penalty += WORKER_CONTACT_PATH_PENALTY * (1 - pathDist / WORKER_CONTACT_CROWD_RADIUS);
-    }
-  }
-  return penalty;
-}
-
-function buildingFootprintRect(
-  buildingEid: number,
-  def: BuildingDef
-): {
-  tileX0: number;
-  tileY0: number;
-  tileX1: number;
-  tileY1: number;
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-} {
-  const tileX0 = Math.round(Position.x[buildingEid]) - Math.floor(def.footprint.w / 2);
-  const tileY0 = Math.round(Position.y[buildingEid]) - Math.floor(def.footprint.h / 2);
-  const tileX1 = tileX0 + def.footprint.w - 1;
-  const tileY1 = tileY0 + def.footprint.h - 1;
-  return {
-    tileX0,
-    tileY0,
-    tileX1,
-    tileY1,
-    minX: tileX0 - 0.5,
-    maxX: tileX0 + def.footprint.w - 0.5,
-    minY: tileY0 - 0.5,
-    maxY: tileY0 + def.footprint.h - 0.5,
-  };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-/** Find the building entity (any) at or near (x, y). Used for placement checks. */
-export function findBuildingAt(
-  world: SimWorld,
-  x: number,
-  y: number,
-  radius = 0.7
-): number | null {
-  const ents = sortedEids(world, buildingQuery(world.ecs));
-  let bestEid: number | null = null;
-  let bestDist = radius;
-  for (const eid of ents) {
-    const d = distToBuildingEdge(world, x, y, eid);
-    if (
-      d < bestDist ||
-      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, eid, bestEid) < 0)
-    ) {
-      bestDist = d;
-      bestEid = eid;
-    }
-  }
-  return bestEid;
-}
-
-/** Find the resource entity at exactly (or near) tile (x, y). */
-export function findResourceAt(
-  world: SimWorld,
-  x: number,
-  y: number,
-  radius = 0.6
-): number | null {
-  const ents = sortedEids(world, resourceQuery(world.ecs));
-  let bestEid: number | null = null;
-  let bestDist = radius;
-  for (const eid of ents) {
-    const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    if (
-      d < bestDist ||
-      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, eid, bestEid) < 0)
-    ) {
-      bestDist = d;
-      bestEid = eid;
-    }
-  }
-  return bestEid;
-}
-
-/** Nearest resource of `kind` to (x, y) within `maxRange` tiles. */
-export function findNearestResource(
-  world: SimWorld,
-  x: number,
-  y: number,
-  kind: ResourceKind,
-  maxRange: number
-): number | null {
-  const ents = sortedEids(world, resourceQuery(world.ecs));
-  let bestEid: number | null = null;
-  let bestDist = maxRange;
-  for (const eid of ents) {
-    if (Resource.kind[eid] !== kind) continue;
-    if (Resource.amount[eid] <= 0) continue;
-    const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    if (
-      d < bestDist ||
-      (bestEid !== null && Math.abs(d - bestDist) < 0.000001 &&
-        compareDeterministicEids(world, eid, bestEid) < 0)
-    ) {
-      bestDist = d;
-      bestEid = eid;
-    }
-  }
-  return bestEid;
-}
-
 function findNearestDropOffEid(world: SimWorld, eid: number): number | null {
   const player = Owner.player[eid];
   const carryKind = ResourceCarry.kind[eid] as ResourceKind;
@@ -9763,91 +8877,4 @@ function routeToNearestDropOff(world: SimWorld, eid: number): void {
   if (!pathToBuildingContact(world, eid, target)) {
     pathTo(world, eid, Position.x[target], Position.y[target]);
   }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Selection helpers (used by render + window-api)
-// ────────────────────────────────────────────────────────────────────────────
-
-export function setSelected(
-  world: SimWorld,
-  eid: number,
-  selected: boolean
-): void {
-  if (selected) {
-    addComponent(world.ecs, Selected, eid);
-  } else {
-    removeComponent(world.ecs, Selected, eid);
-  }
-}
-
-export function clearSelection(world: SimWorld): void {
-  const sel = selectedQuery(world.ecs);
-  for (const eid of sel) {
-    removeComponent(world.ecs, Selected, eid);
-  }
-}
-
-export function selectUnitsOfSameKindInRadius(
-  world: SimWorld,
-  sourceEid: number,
-  radius: number,
-  playerId = Owner.player[sourceEid]
-): number {
-  if (!hasComponent(world.ecs, UnitKind, sourceEid)) return 0;
-  if (Owner.player[sourceEid] !== playerId) return 0;
-
-  const sourceKind = UnitKind.kind[sourceEid];
-  const sourceX = Position.x[sourceEid];
-  const sourceY = Position.y[sourceEid];
-  clearSelection(world);
-
-  let selectedCount = 0;
-  for (const eid of unitQuery(world.ecs)) {
-    if (Owner.player[eid] !== playerId) continue;
-    if (UnitKind.kind[eid] !== sourceKind) continue;
-    const dist = Math.hypot(Position.x[eid] - sourceX, Position.y[eid] - sourceY);
-    if (dist > radius) continue;
-    setSelected(world, eid, true);
-    selectedCount++;
-  }
-
-  return selectedCount;
-}
-
-export function findEntityNear(
-  world: SimWorld,
-  x: number,
-  y: number,
-  radius: number
-): number | null {
-  const ents = positionQuery(world.ecs);
-  let bestEid: number | null = null;
-  let bestDist = radius;
-  for (const eid of ents) {
-    const isUnit = hasComponent(world.ecs, UnitKind, eid);
-    const isBuilding = hasComponent(world.ecs, Building, eid);
-    if (!isUnit && !isBuilding) continue;
-    const d = isBuilding
-      ? distToBuildingEdge(world, x, y, eid)
-      : Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-    const effective = isUnit ? d : d + 0.02;
-    if (effective < bestDist) {
-      bestDist = effective;
-      bestEid = eid;
-    }
-  }
-  return bestEid;
-}
-
-/** Lookup helper for render — does this eid belong to an enemy of `myPlayer`? */
-export function isEnemyOf(
-  world: SimWorld,
-  eid: number,
-  myPlayer: number
-): boolean {
-  if (!hasComponent(world.ecs, Owner, eid)) return false;
-  const p = Owner.player[eid];
-  if (p === 0) return false; // gaia is neutral
-  return p !== myPlayer;
 }
