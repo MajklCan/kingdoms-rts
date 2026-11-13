@@ -34,6 +34,7 @@ import type { TechIdValue } from '@sim/tech-tree';
 import {
   LOCAL_PLAYER_ID,
   createSimWorld,
+  getMapSeed,
   positionQuery,
   pruneHiddenSelectionForPlayer,
   selectedQuery,
@@ -84,7 +85,6 @@ import { createSpriteRegistry, type SpriteSourceRegistry } from './sprites/sprit
 import { bakeVoxelTextures } from './sprites/voxel-bake';
 import { DecorLayer } from './terrain/decor-layer';
 import { TerrainLayer } from './terrain/terrain-layer';
-import { hashBytes } from './tile-hash';
 import { createWorldLayers, type WorldLayers } from './world-layers';
 import { UiApi } from './ui-api';
 
@@ -636,12 +636,12 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Re-bake the ground and decor for the current map and rebuild the fog to
-   * match. The render seed comes from the map bytes (the sim keeps no seed),
-   * so every peer of a multiplayer match draws the same details.
+   * match. The render seed is the world's map seed, identical on every peer
+   * and kept by saves (old saves get the map-byte hash this used to compute).
    */
   private refreshTerrain(): void {
     const map = this.world.map;
-    const seed = hashBytes(map.elevation, hashBytes(map.tiles));
+    const seed = getMapSeed(this.world);
     this.terrain.build(map, this.sprites.art, seed);
     this.decor.build(map, this.terrain.names, this.sprites.art, seed);
     this.fog.rebuild();
