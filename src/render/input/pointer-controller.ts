@@ -215,6 +215,14 @@ export class PointerController {
     }
     const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
     if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
+      if (commands.selectedGathererCount() > 0 && Resource.amount[resourceEid] > 0) {
+        // Free villagers (town center trained) gather by hand and carry to a drop-off.
+        commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid });
+        audio.barkMove();
+        this.feedback?.orderMarker('move', Position.x[resourceEid], Position.y[resourceEid]);
+        setLastEvent(`gather eid=${resourceEid}`);
+        return;
+      }
       const kind = Resource.kind[resourceEid];
       commands.fail({
         reason: 'unavailable',
