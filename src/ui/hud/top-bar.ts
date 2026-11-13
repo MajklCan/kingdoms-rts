@@ -8,6 +8,7 @@ import { SIM } from '../../config';
 import type { GameScene } from '../../render/game-scene';
 import { h, setAttr, setText } from '../dom';
 import { formatAmount, formatClock, RESOURCE_KEYS, type ResourceKey } from '../format';
+import { RESOURCE_ICON } from '../icons/catalog';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { showAgeBanner } from './age-banner';
@@ -63,7 +64,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     const chip = h(
       'div',
       { class: 'res-chip', 'data-res': key, tabindex: '0', 'aria-label': `${RES_LABEL[key]}` },
-      icon(key, `res-icon res-${key}`),
+      icon(RESOURCE_ICON[key], 'res-icon'),
       val
     );
     attachTip(chip, () => ({ title: RES_LABEL[key], body: RES_TIP[key] }));
@@ -72,7 +73,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     strip.append(chip);
   }
   const pop = h('span', { class: 'res-val num', id: 'res-pop' }, '0/0');
-  const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('pop', 'res-icon res-pop'), pop);
+  const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('r-pop', 'res-icon'), pop);
   attachTip(popChip, () => ({ title: 'Population', body: 'Units alive out of your housing cap. Build houses to raise the cap.' }));
   strip.append(popChip);
 

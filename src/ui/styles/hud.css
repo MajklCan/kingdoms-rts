@@ -84,9 +84,6 @@
 
 .res-chip .icon {
   flex: none;
-  width: 1.15rem;
-  height: 1.15rem;
-  filter: drop-shadow(0 var(--px) 0 #000);
 }
 
 .res-val {
@@ -495,37 +492,89 @@
   border-image-source: var(--tex-btn-pressed);
 }
 
-.cmd-cell:active:not(.is-empty):not(.is-disabled) > .cmd-icon {
-  transform: translateY(calc(2 * var(--px)));
+.cmd-cell:active:not(.is-empty):not(.is-disabled) > .cmd-icon,
+.cmd-cell:active:not(.is-empty):not(.is-disabled)::before {
+  transform: translateY(var(--px));
+}
+
+/* The picture sits in a dark recess cut into the button face: 15 x 15 texels
+   at 3 texels in, lit from the top left like the icons. */
+.cmd-cell::before {
+  content: "";
+  position: absolute;
+  inset: calc(2 * var(--px));
+  background: radial-gradient(circle at 40% 35%, #3a2a17, #1a110a 75%);
+  box-shadow:
+    inset var(--px) var(--px) 0 #0a0705,
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 #6b4c2a;
+  pointer-events: none;
+}
+
+.cmd-cell.is-empty::before {
+  display: none;
 }
 
 .cmd-icon {
+  position: relative;
   width: 1.65rem;
   height: 1.65rem;
   filter: drop-shadow(0 var(--px) 0 #0a0705);
 }
 
-/* Hotkey: a tiny ivory keycap in the bottom-right corner. */
-.cmd-key {
-  position: absolute;
-  right: calc(-1 * var(--px));
-  bottom: calc(-1 * var(--px));
-  font-size: 0.625rem;
+.cmd-icon.is-px {
+  filter: none;
 }
 
+/* Hotkey: a small dark tab with the letter, tucked into the bottom-right
+   corner over the rim so it hides only a sliver of the picture. */
+.cmd-key {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  min-width: calc(7 * var(--px));
+  height: calc(8 * var(--px));
+  padding: 0 var(--px);
+  border: 0;
+  border-image: none;
+  background: #0a0705;
+  box-shadow: inset 0 0 0 var(--px) #4a3520;
+  font-size: calc(6.5 * var(--px));
+  line-height: calc(8 * var(--px));
+  font-weight: 700;
+  color: #f2e6c4;
+}
+
+/* Queue count: a small gold tab in the top-left corner, same size as the
+   hotkey tab, so the head of the unit stays visible. */
 .cmd-queue {
   position: absolute;
-  left: calc(2 * var(--px));
-  top: calc(2 * var(--px));
-  min-width: 1rem;
-  padding: 0 0.2rem;
-  font-size: 0.65rem;
+  left: 0;
+  top: 0;
+  min-width: calc(7 * var(--px));
+  height: calc(8 * var(--px));
+  padding: 0 var(--px);
+  font-size: calc(6.5 * var(--px));
   font-weight: 700;
-  line-height: 1rem;
+  line-height: calc(8 * var(--px));
   text-align: center;
   color: var(--text-on-gold);
   background: var(--gold-300);
-  box-shadow: 0 0 0 var(--px) #0a0705;
+  box-shadow: inset 0 0 0 var(--px) #0a0705;
+}
+
+/* The page counter on the "more" socket sits in the bottom-right corner
+   like a hotkey, clear of the arrows. */
+.cmd-cell.is-more .cmd-queue {
+  left: auto;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  font-size: calc(5 * var(--px));
+}
+
+.cmd-key.is-long {
+  font-size: calc(5 * var(--px));
+  letter-spacing: 0.02em;
 }
 
 .cmd-key:empty,
@@ -554,8 +603,20 @@
   opacity: 0.75;
 }
 
+/* Locked (age, prerequisites): the picture goes grey and dim. */
+.cmd-cell.is-disabled .cmd-icon.is-px {
+  opacity: 1;
+  filter: grayscale(1) brightness(0.55) contrast(0.9);
+}
+
+/* Unaffordable: the picture keeps its shapes but sinks into red, like a
+   cost you cannot pay. */
+.cmd-cell.is-disabled.is-short .cmd-icon.is-px {
+  filter: grayscale(1) brightness(0.62) sepia(1) saturate(5.5) hue-rotate(-28deg);
+}
+
 .cmd-cell.is-disabled .cmd-key {
-  filter: grayscale(1) brightness(0.8);
+  color: #a39a8a;
 }
 
 .cmd-cell.is-active {
@@ -563,13 +624,13 @@
   color: var(--gold-200);
 }
 
-.cmd-cell.is-active > .cmd-icon {
+.cmd-cell.is-active > .cmd-icon,
+.cmd-cell.is-active::before {
   transform: translateY(var(--px));
 }
 
-.cmd-cell.is-more .cmd-icon {
-  width: 1.3rem;
-  height: 1.3rem;
+.cmd-cell:hover:not(.is-empty):not(.is-disabled) > .cmd-icon.is-px {
+  filter: brightness(1.18);
 }
 
 .cmd-cell.is-denied {

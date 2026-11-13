@@ -12,7 +12,7 @@ import { appState } from '../app-state';
 import { h, isTextEntryTarget, plainDashes } from '../dom';
 import { missingResources, parseCost, RESOURCE_KEYS, type ResourceKey } from '../format';
 import { getScene, reportFailure } from '../game-bridge';
-import { TECH_ICON } from '../icons/catalog';
+import { RESOURCE_ICON_SMALL, TECH_ICON } from '../icons/catalog';
 import { iconHtml } from '../icons/icon';
 import { pushAlert } from '../hud/alerts';
 import { attachTip } from '../hud/tooltip';
@@ -64,7 +64,7 @@ function costHtml(cost: string, bank: Record<ResourceKey, number>): string {
     .map((k) => {
       const need = parsed[k] ?? 0;
       const short = need > (bank[k] ?? 0);
-      return `<span class="tech-res${short ? ' is-short' : ''}">${iconHtml(k, `res-${k}`)}${need}</span>`;
+      return `<span class="tech-res${short ? ' is-short' : ''}">${iconHtml(RESOURCE_ICON_SMALL[k])}${need}</span>`;
     })
     .join('');
 }
@@ -172,7 +172,7 @@ export function renderTechTree(scene: GameScene): void {
   const nodeHtml = nodes
     .map((n) => {
       const p = point(n);
-      const ic = TECH_ICON[n.icon] ?? 'research';
+      const ic = TECH_ICON[n.icon] ?? 'c-research';
       const progress = n.status === 'researching' ? `<span class="tech-progress"><i style="--p:${n.progressFrac.toFixed(3)}"></i></span>` : '';
       const statusIcon = n.status === 'researched' ? iconHtml('check', 'tech-status-icon') : n.status === 'locked' ? iconHtml('lock', 'tech-status-icon') : '';
       const usable = n.status === 'available' && n.affordable;

@@ -1,14 +1,12 @@
-// Generated list of the SVG icons in public/assets/ui/icons. Each file is a
-// monochrome silhouette used as a CSS mask and tinted with currentColor.
+// List of the SVG icons in public/assets/ui/icons. Each file is a monochrome
+// silhouette used as a CSS mask and tinted with currentColor. The coloured
+// pixel-art icons live in the sprite sheets listed in raster-icons.ts.
+import type { RasterIconName } from './raster-icons';
+
 export const ICON_NAMES = [
-  'advance-age',
   'alert',
-  'archer',
-  'archery-range',
   'auto-defend',
   'banners',
-  'barracks',
-  'cannon',
   'check',
   'chevron-left',
   'chevron-right',
@@ -16,21 +14,13 @@ export const ICON_NAMES = [
   'close',
   'crown',
   'defeat',
-  'defensive-tower',
   'demolish',
   'download',
   'eye',
-  'farm',
   'flag',
-  'food',
   'formation-compact',
   'formation-free',
   'formation-line',
-  'foundation',
-  'foundry',
-  'gold',
-  'gold-mine',
-  'gunman',
   'hammer',
   'helm',
   'hold',
@@ -41,10 +31,8 @@ export const ICON_NAMES = [
   'keyboard',
   'load',
   'lock',
-  'lumber-camp',
   'machine-gun',
   'menu',
-  'mill',
   'mode-campaign',
   'mode-multiplayer',
   'mode-skirmish',
@@ -52,34 +40,25 @@ export const ICON_NAMES = [
   'objectives',
   'pause',
   'person',
-  'pikeman',
   'play',
   'plus',
   'pop',
   'quit',
-  'rally',
   'research',
-  'rotate-ccw',
-  'rotate-cw',
   'save',
-  'scout-cavalry',
   'scroll',
   'settings',
   'shield',
   'sound-off',
   'sound-on',
   'speed',
-  'stable',
-  'stone',
-  'stone-quarry',
   'stop',
   'swords',
   'tech',
-  'town-center',
   'victory',
-  'villager',
-  'wall',
-  'wood',
 ] as const;
 
-export type IconName = (typeof ICON_NAMES)[number];
+export type SvgIconName = (typeof ICON_NAMES)[number];
+
+/** Any HUD icon: an SVG silhouette or a pixel-art sheet frame. */
+export type IconName = SvgIconName | RasterIconName;

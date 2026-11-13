@@ -20,11 +20,56 @@
   vertical-align: -0.2em;
 }
 
-.icon.res-food { color: var(--res-food); }
-.icon.res-wood { color: var(--res-wood); }
-.icon.res-gold { color: var(--res-gold); }
-.icon.res-stone { color: var(--res-stone); }
-.icon.res-pop { color: var(--res-pop); }
+/* ---- Pixel-art icon (a frame of the icon sheet) ------------------------
+   Coloured HUD icons from scripts/ui/gen_icons.py. icon.ts sets the frame as
+   --iw/--ih (size in 1x sheet pixels) and --ibs/--ibp (background size and
+   position in percent). One 1x sheet pixel is half a texel (--ix 0.5), so the
+   1x sheet lands on whole device pixels at texel 2 and the 2x sheet, which has
+   real extra detail, at texel 4 and 8. Other texel sizes scale the 2x sheet
+   smoothly. A context that shows icons at one sheet pixel per texel sets
+   --ix 1 together with the -big sheet and rendering. */
+:root {
+  --icon-sheet-1x: url("/assets/ui/icons/icons.png");
+  --icon-sheet-2x: url("/assets/ui/icons/icons@2x.png");
+  --icon-sheet: var(--icon-sheet-2x);
+  --icon-render: auto;
+  --icon-sheet-big: var(--icon-sheet-2x);
+  --icon-render-big: auto;
+}
+
+:root[data-texel="2"] {
+  --icon-sheet: var(--icon-sheet-1x);
+  --icon-render: pixelated;
+  --icon-render-big: pixelated;
+}
+
+:root[data-texel="4"],
+:root[data-texel="8"] {
+  --icon-render: pixelated;
+  --icon-render-big: pixelated;
+}
+
+:root[data-texel="6"] {
+  --icon-render-big: pixelated;
+}
+
+.icon.is-px {
+  --ix: 0.5;
+  width: calc(var(--iw) * var(--ix) * var(--px));
+  height: calc(var(--ih) * var(--ix) * var(--px));
+  background: var(--icon-sheet) var(--ibp) / var(--ibs) no-repeat;
+  -webkit-mask: none;
+  mask: none;
+  image-rendering: var(--icon-render);
+  vertical-align: middle;
+}
+
+.icon.is-px.is-big,
+.is-big > .icon.is-px {
+  --ix: 1;
+  --icon-sheet: var(--icon-sheet-big);
+  --icon-render: var(--icon-render-big);
+}
 
 /* Numbers a player reads at a glance: resources, timers, costs, HP. */
 .num {
