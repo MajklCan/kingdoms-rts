@@ -7,6 +7,7 @@
 
 import { h } from '../dom';
 import { RESOURCE_KEYS, formatAmount, type CostMap, type ResourceKey } from '../format';
+import { RESOURCE_ICON_SMALL } from '../icons/catalog';
 import { icon } from '../icons/icon';
 
 export interface TipContent {
@@ -63,13 +64,13 @@ function render(content: TipContent): void {
         h(
           'span',
           { class: `tip-res${short ? ' is-short' : ''}`, 'aria-label': `${need} ${k}${short ? ', not enough' : ''}` },
-          icon(k, `res-${k}`),
+          icon(RESOURCE_ICON_SMALL[k]),
           h('span', { class: 'num' }, formatAmount(need))
         )
       );
     }
-    if (content.seconds) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.seconds} seconds` }, icon('hourglass', 'res-time'), h('span', { class: 'num' }, `${content.seconds}s`)));
-    if (content.pop) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.pop} population` }, icon('pop', 'res-pop'), h('span', { class: 'num' }, String(content.pop))));
+    if (content.seconds) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.seconds} seconds` }, icon('r-time-s'), h('span', { class: 'num' }, `${content.seconds}s`)));
+    if (content.pop) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.pop} population` }, icon('r-pop-s'), h('span', { class: 'num' }, String(content.pop))));
     parts.push(row);
   }
   if (content.body) parts.push(h('p', { class: 'tip-body' }, content.body));

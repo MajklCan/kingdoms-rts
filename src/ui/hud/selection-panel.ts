@@ -29,11 +29,11 @@ import {
   selectEntities,
   type ProductionSlotInfo,
 } from '../game-bridge';
-import { actionIcon, BUILDING_ICON_BY_DEF, SELECTION_ICON, UNIT_ICON_BY_DEF } from '../icons/catalog';
+import { BUILDING_ICON_BY_DEF, eraIcon, RESOURCE_ICON_SMALL, SELECTION_ICON, UNIT_ICON_BY_DEF } from '../icons/catalog';
 import { icon, setIcon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { recentEvents } from './event-log';
-import { loadPortraits, portraitForKey, unitPortraitUrl } from './portraits';
+import { loadPortraits, portraitForKey } from './portraits';
 import { attachTip } from './tooltip';
 
 const QUEUE_SLOTS = 6;
@@ -53,13 +53,21 @@ const STAT_LABEL: Record<string, string> = {
   Deploy: 'Deploying',
 };
 const STAT_ICON: Record<string, IconName> = {
-  Atk: 'swords',
-  Rng: 'archer',
-  Spd: 'speed',
-  Pop: 'pop',
-  Workers: 'villager',
-  Build: 'hammer',
+  Atk: 'stat-attack',
+  Rng: 'stat-range',
+  Spd: 'stat-speed',
+  Pop: 'r-pop-s',
+  Workers: 'r-pop-s',
+  Build: 'stat-build',
   Deploy: 'machine-gun',
+};
+/** Small cream glyphs for the orders-in-force chips (stance, formation). */
+const STATE_ICON: Record<string, IconName> = {
+  'stance-hold-position': 'hold',
+  'stance-auto-defend': 'auto-defend',
+  'formation-free': 'formation-free',
+  'formation-line': 'formation-line',
+  'formation-compact': 'formation-compact',
 };
 
 interface Refs {
@@ -113,10 +121,10 @@ function refundText(item: ProductionSlotInfo): string {
   return parts.length > 0 ? `Refunds ${parts.join(', ')}.` : 'Nothing to refund.';
 }
 
-function kindIcon(key: string): IconName {
-  if (key === 'foundation') return 'foundation';
+function kindIcon(key: string, age: number): IconName {
+  if (key === 'foundation') return 'b-foundation';
   if (key.startsWith('u')) return UNIT_ICON_BY_DEF[Number(key.slice(1))] ?? 'person';
-  if (key.startsWith('b')) return BUILDING_ICON_BY_DEF[Number(key.slice(1))] ?? 'house';
+  if (key.startsWith('b')) return eraIcon(BUILDING_ICON_BY_DEF[Number(key.slice(1))] ?? 'house', age);
   return 'shield';
 }
 
@@ -178,7 +186,6 @@ function buildQueue(): Pick<Refs, 'queueWrap' | 'queueSlots' | 'queueMore'> {
     const slot = h(
       'button',
       { type: 'button', class: `queue-slot${i === 0 ? ' is-head' : ''}`, tabindex: '-1', disabled: true },
-      h('img', { class: 'queue-img', alt: '', hidden: true, draggable: 'false' }),
       icon('person', 'queue-icon'),
       h('span', { class: 'queue-progress', 'aria-hidden': 'true' }),
       h('span', { class: 'queue-x', 'aria-hidden': 'true' })
@@ -217,11 +224,11 @@ export function buildSelectionPanel(): HTMLElement {
   const hpFill = h('i');
   const hpBar = h('div', { class: 'bar hp hp-seg', role: 'meter', 'aria-label': 'Health', 'aria-valuemin': 0 }, hpFill);
   const hpText = h('span', { class: 'hp-text num' });
-  const hpRow = h('div', { class: 'hp-row' }, icon('shield', 'hp-icon'), hpBar, hpText);
+  const hpRow = h('div', { class: 'hp-row' }, icon('stat-hp', 'hp-icon'), hpBar, hpText);
   const stats = h('ul', { class: 'stat-chips', id: 'sel-stats', 'aria-label': 'Stats' });
   const statusText = h('span', { class: 'sel-status-text' });
   const statusBar = h('div', { class: 'bar sel-status-bar' }, h('i'));
-  const carryIcon = icon('wood', 'carry-icon');
+  const carryIcon = icon(RESOURCE_ICON_SMALL.wood, 'carry-icon');
   const carryPips: HTMLElement[] = [];
   const pips = h('span', { class: 'carry-pips' });
   for (let i = 0; i < CARRY_MAX; i++) {
@@ -305,7 +312,7 @@ function renderStats(text: string): void {
       const full = STAT_LABEL[label];
       const resource = RESOURCE_WORDS.find((r) => r === part.toLowerCase());
       if (resource) {
-        return h('li', { class: 'stat-chip is-text' }, icon(resource, `stat-icon res-${resource}`), h('span', { class: 'stat-value' }, part));
+        return h('li', { class: 'stat-chip is-text' }, icon(RESOURCE_ICON_SMALL[resource], 'stat-icon'), h('span', { class: 'stat-value' }, part));
       }
       const glyph = STAT_ICON[label];
       return h(
@@ -326,8 +333,7 @@ function renderCarry(stats: string, statusText: string): void {
   const n = Math.min(CARRY_MAX, Number(m[1]));
   refs.carryPips.forEach((pip, i) => pip.classList.toggle('is-on', i < n));
   const kind = RESOURCE_WORDS.find((r) => statusText.toLowerCase().includes(r)) ?? 'wood';
-  setIcon(refs.carryIcon, kind);
-  refs.carryIcon.className = `icon carry-icon res-${kind}`;
+  setIcon(refs.carryIcon, RESOURCE_ICON_SMALL[kind]);
   setAttr(refs.carry, 'aria-label', `Carrying ${m[1]} of ${m[2]}`);
 }
 
@@ -341,7 +347,7 @@ function renderState(scene: GameScene): void {
   lastStateSig = sig;
   refs.state.replaceChildren(
     ...active.map((a) =>
-      h('li', { class: 'state-chip' }, icon(actionIcon(a.id), 'state-icon'), plainDashes(a.label).replace(/^(Stance|Formation):\s*/i, ''))
+      h('li', { class: 'state-chip' }, icon(STATE_ICON[a.id] ?? 'info', 'state-icon'), plainDashes(a.label).replace(/^(Stance|Formation):\s*/i, ''))
     )
   );
 }
@@ -375,12 +381,8 @@ function renderQueue(scene: GameScene, selected: number[], me: number): void {
     setAttr(slot, 'aria-label', item ? `${item.name}, ${i === 0 ? 'training' : 'queued'}. Cancel and refund` : 'Empty slot');
     if (item) {
       slot.dataset.unit = String(item.unitDefId);
-      setPortrait(
-        slot.querySelector<HTMLImageElement>('.queue-img')!,
-        slot.querySelector<HTMLElement>('.queue-icon')!,
-        unitPortraitUrl(item.unitDefId),
-        UNIT_ICON_BY_DEF[item.unitDefId] ?? 'person'
-      );
+      // Same picture as the train button the unit came from.
+      setIcon(slot.querySelector<HTMLElement>('.queue-icon')!, UNIT_ICON_BY_DEF[item.unitDefId] ?? 'person');
     }
     (slot.querySelector('.queue-progress') as HTMLElement).style.setProperty('--p', i === 0 && item ? item.progressFrac.toFixed(3) : '0');
   });
@@ -414,7 +416,7 @@ function renderMulti(scene: GameScene, selected: number[], age: number): void {
         const btn = h(
           'button',
           { type: 'button', class: 'group-chip', 'aria-label': `${eids.length} ${kindName(key)}. Select only these.` },
-          icon(kindIcon(key), 'group-icon'),
+          icon(kindIcon(key, age), 'group-icon'),
           h('span', { class: 'group-count num' }, String(eids.length))
         );
         btn.addEventListener('click', () => selectEntities(scene, eids));
@@ -433,8 +435,8 @@ function renderMulti(scene: GameScene, selected: number[], age: number): void {
     tiles = shown.map((eid) => {
       const key = entityKindKey(scene, eid);
       const img = h('img', { class: 'tile-img', alt: '', hidden: true, draggable: 'false' });
-      const glyph = icon(kindIcon(key), 'tile-icon');
-      setPortrait(img, glyph, portraitForKey(key, age), kindIcon(key));
+      const glyph = icon(kindIcon(key, age), 'tile-icon');
+      setPortrait(img, glyph, portraitForKey(key, age), kindIcon(key, age));
       const el = h(
         'button',
         { type: 'button', class: 'unit-tile', 'aria-label': `${kindName(key)}. Select only this one.` },
@@ -518,7 +520,7 @@ export function updateSelectionPanel(scene: GameScene): void {
     return;
   }
 
-  const byKey = kindIcon(firstKey);
+  const byKey = kindIcon(firstKey, age);
   const fallback = byKey !== 'shield' ? byKey : (SELECTION_ICON[info.kind] ?? 'shield');
   setPortrait(refs.portraitImg, refs.portraitIcon, portraitForKey(firstKey, age), fallback);
   refs.portrait.dataset.team = String(info.team === me ? 'me' : info.team);
