@@ -119,7 +119,7 @@ export class BuildingFx {
       if (hasComponent(ecs, Health, eid) && Health.hpMax[eid] > 0) {
         burning = this.fire(eid, defId, Health.hp[eid] / Health.hpMax[eid], c.x, view.y, view.ref.top, hw, dtMs);
       }
-      if (burning < 2) this.chimneys(defId, frame, view.ref.source === 'voxel', view.x, view.y, view.ref.top, dtMs);
+      if (burning < 2) this.chimneys(eid, defId, frame, view.ref.source === 'voxel', view.x, view.y, view.ref.top, dtMs);
     }
     // Forget buildings that are gone.
     for (const eid of this.known) {
@@ -140,7 +140,16 @@ export class BuildingFx {
     this.primed = false;
   }
 
-  private chimneys(defId: number, frame: string, voxel: boolean, x: number, y: number, top: number, dtMs: number): void {
+  private chimneys(
+    eid: number,
+    defId: number,
+    frame: string,
+    voxel: boolean,
+    x: number,
+    y: number,
+    top: number,
+    dtMs: number
+  ): void {
     const fx = this.host.fx;
     if (fx.headroom('normal') < 120) return;
     if (voxel) {
@@ -150,10 +159,11 @@ export class BuildingFx {
     }
     const mouths = CHIMNEYS[frame];
     if (!mouths) return;
-    for (const m of mouths) {
+    for (let i = 0; i < mouths.length; i++) {
       if (!chance(CHIMNEY_RATE, dtMs)) continue;
+      const m = mouths[i];
       // Style A art: blocky voxel puffs that match the sprites.
-      this.puffs.puff(x + m.x, y + m.y, m.a, m.dark);
+      this.puffs.puff(x + m.x, y + m.y, m.a, m.dark ?? false, eid * 8 + i);
     }
     if (frame === 'foundry_gunpowder') {
       if (chance(3, dtMs)) {
