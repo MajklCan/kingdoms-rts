@@ -162,7 +162,7 @@ export class GameScene extends Phaser.Scene {
     this.buildings = new BuildingRenderer(this.ctx, this.sprites);
     this.status = new StatusOverlay(this.ctx);
     this.commands = new PlayerCommands(this.ctx, this.audio);
-    this.placement = new BuildPlacement(this.ctx, this.commands, this.audio);
+    this.placement = new BuildPlacement(this.ctx, this.commands, this.audio, this.sprites);
     this.units = new UnitRenderer(this.ctx, this.sprites);
     this.resources = new ResourceRenderer(this.ctx, this.sprites, this.occupancy);
     this.fog = new FogRenderer(this.ctx, () => this.terrain.bounds);
