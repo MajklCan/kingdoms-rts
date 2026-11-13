@@ -50,8 +50,13 @@ export function getLoadingRoot(): HTMLElement {
       subEl,
       h('div', { class: 'loading-bar bar', role: 'progressbar', 'aria-label': 'Loading', 'aria-valuemin': 0, 'aria-valuemax': 100 }, barEl),
       statusEl,
-      h('div', { class: 'ornament-rule', 'aria-hidden': 'true' }, h('span')),
-      tipEl
+      h(
+        'aside',
+        { class: 'loading-note', 'aria-label': 'Tip' },
+        h('span', { class: 'loading-note-seal', 'aria-hidden': 'true' }),
+        h('span', { class: 'loading-note-label' }, 'Counsel of the steward'),
+        tipEl
+      )
     )
   );
   return root;

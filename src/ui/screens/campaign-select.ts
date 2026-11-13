@@ -10,6 +10,7 @@ import { MAP_DEFS } from '../../sim/map-gen';
 import { h, plainDashes, readStorage, writeStorage } from '../dom';
 import { icon } from '../icons/icon';
 import { startCampaign } from '../match/match-flow';
+import { paintMapPreview } from './map-preview';
 import { backButton, registerMenuScreen } from './menu-shell';
 
 const LAST_KEY = 'kingdoms.lastMission.v1';
@@ -86,7 +87,14 @@ export function bindCampaignSelect(): void {
     const meta = MISSION_META[mission.id];
     const age = AGE_TABLE.find((a) => a.id === mission.startingAge)?.name ?? '';
     const map = MAP_DEFS.find((m) => m.id === mission.mapId)?.name ?? '';
+    const preview = h('canvas', { class: 'map-thumb' });
     briefing.replaceChildren(
+      h(
+        'figure',
+        { class: 'briefing-map', 'aria-hidden': 'true' },
+        h('span', { class: 'map-thumb-frame' }, preview),
+        h('figcaption', null, map)
+      ),
       h('div', { class: 'eyebrow' }, `Chronicle ${ROMAN[missions.indexOf(mission)] ?? ''}${meta ? ` · ${meta.year}` : ''}`),
       h('h3', { class: 'briefing-title title-display' }, mission.name),
       h('p', { class: 'briefing-lede' }, plainDashes(mission.description)),
@@ -113,6 +121,9 @@ export function bindCampaignSelect(): void {
         h('div', null, h('dt', null, 'Battlefield'), h('dd', null, map))
       )
     );
+    requestAnimationFrame(() => {
+      if (preview.isConnected && preview.clientWidth > 0) paintMapPreview(preview, mission.mapId, false);
+    });
   }
 
   function select(id: CampaignMissionIdValue, focus: boolean): void {
@@ -161,5 +172,6 @@ export function bindCampaignSelect(): void {
     id: 'campaign',
     el,
     focusTarget: () => items.get(selected) ?? begin,
+    onShow: () => select(selected, false),
   });
 }

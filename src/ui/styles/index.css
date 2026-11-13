@@ -9,5 +9,7 @@
 @import './setup.css';
 @import './loading.css';
 @import './hud.css';
+@import './hud-selection.css';
+@import './hud-dock.css';
 @import './panels.css';
 @import './overlays.css';

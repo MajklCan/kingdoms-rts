@@ -1,6 +1,7 @@
-/* Title screens: illuminated manuscript backdrop, hero, mode charters,
-   secondary pills, nameplate and build tag. Carried forward from the
-   menu-redesign branch and rebuilt on tokens + rem. */
+/* Title screens: illuminated manuscript backdrop (painted map, haze,
+   hearth glow, embers and dust with pointer parallax, gilded corners), the
+   blackletter title, oak banner charters, riveted secondary buttons,
+   nameplate and build tag. */
 
 .menu-root {
   position: fixed;
@@ -18,7 +19,7 @@
   position: absolute;
   inset: -6%;
   background: url("/assets/ui/menu-bg.jpg") center 38% / cover no-repeat;
-  will-change: transform;
+  will-change: transform, translate;
   animation: menu-drift 46s ease-in-out infinite alternate;
 }
 
@@ -128,7 +129,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   text-align: center;
 }
 
@@ -144,169 +145,143 @@
   50% { transform: translateY(-0.35rem) rotate(0.2deg); }
 }
 
+/* The one place the blackletter is allowed to be huge. */
 .menu-title {
-  margin: 0;
-  font-family: "UnifrakturMaguntia", var(--font-display);
+  margin: -0.4rem 0 0;
+  font-family: var(--font-title);
   font-weight: 700;
-  font-size: var(--fs-hero);
-  line-height: 0.95;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: linear-gradient(180deg, #fbe6a4 0%, #e9c659 30%, #c9a227 52%, #9b7a1d 74%, #e7cf7e 100%);
+  font-size: 5.75rem;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #fff1bf 0%, #f0cf68 32%, #c9a227 54%, #8f6e16 76%, #e7cf7e 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  filter: drop-shadow(0 2px 0 rgba(60, 42, 8, 0.6)) drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 #3a2806) drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.6));
 }
 
 .menu-subtitle {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.9rem;
   width: min(35rem, 86vw);
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 700;
   font-size: var(--fs-sm);
   letter-spacing: 0.42em;
   text-transform: uppercase;
   color: #f0e0b6;
-  justify-content: center;
+  text-shadow: 0 var(--px) 0 #000;
 }
 
 .menu-subtitle::before,
 .menu-subtitle::after {
   content: "";
   flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-400) 60%, var(--gold-200));
+  height: calc(5 * var(--px));
+  background: var(--tex-rule) 0 0 / calc(8 * var(--px)) calc(5 * var(--px)) repeat-x;
+  image-rendering: pixelated;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 70%);
+  mask: linear-gradient(90deg, transparent, #000 70%);
 }
 
 .menu-subtitle::after {
-  background: linear-gradient(270deg, transparent, var(--gold-400) 60%, var(--gold-200));
+  -webkit-mask: linear-gradient(270deg, transparent, #000 70%);
+  mask: linear-gradient(270deg, transparent, #000 70%);
 }
 
 .menu-lore {
   max-width: 32rem;
-  margin: 0.2rem 0 0.6rem;
+  margin: 0.1rem 0 0.5rem;
   font-size: var(--fs-lg);
   line-height: 1.45;
-  color: #d8cba9;
+  color: #e2d5b3;
   font-style: italic;
+  text-shadow: 0 var(--px) 0 rgba(0, 0, 0, 0.8);
   text-wrap: pretty;
 }
 
-/* Charters (primary mode buttons) */
+/* Charters: heavy oak banners with iron end caps (slice 8 / 14) and a wax
+   seal. Hover gilds the caps, a press sinks the plank and the face. */
 .charter-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: calc(5 * var(--px));
   width: min(27.5rem, 90vw);
-  margin-top: 0.4rem;
+  margin-top: 0.3rem;
 }
 
 .charter {
   position: relative;
   display: grid;
-  grid-template-columns: 3.4rem 1fr auto;
+  grid-template-columns: calc(20 * var(--px)) 1fr auto;
   align-items: center;
   gap: 0.9rem;
-  padding: 0.7rem 1rem 0.7rem 0.7rem;
+  min-height: calc(30 * var(--px));
+  padding: 0 calc(18 * var(--px)) 0 calc(14 * var(--px));
   text-align: left;
-  border: 0;
-  color: var(--ink-900);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 30%),
-    radial-gradient(120% 160% at 20% 0%, var(--parchment-100), var(--parchment-200) 46%, var(--parchment-400) 100%);
-  box-shadow:
-    inset 0 0 0 1px var(--gold-200),
-    inset 0 0 0 0.25rem rgba(231, 216, 180, 0.55),
-    inset 0 0 0 calc(0.25rem + 1px) var(--gold-600),
-    0 0.4rem 1rem rgba(0, 0, 0, 0.5);
-  clip-path: polygon(0 0.4rem, 0.4rem 0, calc(100% - 0.4rem) 0, 100% 0.4rem, 100% calc(100% - 0.4rem), calc(100% - 0.4rem) 100%, 0.4rem 100%, 0 calc(100% - 0.4rem));
-  transition: transform var(--dur-med) var(--ease-out), box-shadow var(--dur-med), filter var(--dur-med);
-  overflow: hidden;
-}
-
-.charter::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--dur-med);
-  background: radial-gradient(120% 200% at 0% 50%, rgba(255, 170, 70, 0.22), transparent 55%);
+  color: var(--gold-100);
+  background: none;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-banner) 8 14 fill / calc(8 * var(--px)) calc(14 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(0, 0, 0, 0.55));
 }
 
 .charter:hover,
 .charter:focus-visible {
-  transform: translateX(0.45rem);
-  outline: none;
-  box-shadow:
-    inset 0 0 0 1px var(--gold-200),
-    inset 0 0 0 0.25rem rgba(243, 231, 200, 0.7),
-    inset 0 0 0 calc(0.25rem + 1px) var(--gold-400),
-    0 0.5rem 1.4rem rgba(0, 0, 0, 0.55),
-    0 0 1.4rem rgba(201, 162, 39, 0.45);
-  filter: brightness(1.04);
-}
-
-.charter:focus-visible {
-  box-shadow:
-    inset 0 0 0 2px var(--red-600),
-    inset 0 0 0 0.25rem rgba(243, 231, 200, 0.7),
-    inset 0 0 0 calc(0.25rem + 1px) var(--gold-400),
-    0 0 0 3px var(--focus-ring),
-    0 0.5rem 1.4rem rgba(0, 0, 0, 0.55);
-}
-
-.charter:hover::after,
-.charter:focus-visible::after {
-  opacity: 1;
+  border-image-source: var(--tex-banner-hover);
 }
 
 .charter:active {
-  transform: translateX(0.45rem) scale(0.992);
+  border-image-source: var(--tex-banner-pressed);
+}
+
+.charter:active > * {
+  transform: translateY(calc(2 * var(--px)));
 }
 
 .medallion {
   position: relative;
-  width: 3.4rem;
-  height: 3.4rem;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff0c0, var(--gold-400) 46%, var(--gold-700) 100%);
-  box-shadow: inset 0 0 0 2px rgba(95, 72, 16, 0.7), 0 1px 3px rgba(0, 0, 0, 0.4);
+  width: calc(20 * var(--px));
+  height: calc(20 * var(--px));
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 var(--px) 0 rgba(0, 0, 0, 0.6));
+}
+
+.charter:hover .medallion,
+.charter:focus-visible .medallion {
+  background-image: var(--tex-seal-gold);
 }
 
 .medallion-disc {
-  position: absolute;
-  inset: 0.3rem;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 30%, var(--red-600), var(--red-800));
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
-  transition: background var(--dur-med);
-}
-
-.charter:hover .medallion-disc,
-.charter:focus-visible .medallion-disc {
-  background: radial-gradient(circle at 40% 30%, var(--red-500), #6b1018);
+  display: none;
 }
 
 .medallion-icon {
   position: relative;
-  width: 1.8rem;
-  height: 1.8rem;
-  color: var(--gold-200);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  width: 1.45rem;
+  height: 1.45rem;
+  color: #fde6cf;
+  filter: drop-shadow(0 var(--px) 0 rgba(60, 8, 10, 0.8));
+}
+
+.charter:hover .medallion-icon,
+.charter:focus-visible .medallion-icon {
+  color: #3a2a06;
+  filter: none;
 }
 
 .charter-body {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.05rem;
   min-width: 0;
 }
 
@@ -314,60 +289,59 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: var(--fs-xl);
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #2c1f0e;
   line-height: 1.1;
+  color: var(--gold-100);
+  text-shadow: 0 calc(2 * var(--px)) 0 #140c05;
 }
 
 .charter-sub {
   font-size: var(--fs-sm);
   font-style: italic;
-  color: var(--ink-muted);
+  color: var(--parchment-200);
+  text-shadow: 0 var(--px) 0 #140c05;
 }
 
 .charter-arrow {
   width: 1.2rem;
   height: 1.2rem;
-  color: var(--gold-600);
-  opacity: 0.7;
-  transition: transform var(--dur-med), opacity var(--dur-med), color var(--dur-med);
+  color: var(--gold-400);
+  filter: drop-shadow(0 var(--px) 0 #000);
 }
 
 .charter:hover .charter-arrow,
 .charter:focus-visible .charter-arrow {
-  transform: translateX(0.2rem);
-  opacity: 1;
-  color: var(--gold-700);
+  color: var(--gold-200);
 }
 
-/* Secondary pills */
+/* Secondary actions: small riveted buttons. */
 .pill-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.7rem;
-  margin-top: 1rem;
+  gap: calc(4 * var(--px));
+  margin-top: 0.9rem;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  min-height: 2.4rem;
-  padding: 0.35rem 1rem;
-  border: 0;
-  border-radius: var(--radius-round);
+  min-height: calc(18 * var(--px));
+  padding: 0 1rem;
   font-family: var(--font-display);
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--gold-100);
-  background: linear-gradient(180deg, rgba(42, 28, 14, 0.85), rgba(16, 10, 5, 0.9));
-  box-shadow: inset 0 0 0 1px var(--gold-600), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
-  transition: box-shadow var(--dur-fast), color var(--dur-fast);
+  text-shadow: 0 var(--px) 0 #000;
+  background: none;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.5));
 }
 
 .pill .icon {
@@ -376,8 +350,17 @@
   color: var(--gold-300);
 }
 
-.pill:hover {
-  box-shadow: inset 0 0 0 1px var(--gold-300), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.5), var(--shadow-glow-gold);
+.pill:hover,
+.pill:focus-visible {
+  border-image-source: var(--tex-btn-hover);
+}
+
+.pill:active {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+.pill:active > * {
+  transform: translateY(calc(2 * var(--px)));
 }
 
 /* Nameplate + build tag + hint */
@@ -388,26 +371,28 @@
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.4rem 1rem 0.4rem 0.4rem;
-  border-radius: var(--radius-round);
-  background: linear-gradient(180deg, rgba(30, 20, 10, 0.85), rgba(12, 8, 4, 0.9));
-  box-shadow: inset 0 0 0 1px var(--gold-700), 0 0.25rem 1rem rgba(0, 0, 0, 0.5);
+  padding: 0.35rem 1.1rem 0.35rem 0.5rem;
+  background: var(--tex-wood-dark) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
+  background-clip: padding-box;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.55));
 }
 
 .nameplate-avatar {
   display: grid;
   place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 50%;
-  color: var(--gold-200);
-  background: radial-gradient(circle at 40% 30%, var(--red-600), var(--red-800));
-  box-shadow: inset 0 0 0 2px var(--gold-500);
+  width: calc(18 * var(--px));
+  height: calc(18 * var(--px));
+  color: #fde6cf;
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
 }
 
 .nameplate-avatar .icon {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 1.3rem;
+  height: 1.3rem;
 }
 
 .nameplate-text {
@@ -419,9 +404,10 @@
 .nameplate-name {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--fs-sm);
-  letter-spacing: 0.06em;
-  color: var(--text-hi);
+  font-size: var(--fs-md);
+  letter-spacing: 0.04em;
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #000;
 }
 
 .nameplate-rank {
@@ -436,9 +422,11 @@
   bottom: 2rem;
   font-family: var(--font-display);
   font-size: var(--fs-2xs);
-  letter-spacing: 0.24em;
+  font-weight: 600;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-muted);
+  text-shadow: 0 var(--px) 0 #000;
 }
 
 .menu-hint {
@@ -452,6 +440,7 @@
   gap: 0.3rem;
   font-size: var(--fs-xs);
   color: var(--text-muted);
+  text-shadow: 0 var(--px) 0 #000;
   white-space: pre;
 }
 

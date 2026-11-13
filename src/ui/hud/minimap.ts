@@ -14,7 +14,8 @@ import { TileType } from '../../sim/map-gen';
 import { h } from '../dom';
 import { getCameraTileQuad, getScene, issueMapOrder, panToTile, type TilePoint } from '../game-bridge';
 
-const TILE_RGB: Record<number, [number, number, number]> = {
+/** Minimap colour per TileType (also used by the skirmish map previews). */
+export const TILE_RGB: Record<number, [number, number, number]> = {
   [TileType.GRASS]: [84, 112, 52],
   [TileType.FOREST]: [43, 58, 24],
   [TileType.DIRT]: [126, 90, 50],
