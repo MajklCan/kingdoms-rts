@@ -36,6 +36,13 @@ import type { SceneContext } from '../scene-context';
 import { addLayerGraphics } from '../world-layers';
 import { UNIT_SELECTION_ELLIPSE, type PickedTile, type SelectionEllipse } from '../world-projection';
 
+/** Per-unit ring and bar sizes (pre-rendered unit art), px at 1x. */
+export interface UnitStatusSize {
+  ringW: number;
+  ringH: number;
+  barW: number;
+}
+
 const SELECTION_COLOR = 0xfeca57;
 const ATTACK_HOVER_COLOR = 0xff4757;
 /** Footprint ring padding, in tiles. */
@@ -111,8 +118,12 @@ export class StatusOverlay {
     }
   }
 
-  /** Selection ring, carry dot, build marker and health bar for a unit. */
-  drawUnit(eid: number, screen: ScreenPos, topY = screen.y - 30): void {
+  /**
+   * Selection ring, carry dot, build marker and health bar for a unit.
+   * `size` (pre-rendered units) gives the ring's full width / height and the
+   * bar width in px; voxel units use the shared defaults.
+   */
+  drawUnit(eid: number, screen: ScreenPos, topY = screen.y - 30, size?: UnitStatusSize): void {
     const ecs = this.ctx.world.ecs;
     const selected = this.ctx.isSelected(eid);
     if (selected) {
@@ -120,8 +131,8 @@ export class StatusOverlay {
       const e = UNIT_SELECTION_ELLIPSE;
       const ring = {
         yOffset: e.yOffset,
-        width: e.width * UNIT_RING_SCALE * pop,
-        height: e.height * UNIT_RING_SCALE * pop,
+        width: (size ? size.ringW : e.width * UNIT_RING_SCALE) * pop,
+        height: (size ? size.ringH : e.height * UNIT_RING_SCALE) * pop,
       };
       this.ellipseRing(screen, ring, ringColor(Owner.player[eid]), Math.min(1, 0.35 + (1.45 - pop) * 1.4));
     }
@@ -141,7 +152,7 @@ export class StatusOverlay {
         this.status.fillRect(screen.x - 11, topY, 3, 3);
       }
     }
-    this.drawHealthBar(eid, screen.x, topY - 6, 18, selected, BAR_H);
+    this.drawHealthBar(eid, screen.x, topY - 6, size?.barW ?? 18, selected, BAR_H);
   }
 
   /** Red ring under the enemy the cursor hovers, when the selection can attack it. */

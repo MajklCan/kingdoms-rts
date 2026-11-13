@@ -47,7 +47,11 @@ export class CombatFx {
   /** Machine guns fire fast: smoke every few shots only. */
   private mgShots = 0;
 
-  constructor(private readonly host: FxHost) {}
+  constructor(
+    private readonly host: FxHost,
+    /** Screen offset of a unit's muzzle from its feet (pre-rendered art), if known. */
+    private readonly muzzle: (eid: number) => { dx: number; dy: number } | null = () => null
+  ) {}
 
   onCombatEvent(event: CombatEvent): void {
     const ctx = this.host.ctx;
@@ -69,7 +73,10 @@ export class CombatFx {
       if (mortar) {
         muzzleSmoke(this.host.fx, from.x, from.y - 16, 0.15, -1, true);
       } else {
-        muzzleSmoke(this.host.fx, from.x, from.y - 10, to.x - from.x, to.y - from.y, true);
+        const m = this.muzzle(event.attackerEid);
+        const mx = from.x + (m?.dx ?? 0);
+        const my = m ? from.y + m.dy : from.y - 10;
+        muzzleSmoke(this.host.fx, mx, my, to.x - mx, to.y - my, true);
       }
       this.host.shake(from.x, from.y, 0.0016, 90);
       return;
@@ -94,7 +101,10 @@ export class CombatFx {
     if (gun && fromSeen) {
       const mg = kind === UnitDefId.MACHINE_GUN;
       if (!mg || this.mgShots++ % 3 === 0) {
-        muzzleSmoke(this.host.fx, from.x, from.y - (mg ? 9 : 14), to.x - from.x, to.y - from.y, false);
+        const m = mg ? null : this.muzzle(event.attackerEid);
+        const mx = from.x + (m?.dx ?? 0);
+        const my = m ? from.y + m.dy : from.y - (mg ? 9 : 14);
+        muzzleSmoke(this.host.fx, mx, my, to.x - mx, to.y - my, false);
       } else {
         this.host.fx.emit('add', { frame: 'glow', x: from.x, y: from.y - 9, life: 50, scale: 0.3, alpha: 0.8, tint: 0xffe0a0 });
       }

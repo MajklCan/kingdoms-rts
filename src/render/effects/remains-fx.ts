@@ -3,7 +3,9 @@
  * the entity was drawn with:
  *
  *   corpse    a dead soldier tips over, darkens, lies there a few seconds and
- *             fades (no blood); crewed guns tilt and smoke instead
+ *             fades (no blood); crewed guns tilt and smoke instead. Units with
+ *             pre-rendered death frames play those (team mask and shadow
+ *             included) instead of the tip-over
  *   tree      a felled tree topples away from its stump and lands in a puff
  *             of dust and leaves, then fades (the stump stays)
  *   collapse  a destroyed building sinks into its own dust cloud while the
@@ -19,6 +21,7 @@ import { UnitDefId } from '@sim/defs';
 import type { BuildingRemoval } from '../entities/building-renderer';
 import type { TreeFall } from '../entities/resource-renderer';
 import type { SpriteSnapshot } from '../entities/sprite-view';
+import type { SpriteRef } from '../sprites/sprite-source';
 import type { UnitDeath } from '../entities/unit-renderer';
 import { clamp01, easeIn, easeOut, type FxHost } from './fx-host';
 import { rand } from './fx-particles';
@@ -39,6 +42,13 @@ interface Remains {
   /** Collapse: sink depth px; tree: top px. */
   size: number;
   landed: boolean;
+  /** Pre-rendered death frames (atlas units) and their pace. */
+  frames?: SpriteRef[];
+  frameMs?: number;
+  shown?: number;
+  shadow?: Phaser.GameObjects.Image | null;
+  /** Team colour of the mask copy. */
+  maskTint?: number;
 }
 
 const MAX_CORPSES = 48;
@@ -66,6 +76,7 @@ export class RemainsFx {
     const s = death.sprite;
     const wreck = WRECKS.has(death.unitDefId);
     if (!wreck && this.corpses >= MAX_CORPSES) this.dropOldestCorpse();
+    if (death.deathFrames && this.playDeath(death, wreck)) return;
     const img = this.copy(s, this.host.ctx.layers.groundFx, false);
     if (!img) return;
     if (!wreck) this.corpses++;
@@ -86,6 +97,51 @@ export class RemainsFx {
     if (wreck) {
       for (let i = 0; i < 3; i++) smoke(fx, s.x + rand(-4, 4), s.y - 8, FX_COLORS.smokeDark, 0.8, 0.45);
     }
+  }
+
+  /** Corpse from pre-rendered death frames: shadow, body and team mask in the ground-FX layer. */
+  private playDeath(death: UnitDeath, wreck: boolean): boolean {
+    const frames = death.deathFrames;
+    const scene = this.host.ctx.scene;
+    const first = frames?.refs[0];
+    if (!frames || !first || !scene.textures.exists(first.texture)) return false;
+    const s = death.sprite;
+    const layer = this.host.ctx.layers.groundFx;
+    const place = (texture: string, frame: string | undefined): Phaser.GameObjects.Image => {
+      const img = scene.add.image(s.x, s.y, texture, frame);
+      img.setOrigin(first.originX, first.originY);
+      img.setScale(first.scale);
+      layer.add(img);
+      return img;
+    };
+    const shadow = first.shadow ? place(first.shadow.texture, first.shadow.frame) : null;
+    const img = place(first.texture, first.frame);
+    const mask = first.teamMask ? place(first.teamMask.texture, first.teamMask.frame) : null;
+    if (mask && first.teamMask) mask.setTint(first.teamMask.tint);
+    if (!wreck) this.corpses++;
+    this.items.push({
+      kind: wreck ? 'wreck' : 'corpse',
+      img,
+      mask,
+      born: this.host.time,
+      dir: 0,
+      x: s.x,
+      y: s.y,
+      scale: first.scale,
+      size: s.top,
+      landed: false,
+      frames: frames.refs,
+      frameMs: frames.frameMs,
+      shown: 0,
+      shadow,
+      maskTint: first.teamMask?.tint,
+    });
+    if (wreck) {
+      const fx = this.host.fx;
+      dustPuff(fx, s.x, s.y, 1.2, FX_COLORS.dust, 6);
+      for (let i = 0; i < 3; i++) smoke(fx, s.x + rand(-4, 4), s.y - 8, FX_COLORS.smokeDark, 0.8, 0.45);
+    }
+    return true;
   }
 
   treeFell(fall: TreeFall): void {
@@ -185,6 +241,7 @@ export class RemainsFx {
   }
 
   private stepCorpse(r: Remains, age: number, lean: number): boolean {
+    if (r.frames) return this.stepDeathFrames(r, age);
     const total = CORPSE_FALL + CORPSE_HOLD + CORPSE_FADE;
     if (age >= total) return false;
     const fall = easeIn(clamp01(age / CORPSE_FALL));
@@ -199,6 +256,35 @@ export class RemainsFx {
         const reach = r.size * 0.55;
         dustPuff(this.host.fx, r.x + r.dir * reach, r.y - 2, 0.6, FX_COLORS.dust, 3);
       }
+    }
+    return true;
+  }
+
+  /** Atlas death: play the frames, then lie, darken and fade like any corpse. */
+  private stepDeathFrames(r: Remains, age: number): boolean {
+    const frames = r.frames ?? [];
+    const fall = (r.frameMs ?? 110) * frames.length;
+    const total = fall + CORPSE_HOLD + CORPSE_FADE;
+    if (age >= total) return false;
+    const index = Math.min(frames.length - 1, Math.floor(age / (r.frameMs ?? 110)));
+    if (index !== r.shown) {
+      r.shown = index;
+      const ref = frames[index];
+      r.img.setTexture(ref.texture, ref.frame);
+      if (r.mask && ref.teamMask) r.mask.setTexture(ref.teamMask.texture, ref.teamMask.frame);
+      if (r.shadow && ref.shadow) r.shadow.setTexture(ref.shadow.texture, ref.shadow.frame);
+    }
+    const k = clamp01((age - fall) / 700);
+    const dark = lerpColor(0xffffff, 0x8c8478, k);
+    r.img.setTint(dark);
+    if (r.mask && r.maskTint !== undefined) r.mask.setTint(multiply(r.maskTint, dark));
+    const alpha = age < fall + CORPSE_HOLD ? 1 : 1 - (age - fall - CORPSE_HOLD) / CORPSE_FADE;
+    r.img.setAlpha(alpha);
+    r.mask?.setAlpha(alpha);
+    r.shadow?.setAlpha(alpha);
+    if (!r.landed && age >= fall) {
+      r.landed = true;
+      if (r.kind === 'corpse') dustPuff(this.host.fx, r.x, r.y - 2, 0.6, FX_COLORS.dust, 3);
     }
     return true;
   }
@@ -293,6 +379,7 @@ export class RemainsFx {
     if (r.kind === 'corpse') this.corpses--;
     r.img.destroy();
     r.mask?.destroy();
+    r.shadow?.destroy();
   }
 
   private dropOldestCorpse(): void {
@@ -307,6 +394,13 @@ export class RemainsFx {
     this.items[oldest] = this.items[this.items.length - 1];
     this.items.pop();
   }
+}
+
+function multiply(a: number, b: number): number {
+  const r = Math.round((((a >> 16) & 0xff) * ((b >> 16) & 0xff)) / 255);
+  const g = Math.round((((a >> 8) & 0xff) * ((b >> 8) & 0xff)) / 255);
+  const bl = Math.round(((a & 0xff) * (b & 0xff)) / 255);
+  return (r << 16) | (g << 8) | bl;
 }
 
 function lerpColor(a: number, b: number, t: number): number {

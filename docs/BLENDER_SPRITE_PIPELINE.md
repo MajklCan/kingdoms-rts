@@ -2,8 +2,9 @@
 
 Pre-rendered sprites for buildings, nature, terrain and decor, built from
 procedural Blender models (no imported or generated meshes, no external
-textures). Units stay voxel. Everything is reproducible from the scripts in
-`scripts/blender/`.
+textures). Units have their own numpy pipeline, see
+[UNIT_SPRITES.md](UNIT_SPRITES.md). Everything is reproducible from the
+scripts in `scripts/blender/`.
 
 ## Outputs
 

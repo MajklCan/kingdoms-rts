@@ -65,7 +65,7 @@ export class WorldFx implements FxHost {
   ) {
     ensureFxTextures(ctx.scene);
     this.fx = new FxParticles(ctx.scene, ctx.layers);
-    this.combat = new CombatFx(this);
+    this.combat = new CombatFx(this, (eid) => deps.units.animator.muzzleOffset(eid));
     this.remains = new RemainsFx(this);
     this.buildingFx = new BuildingFx(this, deps.buildings, deps.audio);
     this.economy = new EconomyFx(this, deps.units);

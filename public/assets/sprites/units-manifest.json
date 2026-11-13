@@ -1,0 +1,540 @@
+{
+ "version": 1,
+ "scale": 1,
+ "facings": [
+  "E",
+  "SE",
+  "S",
+  "SW",
+  "W",
+  "NW",
+  "N",
+  "NE"
+ ],
+ "frameName": "<unit>/<anim>/<facing>/<frame>[/m|/s]",
+ "atlases": [
+  {
+   "key": "kr-units-0",
+   "image": "units-0.png",
+   "json": "units-0.json"
+  }
+ ],
+ "units": {
+  "villager": {
+   "defIds": [
+    "VILLAGER"
+   ],
+   "size": [
+    118,
+    77
+   ],
+   "anchor": [
+    49,
+    49
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "carry_wood": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "carry_food": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "carry_gold": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "carry_stone": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "chop": {
+     "frames": 6,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "mine": {
+     "frames": 6,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "build": {
+     "frames": 6,
+     "ms": 95,
+     "hit": 2,
+     "shadow": "static"
+    },
+    "farm": {
+     "frames": 6,
+     "ms": 130,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "forage": {
+     "frames": 4,
+     "ms": 170,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    },
+    "attack": {
+     "alias": "chop"
+    },
+    "harvest": {
+     "alias": "chop"
+    },
+    "carry": {
+     "alias": "carry_food"
+    }
+   }
+  },
+  "militia": {
+   "defIds": [
+    "MILITIA"
+   ],
+   "size": [
+    114,
+    71
+   ],
+   "anchor": [
+    48,
+    44
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 6,
+     "ms": 90,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    }
+   }
+  },
+  "spearman": {
+   "defIds": [
+    "SPEARMAN"
+   ],
+   "size": [
+    137,
+    88
+   ],
+   "anchor": [
+    49,
+    60
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 6,
+     "ms": 90,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    }
+   },
+   "projectile": [
+    [
+     30.8,
+     15.5
+    ],
+    [
+     -5.4,
+     20.7
+    ],
+    [
+     -38.5,
+     11.6
+    ],
+    [
+     -49.0,
+     -6.5
+    ],
+    [
+     -30.8,
+     -23.1
+    ],
+    [
+     5.4,
+     -28.3
+    ],
+    [
+     38.5,
+     -19.2
+    ],
+    [
+     49.0,
+     -1.1
+    ]
+   ]
+  },
+  "archer": {
+   "defIds": [
+    "ARCHER"
+   ],
+   "size": [
+    112,
+    71
+   ],
+   "anchor": [
+    47,
+    44
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.72,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 6,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    }
+   },
+   "projectile": [
+    [
+     7.8,
+     -17.4
+    ],
+    [
+     -1.8,
+     -16.2
+    ],
+    [
+     -10.4,
+     -18.7
+    ],
+    [
+     -12.9,
+     -23.5
+    ],
+    [
+     -7.8,
+     -27.8
+    ],
+    [
+     1.8,
+     -29.1
+    ],
+    [
+     10.4,
+     -26.5
+    ],
+    [
+     12.9,
+     -21.7
+    ]
+   ]
+  },
+  "cavalry": {
+   "defIds": [
+    "SCOUT_CAVALRY"
+   ],
+   "size": [
+    169,
+    111
+   ],
+   "anchor": [
+    64,
+    76
+   ],
+   "height": 52,
+   "ring": [
+    44,
+    20
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 280,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 6,
+     "stride": 1.5,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 6,
+     "ms": 90,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 130,
+     "once": true,
+     "shadow": "frame"
+    }
+   },
+   "projectile": [
+    [
+     33.2,
+     1.8
+    ],
+    [
+     -2.6,
+     8.1
+    ],
+    [
+     -36.9,
+     -0.1
+    ],
+    [
+     -49.6,
+     -18.0
+    ],
+    [
+     -33.2,
+     -35.1
+    ],
+    [
+     2.6,
+     -41.5
+    ],
+    [
+     36.9,
+     -33.3
+    ],
+    [
+     49.6,
+     -15.4
+    ]
+   ]
+  },
+  "gunman": {
+   "defIds": [
+    "GUNMAN"
+   ],
+   "size": [
+    120,
+    78
+   ],
+   "anchor": [
+    49,
+    50
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.68,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 6,
+     "ms": 100,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    }
+   },
+   "projectile": [
+    [
+     17.5,
+     -9.6
+    ],
+    [
+     -7.0,
+     -7.4
+    ],
+    [
+     -27.4,
+     -14.5
+    ],
+    [
+     -31.8,
+     -26.8
+    ],
+    [
+     -17.5,
+     -37.0
+    ],
+    [
+     7.0,
+     -39.2
+    ],
+    [
+     27.4,
+     -32.1
+    ],
+    [
+     31.8,
+     -19.8
+    ]
+   ]
+  },
+  "cannon": {
+   "defIds": [
+    "CANNON"
+   ],
+   "size": [
+    129,
+    82
+   ],
+   "anchor": [
+    51,
+    52
+   ],
+   "height": 50,
+   "ring": [
+    48,
+    22
+   ],
+   "anims": {
+    "idle": {
+     "frames": 2,
+     "ms": 420,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 6,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 8,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 3,
+     "ms": 150,
+     "once": true,
+     "shadow": "frame"
+    }
+   },
+   "projectile": [
+    [
+     20.1,
+     -8.0
+    ],
+    [
+     0.0,
+     -3.8
+    ],
+    [
+     -20.1,
+     -8.0
+    ],
+    [
+     -28.4,
+     -18.0
+    ],
+    [
+     -20.1,
+     -28.1
+    ],
+    [
+     -0.0,
+     -32.2
+    ],
+    [
+     20.1,
+     -28.1
+    ],
+    [
+     28.4,
+     -18.0
+    ]
+   ]
+  }
+ }
+}

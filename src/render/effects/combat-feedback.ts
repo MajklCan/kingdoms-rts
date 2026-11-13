@@ -5,7 +5,7 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { SIM } from '../../config';
+import { ISO, SIM } from '../../config';
 import { Building } from '@sim/components';
 import { UnitDefId } from '@sim/defs';
 import type { CombatEvent } from '@sim/world';
@@ -75,15 +75,24 @@ export class CombatFeedback {
 
   private spawnProjectile(event: CombatEvent, kind: ProjectileKind): void {
     const ecs = this.ctx.world.ecs;
-    const startLift = hasComponent(ecs, Building, event.attackerEid)
-      ? 68
-      : kind === 'cannon' ? 18 : kind === 'mortar' ? 34 : 28;
+    const attackerIsBuilding = hasComponent(ecs, Building, event.attackerEid);
+    let startLift = attackerIsBuilding ? 68 : kind === 'cannon' ? 18 : kind === 'mortar' ? 34 : 28;
+    let fromX = event.fromX;
+    let fromY = event.fromY;
+    // Pre-rendered units: leave from the bow / muzzle of the drawn frame. A
+    // screen x offset is a tile shift along (1, -1), which keeps screen y.
+    const muzzle = attackerIsBuilding ? null : this.deps.animator.muzzleOffset(event.attackerEid);
+    if (muzzle) {
+      startLift = -muzzle.dy;
+      fromX += muzzle.dx / ISO.TILE_W;
+      fromY -= muzzle.dx / ISO.TILE_W;
+    }
     const targetLift = hasComponent(ecs, Building, event.targetEid)
       ? 42
       : kind === 'cannon' || kind === 'mortar' ? 16 : 22;
     this.deps.effects.spawn(
       PROJECTILE_EFFECT[kind],
-      { x: event.fromX, y: event.fromY, lift: startLift },
+      { x: fromX, y: fromY, lift: startLift },
       {
         to: { x: event.toX, y: event.toY, lift: targetLift },
         durationMs: projectileDurationMs(event, kind),

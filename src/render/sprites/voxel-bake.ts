@@ -8,7 +8,7 @@ import { TEAM_COLORS } from '../../config';
 import { outlineCanvasTexture } from '../voxel/voxel-outline';
 import { bakeVoxelTexture } from '../voxel/voxel-render';
 import { FACINGS } from './facing';
-import { LINEAR_FILTER } from './sprite-registry';
+import { createUnitAtlasSource, LINEAR_FILTER } from './sprite-registry';
 import { UNIT_SHADOW_KEY } from './voxel-sprite-source';
 import {
   VOXEL_SHARED_BAKES,
@@ -21,6 +21,9 @@ import {
 } from './voxel-models';
 
 export function bakeVoxelTextures(scene: Phaser.Scene): void {
+  // Units drawn from the pre-rendered unit atlases need no voxel bake (the
+  // unit manifest and its atlases are loaded in preload, before this runs).
+  const covered = new Set(createUnitAtlasSource(scene)?.coveredUnitDefIds ?? []);
   // voxelW values are tuned so on-screen sprite size matches the 64x32 grid;
   // sharpness comes from canvas-level nearest-neighbour scaling (pixelArt).
   for (const playerId of VOXEL_TEAM_PLAYERS) {
@@ -31,7 +34,7 @@ export function bakeVoxelTextures(scene: Phaser.Scene): void {
     const rim = unitRimColor(teamColor);
     for (const unitDefId of VOXEL_UNIT_BAKE_ORDER) {
       const model = VOXEL_UNIT_MODELS[unitDefId];
-      if (!model) continue;
+      if (!model || covered.has(unitDefId)) continue;
       for (const facing of FACINGS) {
         for (const anim of model.anims) {
           for (let frame = 0; frame < (model.frameCounts[anim] ?? 0); frame++) {

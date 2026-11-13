@@ -105,6 +105,30 @@ export interface MapFeatureSpriteQuery {
   y: number;
 }
 
+/** Timing of one pre-rendered unit animation (atlas units only). */
+export interface UnitAnimInfo {
+  frames: number;
+  /** ms per frame (time-driven anims). */
+  ms: number;
+  /** Tiles per cycle for distance-driven walks, 0 = time driven. */
+  stride: number;
+  /** Frame on which a blow lands / a shot leaves, -1 = none. */
+  hit: number;
+  once: boolean;
+}
+
+/** Per-kind facts about pre-rendered unit art the renderers and effects need. */
+export interface UnitArtInfo {
+  /** Timing of an anim (aliases resolved), null = the art has no such anim. */
+  anim(anim: string): UnitAnimInfo | null;
+  /** Screen offset from the feet where projectiles / muzzle smoke start, per facing. */
+  projectile(facing: Facing): { dx: number; dy: number } | null;
+  /** px from the feet to the top of the head. */
+  height: number;
+  /** Selection ring full width / height px at 1x. */
+  ring: readonly [number, number];
+}
+
 export interface SpriteSource {
   building(query: BuildingSpriteQuery): SpriteRef | null;
   /** Ruins left by a destroyed building of this def (null = no ruin art). */
@@ -112,6 +136,8 @@ export interface SpriteSource {
   unit(query: UnitSpriteQuery): SpriteRef | null;
   /** Number of frames a unit animation has; 0 when the source has no such anim. */
   unitFrameCount(unitDefId: number, anim: string): number;
+  /** Pre-rendered unit facts (timing, anchors); absent / null for voxel units. */
+  unitArt?(unitDefId: number): UnitArtInfo | null;
   resource(query: ResourceSpriteQuery): SpriteRef | null;
   /** Stump left by a felled tree (null = no stump art). */
   stump(conifer: boolean): SpriteRef | null;
