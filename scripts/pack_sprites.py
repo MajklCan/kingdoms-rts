@@ -27,7 +27,10 @@ import sys
 
 import numpy as np
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sprite_grade import GRADE, grade_rgba  # noqa: E402
+
+REPO =os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 RAW = os.path.join(REPO, "art-source", "blender", "renders")
 OUT = os.path.join(REPO, "public", "assets", "sprites")
 MAX_SIZE = 4096
@@ -185,17 +188,25 @@ def shaded_mask(mask: np.ndarray, colour: np.ndarray) -> np.ndarray:
     return out
 
 
+def is_graded(rec: dict) -> bool:
+    """Colour frames get the sprite grade; terrain transition masks (alpha only) do not."""
+    return rec.get("meta", {}).get("asset") != "terrain.transition"
+
+
 def pack_family(family: str, records: list[dict], quantize: bool) -> tuple[list[dict], dict[str, dict]]:
     """Returns (atlas descriptors, frame index name -> {atlas, w, h})."""
     sprites = []
     for rec in records:
         frame_path = os.path.join(REPO, rec["files"].get("frame", ""))
         colour = load_rgba(frame_path) if "frame" in rec["files"] and os.path.exists(frame_path) else None
+        graded = colour is not None and is_graded(rec)
+        if graded:
+            colour = grade_rgba(colour)
         for kind, rel in rec["files"].items():
             path = os.path.join(REPO, rel)
             if not os.path.exists(path):
                 continue
-            arr = load_rgba(path)
+            arr = colour if kind == "frame" and graded else load_rgba(path)
             name = rec["name"] if kind == "frame" else f"{rec['name']}__{kind}"
             if kind == "mask" and colour is not None and colour.shape == arr.shape:
                 arr = shaded_mask(arr, colour)
@@ -313,6 +324,7 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
         "version": 1,
         "generator": "scripts/blender/render_all.py + scripts/pack_sprites.py",
         "doc": "docs/BLENDER_SPRITE_PIPELINE.md",
+        "grade": GRADE,
         "renderScale": RENDER_SCALE,
         "scale": 1.0 / RENDER_SCALE,
         "tile": {"w": 64, "h": 32, "elevationStepPx": 4},

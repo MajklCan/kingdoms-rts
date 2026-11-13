@@ -107,6 +107,18 @@ own frames (terrain).
 - **Sizes**: doors are about 0.52 tile high (villager height), a villager is
   about 0.3 tile wide.
 
+## Colour grade
+
+The packer grades every colour frame before trimming
+(`scripts/sprite_grade.py`): a midtone lift that leaves blacks and whites in
+place, a touch of saturation and a slightly warmer sun. Masks are derived from
+the graded colour, shadow frames and terrain transition masks are not graded.
+The grade that was applied is stored in `manifest.json` under `"grade"`, and
+`unpack_sprites.py` applies the inverse, so unpack + repack never grades twice.
+Change the numbers in `GRADE` (and bump its `version`), then unpack and repack
+to regrade without re-rendering. Preview a grade on any screenshot with
+`python3 scripts/sprite_grade.py --preview in.png out.png`.
+
 ## manifest.json
 
 ```jsonc

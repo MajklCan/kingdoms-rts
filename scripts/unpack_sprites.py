@@ -28,6 +28,9 @@ import sys
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sprite_grade import ungrade_rgba  # noqa: E402
+
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 SPRITES = os.path.join(REPO, "public", "assets", "sprites")
 RAW = os.path.join(REPO, "art-source", "blender", "renders")
@@ -45,6 +48,9 @@ def main() -> None:
     force = "--force" in sys.argv
     with open(os.path.join(SPRITES, "manifest.json")) as fh:
         manifest = json.load(fh)
+    # The packer grades colour frames (scripts/sprite_grade.py); undo it so
+    # the raw renders stay ungraded and a repack does not grade twice.
+    grade = manifest.get("grade")
     atlases = {}
     for a in manifest["atlases"]:
         with open(os.path.join(SPRITES, a["json"])) as fh:
@@ -76,6 +82,9 @@ def main() -> None:
                 # The packer bled RGB into transparent pixels; keep them clean.
                 cut[cut[..., 3] == 0] = 0
                 canvas[sp["y"]:sp["y"] + fr["h"], sp["x"]:sp["x"] + fr["w"]] = cut
+                if grade and kind == "frame" and asset_id != "terrain.transition":
+                    canvas = ungrade_rgba(canvas, grade)
+                    canvas[canvas[..., 3] == 0] = 0
                 Image.fromarray(canvas).save(path)
                 written += 1
             meta = {"asset": asset_id, "variant": variant_key}

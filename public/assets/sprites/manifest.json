@@ -2,6 +2,17 @@
  "version": 1,
  "generator": "scripts/blender/render_all.py + scripts/pack_sprites.py",
  "doc": "docs/BLENDER_SPRITE_PIPELINE.md",
+ "grade": {
+  "version": 1,
+  "lift": 0.5,
+  "power": 1.4,
+  "saturation": 1.07,
+  "warm": [
+   1.03,
+   1.0,
+   0.955
+  ]
+ },
  "renderScale": 2,
  "scale": 0.5,
  "tile": {
