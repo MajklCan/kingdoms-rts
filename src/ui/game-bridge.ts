@@ -155,8 +155,9 @@ export function lastFightPosition(scene: GameScene): TilePoint | null {
   return getUiApi(scene)?.lastFightPosition() ?? null;
 }
 
-export function getMatchStats(scene: GameScene): MatchStatsView | null {
-  return getUiApi(scene)?.getMatchStats() ?? null;
+/** Exact sim stats for `playerId` (default: the local player). */
+export function getMatchStats(scene: GameScene, playerId?: number): MatchStatsView | null {
+  return getUiApi(scene)?.getMatchStats(playerId) ?? null;
 }
 
 /** Tear the match down (leaving a multiplayer session) without a reload. */

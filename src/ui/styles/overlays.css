@@ -72,6 +72,12 @@
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
+/* Two-word titles ("Connection lost") would overflow the card at hero size. */
+.go-title.is-long {
+  font-size: var(--fs-3xl);
+  letter-spacing: 0.08em;
+}
+
 .go-sub {
   margin: 0;
   font-size: var(--fs-md);

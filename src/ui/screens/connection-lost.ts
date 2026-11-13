@@ -64,7 +64,7 @@ function show(state: LostState): void {
   card!.replaceChildren(
     h('div', { class: 'go-emblem is-defeat', 'aria-hidden': 'true' }, icon(state === 'peer-left' ? 'banners' : 'alert')),
     h('div', { class: 'eyebrow' }, 'Multiplayer'),
-    h('h2', { class: 'go-title defeat', id: 'connection-lost-title' }, copy.title),
+    h('h2', { class: 'go-title defeat is-long', id: 'connection-lost-title' }, copy.title),
     h('p', { class: 'go-sub', id: 'connection-lost-body' }, copy.body),
     h('div', { class: 'go-actions' }, back)
   );
