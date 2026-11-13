@@ -42,8 +42,10 @@ import { CommandFeedback, type CommandFailure } from './commands/feedback';
 import type { PlayerCommands } from './commands/player-commands';
 import type { EffectsLayer } from './effects/effects-layer';
 import { ORDER_MARKER_EFFECT, orderMarkerEffect } from './effects/order-marker';
+import { RALLY_FLAG_EFFECT, rallyFlagEffect } from './effects/rally-flag';
 import type { GameAudio } from './game-audio';
 import type { MinimapAlerts } from './hud/minimap-data';
+import { RallyDisplay } from './hud/rally-display';
 import {
   UiAlertFeed,
   type GameMessageListener,
@@ -94,17 +96,23 @@ export interface UiApiDeps {
 export class UiApi {
   private readonly feed: UiAlertFeed;
   private readonly feedback: CommandFeedback;
+  private readonly rally: RallyDisplay;
 
   constructor(
     private readonly ctx: SceneContext,
     private readonly deps: UiApiDeps
   ) {
     deps.effects.register(ORDER_MARKER_EFFECT, orderMarkerEffect);
+    deps.effects.register(RALLY_FLAG_EFFECT, rallyFlagEffect);
     this.feedback = new CommandFeedback(deps.effects, deps.audio);
     deps.commands.setFeedback(this.feedback);
     deps.pointer.setFeedback(this.feedback);
     this.feed = new UiAlertFeed(ctx, { alerts: deps.alerts, feedback: this.feedback });
-    ctx.scene.events.on(Phaser.Scenes.Events.POST_UPDATE, () => this.feed.pump());
+    this.rally = new RallyDisplay(ctx, deps.effects);
+    ctx.scene.events.on(Phaser.Scenes.Events.POST_UPDATE, () => {
+      this.feed.pump();
+      this.rally.update();
+    });
   }
 
   /** The scene is running and owns a world. */
@@ -120,6 +128,7 @@ export class UiApi {
   reset(): void {
     this.feed.reset();
     this.feedback.clear();
+    this.rally.reset();
   }
 
   // ── Selection ─────────────────────────────────────────────────────────────

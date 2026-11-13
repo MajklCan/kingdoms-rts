@@ -72,10 +72,12 @@ function onCellClick(ev: MouseEvent, index: number): void {
     // Same typed path as a refused hotkey: error sound, alert, and the
     // missing resources flash in the top bar.
     const missing = missingResources(parseCost(action.cost), bank(scene));
-    const subject = plainDashes(action.label);
+    // "Train Pikeman" reads as "Not enough food for Pikeman", like the hotkey path.
+    const label = plainDashes(action.label);
+    const subject = label.replace(/^(Train|Build|Research) /, '');
     if (missing.length > 0) reportFailure({ reason: 'resources', subject, missing });
-    else if (/population/i.test(action.disabledReason ?? '')) reportFailure({ reason: 'population', subject: subject.replace(/^Train /, '') });
-    else reportFailure({ reason: 'unavailable', text: tipFor(action).disabled || `${subject} is not available` });
+    else if (/population/i.test(action.disabledReason ?? '')) reportFailure({ reason: 'population', subject });
+    else reportFailure({ reason: 'unavailable', text: tipFor(action).disabled || `${label} is not available` });
     cell.classList.remove('is-denied');
     void cell.offsetWidth;
     cell.classList.add('is-denied');

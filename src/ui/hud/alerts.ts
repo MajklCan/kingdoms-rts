@@ -63,6 +63,9 @@ const ICON: Record<UiAlertKind, IconName> = {
 };
 /** Kinds that also ping the minimap. */
 const PINGED: ReadonlySet<UiAlertKind> = new Set<UiAlertKind>(['attack', 'building-lost']);
+/** Refusals of one kind say the same thing in different words (the pop-cap
+ *  warning and a refused train order): the newest wording replaces the toast. */
+const MERGED_BY_KIND: ReadonlySet<UiAlertKind> = new Set<UiAlertKind>(['population', 'resources']);
 
 interface Toast {
   el: HTMLElement;
@@ -106,11 +109,18 @@ export function pushAlert(alert: HudAlert): void {
   if (alert.kind === 'population') flashPopulation();
   if (alert.at && PINGED.has(alert.kind)) addMinimapPing(alert.at, alert.kind === 'attack' ? 'attack' : 'loss');
   const now = performance.now();
-  const same = toasts.find((t) => t.alert.kind === alert.kind && t.alert.text === alert.text && now - t.at < 4000);
+  const same = toasts.find(
+    (t) =>
+      t.alert.kind === alert.kind &&
+      (MERGED_BY_KIND.has(alert.kind) || t.alert.text === alert.text) &&
+      now - t.at < 4000
+  );
   if (same) {
     same.count++;
     same.at = now;
     same.alert = alert;
+    const textEl = same.el.querySelector('.toast-text');
+    if (textEl) textEl.textContent = plainDashes(alert.text);
     const badge = same.el.querySelector('.toast-count');
     if (badge) badge.textContent = `x${same.count}`;
     window.clearTimeout(same.timer);
