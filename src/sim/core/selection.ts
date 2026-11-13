@@ -4,7 +4,7 @@
 
 import { addComponent, hasComponent, removeComponent } from 'bitecs';
 import { Owner, Position, Selected, UnitKind } from '../components';
-import { isEntityVisibleTo } from '../world';
+import { isEntityVisibleTo } from '../systems/visibility';
 import { selectedQuery, unitQuery } from './queries';
 import type { SimWorld } from './types';
 

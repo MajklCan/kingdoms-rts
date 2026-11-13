@@ -24,13 +24,13 @@ import { removeSimEntity } from '../core/entities';
 import { findBuildingAt, findEntityNear, findResourceAt } from '../core/lookup';
 import { positionQuery, resourceQuery, unitQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
+import { updatePlayerVisibility } from '../systems/visibility';
 import {
   canPlaceBuildingAt,
   countWorksiteWorkers,
   createAiPlayerState,
   getWorksiteWorkerSlots,
   spawnWorksiteWorker,
-  updatePlayerVisibility,
 } from '../world';
 import { spawnCompletedBuilding } from './buildings';
 import {

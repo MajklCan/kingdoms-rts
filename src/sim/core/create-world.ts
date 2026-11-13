@@ -12,6 +12,7 @@ import { Rng } from '../rng';
 import { type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
 import { spawnResource, spawnTownCenter } from '../factories/buildings';
 import { spawnArcher, spawnScoutCavalry, spawnSpearman } from '../factories/units';
+import { createVisibilityStates, updatePlayerVisibility } from '../systems/visibility';
 import {
   FORMATION_FACING_DEFAULT,
   FORMATION_MODE_DEFAULT,
@@ -22,11 +23,9 @@ import {
   TREE_RESOURCE_AMOUNT,
   createAiPlayers,
   createCampaignWorld,
-  createVisibilityStates,
   edgeProximity01,
   normalizeAiDifficulty,
   trySpawnTreeAt,
-  updatePlayerVisibility,
 } from '../world';
 import { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS } from './constants';
 import { findSpawnSpot } from './grid';

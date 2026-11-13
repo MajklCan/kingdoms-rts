@@ -3,6 +3,7 @@
  * render, net, debug and tests build against. Implementation lives in:
  *   core/      world shape, constants, entity ids, queries, world creation
  *   factories/ spawn helpers and the late-game preset fixture
+ *   systems/   per-tick systems
  * Keep this file a barrel: add new code to the module that owns it.
  */
 
@@ -77,6 +78,19 @@ export {
   spawnTownCenter,
 } from './factories/buildings';
 export { createLateGameTestWorld } from './factories/late-game';
+export {
+  createVisibilityState,
+  createVisibilityStates,
+  getPlayerVisibility,
+  isBuildingFootprintVisibleTo,
+  isBuildingVisibleTo,
+  isEntityVisibleTo,
+  isTileExploredBy,
+  isTileVisibleTo,
+  revealMapForPlayer,
+  tileVisibilityIndex,
+  updatePlayerVisibility,
+} from './systems/visibility';
 
 import { addComponent, hasComponent, removeComponent } from 'bitecs';
 import { MAP, SIM } from '../config';
@@ -104,7 +118,6 @@ import {
   PathTarget,
   PopulationCost,
   Position,
-  PrevPosition,
   Producer,
   Resource,
   ResourceCarry,
@@ -182,8 +195,6 @@ import { gatherCueForKind, pushAiEvent, pushSoundCue } from './core/events';
 import {
   buildingFootprintRect,
   canUnitOccupy,
-  canUnitOccupyMovementTarget,
-  canUnitSqueezeAlongDiagonalPath,
   distToBuildingEdge,
   findSpawnSpot,
   markFootprintBlocked,
@@ -201,7 +212,6 @@ import {
   pathTo,
   pathToBuildingContact,
   pathToResourceContact,
-  workerContactCrowdPenalty,
 } from './core/navigation';
 import {
   countPendingPopCap,
@@ -219,7 +229,6 @@ import {
   foundationQuery,
   gathererQuery,
   movableQuery,
-  positionQuery,
   producerQuery,
   resourceQuery,
   resourceWorksiteQuery,
@@ -232,11 +241,8 @@ import type {
   AiDifficulty,
   AiPlayerState,
   CampaignState,
-  LastSeenBuilding,
-  MovementStuckState,
   PendingCannonImpact,
   PendingProjectileImpact,
-  PlayerVisibility,
   SimInput,
   SimWorld,
 } from './core/types';
@@ -265,6 +271,14 @@ import {
   spawnSpearman,
   spawnVillager,
 } from './factories/units';
+import { movementSystem } from './systems/movement';
+import {
+  isEntityVisibleTo,
+  isTileInMap,
+  revealMapForPlayer,
+  updatePlayerVisibility,
+  visibilitySystem,
+} from './systems/visibility';
 
 export const TREE_RESOURCE_AMOUNT = 100;
 export const LOCAL_GOLD_DEPOSIT_AMOUNT = 650;
@@ -300,8 +314,6 @@ const SUDOMER_FIRST_WAVE_TICKS = SIM.TICK_HZ * 300;
 const SUDOMER_WAVE_INTERVAL_TICKS = SIM.TICK_HZ * 55;
 const SUDOMER_TOTAL_WAVES = 5;
 const SUDOMER_POP_CAP = 120;
-const SUDOMER_MUD_INFANTRY_SPEED_MULTIPLIER = 0.62;
-const SUDOMER_MUD_CAVALRY_SPEED_MULTIPLIER = 0.34;
 const ZBOROV_ENEMY_WAVE_INTERVAL_TICKS = SIM.TICK_HZ * 55;
 const ZBOROV_ENEMY_FIRST_WAVE_TICKS = SIM.TICK_HZ * 70;
 const ZBOROV_ENEMY_WAVE_MIN_SIZE = 3;
@@ -310,7 +322,6 @@ const ZBOROV_ENEMY_WAVE_WAIT_CAP_TICKS = SIM.TICK_HZ * 35;
 const ZBOROV_BASE_DEAD_TREE_COUNT = 18;
 const ZBOROV_AMBIENT_DEAD_TREE_COUNT = 28;
 const ZBOROV_AMBIENT_DEAD_TREE_AMOUNT = 45;
-const ZBOROV_WIRE_SPEED_MULTIPLIER = 0.4;
 // Half-width of the playable corridor (must match generateZborovMap); the rest
 // of the dirt/mud map is blocked so the assault can't flank around the lines.
 const ZBOROV_CORRIDOR_HALF = Math.round(MAP.WIDTH * 0.24);
@@ -354,26 +365,6 @@ const AI_DEFENSE_RADIUS = 11;
 const AI_DEFENSE_ORDER_RADIUS = 18;
 const AI_STAGE_RADIUS = 3.5;
 const AI_EVENT_COOLDOWN_TICKS = SIM.TICK_HZ * 20;
-const DEFAULT_UNIT_LINE_OF_SIGHT = 6;
-const SCOUT_LINE_OF_SIGHT = 10;
-const BUILDING_LINE_OF_SIGHT = 7;
-const TOWN_CENTER_LINE_OF_SIGHT = 10;
-const TOWER_LINE_OF_SIGHT = 12;
-const VISION_TILE_FOOTPRINT_RADIUS = 0.5;
-const VISION_EDGE_SOFTENING_TILES = 1;
-
-const UNIT_SEPARATION_RADIUS = 0.42;
-const WORKER_SEPARATION_RADIUS = 0.58;
-const UNIT_SEPARATION_MAX_NUDGE = 0.08;
-const WORKER_SEPARATION_MAX_NUDGE = 0.12;
-const UNIT_SEPARATION_PASSES = 2;
-const PATH_WAYPOINT_TOLERANCE = 0.12;
-const PATH_CONTACT_FINAL_TOLERANCE = 0.06;
-const PATH_FINAL_TOLERANCE = 0.28;
-const STUCK_PROGRESS_EPSILON = 0.025;
-const STUCK_PROGRESS_TICKS = Math.round(SIM.TICK_HZ * 2.5);
-const STUCK_RECOVERY_COOLDOWN_TICKS = Math.round(SIM.TICK_HZ * 3);
-const STUCK_REPATH_RADIUS = 4;
 const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
 const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
 
@@ -550,19 +541,6 @@ export function createAiPlayers(difficulty: AiDifficulty): Array<AiPlayerState |
   );
   states[AI_PLAYER_ID] = createAiPlayerState(0, difficulty);
   return states;
-}
-
-export function createVisibilityState(): PlayerVisibility {
-  const size = MAP.WIDTH * MAP.HEIGHT;
-  return {
-    explored: new Uint8Array(size),
-    visible: new Uint8Array(size),
-    lastSeenBuildings: new Map(),
-  };
-}
-
-export function createVisibilityStates(): PlayerVisibility[] {
-  return Array.from({ length: MAX_PLAYERS }, () => createVisibilityState());
 }
 
 export function createCampaignWorld(
@@ -2084,279 +2062,6 @@ function countNearbyTrees(
   return count;
 }
 
-export function tileVisibilityIndex(x: number, y: number): number {
-  return y * MAP.WIDTH + x;
-}
-
-export function getPlayerVisibility(
-  world: SimWorld,
-  playerId: number
-): PlayerVisibility | null {
-  return world.visibility[playerId] ?? null;
-}
-
-export function isTileVisibleTo(
-  world: SimWorld,
-  playerId: number,
-  x: number,
-  y: number
-): boolean {
-  const tx = Math.round(x);
-  const ty = Math.round(y);
-  if (!isTileInMap(tx, ty)) return false;
-  return (world.visibility[playerId]?.visible[tileVisibilityIndex(tx, ty)] ?? 0) === 1;
-}
-
-export function isTileExploredBy(
-  world: SimWorld,
-  playerId: number,
-  x: number,
-  y: number
-): boolean {
-  const tx = Math.round(x);
-  const ty = Math.round(y);
-  if (!isTileInMap(tx, ty)) return false;
-  return (world.visibility[playerId]?.explored[tileVisibilityIndex(tx, ty)] ?? 0) === 1;
-}
-
-export function isEntityVisibleTo(
-  world: SimWorld,
-  playerId: number,
-  eid: number
-): boolean {
-  if (!hasComponent(world.ecs, Position, eid)) return false;
-  if (hasComponent(world.ecs, Owner, eid) && Owner.player[eid] === playerId) return true;
-  if (hasComponent(world.ecs, Building, eid)) {
-    return isBuildingVisibleTo(world, playerId, eid);
-  }
-  return isTileVisibleTo(world, playerId, Position.x[eid], Position.y[eid]);
-}
-
-export function isBuildingVisibleTo(
-  world: SimWorld,
-  playerId: number,
-  eid: number
-): boolean {
-  if (!hasComponent(world.ecs, Building, eid)) {
-    return isTileVisibleTo(world, playerId, Position.x[eid], Position.y[eid]);
-  }
-  return isBuildingFootprintVisibleTo(
-    world,
-    playerId,
-    Building.defId[eid],
-    Position.x[eid],
-    Position.y[eid]
-  );
-}
-
-export function isBuildingFootprintVisibleTo(
-  world: SimWorld,
-  playerId: number,
-  defId: number,
-  x: number,
-  y: number
-): boolean {
-  let visible = false;
-  forEachBuildingFootprintTile(defId, x, y, (tx, ty) => {
-    if (isTileVisibleTo(world, playerId, tx, ty)) visible = true;
-  });
-  return visible;
-}
-
-export function updatePlayerVisibility(
-  world: SimWorld,
-  playerId = LOCAL_PLAYER_ID
-): void {
-  const vis = world.visibility[playerId];
-  if (!vis) return;
-  if (world.revealedMapPlayers[playerId]) {
-    vis.visible.fill(1);
-    vis.explored.fill(1);
-    updateLastSeenBuildings(world, playerId, vis);
-    return;
-  }
-  vis.visible.fill(0);
-
-  for (const eid of positionQuery(world.ecs)) {
-    if (!hasComponent(world.ecs, Owner, eid)) continue;
-    if (Owner.player[eid] !== playerId) continue;
-    if (hasComponent(world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
-    if (!hasComponent(world.ecs, UnitKind, eid) && !hasComponent(world.ecs, Building, eid)) {
-      continue;
-    }
-    revealCircle(vis, Position.x[eid], Position.y[eid], lineOfSightRadius(world, eid));
-  }
-
-  smoothVisibilityFrontier(vis);
-  updateLastSeenBuildings(world, playerId, vis);
-}
-
-export function revealMapForPlayer(world: SimWorld, playerId = LOCAL_PLAYER_ID): void {
-  if (!world.visibility[playerId]) return;
-  world.revealedMapPlayers[playerId] = true;
-  updatePlayerVisibility(world, playerId);
-}
-
-function visibilitySystem(world: SimWorld): void {
-  // Compute fog for every human player so each client can render its own
-  // perspective. In single-player this is just LOCAL_PLAYER_ID.
-  for (const playerId of world.humanPlayers) {
-    updatePlayerVisibility(world, playerId);
-  }
-}
-
-export function isTileInMap(x: number, y: number): boolean {
-  return x >= 0 && y >= 0 && x < MAP.WIDTH && y < MAP.HEIGHT;
-}
-
-function revealCircle(
-  vis: PlayerVisibility,
-  x: number,
-  y: number,
-  radius: number
-): void {
-  const cx = Math.round(x);
-  const cy = Math.round(y);
-  const effectiveRadius = radius + VISION_EDGE_SOFTENING_TILES;
-  const r = Math.ceil(effectiveRadius + VISION_TILE_FOOTPRINT_RADIUS);
-  const r2 = effectiveRadius * effectiveRadius;
-  for (let ty = cy - r; ty <= cy + r; ty++) {
-    for (let tx = cx - r; tx <= cx + r; tx++) {
-      if (!isTileInMap(tx, ty)) continue;
-      // Reveal if the vision circle touches the tile footprint, not only when
-      // it reaches the tile centre. This removes one-tile notches around the
-      // visible frontier without turning vision into a square.
-      const dx = Math.max(0, Math.abs(tx - x) - VISION_TILE_FOOTPRINT_RADIUS);
-      const dy = Math.max(0, Math.abs(ty - y) - VISION_TILE_FOOTPRINT_RADIUS);
-      if (dx * dx + dy * dy > r2) continue;
-      const idx = tileVisibilityIndex(tx, ty);
-      vis.visible[idx] = 1;
-      vis.explored[idx] = 1;
-    }
-  }
-}
-
-function smoothVisibilityFrontier(vis: PlayerVisibility): void {
-  const before = vis.visible.slice();
-  for (let y = 0; y < MAP.HEIGHT; y++) {
-    for (let x = 0; x < MAP.WIDTH; x++) {
-      const idx = tileVisibilityIndex(x, y);
-      if (before[idx] === 1) continue;
-      const neighbors = countVisibleNeighbors(before, x, y);
-      const cardinals = countVisibleCardinalNeighbors(before, x, y);
-      if (neighbors < 5 && cardinals < 3) continue;
-      vis.visible[idx] = 1;
-      vis.explored[idx] = 1;
-    }
-  }
-}
-
-function countVisibleNeighbors(visible: Uint8Array, x: number, y: number): number {
-  let count = 0;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const tx = x + dx;
-      const ty = y + dy;
-      if (!isTileInMap(tx, ty)) continue;
-      count += visible[tileVisibilityIndex(tx, ty)];
-    }
-  }
-  return count;
-}
-
-function countVisibleCardinalNeighbors(visible: Uint8Array, x: number, y: number): number {
-  let count = 0;
-  if (x > 0) count += visible[tileVisibilityIndex(x - 1, y)];
-  if (x < MAP.WIDTH - 1) count += visible[tileVisibilityIndex(x + 1, y)];
-  if (y > 0) count += visible[tileVisibilityIndex(x, y - 1)];
-  if (y < MAP.HEIGHT - 1) count += visible[tileVisibilityIndex(x, y + 1)];
-  return count;
-}
-
-function lineOfSightRadius(world: SimWorld, eid: number): number {
-  if (hasComponent(world.ecs, Building, eid)) {
-    const defId = Building.defId[eid];
-    if (defId === BuildingDefId.TOWN_CENTER) return TOWN_CENTER_LINE_OF_SIGHT;
-    if (defId === BuildingDefId.DEFENSIVE_TOWER) return TOWER_LINE_OF_SIGHT;
-    return BUILDING_LINE_OF_SIGHT;
-  }
-  if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return SCOUT_LINE_OF_SIGHT;
-  if (hasComponent(world.ecs, MachineGunTag, eid)) return 8;
-  // Indirect fire is useless without spotting — match LOS to the 10-tile range.
-  if (hasComponent(world.ecs, MortarTag, eid)) return 10;
-  return DEFAULT_UNIT_LINE_OF_SIGHT;
-}
-
-function updateLastSeenBuildings(
-  world: SimWorld,
-  playerId: number,
-  vis: PlayerVisibility
-): void {
-  for (const eid of buildingQuery(world.ecs)) {
-    if (!isVisibleEnemyBuilding(world, playerId, eid)) continue;
-    vis.lastSeenBuildings.set(eid, snapshotBuilding(world, eid));
-  }
-
-  for (const [key, snap] of vis.lastSeenBuildings) {
-    if (!isBuildingFootprintVisibleTo(world, playerId, snap.defId, snap.x, snap.y)) {
-      continue;
-    }
-    const live = findBuildingAt(world, snap.x, snap.y, 0.01);
-    if (
-      live === null ||
-      !hasComponent(world.ecs, Owner, live) ||
-      Owner.player[live] !== snap.owner
-    ) {
-      vis.lastSeenBuildings.delete(key);
-    }
-  }
-}
-
-function isVisibleEnemyBuilding(world: SimWorld, playerId: number, eid: number): boolean {
-  if (!hasComponent(world.ecs, Owner, eid)) return false;
-  const owner = Owner.player[eid];
-  if (owner === 0 || owner === playerId) return false;
-  if (hasComponent(world.ecs, Health, eid) && Health.hp[eid] <= 0) return false;
-  return isBuildingVisibleTo(world, playerId, eid);
-}
-
-function snapshotBuilding(world: SimWorld, eid: number): LastSeenBuilding {
-  return {
-    eid,
-    owner: Owner.player[eid],
-    defId: Building.defId[eid],
-    age: world.ages[Owner.player[eid]]?.current ?? AgeId.DARK,
-    x: Position.x[eid],
-    y: Position.y[eid],
-    hp: hasComponent(world.ecs, Health, eid) ? Health.hp[eid] : 0,
-    hpMax: hasComponent(world.ecs, Health, eid) ? Health.hpMax[eid] : 0,
-    isFoundation: hasComponent(world.ecs, ConstructionSite, eid),
-  };
-}
-
-function forEachBuildingFootprintTile(
-  defId: number,
-  x: number,
-  y: number,
-  visit: (tx: number, ty: number) => void
-): void {
-  const def = BUILDING_TABLE[defId];
-  if (!def) {
-    visit(Math.round(x), Math.round(y));
-    return;
-  }
-  const x0 = Math.round(x) - Math.floor(def.footprint.w / 2);
-  const y0 = Math.round(y) - Math.floor(def.footprint.h / 2);
-  for (let dy = 0; dy < def.footprint.h; dy++) {
-    for (let dx = 0; dx < def.footprint.w; dx++) {
-      const tx = x0 + dx;
-      const ty = y0 + dy;
-      if (isTileInMap(tx, ty)) visit(tx, ty);
-    }
-  }
-}
-
 /**
  * Advance the sim by one fixed tick. Inputs queued since the last tick are applied first,
  * then the gatherer state machine ticks, then movement applies any pending paths.
@@ -2703,7 +2408,7 @@ function clearWorkOrders(world: SimWorld, eid: number): void {
   }
 }
 
-function clearFormationSpeedCap(world: SimWorld, eid: number): void {
+export function clearFormationSpeedCap(world: SimWorld, eid: number): void {
   world.formationSpeedCaps.delete(eid);
 }
 
@@ -7100,376 +6805,6 @@ function routeWorksiteWorkerToResource(
     Position.x[siteEid],
     Position.y[siteEid]
   );
-}
-
-/**
- * Move entities toward their current path waypoint at Speed.value tiles/sec.
- */
-function movementSystem(world: SimWorld): void {
-  const dt = 1 / SIM.TICK_HZ;
-  const ents = sortedEids(world, movableQuery(world.ecs));
-  for (const eid of ents) {
-    // Snapshot pre-step position so the render layer can interpolate.
-    if (hasComponent(world.ecs, PrevPosition, eid)) {
-      PrevPosition.x[eid] = Position.x[eid];
-      PrevPosition.y[eid] = Position.y[eid];
-    }
-    const path = world.paths.get(eid);
-    if (!path || path.length === 0) {
-      Velocity.x[eid] = 0;
-      Velocity.y[eid] = 0;
-      world.movementStuck.delete(eid);
-      clearFormationSpeedCap(world, eid);
-      continue;
-    }
-    const waypoint = path[0];
-    const px = Position.x[eid];
-    const py = Position.y[eid];
-    const dx = waypoint.x - px;
-    const dy = waypoint.y - py;
-    const dist = Math.hypot(dx, dy);
-    const speedCap = world.formationSpeedCaps.get(eid);
-    const baseSpeed = speedCap === undefined
-      ? Speed.value[eid]
-      : Math.min(Speed.value[eid], speedCap);
-    const speed = baseSpeed * movementTerrainSpeedMultiplier(world, eid);
-    const stepDist = speed * dt;
-    const arrivalTolerance = pathArrivalTolerance(world, eid, path);
-
-    if (dist <= stepDist || dist <= arrivalTolerance) {
-      completeCurrentWaypoint(world, eid, path, waypoint, path.length > 1 || dist <= stepDist);
-    } else {
-      const nx = dx / dist;
-      const ny = dy / dist;
-      if (!tryMoveUnitStep(world, eid, nx, ny, stepDist, speed, waypoint)) {
-        Velocity.x[eid] = 0;
-        Velocity.y[eid] = 0;
-      }
-      updateMovementStuckState(world, eid, path);
-    }
-  }
-  unitSeparationSystem(world);
-}
-
-function movementTerrainSpeedMultiplier(world: SimWorld, eid: number): number {
-  const tx = Math.round(Position.x[eid]);
-  const ty = Math.round(Position.y[eid]);
-  if (!isTileInMap(tx, ty)) return 1;
-  const tile = world.map.tiles[ty * MAP.WIDTH + tx];
-  // Barbed wire bogs any unit to a crawl — the WW1 kill-zone in front of the
-  // machine-gun nests.
-  if (tile === TileType.BARBED_WIRE) return ZBOROV_WIRE_SPEED_MULTIPLIER;
-  if (tile !== TileType.MUD) return 1;
-  return hasComponent(world.ecs, ScoutCavalryTag, eid)
-    ? SUDOMER_MUD_CAVALRY_SPEED_MULTIPLIER
-    : SUDOMER_MUD_INFANTRY_SPEED_MULTIPLIER;
-}
-
-function pathArrivalTolerance(world: SimWorld, eid: number, path: GridPos[]): number {
-  if (path.length > 1) return PATH_WAYPOINT_TOLERANCE;
-  if (hasComponent(world.ecs, Gatherer, eid)) {
-    const state = Gatherer.state[eid];
-    if (
-      state === GathererStateId.WALKING_TO ||
-      state === GathererStateId.WALKING_TO_BUILD ||
-      state === GathererStateId.RETURNING
-    ) {
-      return PATH_CONTACT_FINAL_TOLERANCE;
-    }
-  }
-  if (hasComponent(world.ecs, BuildOrder, eid) && BuildOrder.targetEid[eid] >= 0) {
-    return PATH_CONTACT_FINAL_TOLERANCE;
-  }
-  return PATH_FINAL_TOLERANCE;
-}
-
-function completeCurrentWaypoint(
-  world: SimWorld,
-  eid: number,
-  path: GridPos[],
-  waypoint: GridPos,
-  snapToWaypoint: boolean
-): void {
-  if (snapToWaypoint && canUnitOccupyMovementTarget(world, eid, waypoint.x, waypoint.y)) {
-    Position.x[eid] = waypoint.x;
-    Position.y[eid] = waypoint.y;
-  }
-  Velocity.x[eid] = 0;
-  Velocity.y[eid] = 0;
-  path.shift();
-  if (path.length === 0) {
-    world.paths.delete(eid);
-    world.movementStuck.delete(eid);
-    clearFormationSpeedCap(world, eid);
-    return;
-  }
-
-  setPathHeadTarget(eid, path);
-  updateMovementStuckState(world, eid, path);
-}
-
-function setPathHeadTarget(eid: number, path: GridPos[]): void {
-  const head = path[0];
-  if (!head) return;
-  PathTarget.x[eid] = Math.round(head.x);
-  PathTarget.y[eid] = Math.round(head.y);
-}
-
-function tryMoveUnitStep(
-  world: SimWorld,
-  eid: number,
-  dirX: number,
-  dirY: number,
-  stepDist: number,
-  speed: number,
-  waypoint: GridPos
-): boolean {
-  const len = Math.hypot(dirX, dirY);
-  if (len < 0.001 || stepDist <= 0) return false;
-  const nx = dirX / len;
-  const ny = dirY / len;
-  const tx = Position.x[eid] + nx * stepDist;
-  const ty = Position.y[eid] + ny * stepDist;
-  if (
-    !canUnitOccupyMovementTarget(world, eid, tx, ty) &&
-    !canUnitSqueezeAlongDiagonalPath(world, tx, ty, nx, ny, waypoint)
-  ) {
-    return false;
-  }
-  Position.x[eid] = tx;
-  Position.y[eid] = ty;
-  Velocity.x[eid] = nx * speed;
-  Velocity.y[eid] = ny * speed;
-  return true;
-}
-
-function updateMovementStuckState(world: SimWorld, eid: number, path: GridPos[]): void {
-  const waypoint = path[0];
-  if (!waypoint) {
-    world.movementStuck.delete(eid);
-    return;
-  }
-
-  const dist = Math.hypot(Position.x[eid] - waypoint.x, Position.y[eid] - waypoint.y);
-  let state = world.movementStuck.get(eid);
-  const waypointChanged =
-    !state ||
-    Math.hypot(state.waypointX - waypoint.x, state.waypointY - waypoint.y) > 0.05;
-  if (waypointChanged) {
-    state = {
-      lastDist: dist,
-      waypointX: waypoint.x,
-      waypointY: waypoint.y,
-      noProgressTicks: 0,
-      cooldownTicks: 0,
-      attempts: 0,
-    };
-    world.movementStuck.set(eid, state);
-    return;
-  }
-  if (!state) return;
-
-  if (state.cooldownTicks > 0) state.cooldownTicks -= 1;
-  if (dist < state.lastDist - STUCK_PROGRESS_EPSILON || dist <= 0.18) {
-    state.noProgressTicks = 0;
-    state.attempts = 0;
-  } else {
-    state.noProgressTicks += 1;
-  }
-
-  state.lastDist = dist;
-  state.waypointX = waypoint.x;
-  state.waypointY = waypoint.y;
-
-  if (state.noProgressTicks < STUCK_PROGRESS_TICKS || state.cooldownTicks > 0) return;
-
-  state.noProgressTicks = 0;
-  state.cooldownTicks = STUCK_RECOVERY_COOLDOWN_TICKS;
-  const recovered = recoverStuckMovement(world, eid, path, state);
-  state.attempts += 1;
-  if (!recovered) return;
-
-  const nextWaypoint = world.paths.get(eid)?.[0];
-  if (!nextWaypoint) {
-    world.movementStuck.delete(eid);
-    return;
-  }
-  state.lastDist = Math.hypot(Position.x[eid] - nextWaypoint.x, Position.y[eid] - nextWaypoint.y);
-  state.waypointX = nextWaypoint.x;
-  state.waypointY = nextWaypoint.y;
-}
-
-function recoverStuckMovement(
-  world: SimWorld,
-  eid: number,
-  path: GridPos[],
-  _state: MovementStuckState
-): boolean {
-  return repathAroundStuckDestination(world, eid, path);
-}
-
-function repathAroundStuckDestination(
-  world: SimWorld,
-  eid: number,
-  path: GridPos[]
-): boolean {
-  const destination = path[path.length - 1];
-  if (!destination) return false;
-
-  const from = {
-    x: Math.round(Position.x[eid]),
-    y: Math.round(Position.y[eid]),
-  };
-  const destX = Math.round(destination.x);
-  const destY = Math.round(destination.y);
-  const candidates: Array<{ tile: GridPos; score: number }> = [];
-  const seen = new Set<string>();
-
-  for (let r = 0; r <= STUCK_REPATH_RADIUS; r++) {
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-        const x = destX + dx;
-        const y = destY + dy;
-        if (!isTileInMap(x, y) || world.map.walkability[y][x] !== 0) continue;
-        const key = `${x},${y}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        candidates.push({
-          tile: { x, y },
-          score:
-            Math.hypot(Position.x[eid] - x, Position.y[eid] - y) +
-            Math.hypot(destination.x - x, destination.y - y) * 0.5 +
-            (isEconomicWorker(world, eid) ? workerContactCrowdPenalty(world, eid, x, y) : 0),
-        });
-      }
-    }
-  }
-  candidates.sort((a, b) => a.score - b.score || compareGridPos(a.tile, b.tile));
-
-  for (const candidate of candidates) {
-    const nextPath = world.pathfinder.findPath(from, candidate.tile);
-    if (nextPath === null) continue;
-    if (nextPath.length === 0) {
-      if (
-        Math.hypot(Position.x[eid] - destination.x, Position.y[eid] - destination.y) >
-        pathArrivalTolerance(world, eid, path)
-      ) {
-        continue;
-      }
-      world.paths.delete(eid);
-      world.movementStuck.delete(eid);
-      return true;
-    }
-    if (!pathHasUsableFirstStep(world, eid, nextPath)) continue;
-    world.paths.set(eid, nextPath);
-    setPathHeadTarget(eid, nextPath);
-    return true;
-  }
-  return false;
-}
-
-function pathHasUsableFirstStep(world: SimWorld, eid: number, path: GridPos[]): boolean {
-  const first = path[0];
-  if (!first) return true;
-  const dx = first.x - Position.x[eid];
-  const dy = first.y - Position.y[eid];
-  const dist = Math.hypot(dx, dy);
-  if (dist < 0.001) return true;
-  const dirX = dx / dist;
-  const dirY = dy / dist;
-  const stepDist = Math.min(Speed.value[eid] / SIM.TICK_HZ, dist);
-  const nextX = Position.x[eid] + dirX * stepDist;
-  const nextY = Position.y[eid] + dirY * stepDist;
-  return (
-    canUnitOccupyMovementTarget(world, eid, nextX, nextY) ||
-    canUnitSqueezeAlongDiagonalPath(world, nextX, nextY, dirX, dirY, first)
-  );
-}
-
-function unitSeparationSystem(world: SimWorld): void {
-  const ents = sortedEids(world, unitQuery(world.ecs)).filter((eid) => Health.hp[eid] > 0);
-  for (let pass = 0; pass < UNIT_SEPARATION_PASSES; pass++) {
-    for (let i = 0; i < ents.length; i++) {
-      const a = ents[i];
-      for (let j = i + 1; j < ents.length; j++) {
-        const b = ents[j];
-        if (areVillagersMutuallyNonBlocking(world, a, b)) continue;
-        const radius = unitSeparationRadius(world, a, b);
-        let dx = Position.x[b] - Position.x[a];
-        let dy = Position.y[b] - Position.y[a];
-        let dist = Math.hypot(dx, dy);
-        if (dist >= radius) continue;
-
-        const overlapDist = dist;
-        if (dist < 0.001) {
-          const angle = deterministicPairAngle(world, a, b);
-          dx = Math.cos(angle);
-          dy = Math.sin(angle);
-          dist = 1;
-        } else {
-          dx /= dist;
-          dy /= dist;
-        }
-
-        const push = Math.min(
-          unitSeparationMaxNudge(world, a, b),
-          (radius - overlapDist) * 0.5
-        );
-        if (push <= 0) continue;
-        const weights = unitSeparationWeights(world, a, b);
-        tryNudgeUnit(world, a, -dx * push * weights.a, -dy * push * weights.a);
-        tryNudgeUnit(world, b, dx * push * weights.b, dy * push * weights.b);
-      }
-    }
-  }
-}
-
-function areVillagersMutuallyNonBlocking(world: SimWorld, a: number, b: number): boolean {
-  return hasComponent(world.ecs, VillagerTag, a) && hasComponent(world.ecs, VillagerTag, b);
-}
-
-function unitSeparationWeights(world: SimWorld, a: number, b: number): { a: number; b: number } {
-  if (Owner.player[a] !== Owner.player[b]) return { a: 0.5, b: 0.5 };
-
-  const aMoving = world.paths.has(a);
-  const bMoving = world.paths.has(b);
-  if (aMoving && bMoving) return { a: 0.15, b: 0.15 };
-  if (aMoving) return { a: 0.15, b: 0.85 };
-  if (bMoving) return { a: 0.85, b: 0.15 };
-  return { a: 0.5, b: 0.5 };
-}
-
-function unitSeparationRadius(world: SimWorld, a: number, b: number): number {
-  return isEconomicWorker(world, a) || isEconomicWorker(world, b)
-    ? WORKER_SEPARATION_RADIUS
-    : UNIT_SEPARATION_RADIUS;
-}
-
-function unitSeparationMaxNudge(world: SimWorld, a: number, b: number): number {
-  return isEconomicWorker(world, a) || isEconomicWorker(world, b)
-    ? WORKER_SEPARATION_MAX_NUDGE
-    : UNIT_SEPARATION_MAX_NUDGE;
-}
-
-function isEconomicWorker(world: SimWorld, eid: number): boolean {
-  return hasComponent(world.ecs, WorksiteWorker, eid) ||
-    hasComponent(world.ecs, VillagerTag, eid);
-}
-
-export function deterministicPairAngle(world: SimWorld, a: number, b: number): number {
-  const ak = deterministicEidKey(world, a);
-  const bk = deterministicEidKey(world, b);
-  const hash = Math.imul(ak + 1, 73856093) ^ Math.imul(bk + 1, 19349663);
-  return ((hash >>> 0) / 0xffffffff) * Math.PI * 2;
-}
-
-function tryNudgeUnit(world: SimWorld, eid: number, dx: number, dy: number): void {
-  const nx = Position.x[eid] + dx;
-  const ny = Position.y[eid] + dy;
-  if (!canUnitOccupy(world, nx, ny)) return;
-  Position.x[eid] = nx;
-  Position.y[eid] = ny;
 }
 
 function startGatheringResource(world: SimWorld, eid: number, target: number): boolean {
