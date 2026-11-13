@@ -79,7 +79,7 @@ const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, 
   ['build-mill', 'MILL', 'I', '◈', 'mill'],
   ['build-foundry', 'FOUNDRY', 'F', '●', 'foundry'],
   ['build-defensive-tower', 'DEFENSIVE_TOWER', 'Y', '♜', 'defensiveTower'],
-  ['build-wall', 'WALL', '', '▬', 'wall'],
+  ['build-wall', 'WALL', 'W', '▬', 'wall'],
 ];
 
 /** Placement prompt shown when a build button is clicked. */
@@ -95,7 +95,7 @@ const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]>
   'build-stable': ['STABLE', 'build STABLE - click to place'],
   'build-foundry': ['FOUNDRY', 'build FOUNDRY - click to place'],
   'build-defensive-tower': ['DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - click to place'],
-  'build-wall': ['WALL', 'build WALL - click the start tile, then the end tile'],
+  'build-wall': ['WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
 };
 
 export class ActionGrid {

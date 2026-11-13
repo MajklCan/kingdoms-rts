@@ -322,6 +322,8 @@ export class PointerController {
   }
 
   private onPointerUp(pointer: Phaser.Input.Pointer): void {
+    const { tx, ty } = this.ctx.pointerTile(pointer);
+    if (this.deps.placement.handlePointerUp(tx, ty)) return;
     this.finishDragAt({ x: pointer.worldX, y: pointer.worldY });
   }
 

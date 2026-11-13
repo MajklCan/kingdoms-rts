@@ -75,6 +75,8 @@ export class BuildPlacement {
   private ghostRef: SpriteRef | null = null;
   /** WALL mode: first click of a line, waiting for the end tile. */
   private wallStart: { x: number; y: number } | null = null;
+  /** The anchor was just pressed: releasing elsewhere finishes the line (drag). */
+  private wallDragArmed = false;
 
   constructor(
     private readonly ctx: SceneContext,
@@ -131,6 +133,7 @@ export class BuildPlacement {
   reset(): void {
     this.mode = 'none';
     this.wallStart = null;
+    this.wallDragArmed = false;
     this.armyRallyMode = false;
     this.awaitingBuildKind = false;
     this.clear();
@@ -191,7 +194,18 @@ export class BuildPlacement {
     return false;
   }
 
-  /** WALL mode: the first click anchors the line, the second sends it. */
+  /**
+   * Pointer released. In WALL mode a drag from the anchor tile sends the line
+   * on release; releasing on the anchor itself keeps the two-click flow.
+   */
+  handlePointerUp(tx: number, ty: number): boolean {
+    if (this.mode !== 'WALL' || !this.wallStart || !this.wallDragArmed) return false;
+    this.wallDragArmed = false;
+    if (!isInsideMap(tx, ty) || (tx === this.wallStart.x && ty === this.wallStart.y)) return false;
+    return this.handleWallClick(tx, ty);
+  }
+
+  /** WALL mode: the first click anchors the line, the second (or a drag release) sends it. */
   private handleWallClick(tx: number, ty: number): boolean {
     const playerId = this.ctx.perspectivePlayerId;
     if (!isInsideMap(tx, ty)) return true;
@@ -205,7 +219,8 @@ export class BuildPlacement {
     }
     if (!this.wallStart) {
       this.wallStart = { x: tx, y: ty };
-      setLastEvent(`wall from (${tx},${ty}) - click the end tile`);
+      this.wallDragArmed = true;
+      setLastEvent(`wall from (${tx},${ty}) - drag or click the end tile`);
       return true;
     }
     const { x: x0, y: y0 } = this.wallStart;

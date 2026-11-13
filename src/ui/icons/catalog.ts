@@ -27,7 +27,7 @@ export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-stable': { icon: 'stable', description: 'Trains fast scout cavalry for raids and reconnaissance.', keyHint: BUILD_HINT('T') },
   'build-foundry': { icon: 'foundry', description: 'Casts gunpowder weapons: gunmen, field cannon and later artillery.', keyHint: BUILD_HINT('F') },
   'build-defensive-tower': { icon: 'defensive-tower', description: 'Stone tower that shoots at enemies in range.', keyHint: BUILD_HINT('Y') },
-  'build-wall': { icon: 'wall', description: 'Wall line: click the start tile, then the end tile. Cost is per tile. Palisade now, stone in the Castle Age, brick with gunpowder.', keyHint: 'click start, then end' },
+  'build-wall': { icon: 'wall', description: 'Wall line: drag from the start tile to the end tile, or click both. Cost is per tile. Palisade now, stone in the Castle Age, brick with gunpowder.', keyHint: BUILD_HINT('W') },
   'advance-age': { icon: 'advance-age', description: 'Advance your realm to the next age, unlocking new buildings, units and research.' },
   'set-army-rally': { icon: 'rally', description: 'Pick a gathering point for newly trained soldiers.' },
   'remove-building': { icon: 'demolish', description: 'Tear down the selected buildings. Nothing is refunded.' },

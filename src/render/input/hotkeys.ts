@@ -32,6 +32,7 @@ const BUILD_KEYS: Array<[string, Exclude<BuildMode, 'none'>, string]> = [
   ['T', 'STABLE', 'build STABLE - left-click to place'],
   ['F', 'FOUNDRY', 'build FOUNDRY - left-click to place'],
   ['Y', 'DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - left-click to place'],
+  ['W', 'WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
 ];
 
 export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
