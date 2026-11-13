@@ -57,7 +57,7 @@ PALETTE: dict[str, int] = {
     "steel_d": 0x67707C,
     "iron": 0x4A4846,
     "black_iron": 0x34363A,
-    "bronze": 0xC08A3E,
+    "bronze": 0x9E7A4C,
     "wood": 0xA0703C,
     "wood_d": 0x5E3E22,
     "wood_l": 0xC89A5E,
