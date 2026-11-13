@@ -13,22 +13,20 @@ import { type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
 import { createAiPlayers, normalizeAiDifficulty } from '../ai/difficulty';
 import { spawnResource, spawnTownCenter } from '../factories/buildings';
 import { spawnArcher, spawnScoutCavalry, spawnSpearman } from '../factories/units';
+import { createCampaignWorld } from '../missions/campaign-world';
 import { edgeProximity01, trySpawnTreeAt } from '../systems/forest-regrowth';
 import { createVisibilityStates, updatePlayerVisibility } from '../systems/visibility';
-import {
-  LOCAL_GOLD_DEPOSIT_AMOUNT,
-  LOCAL_STONE_DEPOSIT_AMOUNT,
-  TREE_RESOURCE_AMOUNT,
-  createCampaignWorld,
-} from '../world';
 import {
   AI_PLAYER_ID,
   FORMATION_FACING_DEFAULT,
   FORMATION_MODE_DEFAULT,
+  LOCAL_GOLD_DEPOSIT_AMOUNT,
   LOCAL_PLAYER_ID,
+  LOCAL_STONE_DEPOSIT_AMOUNT,
   MAX_PLAYERS,
   TREE_EDGE_BAND_TILES,
   TREE_REGEN_BUILDING_CLEARANCE,
+  TREE_RESOURCE_AMOUNT,
 } from './constants';
 import { findSpawnSpot } from './grid';
 import { findBuildingAt, findResourceAt, hasMapFeatureAt } from './lookup';

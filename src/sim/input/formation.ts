@@ -19,13 +19,13 @@ import {
   FORMATION_FACING_DEFAULT,
   FORMATION_MODE_DEFAULT,
   FORMATION_MODE_FREE,
+  FORMATION_MODE_LINE,
   LOCAL_PLAYER_ID,
 } from '../core/constants';
 import { canUnitOccupy } from '../core/grid';
 import { findResourceAt } from '../core/lookup';
 import { pathTo } from '../core/navigation';
 import type { SimWorld } from '../core/types';
-import { FORMATION_MODE_LINE } from '../world';
 import { commandableSelection, ownedCommandableEids } from './apply-input';
 import {
   applyFormationSpeedCap,

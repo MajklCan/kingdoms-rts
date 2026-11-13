@@ -8,7 +8,7 @@ import { AI_PLAYER_ID, LOCAL_PLAYER_ID } from '../core/constants';
 import { findOwnedTownCenter } from '../core/lookup';
 import { townCenterQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { countLiveMilitary, countLiveTrackedEids } from '../world';
+import { countLiveMilitary, countLiveTrackedEids } from '../missions/campaign-world';
 
 export function winConditionSystem(world: SimWorld): void {
   if (world.outcome.state !== 'playing') return;
