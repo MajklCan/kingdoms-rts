@@ -1,20 +1,22 @@
 /**
  * Idle villager button: shows how many of your villagers stand around with
  * nothing to do. Click it (or press .) to select the next one and centre the
- * camera on them, cycling through the idle list.
+ * camera on them, cycling through the idle list in a stable order (the list
+ * is re-read each time, so villagers that went back to work drop out).
  */
 
 import type { GameScene } from '../../render/game-scene';
 import { hasOpenLayer } from '../a11y/layers';
 import { appState } from '../app-state';
 import { h, isTextEntryTarget, setAttr, setText } from '../dom';
-import { entityTile, getIdleVillagers, getScene, selectEntities } from '../game-bridge';
+import { entityTile, getIdleVillagers, getScene, panToTile, selectEntities } from '../game-bridge';
 import { icon } from '../icons/icon';
 import { attachTip } from './tooltip';
 
 let btn: HTMLButtonElement | null = null;
 let countEl: HTMLElement | null = null;
-let cursor = 0;
+/** Last villager we jumped to; the next press continues after it. */
+let lastVisited = -1;
 let lastCheck = 0;
 let idle: number[] = [];
 
@@ -23,11 +25,13 @@ function selectNext(): void {
   if (!scene) return;
   idle = getIdleVillagers(scene, scene.getPerspectivePlayerId());
   if (idle.length === 0) return;
-  cursor = (cursor + 1) % idle.length;
-  const eid = idle[cursor]!;
+  // The list is in ascending entity order: take the first after the last one
+  // visited, wrapping around.
+  const eid = idle.find((e) => e > lastVisited) ?? idle[0]!;
+  lastVisited = eid;
   selectEntities(scene, [eid]);
   const at = entityTile(scene, eid);
-  if (at) scene.panToTile(at.x, at.y);
+  if (at) panToTile(scene, at.x, at.y);
 }
 
 export function buildIdleButton(): HTMLElement {
@@ -71,6 +75,6 @@ export function updateIdleVillagers(scene: GameScene, now: number): void {
 }
 
 export function resetIdleVillagers(): void {
-  cursor = 0;
+  lastVisited = -1;
   idle = [];
 }

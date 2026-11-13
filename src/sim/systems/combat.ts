@@ -27,6 +27,7 @@ import {
 } from '../components';
 import { UnitDefId } from '../defs';
 import { ATTACK_RANGE_TOLERANCE } from '../core/constants';
+import { applyDamage } from '../core/match-stats';
 import { sortedEids } from '../core/entities';
 import { pathTo } from '../core/navigation';
 import { combatQuery } from '../core/queries';
@@ -355,7 +356,7 @@ function applyAttackDamage(
   target: number,
   damage: number
 ): void {
-  Health.hp[target] -= damage;
+  applyDamage(world, target, damage, Owner.player[attacker]);
   retaliateWhenEngaged(world, target, attacker);
 }
 

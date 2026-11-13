@@ -96,6 +96,13 @@ export class GameAudio {
     this.manager.playGamePlaylist();
   }
 
+  /** Back to the title screens: stop the in-game director, play menu music. */
+  leaveMatch(): void {
+    this.inMatch = false;
+    this.manager.stopAmbience();
+    this.manager.playMenuMusic();
+  }
+
   /** Per-frame music director: combat > lingering at home > playlist. */
   update(): void {
     if (!this.inMatch) return;

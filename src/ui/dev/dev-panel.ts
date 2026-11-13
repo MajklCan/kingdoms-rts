@@ -78,7 +78,8 @@ export function buildDevPanel(): HTMLElement | null {
       row('Status', 'dbg-gather'),
       row('Build', 'dbg-build'),
       row('Zoom', 'dbg-zoom'),
-      row('Speed', 'dbg-speed')
+      row('Speed', 'dbg-speed'),
+      row('Last event', 'dbg-event')
     ),
     h(
       'div',
@@ -108,8 +109,8 @@ export function bindDevPanel(): void {
   });
 }
 
-/** Feed the debug overlay every frame (also mirrors the last game event into
- *  the hidden #dbg-event node the event log reads). */
+/** Feed the debug overlay every frame (including the raw last-event line,
+ *  which is developer wording and never shown to players). */
 export function updateDevPanel(scene: GameScene): void {
   const status = scene.getStatusInfo();
   updateDebugOverlay({

@@ -16,7 +16,8 @@ import {
 import type { GridPos } from '../pathfinding';
 import { isUnitUnlocked } from '../tech-tree';
 import { sortedEids } from '../core/entities';
-import { pushSoundCue } from '../core/events';
+import { pushGameEvent, pushSoundCue } from '../core/events';
+import { recordUnitTrained } from '../core/match-stats';
 import { findSpawnSpot } from '../core/grid';
 import { pathTo } from '../core/navigation';
 import { countQueuedPopCost } from '../core/population';
@@ -88,21 +89,27 @@ function applyTrainUnitOnce(world: SimWorld, atEid: number, defId: number): bool
   return true;
 }
 
-export function applyCancelProduction(world: SimWorld, atEid: number): void {
+/**
+ * Cancel one queue entry and refund its cost. `slot` 0 is the unit training
+ * now; without a slot the most recently queued entry goes. Out-of-range or
+ * non-integer slots are ignored (peers can send anything).
+ */
+export function applyCancelProduction(world: SimWorld, atEid: number, slot?: number): void {
   const queue = world.productionQueues.get(atEid);
   if (!queue || queue.length === 0) return;
-  // Pop the most recently-queued (back) and refund.
-  const cancelled = queue.pop();
+  const index = slot === undefined ? queue.length - 1 : slot;
+  if (!Number.isInteger(index) || index < 0 || index >= queue.length) return;
+  const [cancelled] = queue.splice(index, 1);
   if (cancelled === undefined) return;
+  // Cancelling the front entry restarts training for whatever moves up.
+  if (index === 0 && hasComponent(world.ecs, Producer, atEid)) {
+    Producer.currentProgress[atEid] = 0;
+  }
   const def = getUnitDef(cancelled);
   if (!def) return;
   const playerId = Owner.player[atEid];
   const bank = world.resources[playerId];
   if (bank) refund(bank, def.cost);
-  // If we cancelled the currently-training (front) slot, reset progress.
-  if (queue.length === 0) {
-    Producer.currentProgress[atEid] = 0;
-  }
 }
 
 export function productionSystem(world: SimWorld): void {
@@ -137,6 +144,7 @@ export function productionSystem(world: SimWorld): void {
         if (worker !== null) {
           queue.shift();
           Producer.currentProgress[eid] = 0;
+          noteUnitTrained(world, Owner.player[eid], trainingDefId, worker);
         } else {
           Producer.currentProgress[eid] = def.trainTimeTicks;
         }
@@ -174,6 +182,7 @@ export function productionSystem(world: SimWorld): void {
       }
       if (spawnedEid !== null) {
         pushSoundCue(world, 'unit_ready', Position.x[eid], Position.y[eid], Owner.player[eid]);
+        noteUnitTrained(world, Owner.player[eid], trainingDefId, spawnedEid);
         issueProductionRallyOrder(world, eid, spawnedEid);
         queue.shift();
         Producer.currentProgress[eid] = 0;
@@ -183,6 +192,18 @@ export function productionSystem(world: SimWorld): void {
       }
     }
   }
+}
+
+function noteUnitTrained(world: SimWorld, playerId: number, unitDefId: number, unitEid: number): void {
+  recordUnitTrained(world, playerId);
+  pushGameEvent(world, {
+    kind: 'unitTrained',
+    playerId,
+    unitDefId,
+    eid: unitEid,
+    x: Position.x[unitEid],
+    y: Position.y[unitEid],
+  });
 }
 
 function issueProductionRallyOrder(

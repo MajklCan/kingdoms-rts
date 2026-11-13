@@ -33,6 +33,7 @@ import {
 import { sortedEids } from '../core/entities';
 import { distToBuildingEdge, findSpawnSpot } from '../core/grid';
 import { findNearestResource } from '../core/lookup';
+import { recordGathered } from '../core/match-stats';
 import { pathToBuildingContact } from '../core/navigation';
 import { resourceWorksiteQuery, worksiteWorkerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -183,6 +184,7 @@ function runSelfProducingWorksite(
   while (ResourceWorksite.progress[siteEid] >= rateTicks) {
     ResourceWorksite.progress[siteEid] -= rateTicks;
     bank[kind] += 1;
+    recordGathered(world, Owner.player[siteEid], kind, 1);
   }
 }
 

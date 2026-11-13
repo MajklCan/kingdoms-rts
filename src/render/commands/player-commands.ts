@@ -1,7 +1,9 @@
 /**
  * Player intents that need validation + feedback before they become sim
- * inputs: training, research / age advance, stances, formations, demolition.
- * Every command leaves through {@link dispatchCommand}.
+ * inputs: training, cancelling, research / age advance, stances, formations,
+ * demolition and building placement checks. Every command leaves through
+ * {@link dispatchCommand}; refusals are reported as typed failures through
+ * {@link CommandFeedback} so the HUD can say exactly what was missing.
  */
 
 import { hasComponent } from 'bitecs';
@@ -10,22 +12,37 @@ import {
   Owner,
   Producer,
   ResourceWorksite,
+  UnitKind,
   UnitStance,
   UnitStanceId,
   type UnitStanceValue,
 } from '@sim/components';
-import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId } from '@sim/defs';
-import { isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
-import { getWorksiteWorkerSlots, selectedQuery, type SimInput } from '@sim/world';
+import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getBuildingDef, type CostTuple } from '@sim/defs';
+import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
+import {
+  canPlaceBuildingAt,
+  getWorksiteWorkerSlots,
+  selectedCommandableEids,
+  selectedQuery,
+  worksiteUsesResourceNodes,
+  type SimInput,
+} from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR } from '../audio/sound-map';
 import type { GameAudio } from '../game-audio';
 import type { SceneContext } from '../scene-context';
+import { isInsideMap } from '../world-projection';
 import { dispatchCommand } from './command-dispatch';
+import {
+  RESOURCE_NAMES,
+  describeFailure,
+  type CommandFailure,
+  type CommandFeedback,
+  type ResourceName,
+} from './feedback';
 import {
   affordableCountForCost,
   canAffordCost,
-  formatCost,
   nextAgeTechId,
   populationRoomForUnitCount,
 } from './economy';
@@ -36,13 +53,85 @@ export const TRAIN_BATCH_COUNT = 5;
 const FORMATION_FACING_LABELS = ['S', 'SW', 'W', 'NW', 'N', 'NE', 'E', 'SE'];
 
 export class PlayerCommands {
+  private feedback: CommandFeedback | null = null;
+
   constructor(
     private readonly ctx: SceneContext,
     private readonly audio: GameAudio
   ) {}
 
+  /** Where refusals and confirmations go (wired by the UI API). */
+  setFeedback(feedback: CommandFeedback): void {
+    this.feedback = feedback;
+  }
+
   dispatch(input: SimInput): void {
     dispatchCommand(this.ctx, input);
+  }
+
+  /** Own selected units an order would move (buildings and worksite crews excluded). */
+  selectedCommandableCount(): number {
+    const ecs = this.ctx.world.ecs;
+    return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
+      hasComponent(ecs, UnitKind, eid)
+    ).length;
+  }
+
+  /** Report a refused command: error sound + typed notice for the HUD. */
+  fail(failure: CommandFailure): void {
+    setLastEvent(describeFailure(failure));
+    if (this.feedback) this.feedback.fail(failure);
+    else this.audio.playUi(SFX_ERROR);
+  }
+
+  /** A short player-facing confirmation for the event log. */
+  confirm(text: string): void {
+    setLastEvent(text);
+    this.feedback?.info(text);
+  }
+
+  /** Which resources the perspective player is short of for `count` x `cost`. */
+  missingResources(cost: CostTuple, count = 1): ResourceName[] {
+    const bank = this.ctx.world.resources[this.ctx.perspectivePlayerId];
+    const need = [cost.food, cost.wood, cost.gold, cost.stone];
+    return RESOURCE_NAMES.filter((_, i) => (need[i] ?? 0) * count > (bank?.[i] ?? 0));
+  }
+
+  // ── Production queue ──────────────────────────────────────────────────────
+
+  /** Cancel queue slot `slot` (0 = training now; omitted = last queued). */
+  cancelProduction(producerEid: number, slot?: number): boolean {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    if (!hasComponent(world.ecs, Producer, producerEid)) return false;
+    if (!hasComponent(world.ecs, Owner, producerEid) || Owner.player[producerEid] !== playerId) return false;
+    const queue = world.productionQueues.get(producerEid) ?? [];
+    const index = slot ?? queue.length - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= queue.length) return false;
+    const unitName = UNIT_TABLE[queue[index]]?.name ?? 'Unit';
+    this.dispatch({ type: 'cancelProduction', atEid: producerEid, playerId, slot: index });
+    this.confirm(`${unitName} cancelled, cost refunded`);
+    return true;
+  }
+
+  // ── Placement ─────────────────────────────────────────────────────────────
+
+  /** Why `defId` cannot be placed at tile (tx, ty) right now, or null if it can. */
+  placementFailure(defId: number, tx: number, ty: number): CommandFailure | null {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const def = getBuildingDef(defId);
+    if (!def) return { reason: 'unavailable', text: 'Unknown building' };
+    if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
+    if (!isBuildingUnlocked(world, playerId, defId)) return { reason: 'locked', subject: def.name };
+    const missing = this.missingResources(def.cost);
+    if (missing.length > 0) return { reason: 'resources', subject: def.name, missing };
+    if (!canPlaceBuildingAt(world, def, tx, ty)) {
+      const footprintFree = canPlaceBuildingAt(world, { ...def, harvestKind: undefined }, tx, ty);
+      const needsResource = worksiteUsesResourceNodes(def) && footprintFree;
+      return { reason: 'placement', subject: def.name, detail: needsResource ? 'needs-resource' : 'blocked' };
+    }
+    return null;
   }
 
   // ── Production ────────────────────────────────────────────────────────────
@@ -59,34 +148,31 @@ export class PlayerCommands {
           this.trainAtSelectedProducer(UnitDefId.VILLAGER);
           return true;
         }
-        if (!quiet) setLastEvent(`no unit in slot ${slot + 1}`);
+        if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
         return false;
       }
       const trainIds = buildingDef?.trains ?? [];
       if (trainIds.length === 0) {
-        if (!quiet) setLastEvent(`Q: ${buildingDef?.name ?? 'building'} trains nothing`);
+        if (!quiet) this.fail({ reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` });
         return false;
       }
       const idStr = trainIds[slot];
       if (!idStr) {
-        if (!quiet) setLastEvent(`no unit in slot ${slot + 1}`);
+        if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
         return false;
       }
       const unitDefId = UNIT_TABLE.findIndex((u) => u.id === idStr);
-      if (unitDefId < 0) {
-        if (!quiet) setLastEvent(`Q: unknown unit ${idStr}`);
-        return false;
-      }
+      if (unitDefId < 0) return false;
       const unitDef = UNIT_TABLE[unitDefId];
       if (!unitDef) return false;
       if (!isUnitUnlocked(world, this.ctx.perspectivePlayerId, unitDefId)) {
-        if (!quiet) setLastEvent(`${unitDef.name} is locked`);
+        if (!quiet) this.fail({ reason: 'locked', subject: unitDef.name });
         return false;
       }
       this.trainAtSelectedProducer(unitDefId);
       return true;
     }
-    if (!quiet) setLastEvent('Q: no producer selected');
+    if (!quiet) this.fail({ reason: 'unavailable', text: 'Select a building that trains units first' });
     return false;
   }
 
@@ -109,23 +195,23 @@ export class PlayerCommands {
       const playerId = Owner.player[eid];
       const buildingDef = BUILDING_TABLE[Building.defId[eid]];
       if (unitDefId === UnitDefId.VILLAGER && hasComponent(world.ecs, ResourceWorksite, eid)) {
+        const siteName = buildingDef?.name ?? 'Worksite';
         const queue = world.productionQueues.get(eid) ?? [];
         const queuedWorkers = queue.filter((defId) => defId === UnitDefId.VILLAGER).length;
         const slots = getWorksiteWorkerSlots(world, eid);
         const slotRoom = slots - ResourceWorksite.assignedWorkers[eid] - queuedWorkers;
         if (slotRoom <= 0) {
-          setLastEvent(`workers full (${slots}/${slots})`);
+          this.fail({ reason: 'unavailable', text: `${siteName} has no free worker slots` });
           return;
         }
         const queueRoom = Math.max(0, 2 - queue.length);
         if (queueRoom <= 0) {
-          setLastEvent('worker queue full');
+          this.fail({ reason: 'queue-full', subject: siteName });
           return;
         }
         const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
         if (affordable <= 0) {
-          this.audio.playUi(SFX_ERROR);
-          setLastEvent(`${unitDef.name} needs ${formatCost(unitDef.cost)}`);
+          this.fail({ reason: 'resources', subject: 'a worker', missing: this.missingResources(unitDef.cost) });
           return;
         }
         const trainCount = Math.min(targetCount, slotRoom, queueRoom, affordable);
@@ -136,30 +222,22 @@ export class PlayerCommands {
           count: trainCount,
           playerId: this.ctx.perspectivePlayerId,
         });
-        setLastEvent(
-          trainCount === 1
-            ? `queued worker at eid=${eid}`
-            : `queued ${trainCount}x worker at eid=${eid}`
-        );
+        setLastEvent(`queued ${trainCount}x worker at eid=${eid}`);
         return;
       }
       if (!buildingDef?.trains.includes(unitDef.id)) continue;
       if (!isUnitUnlocked(world, playerId, unitDefId)) {
-        this.audio.playUi(SFX_ERROR);
-        setLastEvent(`${unitDef.name} is locked`);
+        this.fail({ reason: 'locked', subject: unitDef.name });
         return;
       }
       const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
       if (affordable <= 0) {
-        this.audio.playUi(SFX_ERROR);
-        setLastEvent(`${unitDef.name} needs ${formatCost(unitDef.cost)}`);
+        this.fail({ reason: 'resources', subject: unitDef.name, missing: this.missingResources(unitDef.cost) });
         return;
       }
       const popRoom = populationRoomForUnitCount(world, playerId, unitDefId, targetCount);
       if (popRoom <= 0) {
-        this.audio.playUi(SFX_ERROR);
-        const pop = world.population[playerId];
-        setLastEvent(`${unitDef.name} needs pop space (${pop?.current ?? 0}/${pop?.cap ?? 0})`);
+        this.fail({ reason: 'population', subject: unitDef.name });
         return;
       }
       const trainCount = Math.min(targetCount, affordable, popRoom);
@@ -170,14 +248,13 @@ export class PlayerCommands {
         count: trainCount,
         playerId: this.ctx.perspectivePlayerId,
       });
-      setLastEvent(
-        trainCount === 1
-          ? `queued ${unitDef.name} at eid=${eid}`
-          : `queued ${trainCount}x ${unitDef.name} at eid=${eid}`
-      );
+      setLastEvent(`queued ${trainCount}x ${unitDef.name} at eid=${eid}`);
       return;
     }
-    setLastEvent(`${unitDef.name}: no ${unitDef.trainAt.toLowerCase().replace('_', ' ')} selected`);
+    this.fail({
+      reason: 'unavailable',
+      text: `Select a ${unitDef.trainAt.toLowerCase().replace('_', ' ')} to train ${unitDef.name}`,
+    });
   }
 
   // ── Research ──────────────────────────────────────────────────────────────
@@ -185,7 +262,7 @@ export class PlayerCommands {
   advanceAge(): void {
     const techId = nextAgeTechId(this.ctx.world, this.ctx.perspectivePlayerId);
     if (!techId) {
-      setLastEvent('maximum age reached');
+      this.fail({ reason: 'unavailable', text: 'Your realm has reached its final age' });
       return;
     }
     this.research(techId, this.ctx.perspectivePlayerId);
@@ -197,23 +274,22 @@ export class PlayerCommands {
     if (!tech) return;
     const status = techStatus(world, playerId, techId);
     if (status === 'researched') {
-      setLastEvent(`${tech.name} already researched`);
+      this.fail({ reason: 'unavailable', text: `${tech.name} is already researched` });
       return;
     }
     if (status === 'researching') {
-      setLastEvent(`${tech.name} already in progress`);
+      this.fail({ reason: 'unavailable', text: `${tech.name} is already under way` });
       return;
     }
     if (status === 'locked') {
-      if (world.campaign?.lockedTechs.includes(techId)) {
-        setLastEvent(`${tech.name} is locked for this mission`);
-        return;
-      }
-      setLastEvent(`${tech.name} prerequisites missing`);
+      const text = world.campaign?.lockedTechs.includes(techId)
+        ? `${tech.name} is locked for this mission`
+        : `${tech.name} needs earlier research first`;
+      this.fail({ reason: 'unavailable', text });
       return;
     }
     if (!canAffordCost(world, playerId, tech.cost)) {
-      setLastEvent(`${tech.name} needs ${formatCost(tech.cost) || 'no resources'}`);
+      this.fail({ reason: 'resources', subject: tech.name, missing: this.missingResources(tech.cost) });
       return;
     }
     this.dispatch({ type: 'researchTech', playerId, techId });
@@ -234,16 +310,14 @@ export class PlayerCommands {
   setStance(stance: UnitStanceValue): void {
     if (this.selectedStanceUnits().length === 0) return;
     this.dispatch({ type: 'setSelectedUnitStance', stance });
-    setLastEvent(
-      stance === UnitStanceId.HOLD_POSITION ? 'units holding position' : 'units set to auto-defend'
-    );
+    this.confirm(stance === UnitStanceId.HOLD_POSITION ? 'Holding position' : 'Units will defend themselves');
   }
 
   setFormationMode(mode: number): void {
     if (this.selectedStanceUnits().length <= 1) return;
     const nextMode = clampFormationMode(mode);
     this.dispatch({ type: 'setFormationMode', mode: nextMode });
-    setLastEvent(`formation: ${formationModeLabel(nextMode)}`);
+    this.confirm(`Formation: ${formationModeLabel(nextMode)}`);
   }
 
   rotateFormation(delta: number): void {
@@ -275,14 +349,12 @@ export class PlayerCommands {
       Building.defId[eid] !== BuildingDefId.TOWN_CENTER
     );
     if (selectedBuildings.length === 0) {
-      setLastEvent('no removable building selected');
+      this.fail({ reason: 'unavailable', text: 'Select one of your buildings to demolish it' });
       return;
     }
     this.dispatch({ type: 'cmdRemoveBuildings', playerId, eids: selectedBuildings });
-    setLastEvent(
-      selectedBuildings.length === 1
-        ? 'removing selected building'
-        : `removing ${selectedBuildings.length} selected buildings`
+    this.confirm(
+      selectedBuildings.length === 1 ? 'Building demolished' : `${selectedBuildings.length} buildings demolished`
     );
   }
 }

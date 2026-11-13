@@ -1,0 +1,297 @@
+/**
+ * The typed surface the DOM UI (src/ui/game-bridge.ts) talks to. Everything
+ * the HUD needs from the running game lives here, so the UI never feature
+ * detects scene methods or reads debug text:
+ *
+ *   selection     selectEntities / getSelectedEids / getIdleVillagers
+ *   production    getProductionQueue / cancelProduction (per slot, refunded)
+ *   camera        getCameraTileQuad (elevation corrected) / panToTile
+ *   orders        issueMapOrder (minimap right-click), reportFailure
+ *   alerts        drainUiAlerts / onGameMessage (typed event subscription)
+ *   match         getMatchStats (exact, from sim counters) / endMatch
+ *   input         setKeyboardEnabled
+ *
+ * Built once by GameScene.create(); it pumps the alert feed after every
+ * scene update, so the UI only has to drain.
+ */
+
+import { hasComponent } from 'bitecs';
+import { SIM } from '../config';
+import {
+  Building,
+  ConstructionSite,
+  DeadTag,
+  Health,
+  Owner,
+  Position,
+  Producer,
+  UnitKind,
+} from '@sim/components';
+import { UNIT_TABLE, getAgeDef, type CostTuple } from '@sim/defs';
+import {
+  clearSelection,
+  clonePlayerStats,
+  emptyPlayerStats,
+  findIdleVillagers,
+  selectedQuery,
+  setSelected,
+  type PlayerMatchStats,
+} from '@sim/world';
+import type { CameraController } from './camera/camera-controller';
+import { CommandFeedback, type CommandFailure } from './commands/feedback';
+import type { PlayerCommands } from './commands/player-commands';
+import type { EffectsLayer } from './effects/effects-layer';
+import { ORDER_MARKER_EFFECT, orderMarkerEffect } from './effects/order-marker';
+import { RALLY_FLAG_EFFECT, rallyFlagEffect } from './effects/rally-flag';
+import type { GameAudio } from './game-audio';
+import type { MinimapAlerts } from './hud/minimap-data';
+import { RallyDisplay } from './hud/rally-display';
+import {
+  UiAlertFeed,
+  type GameMessageListener,
+  type TilePoint,
+  type UiAlert,
+} from './hud/ui-alerts';
+import type { MapOrderKind, PointerController } from './input/pointer-controller';
+import type { SceneContext } from './scene-context';
+
+export type { GameMessage, GameMessageListener, GameMessageTone, TilePoint, UiAlert, UiAlertKind } from './hud/ui-alerts';
+export type { CommandFailure, ResourceName } from './commands/feedback';
+export type { MapOrderKind } from './input/pointer-controller';
+
+export interface ProductionSlotInfo {
+  /** Queue index; 0 is the unit in training. */
+  slot: number;
+  unitDefId: number;
+  name: string;
+  /** 0..1 for slot 0, 0 for the rest. */
+  progressFrac: number;
+  /** Refunded in full when the slot is cancelled. */
+  cost: CostTuple;
+}
+
+export interface CameraTileQuad {
+  /** Tile-space corners: top-left, top-right, bottom-right, bottom-left. */
+  corners: [TilePoint, TilePoint, TilePoint, TilePoint];
+}
+
+export interface MatchStatsView extends PlayerMatchStats {
+  playerId: number;
+  /** Sim time played (ticks / tick rate); freezes when the match is decided. */
+  seconds: number;
+  ageName: string;
+}
+
+export interface UiApiDeps {
+  camera: CameraController;
+  commands: PlayerCommands;
+  pointer: PointerController;
+  alerts: MinimapAlerts;
+  effects: EffectsLayer;
+  audio: GameAudio;
+  /** Tear the match down and leave the scene idle behind the menu. */
+  endMatch: () => void;
+}
+
+export class UiApi {
+  private readonly feed: UiAlertFeed;
+  private readonly feedback: CommandFeedback;
+  private readonly rally: RallyDisplay;
+
+  constructor(
+    private readonly ctx: SceneContext,
+    private readonly deps: UiApiDeps
+  ) {
+    deps.effects.register(ORDER_MARKER_EFFECT, orderMarkerEffect);
+    deps.effects.register(RALLY_FLAG_EFFECT, rallyFlagEffect);
+    this.feedback = new CommandFeedback(deps.effects, deps.audio);
+    deps.commands.setFeedback(this.feedback);
+    deps.pointer.setFeedback(this.feedback);
+    this.feed = new UiAlertFeed(ctx, { alerts: deps.alerts, feedback: this.feedback });
+    this.rally = new RallyDisplay(ctx, deps.effects);
+    ctx.scene.events.on(Phaser.Scenes.Events.POST_UPDATE, () => {
+      this.feed.pump();
+      this.rally.update();
+    });
+  }
+
+  /** The scene is running and owns a world. */
+  isReady(): boolean {
+    return this.ctx.scene.sys.isActive();
+  }
+
+  get perspectivePlayerId(): number {
+    return this.ctx.perspectivePlayerId;
+  }
+
+  /** New, loaded or ended match: drop queued alerts and notices. */
+  reset(): void {
+    this.feed.reset();
+    this.feedback.clear();
+    this.rally.reset();
+  }
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+
+  /** Select living, visible entities (replacing the selection unless additive). */
+  selectEntities(eids: readonly number[], additive = false): void {
+    const world = this.ctx.world;
+    if (!additive) clearSelection(world);
+    for (const eid of eids) {
+      if (!this.isAlive(eid)) continue;
+      if (!this.ctx.isEntityVisible(eid)) continue;
+      setSelected(world, eid, true);
+    }
+  }
+
+  getSelectedEids(): number[] {
+    return Array.from(selectedQuery(this.ctx.world.ecs));
+  }
+
+  getIdleVillagers(playerId = this.ctx.perspectivePlayerId): number[] {
+    return findIdleVillagers(this.ctx.world, playerId);
+  }
+
+  // ── Production ────────────────────────────────────────────────────────────
+
+  getProductionQueue(producerEid: number): ProductionSlotInfo[] {
+    const world = this.ctx.world;
+    if (!hasComponent(world.ecs, Producer, producerEid)) return [];
+    const queue = world.productionQueues.get(producerEid) ?? [];
+    return queue.map((unitDefId, slot) => {
+      const def = UNIT_TABLE[unitDefId];
+      const total = def?.trainTimeTicks ?? 0;
+      const progressFrac =
+        slot === 0 && total > 0 ? Math.max(0, Math.min(1, Producer.currentProgress[producerEid] / total)) : 0;
+      return {
+        slot,
+        unitDefId,
+        name: def?.name ?? 'Unit',
+        progressFrac,
+        cost: def ? { ...def.cost } : { food: 0, wood: 0, gold: 0, stone: 0 },
+      };
+    });
+  }
+
+  /** Cancel one queue slot (default: the last one); the cost is refunded. */
+  cancelProduction(producerEid: number, slot?: number): boolean {
+    return this.deps.commands.cancelProduction(producerEid, slot);
+  }
+
+  // ── Camera and orders ─────────────────────────────────────────────────────
+
+  getCameraTileQuad(): CameraTileQuad {
+    const [a, b, c, d] = this.deps.camera.viewTileQuad();
+    const zero = { x: 0, y: 0 };
+    return { corners: [a ?? zero, b ?? zero, c ?? zero, d ?? zero] };
+  }
+
+  panToTile(x: number, y: number): void {
+    this.deps.camera.panToTile(x, y);
+  }
+
+  /** Move / attack-move the selection to a tile, with an order marker. */
+  issueMapOrder(kind: MapOrderKind, x: number, y: number): boolean {
+    return this.deps.pointer.issueMapOrder(kind, Math.round(x), Math.round(y));
+  }
+
+  /** A UI control refused an action (disabled button): sound + typed alert. */
+  reportFailure(failure: CommandFailure): void {
+    this.deps.commands.fail(failure);
+  }
+
+  // ── Alerts and messages ───────────────────────────────────────────────────
+
+  drainUiAlerts(): UiAlert[] {
+    return this.feed.drain();
+  }
+
+  /** Player-facing event log lines. Returns an unsubscribe function. */
+  onGameMessage(listener: GameMessageListener): () => void {
+    return this.feed.subscribe(listener);
+  }
+
+  /** Where the latest fight against us is, following it as it moves. */
+  lastFightPosition(): TilePoint | null {
+    return this.feed.lastFightPosition();
+  }
+
+  // ── Match ─────────────────────────────────────────────────────────────────
+
+  getMatchStats(playerId = this.ctx.perspectivePlayerId): MatchStatsView {
+    const world = this.ctx.world;
+    const stats = world.matchStats[playerId];
+    const age = world.ages[playerId];
+    return {
+      ...(stats ? clonePlayerStats(stats) : emptyPlayerStats()),
+      playerId,
+      seconds: world.tick / SIM.TICK_HZ,
+      ageName: getAgeDef(age?.current ?? 0)?.name ?? 'Dark Age',
+    };
+  }
+
+  /** Leave the match (multiplayer: leave the session) and idle behind the menu. */
+  endMatch(): void {
+    this.deps.endMatch();
+    this.reset();
+  }
+
+  setKeyboardEnabled(enabled: boolean): void {
+    const kb = this.ctx.scene.input.keyboard;
+    if (!kb) return;
+    kb.enabled = enabled;
+    if (!enabled) kb.resetKeys();
+  }
+
+  // ── Entity reads (HUD helpers) ────────────────────────────────────────────
+
+  isAlive(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    if (!hasComponent(ecs, Position, eid)) return false;
+    if (hasComponent(ecs, DeadTag, eid)) return false;
+    return !hasComponent(ecs, Health, eid) || Health.hp[eid] > 0;
+  }
+
+  ownerOf(eid: number): number {
+    return this.ctx.ownerOf(eid);
+  }
+
+  entityTile(eid: number): TilePoint | null {
+    if (!hasComponent(this.ctx.world.ecs, Position, eid)) return null;
+    return { x: Position.x[eid], y: Position.y[eid] };
+  }
+
+  /** Living entities from `eids` owned by `playerId`, order kept. */
+  filterOwnedAlive(eids: readonly number[], playerId = this.ctx.perspectivePlayerId): number[] {
+    const ecs = this.ctx.world.ecs;
+    return eids.filter((eid) => hasComponent(ecs, Owner, eid) && Owner.player[eid] === playerId && this.isAlive(eid));
+  }
+
+  centroid(eids: readonly number[]): TilePoint | null {
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    for (const eid of eids) {
+      const t = this.entityTile(eid);
+      if (!t) continue;
+      sx += t.x;
+      sy += t.y;
+      n++;
+    }
+    return n > 0 ? { x: sx / n, y: sy / n } : null;
+  }
+
+  /** Grouping key: `u<unit def>` for units, `b<building def>`, or 'foundation'. */
+  entityKindKey(eid: number): string {
+    const ecs = this.ctx.world.ecs;
+    if (hasComponent(ecs, UnitKind, eid)) return `u${UnitKind.kind[eid]}`;
+    if (hasComponent(ecs, ConstructionSite, eid)) return 'foundation';
+    if (hasComponent(ecs, Building, eid)) return `b${Building.defId[eid]}`;
+    return 'unknown';
+  }
+
+  isProducer(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    return hasComponent(ecs, Producer, eid) && hasComponent(ecs, Building, eid);
+  }
+}

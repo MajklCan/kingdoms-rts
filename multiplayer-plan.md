@@ -28,7 +28,7 @@ Every client runs the **full simulation locally**; only **player commands** cros
 | Seeded deterministic RNG (Mulberry32, integer ops, get/setState) | ✅ | `rng.ts` |
 | No `Math.random` / `Date.now` / `performance.now` in sim | ✅ | grep: 0 hits in `src/sim` (excl. tests) |
 | sim/render separation (zero Phaser imports in `/sim`) | ✅ | confirmed |
-| Full world snapshot serializer (entities, resources, fog, AI, paths, map) | ✅ | `save-load.ts: SavedGameV1`, `serializeSimWorld()` |
+| Full world snapshot serializer (entities, resources, fog, AI, paths, map) | ✅ | `save-load.ts: SavedGame`, `serializeSimWorld()` |
 
 The command-queue + pure-reducer + fixed-timestep trio is ~70% of a lockstep skeleton and is the part most teams get wrong. It's already correct here.
 

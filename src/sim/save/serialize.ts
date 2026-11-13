@@ -1,5 +1,5 @@
 /**
- * Snapshot a live SimWorld into a JSON-safe SavedGameV1.
+ * Snapshot a live SimWorld into a JSON-safe SavedGame.
  */
 
 import { hasComponent } from 'bitecs';
@@ -46,9 +46,9 @@ import {
   WorksiteWorker,
 } from '../components';
 import { type SimWorld, createLateGameTestWorld, positionQuery } from '../world';
-import { SAVE_VERSION, type SavedEntityV1, type SavedGameV1 } from './schema';
+import { SAVE_VERSION, type SavedEntityV1, type SavedGame } from './schema';
 
-export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): SavedGameV1 {
+export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): SavedGame {
   const entities: SavedEntityV1[] = [];
   for (const eid of positionQuery(world.ecs)) {
     const entity: SavedEntityV1 = {
@@ -201,6 +201,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     formationModes: world.formationModes.slice(),
     formationFacings: world.formationFacings.slice(),
     outcome: { ...world.outcome },
+    matchStats: world.matchStats.map((stats) => ({ ...stats, gathered: [...stats.gathered] })),
     entities,
     productionQueues: Array.from(world.productionQueues.entries()).map(([eid, queue]) => ({
       eid,
@@ -267,6 +268,6 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
   };
 }
 
-export function createLateGameTestSave(): SavedGameV1 {
+export function createLateGameTestSave(): SavedGame {
   return serializeSimWorld(createLateGameTestWorld(), 'Late Game Test');
 }

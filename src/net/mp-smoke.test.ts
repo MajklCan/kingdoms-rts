@@ -743,3 +743,39 @@ describe('multiplayer robustness: commands from the wire', () => {
     expect(waited).toBeLessThanOrEqual(SIM.TICK_HZ * 2);
   });
 });
+
+describe('multiplayer session: local commands and leaving', () => {
+  it('sends a selection-relative command as its self-describing form from the local selection', () => {
+    const m = setupMatch(777);
+    const units = ownedUnits(m.worldB, 2).slice(0, 2);
+    expect(units.length).toBeGreaterThan(0);
+    for (const eid of units) setSelected(m.worldB, eid, true);
+    // An enemy unit in the local selection must not leak into the order.
+    setSelected(m.worldB, ownedUnits(m.worldB, 1)[0]!, true);
+    const positions = (world: SimWorld) =>
+      ownedUnits(world, 2).slice(0, 2).map((eid) => [Position.x[eid], Position.y[eid]]);
+    const enemyBefore = ownedUnits(m.worldB, 1).map((eid) => [Position.x[eid], Position.y[eid]]);
+    const startA = positions(m.worldA);
+    m.sessB.sendCommand({ type: 'moveSelected', to: { x: 32, y: 32 } });
+    m.pumpN(SIM.TICK_HZ * 3);
+    m.settle();
+    expect(m.capA.desync || m.capB.desync).toBe(false);
+    // Player 2's units moved on player 1's client too.
+    expect(positions(m.worldA)).not.toEqual(startA);
+    expect(positions(m.worldA)).toEqual(positions(m.worldB));
+    expect(ownedUnits(m.worldB, 1).map((eid) => [Position.x[eid], Position.y[eid]])).toEqual(enemyBefore);
+    expect(checksumWorld(m.worldA)).toBe(checksumWorld(m.worldB));
+  });
+
+  it('leave() parks the session in a terminal state and stops stepping', () => {
+    const m = setupMatch(778);
+    const tickBefore = m.worldA.tick;
+    m.sessA.leave();
+    m.sessA.leave(); // idempotent
+    expect(m.sessA.state).toBe('left');
+    // The transport's close callback must not turn it into 'disconnected'.
+    expect(m.capA.state).toBe('left');
+    m.sessA.update(SIM.TICK_MS * 10);
+    expect(m.worldA.tick).toBe(tickBefore);
+  });
+});

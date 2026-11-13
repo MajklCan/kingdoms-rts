@@ -36,6 +36,7 @@ import {
 } from '../components';
 import { UnitDefId } from '../defs';
 import { addSimEntity } from '../core/entities';
+import { recordPopulation } from '../core/match-stats';
 import type { SimWorld } from '../core/types';
 
 /** Spawn a Villager at tile (x,y) owned by playerId. Returns the new eid. */
@@ -95,6 +96,7 @@ export function spawnVillager(
   Cooldown.ticksRemaining[eid] = 0;
   // Count toward population.
   world.population[playerId].current += popCost;
+  recordPopulation(world, playerId);
   return eid;
 }
 
@@ -215,6 +217,7 @@ function spawnMilitaryUnit(
   }
   Cooldown.ticksRemaining[eid] = 0;
   world.population[playerId].current += spec.popCost;
+  recordPopulation(world, playerId);
   return eid;
 }
 

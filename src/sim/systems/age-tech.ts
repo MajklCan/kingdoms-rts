@@ -13,7 +13,8 @@ import {
   techDef,
   techPrereqsMet,
 } from '../tech-tree';
-import { pushSoundCue } from '../core/events';
+import { pushGameEvent, pushSoundCue } from '../core/events';
+import { recordTechResearched } from '../core/match-stats';
 import { getHousePopProvided, recalculatePlayerPopCap } from '../core/population';
 import { buildingQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -65,6 +66,8 @@ export function applyResearchTech(world: SimWorld, playerId: number, techId: Tec
   if (techId === TechId.HOUSING_I || techId === TechId.HOUSING_II) {
     applyHousingPopUpgrade(world, playerId, previousHousePop);
   }
+  recordTechResearched(world, playerId);
+  pushGameEvent(world, { kind: 'researchCompleted', playerId, techId });
 }
 
 function applyHousingPopUpgrade(
@@ -113,6 +116,7 @@ export function ageProgressionSystem(world: SimWorld): void {
       age.totalTicks = 0;
       // Non-spatial fanfare; render plays it only for the local player.
       pushSoundCue(world, 'age_up', 0, 0, p);
+      pushGameEvent(world, { kind: 'ageAdvanced', playerId: p, ageId: age.current });
     }
   }
 }

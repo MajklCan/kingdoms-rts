@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeTurnCommands, sanitizeWireCommand } from './commands';
 
+describe('cancelProduction slot', () => {
+  it('keeps an integer slot and drops a malformed one', () => {
+    expect(sanitizeWireCommand(2, { type: 'cancelProduction', atEid: 7, slot: 2 })).toEqual({
+      type: 'cancelProduction',
+      atEid: 7,
+      slot: 2,
+      playerId: 2,
+    });
+    expect(sanitizeWireCommand(2, { type: 'cancelProduction', atEid: 7 })).toEqual({
+      type: 'cancelProduction',
+      atEid: 7,
+      playerId: 2,
+    });
+    expect(sanitizeWireCommand(2, { type: 'cancelProduction', atEid: 7, slot: 1.5 })).toBeNull();
+    expect(sanitizeWireCommand(2, { type: 'cancelProduction', atEid: 7, slot: 'last' })).toBeNull();
+  });
+});
+
 describe('sanitizeWireCommand', () => {
   it('keeps well-formed commands from their own player', () => {
     const move = { type: 'cmdMove', playerId: 2, eids: [4, 5], to: { x: 3, y: 4.5 } };

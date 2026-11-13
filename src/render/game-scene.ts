@@ -28,10 +28,11 @@ import {
   createLateGameTestSave,
   loadSimWorldSnapshot,
   serializeSimWorld,
-  type SavedGameV1,
+  type SavedGame,
 } from '@sim/save-load';
 import type { TechIdValue } from '@sim/tech-tree';
 import {
+  LOCAL_PLAYER_ID,
   createSimWorld,
   positionQuery,
   pruneHiddenSelectionForPlayer,
@@ -84,6 +85,7 @@ import { DecorLayer } from './terrain/decor-layer';
 import { TerrainLayer } from './terrain/terrain-layer';
 import { hashBytes } from './tile-hash';
 import { createWorldLayers, type WorldLayers } from './world-layers';
+import { UiApi } from './ui-api';
 
 /** Max sim steps per frame when catching up (avoids a spiral of death). */
 const MAX_STEPS_PER_FRAME = 8;
@@ -111,6 +113,7 @@ export class GameScene extends Phaser.Scene {
   private occupancy!: Occupancy;
   private terrain!: TerrainLayer;
   private decor!: DecorLayer;
+  private uiApi: UiApi | null = null;
   /** `?inspect=` sprite sheet is showing instead of the game. */
   private inspectionMode = false;
   /** True once create() has finished (graphics + textures exist). */
@@ -206,6 +209,10 @@ export class GameScene extends Phaser.Scene {
       camera: this.camera,
       pointer: this.pointer,
       toggleGameSpeed: () => this.toggleGameSpeed(),
+    });
+    this.uiApi = new UiApi(this.ctx, {
+      camera: this.camera, commands: this.commands, pointer: this.pointer, alerts: this.alerts,
+      effects: this.effects, audio: this.audio, endMatch: () => this.endMatch(),
     });
 
     this.installDebugWindowApi();
@@ -347,11 +354,11 @@ export class GameScene extends Phaser.Scene {
     return this.world;
   }
 
-  createSaveSnapshot(label = 'Manual Save'): SavedGameV1 {
+  createSaveSnapshot(label = 'Manual Save'): SavedGame {
     return serializeSimWorld(this.world, label);
   }
 
-  loadSaveSnapshot(snapshot: SavedGameV1, label = snapshot.label): void {
+  loadSaveSnapshot(snapshot: SavedGame, label = snapshot.label): void {
     loadSimWorldSnapshot(this.world, snapshot);
     this.afterWorldLoaded(`loaded ${label}`);
   }
@@ -373,6 +380,27 @@ export class GameScene extends Phaser.Scene {
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
     this.ctx.world = createSimWorld(Date.now() & 0xffff, { campaignMissionId: missionId });
     this.afterWorldLoaded(this.world.campaign?.name ?? 'campaign started');
+    this.world.paused = true; // the briefing resumes it
+  }
+
+  /** Typed API for the DOM HUD (src/ui/game-bridge.ts); null before create(). */
+  getUiApi(): UiApi | null {
+    return this.uiApi;
+  }
+
+  /** Leave the match for the menu without a reload: a multiplayer session is
+   *  left properly (the relay tells the peer) and an idle world swapped in. */
+  endMatch(): void {
+    this.pendingMpMatch?.session.leave();
+    this.pendingMpMatch = null;
+    this.ctx.multiplayer?.leave();
+    this.ctx.multiplayer = null;
+    this.ctx.perspectivePlayerId = LOCAL_PLAYER_ID;
+    this.ctx.gameSpeed = 1;
+    this.ctx.world = createSimWorld(Date.now() & 0xffff);
+    this.afterWorldLoaded('left the match');
+    this.world.paused = true;
+    this.audio.leaveMatch();
   }
 
   /** The player id this client controls (host=1, guest=2 in multiplayer). */
@@ -590,6 +618,7 @@ export class GameScene extends Phaser.Scene {
     this.effects.clear();
     this.status.clear();
     this.alerts.clear();
+    this.uiApi?.reset();
     this.buildings.clear();
     this.units.clear();
     this.resources.clear();

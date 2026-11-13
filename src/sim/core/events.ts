@@ -3,7 +3,20 @@
  */
 
 import { type ResourceKind, ResourceKindId } from '../components';
-import type { SimWorld, SoundCueKind } from './types';
+import type { GameEvent, SimWorld, SoundCueKind } from './types';
+
+/** Distributive Omit, so each GameEvent variant keeps its own fields. */
+type WithoutTick<T> = T extends unknown ? Omit<T, 'tick'> : never;
+
+/** Same headless cap as sound cues: render drains every frame. */
+const MAX_GAME_EVENTS = 256;
+
+export function pushGameEvent(world: SimWorld, event: WithoutTick<GameEvent>): void {
+  world.gameEvents.push({ ...event, tick: world.tick } as GameEvent);
+  if (world.gameEvents.length > MAX_GAME_EVENTS) {
+    world.gameEvents.splice(0, world.gameEvents.length - MAX_GAME_EVENTS);
+  }
+}
 
 export function pushAiEvent(world: SimWorld, playerId: number, message: string): void {
   world.aiEvents.push({ tick: world.tick, playerId, message });

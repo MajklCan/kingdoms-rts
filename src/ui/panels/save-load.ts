@@ -7,7 +7,7 @@
 
 import { SIM } from '../../config';
 import { AGE_TABLE } from '../../sim/defs';
-import { parseSavedGame, type SavedGameV1 } from '../../sim/save-load';
+import { parseSavedGame, type SavedGame } from '../../sim/save-load';
 import { appState } from '../app-state';
 import { downloadTextFile, h, readStorage, removeStorage, writeStorage } from '../dom';
 import { formatClock } from '../format';
@@ -31,7 +31,7 @@ let modeTabs: { save: HTMLButtonElement; load: HTMLButtonElement } | null = null
 let fileInput: HTMLInputElement | null = null;
 let afterClose: (() => void) | null = null;
 
-function readSlot(i: number): SavedGameV1 | null {
+function readSlot(i: number): SavedGame | null {
   const raw = readStorage(SLOT_KEYS[i]!);
   return raw ? parseSavedGame(raw) : null;
 }
@@ -51,7 +51,7 @@ function setStatus(text: string, tone: 'info' | 'error' = 'info'): void {
   statusEl.dataset.tone = tone;
 }
 
-function describe(save: SavedGameV1): string {
+function describe(save: SavedGame): string {
   const when = new Date(save.savedAt);
   const date = Number.isNaN(when.getTime())
     ? ''
@@ -88,7 +88,7 @@ async function saveTo(i: number): Promise<void> {
   render();
 }
 
-function load(save: SavedGameV1): void {
+function load(save: SavedGame): void {
   if (modal) dismissSilently(modal);
   afterClose = null;
   loadSnapshot(save, save.label || 'Saved game');

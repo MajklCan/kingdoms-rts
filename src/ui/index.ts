@@ -23,7 +23,6 @@ import { resetSelectionPanel } from './hud/selection-panel';
 import { bindTooltipDismiss, getTooltipRoot, hideTip } from './hud/tooltip';
 import { resetTopBar } from './hud/top-bar';
 import { onMatchEnd, onMatchStart } from './match/match-flow';
-import { resetTracker } from './match/tracker';
 import { bindMultiplayerClientDiagnostics, installMultiplayerDebugApi, startMultiplayerPump } from './multiplayer/pump';
 import { dismissAllModals, getModalRoot } from './panels/modal';
 import { bindObjectivesKey, resetObjectives } from './panels/objectives';
@@ -31,6 +30,7 @@ import { bindPauseMenuKeys } from './panels/pause-menu';
 import { applyStoredUiScale } from './panels/settings';
 import { bindTechTreeKey } from './panels/tech-tree';
 import { bindCampaignSelect } from './screens/campaign-select';
+import { getConnectionLostRoot, resetConnectionLost } from './screens/connection-lost';
 import { getGameOverRoot, resetGameOver } from './screens/game-over';
 import { getLoadingRoot } from './screens/loading';
 import { bindMainMenu } from './screens/main-menu';
@@ -42,7 +42,6 @@ import { bindUiSounds } from './ui-sounds';
 function resetMatchUi(): void {
   dismissAllModals();
   hideTip();
-  resetTracker();
   resetAlerts();
   resetControlGroups();
   resetEventLog();
@@ -51,6 +50,7 @@ function resetMatchUi(): void {
   resetCommandGrid();
   resetMinimap();
   resetGameOver();
+  resetConnectionLost();
   resetObjectives();
   resetTopBar();
 }
@@ -83,7 +83,7 @@ export function mountUi(game: Phaser.Game): void {
   bindMultiplayerLobby();
 
   const dev = buildDevPanel();
-  root.append(buildHud(), getMenuRoot(), getModalRoot(), getGameOverRoot(), getLoadingRoot(), getTooltipRoot());
+  root.append(buildHud(), getMenuRoot(), getModalRoot(), getGameOverRoot(), getConnectionLostRoot(), getLoadingRoot(), getTooltipRoot());
   if (dev) root.append(dev);
 
   bindLayerKeys();

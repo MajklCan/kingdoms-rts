@@ -1,17 +1,18 @@
 /**
  * Victory / defeat proclamation with match statistics. Appears once when
- * the scene reports an outcome; "Keep watching" dismisses it for the rest of
- * the match, "Return to menu" leaves.
+ * the sim decides the match (world.outcome); "Keep watching" dismisses it for
+ * the rest of the match, "Return to menu" leaves. The numbers are the sim's
+ * exact counters (see src/sim/core/match-stats.ts), not UI estimates.
  */
 
 import type { GameScene } from '../../render/game-scene';
 import { openLayer, releaseLayer } from '../a11y/layers';
 import { h } from '../dom';
 import { formatAmount, formatClock } from '../format';
+import { getMatchStats } from '../game-bridge';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { quitToMenu } from '../match/match-flow';
-import { getMatchStats } from '../match/tracker';
 
 let root: HTMLElement | null = null;
 let card: HTMLElement | null = null;
@@ -33,6 +34,8 @@ function stat(iconName: IconName, label: string, value: string): HTMLElement {
 function show(scene: GameScene, won: boolean): void {
   const r = getGameOverRoot();
   const s = getMatchStats(scene);
+  if (!s) return;
+  const [food, wood, gold, stone] = s.gathered;
   const mission = scene.getCampaignMission();
   const returnBtn = h('button', { type: 'button', class: 'btn btn-seal btn-lg', id: 'game-over-play-again' }, icon('quit'), 'Return to Menu');
   const watchBtn = h('button', { type: 'button', class: 'btn btn-ink btn-lg', id: 'game-over-watch' }, icon('eye'), 'Keep Watching');
@@ -54,13 +57,19 @@ function show(scene: GameScene, won: boolean): void {
       'dl',
       { class: 'go-stats' },
       stat('hourglass', 'Match time', formatClock(s.seconds)),
+      stat('crown', 'Age reached', s.ageName),
       stat('person', 'Units trained', String(s.unitsTrained)),
-      stat('swords', 'Enemies defeated', String(s.enemiesDefeated)),
       stat('defeat', 'Units lost', String(s.unitsLost)),
-      stat('hammer', 'Buildings raised', String(s.buildingsBuilt)),
-      stat('gold', 'Resources gathered', formatAmount(s.resourcesGathered)),
+      stat('swords', 'Enemy units slain', String(s.unitsKilled)),
       stat('pop', 'Peak population', String(s.peakPopulation)),
-      stat('crown', 'Age reached', scene.getAge(scene.getPerspectivePlayerId()).name)
+      stat('hammer', 'Buildings built', String(s.buildingsBuilt)),
+      stat('demolish', 'Buildings lost', String(s.buildingsLost)),
+      stat('victory', 'Enemy buildings razed', String(s.buildingsRazed)),
+      stat('research', 'Technologies researched', String(s.techsResearched)),
+      stat('food', 'Food gathered', formatAmount(food)),
+      stat('wood', 'Wood gathered', formatAmount(wood)),
+      stat('gold', 'Gold gathered', formatAmount(gold)),
+      stat('stone', 'Stone gathered', formatAmount(stone))
     ),
     h('div', { class: 'go-actions' }, watchBtn, returnBtn)
   );

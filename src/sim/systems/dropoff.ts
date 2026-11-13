@@ -20,6 +20,7 @@ import {
 import { BuildingDefId, getBuildingDef } from '../defs';
 import { compareDeterministicEids, sortedEids } from '../core/entities';
 import { distToBuildingEdge } from '../core/grid';
+import { recordGathered } from '../core/match-stats';
 import { pathTo, pathToBuildingContact } from '../core/navigation';
 import { dropOffQuery, gathererQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -44,7 +45,9 @@ export function dropoffSystem(world: SimWorld): void {
     const carryKind = ResourceCarry.kind[eid] as ResourceKind;
     const playerId = Owner.player[eid];
     if (carryAmt > 0 && world.resources[playerId]) {
-      world.resources[playerId][carryKind] += carryAmt + millDropOffFoodBonus(world, eid, carryKind, carryAmt);
+      const delivered = carryAmt + millDropOffFoodBonus(world, eid, carryKind, carryAmt);
+      world.resources[playerId][carryKind] += delivered;
+      recordGathered(world, playerId, carryKind, delivered);
     }
     ResourceCarry.amount[eid] = 0;
 

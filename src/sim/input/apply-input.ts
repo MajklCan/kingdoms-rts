@@ -128,7 +128,7 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       return;
     case 'cancelProduction':
       if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
-      applyCancelProduction(world, input.atEid);
+      applyCancelProduction(world, input.atEid, input.slot);
       return;
     case 'advanceAge':
       applyAdvanceAge(world, input.playerId);

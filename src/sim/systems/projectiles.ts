@@ -8,6 +8,7 @@ import { GunmanTag, Health, MachineGunTag, Owner, Position } from '../components
 import { sortedEids } from '../core/entities';
 import { pushSoundCue } from '../core/events';
 import { distToBuildingEdge } from '../core/grid';
+import { applyDamage } from '../core/match-stats';
 import { buildingQuery, unitQuery } from '../core/queries';
 import type { PendingCannonImpact, PendingProjectileImpact, SimWorld } from '../core/types';
 import { retaliateWhenEngaged } from './combat';
@@ -75,7 +76,7 @@ function applyProjectileImpactDamage(world: SimWorld, impact: PendingProjectileI
   ) {
     return;
   }
-  Health.hp[impact.targetEid] -= impact.damage;
+  applyDamage(world, impact.targetEid, impact.damage, impact.attackerOwner);
   retaliateWhenEngaged(world, impact.targetEid, impact.attackerEid);
 }
 
@@ -99,9 +100,11 @@ function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): 
     if (distToBuildingEdge(world, impact.impactX, impact.impactY, building) > CANNON_BUILDING_DIRECT_HIT_RADIUS) {
       continue;
     }
-    Health.hp[building] -= Math.max(
-      1,
-      Math.ceil(impact.damage * CANNON_BUILDING_DAMAGE_MULTIPLIER) - Health.armor[building]
+    applyDamage(
+      world,
+      building,
+      Math.max(1, Math.ceil(impact.damage * CANNON_BUILDING_DAMAGE_MULTIPLIER) - Health.armor[building]),
+      impact.attackerOwner
     );
     retaliateWhenEngaged(world, building, impact.attackerEid);
   }
@@ -110,7 +113,7 @@ function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): 
     if (!isValidCannonSplashVictim(world, impact.attackerOwner, victim)) continue;
     const distance = Math.hypot(Position.x[victim] - impact.impactX, Position.y[victim] - impact.impactY);
     if (distance > CANNON_SPLASH_MAX_RADIUS) continue;
-    Health.hp[victim] -= computeCannonSplashDamage(impact.damage, victim, distance);
+    applyDamage(world, victim, computeCannonSplashDamage(impact.damage, victim, distance), impact.attackerOwner);
     retaliateWhenEngaged(world, victim, impact.attackerEid);
   }
 }
