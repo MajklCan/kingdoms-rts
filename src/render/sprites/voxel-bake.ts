@@ -5,6 +5,7 @@
  */
 
 import { TEAM_COLORS } from '../../config';
+import { outlineCanvasTexture } from '../voxel/voxel-outline';
 import { bakeVoxelTexture } from '../voxel/voxel-render';
 import { FACINGS } from './facing';
 import { LINEAR_FILTER } from './sprite-registry';
@@ -27,19 +28,23 @@ export function bakeVoxelTextures(scene: Phaser.Scene): void {
     for (const bake of voxelTeamBuildingBakes(playerId, teamColor)) {
       bakeStatic(scene, bake);
     }
+    const rim = unitRimColor(teamColor);
     for (const unitDefId of VOXEL_UNIT_BAKE_ORDER) {
       const model = VOXEL_UNIT_MODELS[unitDefId];
       if (!model) continue;
       for (const facing of FACINGS) {
         for (const anim of model.anims) {
           for (let frame = 0; frame < (model.frameCounts[anim] ?? 0); frame++) {
-            bakeIfMissing(
+            const key = voxelUnitKey(model, playerId, facing, anim, frame);
+            const baked = bakeIfMissing(
               scene,
-              voxelUnitKey(model, playerId, facing, anim, frame),
+              key,
               () => model.build(teamColor, { facing, anim, frame }),
               4,
               model.bounds
             );
+            // Dark team-tinted rim: units pop off the busy pre-rendered ground.
+            if (baked) outlineCanvasTexture(scene.textures, key, rim, UNIT_RIM_ALPHA);
           }
         }
       }
@@ -76,13 +81,27 @@ function bakeStatic(scene: Phaser.Scene, bake: VoxelStaticBake): void {
   bakeIfMissing(scene, bake.key, bake.build, bake.voxelW, bake.bounds);
 }
 
+/** True when it baked (the key did not exist yet). */
 function bakeIfMissing(
   scene: Phaser.Scene,
   key: string,
   build: VoxelStaticBake['build'],
   voxelW: number,
   bounds: VoxelStaticBake['bounds']
-): void {
-  if (scene.textures.exists(key)) return;
+): boolean {
+  if (scene.textures.exists(key)) return false;
   bakeVoxelTexture(scene, build(), { textureKey: key, voxelW, bounds });
+  return true;
+}
+
+/** Opacity of the unit rim. */
+const UNIT_RIM_ALPHA = 0.9;
+
+/** Unit rim colour: the team colour pushed almost to black. */
+export function unitRimColor(teamColor: number): number {
+  const k = 0.22;
+  const r = Math.round(((teamColor >> 16) & 0xff) * k);
+  const g = Math.round(((teamColor >> 8) & 0xff) * k);
+  const b = Math.round((teamColor & 0xff) * k);
+  return (r << 16) | (g << 8) | b;
 }

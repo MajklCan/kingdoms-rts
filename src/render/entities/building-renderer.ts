@@ -36,13 +36,33 @@ import type { FarmStage, SpriteSource } from '../sprites/sprite-source';
 import { tileHash } from '../tile-hash';
 import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, spriteAnchorPoint } from '../world-projection';
+import { HitFlash } from './hit-flash';
 import { SpriteSync } from './sprite-sync';
+import type { SpriteSnapshot, SpriteView } from './sprite-view';
 
-/** How long a ruin stays, and the fade at its end. */
 /** Minimum texel alpha (0-255) that counts as a hit for click picking. */
 const PICK_ALPHA = 40;
+/** How long a ruin stays, the fade at its end, and its fade-in under the collapse dust. */
 const RUIN_TICKS = SIM.TICK_HZ * 75;
 const RUIN_FADE_TICKS = SIM.TICK_HZ * 6;
+const RUIN_APPEAR_TICKS = Math.round(SIM.TICK_HZ * 1.1);
+/** Peak additive hit flash on buildings: subtle, warm. */
+const BUILDING_FLASH = 0x584030;
+
+/** A building the perspective player could see went away (destroyed or cancelled). */
+export interface BuildingRemoval {
+  eid: number;
+  defId: number;
+  owner: number;
+  /** Footprint centre on screen. */
+  center: ScreenPos;
+  w: number;
+  h: number;
+  /** It was still a foundation. */
+  foundation: boolean;
+  /** Last drawn frame (absent when it had no sprite this frame). */
+  sprite?: SpriteSnapshot;
+}
 /** One crop cycle of a worked farm: sown -> growing -> ripe -> harvested. */
 const FARM_CYCLE_TICKS = SIM.TICK_HZ * 90;
 const FARM_STAGE_ENDS: ReadonlyArray<readonly [number, FarmStage]> = [
@@ -53,7 +73,9 @@ const FARM_STAGE_ENDS: ReadonlyArray<readonly [number, FarmStage]> = [
 ];
 
 interface TrackedBuilding {
+  eid: number;
   defId: number;
+  owner: number;
   x: number;
   y: number;
   foundation: boolean;
@@ -68,6 +90,7 @@ interface Ruin {
   y0: number;
   w: number;
   h: number;
+  bornTick: number;
   expiresTick: number;
 }
 
@@ -87,13 +110,16 @@ export class BuildingRenderer {
   /** eid -> screen y of the top of the art, for the status bars. */
   private readonly tops = new Map<number, number>();
   private readonly seen = new Set<number>();
+  private readonly flash: HitFlash;
+  private readonly removalListeners: Array<(removal: BuildingRemoval) => void> = [];
 
   constructor(
     private readonly ctx: SceneContext,
     private readonly sprites: SpriteSource
   ) {
     this.bars = addLayerGraphics(ctx.scene, ctx.layers.overlay);
-    this.live = new SpriteSync(ctx.scene, ctx.layers);
+    this.flash = new HitFlash(BUILDING_FLASH, () => ctx.scene.time.now);
+    this.live = new SpriteSync(ctx.scene, ctx.layers, (eid) => this.flash.forget(eid));
     this.remembered = new SpriteSync(ctx.scene, ctx.layers);
     this.ruinViews = new SpriteSync(ctx.scene, ctx.layers);
   }
@@ -132,6 +158,7 @@ export class BuildingRenderer {
       const p = spriteAnchorPoint(ref.anchor, c, def.footprint.w, def.footprint.h);
       const view = this.live.show(eid, ref, p.x, p.y);
       view.clearTint();
+      view.setFlash(this.flash.colorFor(eid, Health.hp[eid]));
       view.setAlpha(isFoundation && ref.source === 'voxel' ? 0.5 : 1.0);
       view.setDepth(buildingDepth(def, c));
       const topY = p.y - ref.top;
@@ -251,6 +278,26 @@ export class BuildingRenderer {
     return this.ctx.buildingScreenPosition(eid);
   }
 
+  /** Screen y of the top of a live building's art (null when not drawn). */
+  topOf(eid: number): number | null {
+    return this.tops.get(eid) ?? null;
+  }
+
+  /** Live building sprite drawn this frame. */
+  viewOf(eid: number): SpriteView | undefined {
+    return this.live.get(eid);
+  }
+
+  /** Every live building sprite (occlusion tests). */
+  liveViews(): IterableIterator<SpriteView> {
+    return this.live.allViews();
+  }
+
+  /** Called when a building the player could see is destroyed or vanishes. */
+  onRemoved(listener: (removal: BuildingRemoval) => void): void {
+    this.removalListeners.push(listener);
+  }
+
   get counts(): { live: number; remembered: number; ruins: number; atlas: number } {
     return {
       live: this.live.size,
@@ -271,6 +318,7 @@ export class BuildingRenderer {
     this.farmFoundations.clear();
     this.wallTiles.clear();
     this.tops.clear();
+    this.flash.clear();
   }
 
   // ── Ruins ───────────────────────────────────────────────────────────────
@@ -297,7 +345,15 @@ export class BuildingRenderer {
       }
       this.seen.add(eid);
       const foundation = hasComponent(world.ecs, ConstructionSite, eid);
-      this.tracked.set(eid, { defId, x, y, foundation, visible: this.ctx.isEntityVisible(eid) });
+      const visible = this.ctx.isEntityVisible(eid);
+      const owner = Owner.player[eid];
+      if (prev && prev.defId === defId && prev.x === x && prev.y === y) {
+        prev.owner = owner;
+        prev.foundation = foundation;
+        prev.visible = visible;
+      } else {
+        this.tracked.set(eid, { eid, defId, owner, x, y, foundation, visible });
+      }
       if (defId === BuildingDefId.FARM && foundation) this.farmFoundations.add(eid);
     }
     for (const [eid, prev] of this.tracked) {
@@ -310,18 +366,35 @@ export class BuildingRenderer {
   }
 
   private removed(prev: TrackedBuilding): void {
-    if (prev.foundation || !prev.visible) return;
+    if (!prev.visible) return;
     const def = BUILDING_TABLE[prev.defId];
     if (!def) return;
     const anchor = buildingAnchorTileForDef(def, prev.x, prev.y);
+    const center = this.ctx.tileToScreen(anchor.x, anchor.y);
+    if (this.removalListeners.length > 0) {
+      const removal: BuildingRemoval = {
+        eid: prev.eid,
+        defId: prev.defId,
+        owner: prev.owner,
+        center,
+        w: def.footprint.w,
+        h: def.footprint.h,
+        foundation: prev.foundation,
+        sprite: this.live.get(prev.eid)?.snapshot(),
+      };
+      for (const listener of this.removalListeners) listener(removal);
+    }
+    if (prev.foundation) return;
+    const tick = this.ctx.world.tick;
     this.ruins.set(this.nextRuinId++, {
       defId: prev.defId,
-      center: this.ctx.tileToScreen(anchor.x, anchor.y),
+      center,
       x0: Math.round(prev.x) - Math.floor(def.footprint.w / 2),
       y0: Math.round(prev.y) - Math.floor(def.footprint.h / 2),
       w: def.footprint.w,
       h: def.footprint.h,
-      expiresTick: this.ctx.world.tick + RUIN_TICKS,
+      bornTick: tick,
+      expiresTick: tick + RUIN_TICKS,
     });
   }
 
@@ -341,7 +414,11 @@ export class BuildingRenderer {
       const p = spriteAnchorPoint(ref.anchor, ruin.center, ruin.w, ruin.h);
       const view = this.ruinViews.show(id, ref, p.x, p.y);
       view.setDepth(ruin.center.y - (ruin.w + ruin.h) * 8 - 1);
-      view.setAlpha(Math.min(1, (ruin.expiresTick - tick) / RUIN_FADE_TICKS));
+      view.setAlpha(Math.min(
+        1,
+        (ruin.expiresTick - tick) / RUIN_FADE_TICKS,
+        Math.max(0, tick - ruin.bornTick) / RUIN_APPEAR_TICKS
+      ));
       view.setTintOrClear(this.ctx.isTileVisible(cx, cy) ? null : FOG_DIM_TINT);
     }
     this.ruinViews.end();

@@ -6,13 +6,20 @@
  *
  * Looks are render-only and deterministic: tree species from a tile hash
  * (conifers favour forest tiles), pile looks from the remaining amount.
+ *
+ * Life on top of that, all render-only: trees in view sway gently with a
+ * stable per-tile phase, a tree shakes when it is chopped (its amount drops),
+ * and listeners hear about every hit on a pile and every tree that falls, so
+ * the VFX layer can throw chips and topple the trunk.
  */
 
+import { entityExists } from 'bitecs';
 import { MAP, SIM } from '../../config';
 import { Position, Resource, ResourceKindId } from '@sim/components';
 import { CampaignMissionId } from '@sim/campaign';
 import { MapFeatureKind, TileType, type MapFeature } from '@sim/map-gen';
 import { resourceQuery } from '@sim/world';
+import { reducedMotion } from '../effects/motion-prefs';
 import type { ScreenPos } from '../iso';
 import { FOG_DIM_TINT } from '../overlays/fog-style';
 import type { SceneContext } from '../scene-context';
@@ -21,6 +28,36 @@ import { tileHash01 } from '../tile-hash';
 import { spriteAnchorPoint } from '../world-projection';
 import type { Occupancy } from './occupancy';
 import { SpriteSync } from './sprite-sync';
+import type { SpriteSnapshot, SpriteView } from './sprite-view';
+
+/** A visible pile lost some of its amount this frame (someone is working it). */
+export interface ResourceHit {
+  eid: number;
+  kind: number;
+  /** Tile. */
+  x: number;
+  y: number;
+  /** Screen anchor and the screen y of the top of the art. */
+  screen: ScreenPos;
+  top: number;
+}
+
+/** A visible tree was cut down. */
+export interface TreeFall {
+  x: number;
+  y: number;
+  conifer: boolean;
+  sprite: SpriteSnapshot;
+}
+
+/** Tree sway: rad amplitude (broadleaf / conifer) and period range, ms. */
+const SWAY_BROADLEAF = 0.016;
+const SWAY_CONIFER = 0.009;
+const SWAY_PERIOD_MS = 4200;
+/** Chop shake: rad amplitude, length, wobble frequency. */
+const SHAKE_RAD = 0.05;
+const SHAKE_MS = 420;
+const SHAKE_HZ = 11;
 
 const SNOW_TILES: ReadonlySet<number> = new Set([
   TileType.SNOW,
@@ -59,15 +96,57 @@ export class ResourceRenderer {
   private readonly treesSeen = new Set<number>();
   /** Tile index -> stump. */
   private readonly stumps = new Map<number, Stump>();
+  /** Tile index -> tree eid drawn there this frame (occlusion lookups). */
+  private readonly treeByTile = new Map<number, number>();
+  /** eid -> amount last frame (hit detection). */
+  private readonly lastAmount = new Map<number, number>();
+  /** eid -> scene time (ms) of the last chop, for the shake. */
+  private readonly shakeAt = new Map<number, number>();
+  private readonly hitListeners: Array<(hit: ResourceHit) => void> = [];
+  private readonly fallListeners: Array<(fall: TreeFall) => void> = [];
+  /** Gold piles drawn and visible this frame (glints). */
+  readonly goldInView: ScreenPos[] = [];
+  private goldCount = 0;
 
   constructor(
     private readonly ctx: SceneContext,
     private readonly sprites: SpriteSource,
     private readonly occupancy: Occupancy
   ) {
-    this.resources = new SpriteSync(ctx.scene, ctx.layers, (eid) => this.fullAmount.delete(eid));
+    this.resources = new SpriteSync(
+      ctx.scene,
+      ctx.layers,
+      (eid) => {
+        this.fullAmount.delete(eid);
+        this.lastAmount.delete(eid);
+        this.shakeAt.delete(eid);
+      },
+      (eid, view) => this.noticeRemoval(eid, view)
+    );
     this.features = new SpriteSync(ctx.scene, ctx.layers);
     this.stumpViews = new SpriteSync(ctx.scene, ctx.layers);
+  }
+
+  /** Called for every visible pile that lost amount this frame. */
+  onHit(listener: (hit: ResourceHit) => void): void {
+    this.hitListeners.push(listener);
+  }
+
+  /** Called when a visible tree is cut down (before its stump appears). */
+  onTreeFall(listener: (fall: TreeFall) => void): void {
+    this.fallListeners.push(listener);
+  }
+
+  /** Tree drawn on a tile this frame. */
+  treeViewAt(tileX: number, tileY: number): SpriteView | undefined {
+    if (tileX < 0 || tileY < 0 || tileX >= MAP.WIDTH || tileY >= MAP.HEIGHT) return undefined;
+    const eid = this.treeByTile.get(tileY * MAP.WIDTH + tileX);
+    return eid === undefined ? undefined : this.resources.get(eid);
+  }
+
+  /** Number of valid entries at the front of {@link goldInView}. */
+  get goldInViewCount(): number {
+    return this.goldCount;
   }
 
   drawMapFeatures(): void {
@@ -90,11 +169,16 @@ export class ResourceRenderer {
 
   drawResources(): void {
     const world = this.ctx.world;
+    const now = this.ctx.scene.time.now;
+    const sway = !reducedMotion();
     this.resources.begin();
     this.treesSeen.clear();
+    this.treeByTile.clear();
+    this.goldCount = 0;
     for (const eid of resourceQuery(world.ecs)) {
       // An emptied node is gone for the player (the sim may drop it a tick later).
-      if (Resource.amount[eid] <= 0) continue;
+      const amount = Resource.amount[eid];
+      if (amount <= 0) continue;
       const kind = Resource.kind[eid];
       const x = Position.x[eid];
       const y = Position.y[eid];
@@ -117,7 +201,20 @@ export class ResourceRenderer {
       const p = spriteAnchorPoint(ref.anchor, c);
       const view = this.resources.show(eid, ref, p.x, p.y);
       view.setDepth(c.y);
-      view.setTintOrClear(this.ctx.isTileVisible(Math.round(x), Math.round(y)) ? null : FOG_DIM_TINT);
+      const visible = this.ctx.isTileVisible(Math.round(x), Math.round(y));
+      view.setTintOrClear(visible ? null : FOG_DIM_TINT);
+
+      const last = this.lastAmount.get(eid);
+      if (last !== amount) {
+        this.lastAmount.set(eid, amount);
+        if (last !== undefined && amount < last && visible) this.hit(eid, kind, x, y, c, c.y - ref.top, now);
+      }
+      if (kind === ResourceKindId.WOOD) {
+        this.treeByTile.set(tileIndex(x, y), eid);
+        view.sprite.rotation = visible ? this.treeLean(eid, x, y, conifer, now, sway) : 0;
+      } else if (kind === ResourceKindId.GOLD && visible) {
+        this.noteGold(c.x, c.y - ref.top * 0.45);
+      }
     }
     this.resources.end();
     this.collectFelledTrees();
@@ -141,6 +238,64 @@ export class ResourceRenderer {
     this.fullAmount.clear();
     this.trees.clear();
     this.stumps.clear();
+    this.treeByTile.clear();
+    this.lastAmount.clear();
+    this.shakeAt.clear();
+    this.goldCount = 0;
+  }
+
+  // ── Life: sway, chop shake, hits, falls ─────────────────────────────────
+
+  /** Sway (stable per-tile phase, slow gusts) plus the decaying chop shake. */
+  private treeLean(eid: number, x: number, y: number, conifer: boolean, now: number, sway: boolean): number {
+    let lean = 0;
+    if (sway) {
+      const phase = tileHash01(Math.round(x), Math.round(y), 0x5a7) * Math.PI * 2;
+      const period = SWAY_PERIOD_MS * (0.8 + tileHash01(Math.round(x), Math.round(y), 0x9e1) * 0.5);
+      // Gusts roll across the map from the left: slow envelope keyed to screen x.
+      const gust = 0.65 + 0.35 * Math.sin(now / 2600 - (x - y) * 0.09);
+      lean = Math.sin((now / period) * Math.PI * 2 + phase) * (conifer ? SWAY_CONIFER : SWAY_BROADLEAF) * gust;
+    }
+    const at = this.shakeAt.get(eid);
+    if (at !== undefined) {
+      const age = now - at;
+      if (age >= SHAKE_MS) {
+        this.shakeAt.delete(eid);
+      } else {
+        const k = 1 - age / SHAKE_MS;
+        lean += Math.sin((age / 1000) * SHAKE_HZ * Math.PI * 2) * SHAKE_RAD * k * k;
+      }
+    }
+    return lean;
+  }
+
+  private hit(eid: number, kind: number, x: number, y: number, screen: ScreenPos, top: number, now: number): void {
+    if (kind === ResourceKindId.WOOD) this.shakeAt.set(eid, now);
+    if (this.hitListeners.length === 0) return;
+    const hit: ResourceHit = { eid, kind, x, y, screen, top };
+    for (const listener of this.hitListeners) listener(hit);
+  }
+
+  private noteGold(x: number, y: number): void {
+    const spot = this.goldInView[this.goldCount];
+    if (spot) {
+      spot.x = x;
+      spot.y = y;
+    } else {
+      this.goldInView.push({ x, y });
+    }
+    this.goldCount++;
+  }
+
+  /** A drawn resource is dropped: a visible tree that is gone fell. */
+  private noticeRemoval(eid: number, view: SpriteView): void {
+    const tree = this.trees.get(eid);
+    if (!tree || this.fallListeners.length === 0) return;
+    const ecs = this.ctx.world.ecs;
+    if (entityExists(ecs, eid) && Resource.amount[eid] > 0) return;
+    if (!this.ctx.isTileVisible(Math.round(tree.x), Math.round(tree.y))) return;
+    const fall: TreeFall = { x: tree.x, y: tree.y, conifer: tree.conifer, sprite: view.snapshot() };
+    for (const listener of this.fallListeners) listener(fall);
   }
 
   /** Trees that vanished since last frame leave a stump on their tile. */

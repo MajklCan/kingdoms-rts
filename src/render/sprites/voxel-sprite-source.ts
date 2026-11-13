@@ -30,12 +30,12 @@ export const UNIT_SHADOW_KEY = 'unit-contact-shadow';
 
 /** Contact shadow per unit: [width px at 1x, alpha]. Wide bodies get wider blobs. */
 const UNIT_SHADOW_SIZE: Readonly<Record<number, readonly [number, number]>> = {
-  [UnitDefId.SCOUT_CAVALRY]: [32, 0.6],
-  [UnitDefId.CANNON]: [32, 0.6],
-  [UnitDefId.MACHINE_GUN]: [28, 0.6],
-  [UnitDefId.MORTAR]: [28, 0.6],
+  [UnitDefId.SCOUT_CAVALRY]: [36, 0.72],
+  [UnitDefId.CANNON]: [36, 0.72],
+  [UnitDefId.MACHINE_GUN]: [31, 0.72],
+  [UnitDefId.MORTAR]: [31, 0.72],
 };
-const DEFAULT_UNIT_SHADOW: readonly [number, number] = [22, 0.62];
+const DEFAULT_UNIT_SHADOW: readonly [number, number] = [25, 0.78];
 
 /** Wall neighbour mask -> the voxel wall's axis (more connections wins, x on ties). */
 export function wallAxisForMask(mask: number): 'x' | 'y' {
