@@ -22,7 +22,7 @@ GRASS = Surface((0x7e9e40, 0x66882f, 0x98b452), "leaves", 0.03, roughness=0.8, b
                 ao=0.6, coords="object")
 GRASS_DRY = Surface((0xa8a256, 0x8e8a44, 0xbcb46a), "leaves", 0.03, roughness=0.8, bump=0.4, noise_scale=2.0, grime=0.0,
                     ao=0.6, coords="object")
-REED = Surface((0x8a9a4a, 0x6e8038, 0xa2aa5e), "leaves", 0.03, roughness=0.8, bump=0.3, noise_scale=2.0, grime=0.0,
+REED = Surface((0x9aaa56, 0x7e9040, 0xb4ba6a), "leaves", 0.03, roughness=0.8, bump=0.3, noise_scale=2.0, grime=0.0,
                ao=0.6, coords="object")
 FERN = Surface((0x4e7e30, 0x3c6a26, 0x62923c), "leaves", 0.03, roughness=0.8, bump=0.5, noise_scale=2.5, grime=0.0,
                ao=0.7, coords="object")
@@ -86,11 +86,11 @@ def reeds(col, rng) -> None:
     b = B(col, rng)
     m = _mat("reed", REED)
     head = _mat("reed_head", Surface((0x5a4030, 0x4a3426, 0x6a4c38), "none", roughness=0.8, grime=0.0, ao=0.4))
-    for _ in range(4):
+    for _ in range(6):
         a = rng.uniform(0, math.tau)
-        r = rng.uniform(0, 0.14)
+        r = rng.uniform(0, 0.15)
         cx, cy = math.cos(a) * r, math.sin(a) * r
-        blades(b, cx, cy, 18, rng.uniform(0.2, 0.28), 0.04, m, w=0.007, lean=(0.05, 0.25))
+        blades(b, cx, cy, 34, rng.uniform(0.16, 0.24), 0.05, m, w=0.009, lean=(0.1, 0.4))
         for _ in range(rng.randint(2, 4)):
             px, py = cx + rng.uniform(-0.03, 0.03), cy + rng.uniform(-0.03, 0.03)
             hh = rng.uniform(0.22, 0.3)

@@ -243,6 +243,7 @@ def _choose_size(sprites: list[dict]) -> int:
 # ---------------------------------------------------------------------------
 
 ERA_ORDER = ["dark", "castle", "gunpowder", "total_war"]
+FARM_STAGES = ["sown", "growing", "ripe", "depleted"]
 
 
 def sprite_ref(rec: dict, index: dict[str, dict]) -> dict:
@@ -278,6 +279,9 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
         elif a["kind"] == "construction":
             a["stages"] = sorted(keys, key=lambda k: a["variants"][k].get("progress", 0))
             a["default"] = a["stages"][0]
+        elif set(keys) <= set(FARM_STAGES):
+            a["stages"] = [k for k in FARM_STAGES if k in keys]
+            a["default"] = "ripe" if "ripe" in keys else a["stages"][0]
         else:
             a["default"] = "default" if "default" in keys else sorted(keys)[0]
         a["variants"] = dict(sorted(a["variants"].items(), key=lambda kv: _vkey(kv[0])))
@@ -288,9 +292,17 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
         "renderScale": RENDER_SCALE,
         "scale": 1.0 / RENDER_SCALE,
         "tile": {"w": 64, "h": 32, "elevationStepPx": 4},
+        "eraOrder": ERA_ORDER,
         "conventions": {
-            "anchor": "pixel (in sourceSize, render scale) of the bottom corner of the footprint diamond; "
-                      "for terrain tiles the diamond centre",
+            "anchor": "pixel (in sourceSize, render scale) of the bottom corner of the footprint diamond, for every "
+                      "kind incl. terrain tiles; cliff faces: the tile's bottom corner at the top of that step",
+            "terrain": "tile frame = variant str((x mod period) + period * (y mod period)); animated water "
+                       "'<index>.<frame>'; cliff faces are one elevationStepPx step, stack them down to the "
+                       "lower tile, use the *_lip variant for the topmost step",
+            "transition": "white masks, alpha = how much of the neighbour's ground to draw over this tile; edge_px "
+                          "= neighbour at x+1, corner_px_py = diagonal neighbour at x+1,y+1 (only when neither "
+                          "adjacent edge neighbour matches)",
+            "walls": "variant '<era>.<mask>', mask bits 1 = +x, 2 = +y, 4 = -x, 8 = -y (game tile directions)",
             "mask": "white RGB, alpha = team colour coverage; tint per player and draw over the frame (multiply or "
                     "overlay), same sourceSize and anchor",
             "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",

@@ -17,6 +17,7 @@ import math
 import random
 
 import bpy
+from mathutils import Euler, Matrix, Vector
 
 from bld_common import DOOR_W, baroque_gable, chimney, hall, stairs, style, wall_banner
 from kr_kit import B
@@ -542,9 +543,16 @@ def _sails(b: B, hx: float, hy: float, hz: float, length: float = 0.86, width: f
         vs = [bm.verts.new(P(0.18, 0.025, -0.008)), bm.verts.new(P(length - 0.02, 0.025, -0.008)),
               bm.verts.new(P(length - 0.02, width - 0.005, -0.008)), bm.verts.new(P(0.18, width - 0.005, -0.008))]
         bm.faces.new(vs)
-        cloth = b.obj(bm, "team", "sail")
+        cloth = b.obj(bm, "cloth", "sail")
         sol = cloth.modifiers.new("solid", "SOLIDIFY")
         sol.thickness = 0.005
+        # team-coloured band near the sail tip
+        bm = bmesh.new()
+        vs = [bm.verts.new(P(length - 0.17, 0.03, -0.016)), bm.verts.new(P(length - 0.06, 0.03, -0.016)),
+              bm.verts.new(P(length - 0.06, width - 0.01, -0.016)), bm.verts.new(P(length - 0.17, width - 0.01, -0.016))]
+        bm.faces.new(vs)
+        band = b.obj(bm, "team", "sail_band")
+        band.modifiers.new("solid", "SOLIDIFY").thickness = 0.004
 
 
 def mill(col, rng, era: str) -> None:
@@ -587,7 +595,7 @@ def mill(col, rng, era: str) -> None:
         body = "plaster" if era == "castle" else "brick"
         b.lathe([(0.43, 0.2), (0.4, 0.6), (0.36, 1.0), (0.33, 1.3)], cx, cy, body, segs=24)
         b.cyl((cx, cy, 1.28), (cx, cy, 1.33), 0.36, "timber", segs=24)
-        b.cone_roof(cx, cy, 1.33, 0.33, 0.42, "shingle" if era == "castle" else "tile_dark", segs=24, overhang=0.05,
+        b.cone_roof(cx, cy, 1.33, 0.33, 0.42, "thatch" if era == "castle" else "tile_dark", segs=24, overhang=0.05,
                     thick=0.03)
         # door and windows on the visible side
         import math as _m
@@ -617,17 +625,27 @@ def lumber_camp(col, rng, era: str) -> None:
     st = style(era)
     b.pad(1, 1, "dirt")
     x0, y0, x1, y1 = -0.44, -0.02, 0.2, 0.44
+    # open lean-to shed: posts, back wall, mono-pitch roof
+    post_m = "log" if era == "dark" else "timber"
+    for (px, py) in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+        if era == "dark":
+            b.cyl((px, py, 0), (px, py, 0.5 if py < 0.2 else 0.66), 0.02, post_m, segs=7)
+        else:
+            b.box(px - 0.02, py - 0.02, 0.0, px + 0.02, py + 0.02, 0.52 if py < 0.2 else 0.7, post_m, 0.004)
     if era == "dark":
-        for (px, py) in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
-            b.cyl((px, py, 0), (px, py, 0.5 if py < 0.2 else 0.66), 0.02, "log", segs=7)
         b._slab([(x0 - 0.07, y0 - 0.08, 0.5), (x1 + 0.07, y0 - 0.08, 0.5), (x1 + 0.07, y1 + 0.06, 0.68),
                  (x0 - 0.07, y1 + 0.06, 0.68)], 0.06, "thatch", 0.01)
         b.box(x0, y1 - 0.03, 0, x1, y1, 0.6, "planks", 0.003)
     else:
-        hall(b, x0, y0, x1, y1, 0.56, st, roof="none", frame=False, wall_m="planks",
-             doors=(("-y", 0.35, 0.26, 0.44),), base=True)
-        b._slab([(x0 - 0.06, y0 - 0.07, 0.56), (x1 + 0.06, y0 - 0.07, 0.56), (x1 + 0.06, y1 + 0.06, 0.74),
-                 (x0 - 0.06, y1 + 0.06, 0.74)], 0.035, st.roof, 0.0)
+        b.box(x0 - 0.03, y0 - 0.03, 0, x1 + 0.03, y1 + 0.03, 0.04, st.base, 0.006)
+        b.beam((x0, y0, 0.5), (x1, y0, 0.5), 0.03, "timber", d=0.04)
+        b.beam((x0, y1, 0.68), (x1, y1, 0.68), 0.03, "timber", d=0.04)
+        for xx in (x0 + 0.01, x1 - 0.01):
+            b.beam((xx, y0, 0.27), (xx, y0 + 0.16, 0.5), 0.016, "timber")
+        b.box(x0, y1 - 0.03, 0.04, x1, y1, 0.66, "planks_dark", 0.003)
+        b.box(x0, y0 + 0.2, 0.04, x0 + 0.03, y1, 0.6, "planks_dark", 0.003)
+        b._slab([(x0 - 0.06, y0 - 0.08, 0.53), (x1 + 0.06, y0 - 0.08, 0.53), (x1 + 0.06, y1 + 0.06, 0.72),
+                 (x0 - 0.06, y1 + 0.06, 0.72)], 0.035, st.roof, 0.0)
     # stacked planks under / beside the shed
     for i in range(4):
         b.box(-0.38, 0.06 + i * 0.0, i * 0.022, 0.12, 0.2, i * 0.022 + 0.02, "planks", 0.003)
@@ -665,7 +683,9 @@ def _mound(b: B, cx: float, cy: float, rx: float, ry: float, h: float, m: str = 
 def gold_mine(col, rng, era: str) -> None:
     b = _b(col, rng)
     b.pad(1, 1, "gravel")
-    _mound(b, -0.08, 0.16, 0.42, 0.34, 0.5)
+    from nature import gold_ore_material
+
+    _mound(b, -0.08, 0.16, 0.44, 0.36, 0.52, gold_ore_material())
     ex, ey = -0.08, -0.14
     pm = "log" if era == "dark" else "ashlar"
     if era == "dark":
@@ -1002,7 +1022,9 @@ def construction(col, rng, n: int, stage: int) -> None:
 
 def rubble(col, rng, n: int) -> None:
     b = _b(col, rng)
-    b.pad(n, n, "ash", inset=0.05, irregular=0.06)
+    b.pad(n, n, "dirt", inset=0.05, irregular=0.06)
+    b.pad(n * 0.62, n * 0.5, "ash", inset=0.0, z=0.004, irregular=0.18, cx=rng.uniform(-0.1, 0.1) * n,
+          cy=rng.uniform(-0.1, 0.1) * n)
     h0 = n / 2 - 0.15
     # broken wall stubs on the footprint outline
     for (xa, ya, xb, yb) in ((-h0, -h0, h0, -h0 + 0.08), (h0 - 0.08, -h0, h0, h0), (-h0, h0 - 0.08, h0, h0),
@@ -1027,8 +1049,33 @@ def rubble(col, rng, n: int) -> None:
         ln = rng.uniform(0.2, 0.35) * (1 + 0.3 * n)
         z = rng.uniform(0.02, 0.1)
         b.beam((x, y, z), (x + math.cos(a) * ln, y + math.sin(a) * ln, rng.uniform(0.0, 0.18)), 0.035, "char")
-    ob = b.sphere((rng.uniform(-0.2, 0.2), rng.uniform(-0.2, 0.2), 0), 0.25 * n, "ash", scale=(1, 0.8, 0.35))
-    b.roughen(ob, 0.03, 0.08, 1)
+    # collapsed masonry heaps instead of one smooth mound
+    for k in range(n + 1):
+        cx = rng.uniform(-h0 * 0.6, h0 * 0.6)
+        cy = rng.uniform(-h0 * 0.6, h0 * 0.6)
+        _debris_heap(b, cx, cy, 0.16 + 0.08 * n, 0.08 + 0.04 * n, 26 + 10 * n)
+
+
+def _debris_heap(b: B, cx: float, cy: float, r: float, h: float, count: int) -> None:
+    """Conical heap of broken stones, plaster chunks and roof-tile shards."""
+    rng = b.rng
+    mats = ("fieldstone", "fieldstone", "rock_cut", "plaster", "tile_red", "char")
+    for i in range(count):
+        a = rng.uniform(0, math.tau)
+        d = r * math.sqrt(rng.random())
+        x, y = cx + math.cos(a) * d, cy + math.sin(a) * d
+        top = h * (1 - d / r) ** 1.2
+        z = rng.uniform(0.0, max(0.0, top - 0.02))
+        s = rng.uniform(0.03, 0.065)
+        m = rng.choice(mats)
+        if m == "tile_red":
+            ob = b.box(x - s * 0.7, y - s * 0.45, z, x + s * 0.7, y + s * 0.45, z + 0.012, m, 0.002, rng.uniform(0, 3))
+        else:
+            ob = b.box(x - s / 2, y - s * 0.4, z, x + s / 2, y + s * 0.4, z + s * rng.uniform(0.5, 0.8), m, 0.008,
+                       rng.uniform(0, 3))
+        c = Vector((x, y, z + s * 0.3))
+        tilt = Euler((rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), 0.0)).to_matrix().to_4x4()
+        ob.data.transform(Matrix.Translation(c) @ tilt @ Matrix.Translation(-c))
 
 
 # ---------------------------------------------------------------------------

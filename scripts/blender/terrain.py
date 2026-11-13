@@ -8,8 +8,10 @@ noise / Voronoi. One P x P block is rendered at once and sliced into P*P
 diamond tiles; the engine picks frame (x mod P) + P * (y mod P), so
 neighbouring tiles of the same type always continue each other.
 
-Tile frames are 132x68 at 2x: the 128x64 diamond plus a 2 px bleed. Anchor
-is the bottom corner of the diamond (66, 66), like every other sprite.
+Tile frames are 144x72 at 2x: the 128x64 diamond plus a 2:1 bleed (8 px
+horizontally, 4 px vertically) so filtering never shows the background at
+tile edges. Anchor is the bottom corner of the diamond (72, 68), like every
+other sprite.
 
 Cliff faces are one elevation step (4 px at 1x, 8 px at 2x) tall and
 vertically tileable: stack them for higher steps. "lip" faces carry the
@@ -30,8 +32,9 @@ from mathutils import Vector
 import kr_lib as K
 from kr_lib import NodeBuilder, _inp, _out, hex_rgb
 
-M_BLEED = 2
-TILE_FRAME = (128 + 2 * M_BLEED, 64 + 2 * M_BLEED)
+BLEED_X, BLEED_Y = 8, 4  # 2:1 bleed around the diamond (about 1.8 px at 1x along the edge normal)
+TILE_FRAME = (128 + 2 * BLEED_X, 64 + 2 * BLEED_Y)
+EDGE_VARIANTS = 3
 STEP_PX = 8  # one elevation step at 2x
 STEP_UNITS = STEP_PX / (K.PPU * K.SCREEN_UP.z)
 
@@ -564,13 +567,13 @@ def render_block(scene, name: str, kind: str, period: int, frame: int, frames: i
 def slice_tiles(block: np.ndarray, fr: K.Frame, period: int) -> dict[tuple[int, int], np.ndarray]:
     out = {}
     fw, fh = TILE_FRAME
-    mask = _diamond_mask(fw, fh, fw / 2, fh / 2, 64 + M_BLEED, 32 + M_BLEED / 2)
+    mask = _diamond_mask(fw, fh, fw / 2, fh / 2, 64 + BLEED_X, 32 + BLEED_Y)
     for gx in range(period):
         for gy in range(period):
             # pixel of this tile's bottom corner inside the block image
             bx = fr.anchor_x + (gx - gy) * 64
             by = fr.anchor_y + (gx + gy - 2 * (period - 1)) * 32
-            x0, y0 = bx - fw // 2, by - 64 - M_BLEED
+            x0, y0 = bx - fw // 2, by - 64 - BLEED_Y
             crop = block[y0:y0 + fh, x0:x0 + fw].copy()
             crop[..., 3] = np.where(mask, 255, 0)
             crop[~mask] = 0
@@ -685,9 +688,10 @@ def render_cliff(scene, recipe: str, side: str, lip: int | None) -> np.ndarray:
 def transition_masks(rng: random.Random) -> dict[str, np.ndarray]:
     """White masks with soft noisy alpha for blending a neighbour's ground over a tile.
 
-    Keys use game directions: edge_px (neighbour at x+1), edge_py, edge_mx, edge_my,
+    Keys use game directions: edge_px.N (neighbour at x+1), edge_py.N, edge_mx.N,
+    edge_my.N with N = 0..EDGE_VARIANTS-1 (pick per tile, e.g. by a position hash),
     and corner_* for diagonal-only neighbours (corner_px_py = neighbour at x+1,y+1).
-    Noise is periodic along each edge so masks of a row of tiles join up.
+    Edge wobble is zero at the tile corners, so every variant joins every other.
     """
     fw, fh = TILE_FRAME
     cx, cy = fw / 2, fh / 2
@@ -697,7 +701,6 @@ def transition_masks(rng: random.Random) -> dict[str, np.ndarray]:
     sy = (ys + 0.5 - cy) / 32.0
     u = (sx + sy) / 2 + 0.5
     v = (sy - sx) / 2 + 0.5
-    inside = _diamond_mask(fw, fh, cx, cy, 64 + M_BLEED, 32 + M_BLEED / 2)
 
     def pnoise(t: np.ndarray, seed: int) -> np.ndarray:
         r = np.random.default_rng(seed)
@@ -707,28 +710,35 @@ def transition_masks(rng: random.Random) -> dict[str, np.ndarray]:
         return acc / 1.4
 
     out = {}
-    width = 0.42
+    width = 0.34
 
     def edge_alpha(dist: np.ndarray, along: np.ndarray, seed: int) -> np.ndarray:
-        wob = 0.12 * pnoise(along, seed)
-        a = 1.0 - np.clip((dist + wob) / width, 0.0, 1.0)
+        # fully the neighbour's ground from the shared edge (and in the bleed beyond it)
+        # to a wobbly depth, then a smooth fade; depth is 0 at both tile corners so any
+        # variant joins any other
+        t = np.clip(along, 0.0, 1.0)
+        depth = 0.16 * np.sin(np.pi * t) * (0.55 + 0.45 * np.clip(pnoise(t, seed), -1.0, 1.0))
+        a = 1.0 - np.clip((dist - depth) / width, 0.0, 1.0)
         return a * a * (3 - 2 * a)
 
     edges = {"edge_px": (1 - u, v), "edge_mx": (u, v), "edge_py": (1 - v, u), "edge_my": (v, u)}
     for i, (k, (dist, along)) in enumerate(edges.items()):
-        a = edge_alpha(dist, along, 100 + i % 2)
-        out[k] = a
+        for n in range(EDGE_VARIANTS):
+            out[f"{k}.{n}"] = edge_alpha(dist, along, 100 + 10 * i + n)
     corners = {"corner_px_py": (1 - u, 1 - v), "corner_px_my": (1 - u, v), "corner_mx_py": (u, 1 - v), "corner_mx_my": (u, v)}
     for i, (k, (du, dv)) in enumerate(corners.items()):
+        du, dv = np.maximum(du, 0.0), np.maximum(dv, 0.0)
         d = np.sqrt(du * du + dv * dv)
-        wob = 0.08 * pnoise(np.arctan2(dv, du) / (np.pi / 2), 200 + i)
-        a = 1.0 - np.clip((d + wob) / width, 0.0, 1.0)
+        depth = 0.05 * (1.0 + np.clip(pnoise(np.arctan2(dv, du) / (np.pi / 2), 200 + i), -1.0, 1.0))
+        a = 1.0 - np.clip((d - depth) / (width * 0.8), 0.0, 1.0)
         out[k] = a * a * (3 - 2 * a)
     res = {}
     for k, a in out.items():
         img = np.zeros((fh, fw, 4), np.uint8)
         img[..., :3] = 255
-        img[..., 3] = np.where(inside, np.round(a * 255), 0).astype(np.uint8)
+        # not clipped to the diamond: overlay alpha = neighbour tile alpha (which has the
+        # diamond cut) * mask, so the overlay covers the base tile's bleed exactly
+        img[..., 3] = np.round(a * 255).astype(np.uint8)
         res[k] = img
     return res
 
@@ -753,7 +763,7 @@ def render(scene: bpy.types.Scene, out_dir: str, only: str | None) -> list[dict]
                 path = os.path.join(out_dir, fname + ".png")
                 K.write_png(path, img)
                 variant = str(idx) if frames == 1 else f"{idx}.{frame}"
-                records.append({"name": fname, "width": fw, "height": fh, "anchor": [fw // 2, fh - M_BLEED],
+                records.append({"name": fname, "width": fw, "height": fh, "anchor": [fw // 2, fh - BLEED_Y],
                                 "footprint": [1, 1], "files": {"frame": path},
                                 "meta": {"asset": f"terrain.{name}", "variant": variant, "kind": "terrain",
                                          "tileType": tile_type, "period": period, "frameIndex": frame}})
@@ -777,10 +787,10 @@ def render(scene: bpy.types.Scene, out_dir: str, only: str | None) -> list[dict]
                 print(f"rendered {fname}")
     if want("transition"):
         for k, img in transition_masks(random.Random(5)).items():
-            fname = f"transition_{k}"
+            fname = "transition_" + k.replace(".", "_")
             path = os.path.join(out_dir, fname + ".png")
             K.write_png(path, img)
-            records.append({"name": fname, "width": fw, "height": fh, "anchor": [fw // 2, fh - M_BLEED],
+            records.append({"name": fname, "width": fw, "height": fh, "anchor": [fw // 2, fh - BLEED_Y],
                             "footprint": [1, 1], "files": {"frame": path},
                             "meta": {"asset": "terrain.transition", "variant": k, "kind": "transition_mask"}})
     return records

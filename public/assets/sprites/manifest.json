@@ -9,8 +9,17 @@
   "h": 32,
   "elevationStepPx": 4
  },
+ "eraOrder": [
+  "dark",
+  "castle",
+  "gunpowder",
+  "total_war"
+ ],
  "conventions": {
-  "anchor": "pixel (in sourceSize, render scale) of the bottom corner of the footprint diamond; for terrain tiles the diamond centre",
+  "anchor": "pixel (in sourceSize, render scale) of the bottom corner of the footprint diamond, for every kind incl. terrain tiles; cliff faces: the tile's bottom corner at the top of that step",
+  "terrain": "tile frame = variant str((x mod period) + period * (y mod period)); animated water '<index>.<frame>'; cliff faces are one elevationStepPx step, stack them down to the lower tile, use the *_lip variant for the topmost step",
+  "transition": "white masks, alpha = how much of the neighbour's ground to draw over this tile; edge_px = neighbour at x+1, corner_px_py = diagonal neighbour at x+1,y+1 (only when neither adjacent edge neighbour matches)",
+  "walls": "variant '<era>.<mask>', mask bits 1 = +x, 2 = +y, 4 = -x, 8 = -y (game tile directions)",
   "mask": "white RGB, alpha = team colour coverage; tint per player and draw over the frame (multiply or overlay), same sourceSize and anchor",
   "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",
   "sun": "from screen top-left, shadows fall to the screen right",
@@ -23,7 +32,7 @@
    "json": "buildings-0.json",
    "size": [
     4096,
-    2433
+    2403
    ],
    "frames": 210
   },
@@ -32,8 +41,8 @@
    "image": "decor-0.png",
    "json": "decor-0.json",
    "size": [
-    1024,
-    393
+    1023,
+    407
    ],
    "frames": 58
   },
@@ -52,10 +61,10 @@
    "image": "terrain-0.png",
    "json": "terrain-0.json",
    "size": [
-    2046,
-    2040
+    2016,
+    2046
    ],
-   "frames": 190
+   "frames": 198
   }
  ],
  "assets": {
@@ -291,7 +300,13 @@
    "defId": "FARM",
    "construction": "construction.2x2",
    "rubble": "rubble.2x2",
-   "default": "depleted"
+   "stages": [
+    "sown",
+    "growing",
+    "ripe",
+    "depleted"
+   ],
+   "default": "ripe"
   },
   "building.foundry": {
    "kind": "building",
@@ -339,7 +354,7 @@
      ],
      "size": [
       222,
-      129
+      131
      ],
      "mask": "gold_mine_dark__mask",
      "shadow": "gold_mine_dark__shadow"
@@ -353,7 +368,7 @@
      ],
      "size": [
       222,
-      129
+      131
      ],
      "mask": "gold_mine_castle__mask",
      "shadow": "gold_mine_castle__shadow"
@@ -439,12 +454,12 @@
      "atlas": "kr-buildings-0",
      "frame": "lumber_camp_dark",
      "anchor": [
-      127,
-      129
+      125,
+      127
      ],
      "size": [
-      254,
-      142
+      250,
+      140
      ],
      "mask": "lumber_camp_dark__mask",
      "shadow": "lumber_camp_dark__shadow"
@@ -453,12 +468,12 @@
      "atlas": "kr-buildings-0",
      "frame": "lumber_camp_castle",
      "anchor": [
-      127,
-      129
+      125,
+      127
      ],
      "size": [
-      254,
-      142
+      250,
+      140
      ],
      "mask": "lumber_camp_castle__mask",
      "shadow": "lumber_camp_castle__shadow"
@@ -2508,11 +2523,11 @@
      "frame": "rubble_1x1",
      "anchor": [
       70,
-      75
+      72
      ],
      "size": [
       140,
-      81
+      80
      ],
      "shadow": "rubble_1x1__shadow"
     }
@@ -2530,12 +2545,12 @@
      "atlas": "kr-buildings-0",
      "frame": "rubble_2x2",
      "anchor": [
-      135,
-      137
+      134,
+      135
      ],
      "size": [
-      270,
-      143
+      268,
+      141
      ],
      "shadow": "rubble_2x2__shadow"
     }
@@ -2554,11 +2569,11 @@
      "frame": "rubble_3x3",
      "anchor": [
       198,
-      203
+      198
      ],
      "size": [
       396,
-      209
+      204
      ],
      "shadow": "rubble_3x3__shadow"
     }
@@ -2576,12 +2591,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2589,12 +2604,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2602,12 +2617,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2615,12 +2630,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_x_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -2640,12 +2655,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2653,12 +2668,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2666,12 +2681,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2679,12 +2694,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_bridge_y_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -2916,12 +2931,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2929,12 +2944,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2942,12 +2957,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2955,12 +2970,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2968,12 +2983,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2981,12 +2996,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -2994,12 +3009,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3007,12 +3022,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3020,12 +3035,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3033,12 +3048,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3046,12 +3061,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3059,12 +3074,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3072,12 +3087,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3085,12 +3100,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3098,12 +3113,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3111,12 +3126,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_dirt_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -3136,12 +3151,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3149,12 +3164,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3162,12 +3177,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3175,12 +3190,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3188,12 +3203,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3201,12 +3216,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3214,12 +3229,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3227,12 +3242,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3240,12 +3255,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3253,12 +3268,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3266,12 +3281,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3279,12 +3294,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3292,12 +3307,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3305,12 +3320,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3318,12 +3333,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3331,12 +3346,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_forest_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -3356,12 +3371,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3369,12 +3384,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3382,12 +3397,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3395,12 +3410,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3408,12 +3423,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3421,12 +3436,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3434,12 +3449,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3447,12 +3462,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3460,12 +3475,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3473,12 +3488,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3486,12 +3501,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3499,12 +3514,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3512,12 +3527,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3525,12 +3540,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3538,12 +3553,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3551,12 +3566,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_grass_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -3576,12 +3591,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3589,12 +3604,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3602,12 +3617,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3615,12 +3630,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_ice_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -3640,12 +3655,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3653,12 +3668,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3666,12 +3681,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3679,12 +3694,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3692,12 +3707,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3705,12 +3720,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3718,12 +3733,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3731,12 +3746,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3744,12 +3759,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3757,12 +3772,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3770,12 +3785,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3783,12 +3798,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3796,12 +3811,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3809,12 +3824,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3822,12 +3837,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3835,12 +3850,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_meadow_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -3860,12 +3875,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3873,12 +3888,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3886,12 +3901,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3899,12 +3914,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3912,12 +3927,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3925,12 +3940,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3938,12 +3953,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3951,12 +3966,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3964,12 +3979,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3977,12 +3992,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -3990,12 +4005,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4003,12 +4018,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4016,12 +4031,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4029,12 +4044,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4042,12 +4057,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4055,12 +4070,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_mud_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -4080,12 +4095,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4093,12 +4108,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4106,12 +4121,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4119,12 +4134,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_packed_snow_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -4144,12 +4159,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4157,12 +4172,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4170,12 +4185,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4183,12 +4198,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4196,12 +4211,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4209,12 +4224,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4222,12 +4237,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4235,12 +4250,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4248,12 +4263,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4261,12 +4276,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4274,12 +4289,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4287,12 +4302,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4300,12 +4315,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4313,12 +4328,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4326,12 +4341,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4339,12 +4354,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_sand_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -4364,12 +4379,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4377,12 +4392,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4390,12 +4405,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4403,12 +4418,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -4428,12 +4443,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4441,12 +4456,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4454,12 +4469,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4467,12 +4482,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_snow_forest_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -4492,12 +4507,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_00",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4505,12 +4520,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_01",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4518,12 +4533,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_02",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4531,12 +4546,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_03",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4544,12 +4559,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_04",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4557,12 +4572,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_05",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4570,12 +4585,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_06",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4583,12 +4598,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_07",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4596,12 +4611,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_08",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4609,12 +4624,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_09",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4622,12 +4637,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_10",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4635,12 +4650,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_11",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4648,12 +4663,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_12",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4661,12 +4676,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_13",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4674,12 +4689,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_14",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4687,12 +4702,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_stone_15",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     }
@@ -4712,96 +4727,192 @@
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_mx_my",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
     "corner_mx_py": {
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_mx_py",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
     "corner_px_my": {
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_px_my",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
     "corner_px_py": {
      "atlas": "kr-terrain-0",
      "frame": "transition_corner_px_py",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
-    "edge_mx": {
+    "edge_mx.0": {
      "atlas": "kr-terrain-0",
-     "frame": "transition_edge_mx",
+     "frame": "transition_edge_mx_0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
-    "edge_my": {
+    "edge_mx.1": {
      "atlas": "kr-terrain-0",
-     "frame": "transition_edge_my",
+     "frame": "transition_edge_mx_1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
-    "edge_px": {
+    "edge_mx.2": {
      "atlas": "kr-terrain-0",
-     "frame": "transition_edge_px",
+     "frame": "transition_edge_mx_2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ]
     },
-    "edge_py": {
+    "edge_my.0": {
      "atlas": "kr-terrain-0",
-     "frame": "transition_edge_py",
+     "frame": "transition_edge_my_0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
+      144,
+      72
+     ]
+    },
+    "edge_my.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_my_1",
+     "anchor": [
+      72,
       68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_my.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_my_2",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_px.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_px_0",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_px.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_px_1",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_px.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_px_2",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_py.0": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_py_0",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_py.1": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_py_1",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
+     ]
+    },
+    "edge_py.2": {
+     "atlas": "kr-terrain-0",
+     "frame": "transition_edge_py_2",
+     "anchor": [
+      72,
+      68
+     ],
+     "size": [
+      144,
+      72
      ]
     }
    },
@@ -4818,12 +4929,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4831,12 +4942,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -4844,12 +4955,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -4857,12 +4968,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_00_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     },
@@ -4870,12 +4981,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4883,12 +4994,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -4896,12 +5007,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -4909,12 +5020,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_01_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     },
@@ -4922,12 +5033,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4935,12 +5046,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -4948,12 +5059,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -4961,12 +5072,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_02_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     },
@@ -4974,12 +5085,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -4987,12 +5098,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -5000,12 +5111,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -5013,12 +5124,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_03_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     }
@@ -5038,12 +5149,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -5051,12 +5162,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -5064,12 +5175,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -5077,12 +5188,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_00_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     },
@@ -5090,12 +5201,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -5103,12 +5214,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -5116,12 +5227,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -5129,12 +5240,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_01_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     },
@@ -5142,12 +5253,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -5155,12 +5266,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -5168,12 +5279,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -5181,12 +5292,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_02_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     },
@@ -5194,12 +5305,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f0",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 0
     },
@@ -5207,12 +5318,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f1",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 1
     },
@@ -5220,12 +5331,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f2",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 2
     },
@@ -5233,12 +5344,12 @@
      "atlas": "kr-terrain-0",
      "frame": "terrain_water_shallow_03_f3",
      "anchor": [
-      66,
-      66
+      72,
+      68
      ],
      "size": [
-      132,
-      68
+      144,
+      72
      ],
      "frameIndex": 3
     }
