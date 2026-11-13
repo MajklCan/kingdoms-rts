@@ -16,7 +16,7 @@ import { AgeId, BuildingDefId, UnitDefId } from '../defs';
 import { TechId, hasTech } from '../tech-tree';
 import type { SimWorld } from '../core/types';
 import { aiRequiredWaveSize } from './attack';
-import { aiSettings } from './difficulty';
+import { aiDifficultyOf, aiSettings } from './difficulty';
 import {
   AI_PRODUCER_QUEUE_TARGET,
   type AiProductionMacro,
@@ -80,7 +80,7 @@ export function aiMaintainMilitaryInfrastructure(
   const hasWoodEconomy = aiHasAnyBuilding(snapshot, BuildingDefId.LUMBER_CAMP);
   const settings = aiSettings(world);
   const age = world.ages[playerId]?.current ?? AgeId.DARK;
-  const macro = world.aiDifficulty === 'hard'
+  const macro = aiDifficultyOf(world) === 'hard'
     ? aiAnalyzeProductionMacro(world, playerId, snapshot)
     : null;
   const desiredBarracks = macro
@@ -118,7 +118,7 @@ export function aiMaintainMilitaryInfrastructure(
 }
 
 export function aiTrainArmy(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  if (world.aiDifficulty === 'hard') {
+  if (aiDifficultyOf(world) === 'hard') {
     aiTrainHardArmy(world, playerId, snapshot);
     return;
   }
@@ -291,7 +291,7 @@ function aiDesiredArmyMix(
     settings.maxArmyUnits,
     aiRequiredWaveSize(world, playerId) + Math.ceil(settings.maxWaveUnits * 0.55)
   );
-  const playerPressureTarget = world.aiDifficulty === 'hard'
+  const playerPressureTarget = aiDifficultyOf(world) === 'hard'
     ? Math.min(
       settings.maxArmyUnits,
       snapshot.enemyMilitary.length + Math.min(18, Math.ceil(snapshot.enemyMilitary.length * 0.35) + 6)

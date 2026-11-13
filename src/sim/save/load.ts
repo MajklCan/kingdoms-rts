@@ -134,6 +134,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
         waveUnitEids: [],
         lastAttackEventTick: savedAi.lastAttackEventTick,
         lastDefenseEventTick: savedAi.lastDefenseEventTick,
+        ...(savedAi.difficulty ? { difficulty: normalizeAiDifficulty(savedAi.difficulty) } : {}),
       });
     } else {
       world.aiPlayers.push(playerId === AI_PLAYER_ID ? createAiPlayerState(snapshot.tick, world.aiDifficulty) : null);

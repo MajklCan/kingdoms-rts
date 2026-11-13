@@ -30,7 +30,7 @@ import {
   worksiteUsesResourceNodes,
 } from '../systems/worksites';
 import { aiRequiredWaveSize } from './attack';
-import { aiElapsedMinutes, aiSettings } from './difficulty';
+import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
 import { aiPlaceBuilding, aiQueueUnit } from './placement';
 import {
   type AiSnapshot,
@@ -350,8 +350,8 @@ function aiDesiredMillCount(world: SimWorld, playerId: number, snapshot: AiSnaps
   if (!hasTech(world, playerId, TechId.MILLS)) return 0;
   const farms = countAiBuildings(snapshot, BuildingDefId.FARM);
   if (farms < 3) return 0;
-  if (world.aiDifficulty === 'hard' && farms >= 14) return 3;
-  if (farms >= 8 && world.aiDifficulty !== 'easy') return 2;
+  if (aiDifficultyOf(world) === 'hard' && farms >= 14) return 3;
+  if (farms >= 8 && aiDifficultyOf(world) !== 'easy') return 2;
   return 1;
 }
 
@@ -364,7 +364,7 @@ function aiBottleneckBuildingDef(kind: ResourceKind | null): number | null {
 }
 
 export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  if (world.aiDifficulty !== 'easy') {
+  if (aiDifficultyOf(world) !== 'easy') {
     aiMaintainAdaptiveEconomy(world, playerId, snapshot);
     return;
   }

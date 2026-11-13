@@ -21,7 +21,6 @@ import {
   canAfford,
   getBuildingDef,
   getUnitDef,
-  spend,
 } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
@@ -30,8 +29,8 @@ import { ResourceProbe } from '../core/placement-probe';
 import { countQueuedPopCost } from '../core/population';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { spawnFoundation } from '../factories/buildings';
 import { canPlaceBuildingAt } from '../input/buildings';
+import { activeAiActuator } from './direct-actuator';
 import {
   countQueuedWorksiteWorkers,
   countWorksiteWorkers,
@@ -56,9 +55,7 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
     const slots = getWorksiteWorkerSlots(world, atEid);
     const occupied = countWorksiteWorkers(world, atEid) + countQueuedWorksiteWorkers(world, atEid);
     if (occupied >= slots) return false;
-    spend(bank, unitDef.cost);
-    queue.push(defId);
-    world.productionQueues.set(atEid, queue);
+    activeAiActuator().commitQueueUnit(world, atEid, defId);
     return true;
   }
 
@@ -73,9 +70,7 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
   const pop = world.population[playerId];
   if (!pop) return false;
   if (pop.current + countQueuedPopCost(world, playerId) + unitDef.popCost > pop.cap) return false;
-  spend(bank, unitDef.cost);
-  queue.push(defId);
-  world.productionQueues.set(atEid, queue);
+  activeAiActuator().commitQueueUnit(world, atEid, defId);
   return true;
 }
 
@@ -97,15 +92,15 @@ export function aiPlaceBuilding(
   ) {
     return false;
   }
-  const spot = aiFindBuildingSpot(world, def, nearX, nearY, playerId);
+  const spot = aiFindBuildingSpot(world, defId, def, nearX, nearY, playerId);
   if (!spot) return false;
-  spend(bank, def.cost);
-  spawnFoundation(world, defId, spot.x, spot.y, playerId);
+  activeAiActuator().commitPlaceBuilding(world, defId, spot.x, spot.y, playerId);
   return true;
 }
 
 function aiFindBuildingSpot(
   world: SimWorld,
+  defId: number,
   def: BuildingDef,
   nearX: number,
   nearY: number,
@@ -118,6 +113,7 @@ function aiFindBuildingSpot(
   // instead of rescanning every entity for each candidate spot.
   const probe = new ResourceProbe(world);
   const enemies = aiEnemyPoints(world, playerId);
+  const actuator = activeAiActuator();
   let bestSpot: GridPos | null = null;
   let bestScore = Infinity;
   for (let r = 2; r <= maxR; r++) {
@@ -128,6 +124,7 @@ function aiFindBuildingSpot(
         const y = cy + dy;
         if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
         if (!canPlaceBuildingAt(world, def, x, y, probe)) continue;
+        if (actuator.isSpotClaimed(defId, x, y)) continue;
         if (hasPointNear(enemies, x, y, 8)) continue;
         const score = aiBuildingPlacementScore(world, def, x, y, nearX, nearY, playerId, probe);
         if (score < bestScore) {

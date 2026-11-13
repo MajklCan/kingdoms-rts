@@ -19,14 +19,11 @@ import {
 } from '../components';
 import { AgeId, BuildingDefId, getBuildingDef } from '../defs';
 import type { GridPos } from '../pathfinding';
-import { pushAiEvent } from '../core/events';
 import { findSpawnSpot } from '../core/grid';
-import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { AiPlayerState, SimWorld } from '../core/types';
-import { isMovableEntity } from '../input/formation';
-import { clearCombatOrders, clearFormationSpeedCap, clearWorkOrders } from '../input/unit-orders';
 import { isTargetInAttackRange, isValidHostileTarget } from '../systems/targeting';
 import { findAiBreachTarget } from './breach';
+import { activeAiActuator } from './direct-actuator';
 import { aiElapsedMinutes, aiSettings } from './difficulty';
 import type { AiSnapshot } from './snapshot';
 
@@ -93,7 +90,7 @@ export function aiHandleDefense(
   }
 
   if (world.tick - state.lastDefenseEventTick >= AI_EVENT_COOLDOWN_TICKS) {
-    pushAiEvent(world, playerId, 'Frankia pulls its army home to defend');
+    activeAiActuator().event(world, playerId, 'Frankia pulls its army home to defend');
     state.lastDefenseEventTick = world.tick;
   }
 }
@@ -136,7 +133,7 @@ export function aiManageAttackPlan(
     state.stageStartedTick = world.tick;
     state.waveUnitEids = aiSelectWaveUnits(world, snapshot.myMilitary, rally);
     if (world.tick - state.lastAttackEventTick >= AI_EVENT_COOLDOWN_TICKS) {
-      pushAiEvent(world, playerId, 'Frankish raiding party is gathering near the river');
+      activeAiActuator().event(world, playerId, 'Frankish raiding party is gathering near the river');
       state.lastAttackEventTick = world.tick;
     }
   }
@@ -158,7 +155,7 @@ export function aiManageAttackPlan(
   state.plan = 'attacking';
   state.lastAttackTick = world.tick;
   state.nextAttackTick = world.tick + settings.attackCooldownTicks;
-  pushAiEvent(world, playerId, `Frankish attack is moving toward your ${aiTargetLabel(target)}`);
+  activeAiActuator().event(world, playerId, `Frankish attack is moving toward your ${aiTargetLabel(target)}`);
   state.lastAttackEventTick = world.tick;
 }
 
@@ -281,42 +278,18 @@ function isLiveOwnedMilitary(world: SimWorld, eid: number, playerId: number): bo
 }
 
 function issueAiMoveOrder(world: SimWorld, eid: number, to: GridPos): void {
-  if (!isMovableEntity(world, eid)) return;
-  if (!pathTo(world, eid, to.x, to.y)) return;
-  clearCombatOrders(world, eid);
-  clearWorkOrders(world, eid);
+  activeAiActuator().move(world, eid, to);
 }
 
 /** False when the unit cannot move or has no path to `to`. */
 function issueAiAttackMoveOrder(world: SimWorld, eid: number, to: GridPos): boolean {
-  if (!isMovableEntity(world, eid)) return false;
   if (!hasComponent(world.ecs, Combat, eid)) return false;
-  if (!pathTo(world, eid, to.x, to.y)) return false;
-  AttackTarget.targetEid[eid] = -1;
-  AttackTarget.retainGoal[eid] = 0;
-  if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-    AttackMoveGoal.active[eid] = 1;
-    AttackMoveGoal.x[eid] = to.x;
-    AttackMoveGoal.y[eid] = to.y;
-  }
-  clearWorkOrders(world, eid);
-  clearFormationSpeedCap(world, eid);
-  return true;
+  return activeAiActuator().attackMove(world, eid, to);
 }
 
 function issueAiAttackOrder(world: SimWorld, eid: number, target: number): void {
   if (!hasComponent(world.ecs, Combat, eid)) return;
   if (!hasComponent(world.ecs, AttackTarget, eid)) return;
   if (!isValidHostileTarget(world, eid, target)) return;
-  const inRange = isTargetInAttackRange(world, eid, target);
-  const canReach =
-    inRange ||
-    (isMovableEntity(world, eid) && pathToAttackTarget(world, eid, target));
-  if (!canReach) return;
-  AttackTarget.targetEid[eid] = target;
-  AttackTarget.retainGoal[eid] = 1;
-  if (hasComponent(world.ecs, AttackMoveGoal, eid)) AttackMoveGoal.active[eid] = 0;
-  if (inRange) world.paths.delete(eid);
-  clearWorkOrders(world, eid);
-  clearFormationSpeedCap(world, eid);
+  activeAiActuator().attack(world, eid, target, isTargetInAttackRange(world, eid, target));
 }

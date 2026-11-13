@@ -18,7 +18,7 @@ import {
   VillagerTag,
 } from '../components';
 import { type BuildingDef, getBuildingDef } from '../defs';
-import { LOCAL_PLAYER_ID } from '../core/constants';
+import { isRivalPlayer } from '../core/players';
 import { findNearestResource } from '../core/lookup';
 import { buildingQuery, townCenterQuery, unitQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -52,7 +52,7 @@ export function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot
   for (const eid of buildingQuery(world.ecs)) {
     if (Health.hp[eid] <= 0) continue;
     if (Owner.player[eid] === playerId) myBuildings.push(eid);
-    else if (Owner.player[eid] === LOCAL_PLAYER_ID) enemyBuildings.push(eid);
+    else if (isRivalPlayer(Owner.player[eid], playerId)) enemyBuildings.push(eid);
   }
 
   const myMilitary: number[] = [];
@@ -72,7 +72,7 @@ export function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot
       else if (hasComponent(world.ecs, ScoutCavalryTag, eid)) myScouts.push(eid);
       else if (hasComponent(world.ecs, GunmanTag, eid)) myGunmen.push(eid);
       else if (hasComponent(world.ecs, CannonTag, eid)) myCannons.push(eid);
-    } else if (Owner.player[eid] === LOCAL_PLAYER_ID) {
+    } else if (isRivalPlayer(Owner.player[eid], playerId)) {
       enemyMilitary.push(eid);
     }
   }

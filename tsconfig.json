@@ -27,5 +27,5 @@
       "@ui/*": ["src/ui/*"]
     }
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "scripts/sim"]
 }

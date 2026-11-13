@@ -404,6 +404,7 @@ export function checksumWorld(world: SimWorld): number {
     for (const eid of ai.waveUnitEids) h.u32(canon(eid));
     hashTick(h, ai.lastAttackEventTick);
     hashTick(h, ai.lastDefenseEventTick);
+    if (ai.difficulty) h.str(ai.difficulty);
   }
 
   h.bit(world.campaign !== null);

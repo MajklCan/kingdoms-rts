@@ -25,12 +25,12 @@ import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } from '../d
 import { TechId, hasTech, worksiteWorkerSlotsForKind } from '../tech-tree';
 import { aiResourceWorksiteCanStillProduce } from '../ai/snapshot';
 import {
-  AI_PLAYER_ID,
   DROP_OFF_EDGE_DISTANCE,
   FARM_WORK_EDGE_DISTANCE,
   RESOURCE_GATHER_DISTANCE,
 } from '../core/constants';
 import { sortedEids } from '../core/entities';
+import { isAiControlledPlayer } from '../core/players';
 import { distToBuildingEdge, findSpawnSpot } from '../core/grid';
 import { findNearestResource } from '../core/lookup';
 import { recordGathered } from '../core/match-stats';
@@ -223,7 +223,9 @@ function worksiteProductionRateTicks(
 
 export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number): void {
   if (ResourceWorksite.freeWorkersSpawned[siteEid] > 0) {
-    if (Owner.player[siteEid] !== AI_PLAYER_ID || countWorksiteWorkers(world, siteEid) > 0) return;
+    // The AI cannot re-crew a worksite by hand, so its empty sites get their
+    // free worker back. Human players (every seat in multiplayer) re-train.
+    if (!isAiControlledPlayer(world, Owner.player[siteEid]) || countWorksiteWorkers(world, siteEid) > 0) return;
     const def = getBuildingDef(Building.defId[siteEid]);
     if (def && worksiteUsesResourceNodes(def) && !aiResourceWorksiteCanStillProduce(world, siteEid, def)) {
       return;
