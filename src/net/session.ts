@@ -249,6 +249,7 @@ export class MultiplayerSession {
 
     const readyTicks = this.lockstep.drainReadyTicks();
     for (const ready of readyTicks) {
+      this.guardLockstepWorld(this.world, ready.tick);
       for (const input of ready.inputs) this.world.inputs.push(decodeInputFromWire(this.world, input));
       step(this.world);
       this.lastStepAtMs = nowMs();
@@ -315,6 +316,24 @@ export class MultiplayerSession {
         data: event.data ? { ...event.data } : undefined,
       })),
     };
+  }
+
+  /**
+   * Only the lockstep may change what a tick does. A paused world would skip
+   * the tick (and defer its inputs) on this client alone, and an input pushed
+   * straight into world.inputs (debug API, a stray UI path) would run here
+   * only; either desyncs the match. Pause is not a multiplayer feature, so
+   * both are undone here and logged.
+   */
+  private guardLockstepWorld(world: SimWorld, tick: number): void {
+    if (world.paused) {
+      world.paused = false;
+      this.recordEvent('local-pause-ignored', { tick });
+    }
+    if (world.inputs.length > 0) {
+      this.recordEvent('local-inputs-dropped', { tick, count: world.inputs.length, types: world.inputs.map((i) => i.type) });
+      world.inputs.length = 0;
+    }
   }
 
   private maybeChecksum(tick: number): void {

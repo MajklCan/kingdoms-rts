@@ -2,7 +2,7 @@
  * Entity lifecycle (NetId bookkeeping) and deterministic ordering helpers.
  */
 
-import { addComponent, addEntity, hasComponent, removeEntity } from 'bitecs';
+import { addComponent, addEntity, getEntityComponents, hasComponent, removeComponent, removeEntity } from 'bitecs';
 import { Health, NetId, Position } from '../components';
 import type { GridPos } from '../pathfinding';
 import type { SimWorld } from './types';
@@ -65,7 +65,47 @@ export function removeSimEntity(world: SimWorld, eid: number): void {
   if (hasComponent(world.ecs, NetId, eid)) {
     world.netIdToEid.delete(NetId.value[eid]);
   }
+  forgetEntity(world, eid);
+  // bitECS 0.3 keeps component data in global arrays and does not clear them
+  // on removeEntity; a recycled eid would inherit this entity's values for
+  // every field its next spawn does not write. Clear them now.
+  for (const component of getEntityComponents(world.ecs, eid)) {
+    removeComponent(world.ecs, component, eid, true);
+  }
   removeEntity(world.ecs, eid);
+}
+
+/**
+ * Drop every world-level reference to a removed entity. bitECS recycles raw
+ * eids, and clients recycle differently (one may have played a match before),
+ * so a stale entry keyed by this eid would later attach to an unrelated
+ * entity on one client only: a desync.
+ */
+function forgetEntity(world: SimWorld, eid: number): void {
+  world.paths.delete(eid);
+  world.movementStuck.delete(eid);
+  world.formationSpeedCaps.delete(eid);
+  world.cannonWindups.delete(eid);
+  world.productionQueues.delete(eid);
+  world.killingBlows.delete(eid);
+  for (const [attacker, windup] of world.cannonWindups) {
+    if (windup.targetEid === eid) world.cannonWindups.delete(attacker);
+  }
+  if (world.pendingProjectileImpacts.some((i) => i.targetEid === eid || i.attackerEid === eid)) {
+    // An arrow at a removed target hits nothing; one from a removed archer
+    // still lands, it just cannot provoke retaliation against its shooter.
+    world.pendingProjectileImpacts = world.pendingProjectileImpacts
+      .filter((i) => i.targetEid !== eid)
+      .map((i) => (i.attackerEid === eid ? { ...i, attackerEid: -1 } : i));
+  }
+  if (world.pendingCannonImpacts.some((i) => i.attackerEid === eid)) {
+    world.pendingCannonImpacts = world.pendingCannonImpacts.map((i) =>
+      i.attackerEid === eid ? { ...i, attackerEid: -1 } : i
+    );
+  }
+  for (const ai of world.aiPlayers) {
+    if (ai && ai.waveUnitEids.includes(eid)) ai.waveUnitEids = ai.waveUnitEids.filter((e) => e !== eid);
+  }
 }
 
 export function netIdForEntity(world: SimWorld, eid: number): number | null {

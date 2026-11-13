@@ -10,15 +10,16 @@
  *  - Hash ONLY sim-deterministic state. The `Selected` component is client-local
  *    (each player selects different units) and is deliberately EXCLUDED - it is
  *    not part of the shared simulation.
- *  - Entities are visited in ascending eid order so the hash is independent of
- *    query iteration order.
+ *  - Entities are visited in NetId order (sortedEids) so the hash is independent
+ *    of query iteration order AND of raw eid values.
  *  - Absolute entity ids are NOT hashed. bitECS 0.3.40 uses a process-global eid
- *    cursor, so two worlds (or a save reloaded into a fresh world) get different
- *    absolute eids for identical state. We hash each entity's CANONICAL index
- *    (its rank in ascending-eid order) instead, and remap stored eid references
- *    (targets, sites) through the same canonical map. The checksum is therefore
- *    invariant to eid allocation - true for both in-process comparisons and
- *    real cross-machine lockstep.
+ *    cursor and a global recycle list, so two clients (one of which played a
+ *    match before, or reloaded a save) hold identical state under different raw
+ *    eids, in a different raw order. We hash each entity's CANONICAL index (its
+ *    rank in NetId order) instead, and remap stored eid references (targets,
+ *    sites) through the same canonical map. Ranking by raw eid would report a
+ *    desync whenever recycled eids put two clients' entities in different raw
+ *    orders.
  *  - Floats are hashed by their exact IEEE-754 bits, not their decimal value.
  */
 
@@ -63,6 +64,7 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from './components';
+import { sortedEids } from './core/entities';
 import { positionQuery, type SimWorld } from './world';
 
 // FNV-1a 32-bit. Cheap, good dispersion, deterministic across engines for
@@ -132,7 +134,7 @@ function hashEntityMap<T>(
   canon: (ref: number) => number,
   writeValue: (value: T) => void
 ): void {
-  const entries = [...map.entries()].sort((a, b) => a[0] - b[0]);
+  const entries = [...map.entries()].sort((a, b) => canon(a[0]) - canon(b[0]) || a[0] - b[0]);
   h.u32(entries.length);
   for (const [eid, value] of entries) {
     h.u32(canon(eid));
@@ -223,7 +225,7 @@ export function checksumWorld(world: SimWorld): number {
   // Entities - ascending eid so the order is query-independent. Hash canonical
   // index (rank), not the absolute eid (see header note). `canon` remaps a
   // stored eid reference to its rank; missing/invalid refs hash to a sentinel.
-  const eids = [...positionQuery(ecs)].sort((a, b) => a - b);
+  const eids = sortedEids(world, positionQuery(ecs));
   const rank = new Map<number, number>();
   for (let i = 0; i < eids.length; i++) rank.set(eids[i], i);
   const canon = (ref: number): number => {
@@ -325,15 +327,16 @@ export function checksumWorld(world: SimWorld): number {
     if (hasComponent(ecs, Cooldown, eid)) h.u32(Cooldown.ticksRemaining[eid] & 0xffff);
   }
 
-  // Production queues + paths (ascending eid; keys hashed via canonical rank).
-  const queueEids = [...world.productionQueues.keys()].sort((a, b) => a - b);
+  // Production queues + paths (canonical order; keys hashed via canonical rank).
+  const byCanon = (a: number, b: number): number => canon(a) - canon(b) || a - b;
+  const queueEids = [...world.productionQueues.keys()].sort(byCanon);
   for (const eid of queueEids) {
     h.u32(canon(eid));
     const q = world.productionQueues.get(eid)!;
     h.u32(q.length);
     for (const item of q) h.u32(item);
   }
-  const pathEids = [...world.paths.keys()].sort((a, b) => a - b);
+  const pathEids = [...world.paths.keys()].sort(byCanon);
   for (const eid of pathEids) {
     h.u32(canon(eid));
     const wp = world.paths.get(eid)!;

@@ -269,8 +269,10 @@ describe('AI wall breaching', () => {
     // Same answer twice: deterministic.
     expect(findAiBreachTarget(world, P2, { x: at.x, y: at.y }, target)).toBe(breach);
 
+    // Read the tile first: removal clears the entity's component data.
+    const gap = { x: Position.x[ring[3]], y: Position.y[ring[3]] };
     removeSimEntity(world, ring[3]);
-    world.grid[Position.y[ring[3]]][Position.x[ring[3]]] = 0;
+    world.grid[gap.y][gap.x] = 0;
     expect(findAiBreachTarget(world, P2, { x: at.x, y: at.y }, target)).toBeNull();
   });
 

@@ -26,9 +26,9 @@ export function applyRemoveSelectedBuildings(world: SimWorld, playerId: number):
 
 /** Self-describing (network-safe) building removal: the sender resolves the
  *  exact building eids, and we validate ownership here so a peer can replay it
- *  identically. Ascending eid order keeps the mutation order deterministic. */
+ *  identically. NetId order keeps the mutation order the same on every client. */
 export function applyRemoveBuildingsCommand(world: SimWorld, playerId: number, eids: number[]): void {
-  for (const eid of [...eids].sort((a, b) => a - b)) {
+  for (const eid of sortedEids(world, eids)) {
     if (!isRemovableBuilding(world, eid, playerId)) continue;
     markWorksiteWorkersDead(world, eid);
     addComponent(world.ecs, DeadTag, eid);
@@ -51,6 +51,8 @@ export function applyPlaceBuilding(
 ): void {
   const def = getBuildingDef(defId);
   if (!def) return;
+  // Tiles only: a fractional spot indexes no grid row (a peer could crash us).
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return;
   if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return;
   if (defId === BuildingDefId.WALL) {
     // A one-tile line: same tier cost, hp and unit check as a dragged line.

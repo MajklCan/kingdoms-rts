@@ -19,8 +19,8 @@ import { TileType } from '../map-gen';
 import type { GridPos } from '../pathfinding';
 import { compareGridPos, sortedEids } from '../core/entities';
 import { canUnitOccupyMovementTarget, canUnitSqueezeAlongDiagonalPath } from '../core/grid';
-import { workerContactCrowdPenalty } from '../core/navigation';
-import { movableQuery } from '../core/queries';
+import { crowdPenaltyAt, workerContactCrowd } from '../core/navigation';
+import { movableQuery, unitQuery } from '../core/queries';
 import type { MovementStuckState, SimWorld } from '../core/types';
 import { clearFormationSpeedCap } from '../input/unit-orders';
 import { isEconomicWorker, unitSeparationSystem } from './separation';
@@ -259,6 +259,9 @@ function repathAroundStuckDestination(
   const destY = Math.round(destination.y);
   const candidates: Array<{ tile: GridPos; score: number }> = [];
   const seen = new Set<string>();
+  const crowd = isEconomicWorker(world, eid)
+    ? workerContactCrowd(world, eid, sortedEids(world, unitQuery(world.ecs)))
+    : null;
 
   for (let r = 0; r <= STUCK_REPATH_RADIUS; r++) {
     for (let dy = -r; dy <= r; dy++) {
@@ -275,7 +278,7 @@ function repathAroundStuckDestination(
           score:
             Math.hypot(Position.x[eid] - x, Position.y[eid] - y) +
             Math.hypot(destination.x - x, destination.y - y) * 0.5 +
-            (isEconomicWorker(world, eid) ? workerContactCrowdPenalty(world, eid, x, y) : 0),
+            (crowd ? crowdPenaltyAt(world, crowd, x, y) : 0),
         });
       }
     }

@@ -19,6 +19,7 @@ import {
 } from '../components';
 import { AgeId, BuildingDefId, getBuildingDef } from '../defs';
 import type { GridPos } from '../pathfinding';
+import { compareDeterministicEids } from '../core/entities';
 import { findSpawnSpot } from '../core/grid';
 import type { AiPlayerState, SimWorld } from '../core/types';
 import { isTargetInAttackRange, isValidHostileTarget } from '../systems/targeting';
@@ -174,7 +175,7 @@ function aiSelectWaveUnits(world: SimWorld, units: number[], rally: GridPos): nu
       const da = Math.hypot(Position.x[a] - rally.x, Position.y[a] - rally.y);
       const db = Math.hypot(Position.x[b] - rally.x, Position.y[b] - rally.y);
       if (Math.abs(da - db) > 0.001) return da - db;
-      return a - b;
+      return compareDeterministicEids(world, a, b);
     })
     .slice(0, aiSettings(world).maxWaveUnits);
 }

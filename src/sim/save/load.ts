@@ -62,6 +62,11 @@ import { Pathfinder } from '../pathfinding';
 import { TECH_TREE, type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
 import { type SavedEntityV1, type SavedGame, type SavedGameV1, type SavedGameV2, migrateSavedGame } from './schema';
 
+/** Ticks are never negative; a negative (or missing) saved tick means never. */
+function fromSavedTick(tick: number | null | undefined): number {
+  return typeof tick === 'number' && Number.isFinite(tick) && tick >= 0 ? tick : -Infinity;
+}
+
 export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV2 | SavedGameV1): void {
   const snapshot = migrateSavedGame(saved);
   if (!snapshot) {
@@ -128,12 +133,14 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
         ...createAiPlayerState(snapshot.tick, world.aiDifficulty),
         plan: savedAi.plan,
         nextAttackTick: savedAi.nextAttackTick,
-        lastAttackTick: savedAi.lastAttackTick,
+        // Saves store "never" (-Infinity) as -1; restore it, the AI's
+        // cooldown checks treat the two differently.
+        lastAttackTick: fromSavedTick(savedAi.lastAttackTick),
         stageStartedTick: savedAi.stageStartedTick,
         rallyPoint: savedAi.rallyPoint ? { ...savedAi.rallyPoint } : null,
         waveUnitEids: [],
-        lastAttackEventTick: savedAi.lastAttackEventTick,
-        lastDefenseEventTick: savedAi.lastDefenseEventTick,
+        lastAttackEventTick: fromSavedTick(savedAi.lastAttackEventTick),
+        lastDefenseEventTick: fromSavedTick(savedAi.lastDefenseEventTick),
         ...(savedAi.difficulty ? { difficulty: normalizeAiDifficulty(savedAi.difficulty) } : {}),
       });
     } else {
@@ -170,6 +177,13 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
 
   const eidMap = new Map<number, number>();
   let maxRestoredNetId = 0;
+  // Hand out temporary NetIds above every saved one: a temporary id equal to
+  // a NetId restored earlier in this loop would overwrite that entity's
+  // netIdToEid entry and the override below would then delete it.
+  for (const saved of snapshot.entities) {
+    if (saved.netId !== undefined) maxRestoredNetId = Math.max(maxRestoredNetId, saved.netId);
+  }
+  world.nextNetId = maxRestoredNetId + 1;
   for (const saved of snapshot.entities) {
     const eid = addSimEntity(world);
     if (saved.netId !== undefined) {
@@ -374,7 +388,9 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
     MachineGunDeployment.deployed[eid] = saved.machineGunDeployment?.deployed ?? 1;
     MachineGunDeployment.setupTicks[eid] = saved.machineGunDeployment?.setupTicks ?? 0;
   }
-  if (isSavedMilitaryEntity(saved)) {
+  // Villagers carry a stance too (spawned with it): restore it whenever it was
+  // saved, so a reloaded world hashes like the one that was saved.
+  if (saved.stance !== undefined || isSavedMilitaryEntity(saved)) {
     addComponent(ecs, UnitStance, eid);
     UnitStance.stance[eid] =
       saved.stance === UnitStanceId.HOLD_POSITION
