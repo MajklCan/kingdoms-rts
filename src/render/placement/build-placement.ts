@@ -31,6 +31,8 @@ import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, isInsideMap, spriteAnchorPoint } from '../world-projection';
 
 const GHOST_ALPHA = 0.6;
+/** Multiplicative tints on the ghost sprite: green = can build here, red = can't. */
+const GHOST_VALID_TINT = 0xa8f0a0;
 const GHOST_INVALID_TINT = 0xff6b6b;
 
 export type BuildMode =
@@ -345,8 +347,7 @@ export class BuildPlacement {
     const p = spriteAnchorPoint(ref.anchor, c, w, h);
     sprite.setPosition(p.x, p.y);
     sprite.setAlpha(GHOST_ALPHA);
-    if (valid) sprite.clearTint();
-    else sprite.setTint(GHOST_INVALID_TINT);
+    sprite.setTint(valid ? GHOST_VALID_TINT : GHOST_INVALID_TINT);
     sprite.setVisible(true);
     return true;
   }
