@@ -1,0 +1,1630 @@
+{
+ "version": 1,
+ "generator": "scripts/blender/render_all.py + scripts/pack_sprites.py",
+ "doc": "docs/BLENDER_SPRITE_PIPELINE.md",
+ "renderScale": 2,
+ "scale": 0.5,
+ "tile": {
+  "w": 64,
+  "h": 32,
+  "elevationStepPx": 4
+ },
+ "conventions": {
+  "anchor": "pixel (in sourceSize, render scale) of the bottom corner of the footprint diamond; for terrain tiles the diamond centre",
+  "mask": "white RGB, alpha = team colour coverage; tint per player and draw over the frame (multiply or overlay), same sourceSize and anchor",
+  "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",
+  "sun": "from screen top-left, shadows fall to the screen right",
+  "gameToBlender": "game tile +x = Blender +X, game tile +y = Blender -Y, 1 tile = 1 Blender unit"
+ },
+ "atlases": [
+  {
+   "key": "kr-buildings-0",
+   "image": "buildings-0.png",
+   "json": "buildings-0.json",
+   "size": [
+    4096,
+    2433
+   ],
+   "frames": 210
+  }
+ ],
+ "assets": {
+  "building.archery_range": {
+   "kind": "building",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "archery_range_dark",
+     "anchor": [
+      184,
+      209
+     ],
+     "size": [
+      368,
+      215
+     ],
+     "mask": "archery_range_dark__mask",
+     "shadow": "archery_range_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "archery_range_castle",
+     "anchor": [
+      184,
+      209
+     ],
+     "size": [
+      368,
+      215
+     ],
+     "mask": "archery_range_castle__mask",
+     "shadow": "archery_range_castle__shadow"
+    }
+   },
+   "defId": "ARCHERY_RANGE",
+   "construction": "construction.2x2",
+   "rubble": "rubble.2x2",
+   "eras": [
+    "dark",
+    "castle"
+   ],
+   "default": "dark"
+  },
+  "building.barracks": {
+   "kind": "building",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "barracks_dark",
+     "anchor": [
+      304,
+      246
+     ],
+     "size": [
+      608,
+      252
+     ],
+     "mask": "barracks_dark__mask",
+     "shadow": "barracks_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "barracks_castle",
+     "anchor": [
+      304,
+      246
+     ],
+     "size": [
+      608,
+      252
+     ],
+     "mask": "barracks_castle__mask",
+     "shadow": "barracks_castle__shadow"
+    },
+    "gunpowder": {
+     "atlas": "kr-buildings-0",
+     "frame": "barracks_gunpowder",
+     "anchor": [
+      304,
+      246
+     ],
+     "size": [
+      608,
+      252
+     ],
+     "mask": "barracks_gunpowder__mask",
+     "shadow": "barracks_gunpowder__shadow"
+    }
+   },
+   "defId": "BARRACKS",
+   "construction": "construction.2x2",
+   "rubble": "rubble.2x2",
+   "eras": [
+    "dark",
+    "castle",
+    "gunpowder"
+   ],
+   "default": "dark"
+  },
+  "building.defensive_tower": {
+   "kind": "building",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "defensive_tower_dark",
+     "anchor": [
+      276,
+      254
+     ],
+     "size": [
+      552,
+      275
+     ],
+     "mask": "defensive_tower_dark__mask",
+     "shadow": "defensive_tower_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "defensive_tower_castle",
+     "anchor": [
+      276,
+      254
+     ],
+     "size": [
+      552,
+      275
+     ],
+     "mask": "defensive_tower_castle__mask",
+     "shadow": "defensive_tower_castle__shadow"
+    },
+    "gunpowder": {
+     "atlas": "kr-buildings-0",
+     "frame": "defensive_tower_gunpowder",
+     "anchor": [
+      276,
+      254
+     ],
+     "size": [
+      552,
+      275
+     ],
+     "mask": "defensive_tower_gunpowder__mask",
+     "shadow": "defensive_tower_gunpowder__shadow"
+    }
+   },
+   "defId": "DEFENSIVE_TOWER",
+   "construction": "construction.1x1",
+   "rubble": "rubble.1x1",
+   "eras": [
+    "dark",
+    "castle",
+    "gunpowder"
+   ],
+   "default": "dark"
+  },
+  "building.farm": {
+   "kind": "building",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "depleted": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_depleted",
+     "anchor": [
+      142,
+      162
+     ],
+     "size": [
+      284,
+      168
+     ],
+     "mask": "farm_depleted__mask",
+     "shadow": "farm_depleted__shadow"
+    },
+    "growing": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_growing",
+     "anchor": [
+      142,
+      162
+     ],
+     "size": [
+      284,
+      168
+     ],
+     "mask": "farm_growing__mask",
+     "shadow": "farm_growing__shadow"
+    },
+    "ripe": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_ripe",
+     "anchor": [
+      142,
+      162
+     ],
+     "size": [
+      284,
+      168
+     ],
+     "mask": "farm_ripe__mask",
+     "shadow": "farm_ripe__shadow"
+    },
+    "sown": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_sown",
+     "anchor": [
+      142,
+      162
+     ],
+     "size": [
+      284,
+      168
+     ],
+     "mask": "farm_sown__mask",
+     "shadow": "farm_sown__shadow"
+    }
+   },
+   "defId": "FARM",
+   "construction": "construction.2x2",
+   "rubble": "rubble.2x2",
+   "default": "depleted"
+  },
+  "building.foundry": {
+   "kind": "building",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "gunpowder": {
+     "atlas": "kr-buildings-0",
+     "frame": "foundry_gunpowder",
+     "anchor": [
+      250,
+      296
+     ],
+     "size": [
+      500,
+      302
+     ],
+     "mask": "foundry_gunpowder__mask",
+     "shadow": "foundry_gunpowder__shadow"
+    }
+   },
+   "defId": "FOUNDRY",
+   "construction": "construction.2x2",
+   "rubble": "rubble.2x2",
+   "eras": [
+    "gunpowder"
+   ],
+   "default": "gunpowder"
+  },
+  "building.gold_mine": {
+   "kind": "building",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "gold_mine_dark",
+     "anchor": [
+      111,
+      120
+     ],
+     "size": [
+      222,
+      129
+     ],
+     "mask": "gold_mine_dark__mask",
+     "shadow": "gold_mine_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "gold_mine_castle",
+     "anchor": [
+      111,
+      120
+     ],
+     "size": [
+      222,
+      129
+     ],
+     "mask": "gold_mine_castle__mask",
+     "shadow": "gold_mine_castle__shadow"
+    }
+   },
+   "defId": "GOLD_MINE",
+   "construction": "construction.1x1",
+   "rubble": "rubble.1x1",
+   "eras": [
+    "dark",
+    "castle"
+   ],
+   "default": "dark"
+  },
+  "building.house": {
+   "kind": "building",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "house_dark",
+     "anchor": [
+      172,
+      158
+     ],
+     "size": [
+      344,
+      168
+     ],
+     "mask": "house_dark__mask",
+     "shadow": "house_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "house_castle",
+     "anchor": [
+      172,
+      158
+     ],
+     "size": [
+      344,
+      168
+     ],
+     "mask": "house_castle__mask",
+     "shadow": "house_castle__shadow"
+    },
+    "gunpowder": {
+     "atlas": "kr-buildings-0",
+     "frame": "house_gunpowder",
+     "anchor": [
+      172,
+      158
+     ],
+     "size": [
+      344,
+      168
+     ],
+     "mask": "house_gunpowder__mask",
+     "shadow": "house_gunpowder__shadow"
+    }
+   },
+   "defId": "HOUSE",
+   "construction": "construction.1x1",
+   "rubble": "rubble.1x1",
+   "eras": [
+    "dark",
+    "castle",
+    "gunpowder"
+   ],
+   "default": "dark"
+  },
+  "building.lumber_camp": {
+   "kind": "building",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "lumber_camp_dark",
+     "anchor": [
+      127,
+      129
+     ],
+     "size": [
+      254,
+      142
+     ],
+     "mask": "lumber_camp_dark__mask",
+     "shadow": "lumber_camp_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "lumber_camp_castle",
+     "anchor": [
+      127,
+      129
+     ],
+     "size": [
+      254,
+      142
+     ],
+     "mask": "lumber_camp_castle__mask",
+     "shadow": "lumber_camp_castle__shadow"
+    }
+   },
+   "defId": "LUMBER_CAMP",
+   "construction": "construction.1x1",
+   "rubble": "rubble.1x1",
+   "eras": [
+    "dark",
+    "castle"
+   ],
+   "default": "dark"
+  },
+  "building.mill": {
+   "kind": "building",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "mill_dark",
+     "anchor": [
+      226,
+      242
+     ],
+     "size": [
+      452,
+      248
+     ],
+     "mask": "mill_dark__mask",
+     "shadow": "mill_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "mill_castle",
+     "anchor": [
+      226,
+      242
+     ],
+     "size": [
+      452,
+      248
+     ],
+     "mask": "mill_castle__mask",
+     "shadow": "mill_castle__shadow"
+    },
+    "gunpowder": {
+     "atlas": "kr-buildings-0",
+     "frame": "mill_gunpowder",
+     "anchor": [
+      226,
+      242
+     ],
+     "size": [
+      452,
+      248
+     ],
+     "mask": "mill_gunpowder__mask",
+     "shadow": "mill_gunpowder__shadow"
+    }
+   },
+   "defId": "MILL",
+   "construction": "construction.2x2",
+   "rubble": "rubble.2x2",
+   "eras": [
+    "dark",
+    "castle",
+    "gunpowder"
+   ],
+   "default": "dark"
+  },
+  "building.stable": {
+   "kind": "building",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "stable_dark",
+     "anchor": [
+      194,
+      207
+     ],
+     "size": [
+      388,
+      213
+     ],
+     "mask": "stable_dark__mask",
+     "shadow": "stable_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "stable_castle",
+     "anchor": [
+      194,
+      207
+     ],
+     "size": [
+      388,
+      213
+     ],
+     "mask": "stable_castle__mask",
+     "shadow": "stable_castle__shadow"
+    }
+   },
+   "defId": "STABLE",
+   "construction": "construction.2x2",
+   "rubble": "rubble.2x2",
+   "eras": [
+    "dark",
+    "castle"
+   ],
+   "default": "dark"
+  },
+  "building.stone_quarry": {
+   "kind": "building",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "stone_quarry_dark",
+     "anchor": [
+      102,
+      106
+     ],
+     "size": [
+      204,
+      118
+     ],
+     "mask": "stone_quarry_dark__mask",
+     "shadow": "stone_quarry_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "stone_quarry_castle",
+     "anchor": [
+      102,
+      106
+     ],
+     "size": [
+      204,
+      118
+     ],
+     "mask": "stone_quarry_castle__mask",
+     "shadow": "stone_quarry_castle__shadow"
+    }
+   },
+   "defId": "STONE_QUARRY",
+   "construction": "construction.1x1",
+   "rubble": "rubble.1x1",
+   "eras": [
+    "dark",
+    "castle"
+   ],
+   "default": "dark"
+  },
+  "building.town_center": {
+   "kind": "building",
+   "footprint": [
+    3,
+    3
+   ],
+   "variants": {
+    "dark": {
+     "atlas": "kr-buildings-0",
+     "frame": "town_center_dark",
+     "anchor": [
+      348,
+      369
+     ],
+     "size": [
+      696,
+      375
+     ],
+     "mask": "town_center_dark__mask",
+     "shadow": "town_center_dark__shadow"
+    },
+    "castle": {
+     "atlas": "kr-buildings-0",
+     "frame": "town_center_castle",
+     "anchor": [
+      348,
+      369
+     ],
+     "size": [
+      696,
+      375
+     ],
+     "mask": "town_center_castle__mask",
+     "shadow": "town_center_castle__shadow"
+    },
+    "gunpowder": {
+     "atlas": "kr-buildings-0",
+     "frame": "town_center_gunpowder",
+     "anchor": [
+      348,
+      369
+     ],
+     "size": [
+      696,
+      375
+     ],
+     "mask": "town_center_gunpowder__mask",
+     "shadow": "town_center_gunpowder__shadow"
+    }
+   },
+   "defId": "TOWN_CENTER",
+   "construction": "construction.3x3",
+   "rubble": "rubble.3x3",
+   "eras": [
+    "dark",
+    "castle",
+    "gunpowder"
+   ],
+   "default": "dark"
+  },
+  "building.wall": {
+   "kind": "building",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "dark.0": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_00",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_00__shadow",
+     "connections": 0,
+     "era": "dark"
+    },
+    "dark.1": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_01",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_01__shadow",
+     "connections": 1,
+     "era": "dark"
+    },
+    "dark.2": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_02",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_02__shadow",
+     "connections": 2,
+     "era": "dark"
+    },
+    "dark.3": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_03",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_03__shadow",
+     "connections": 3,
+     "era": "dark"
+    },
+    "dark.4": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_04",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_04__shadow",
+     "connections": 4,
+     "era": "dark"
+    },
+    "dark.5": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_05",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_05__shadow",
+     "connections": 5,
+     "era": "dark"
+    },
+    "dark.6": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_06",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_06__shadow",
+     "connections": 6,
+     "era": "dark"
+    },
+    "dark.7": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_07",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_07__shadow",
+     "connections": 7,
+     "era": "dark"
+    },
+    "dark.8": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_08",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_08__shadow",
+     "connections": 8,
+     "era": "dark"
+    },
+    "dark.9": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_09",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_09__shadow",
+     "connections": 9,
+     "era": "dark"
+    },
+    "dark.10": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_10",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_10__shadow",
+     "connections": 10,
+     "era": "dark"
+    },
+    "dark.11": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_11",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_11__shadow",
+     "connections": 11,
+     "era": "dark"
+    },
+    "dark.12": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_12",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_12__shadow",
+     "connections": 12,
+     "era": "dark"
+    },
+    "dark.13": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_13",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_13__shadow",
+     "connections": 13,
+     "era": "dark"
+    },
+    "dark.14": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_14",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_14__shadow",
+     "connections": 14,
+     "era": "dark"
+    },
+    "dark.15": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_dark_15",
+     "anchor": [
+      134,
+      131
+     ],
+     "size": [
+      268,
+      137
+     ],
+     "shadow": "wall_dark_15__shadow",
+     "connections": 15,
+     "era": "dark"
+    },
+    "castle.0": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_00",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_00__shadow",
+     "connections": 0,
+     "era": "castle"
+    },
+    "castle.1": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_01",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_01__shadow",
+     "connections": 1,
+     "era": "castle"
+    },
+    "castle.2": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_02",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_02__shadow",
+     "connections": 2,
+     "era": "castle"
+    },
+    "castle.3": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_03",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_03__shadow",
+     "connections": 3,
+     "era": "castle"
+    },
+    "castle.4": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_04",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_04__shadow",
+     "connections": 4,
+     "era": "castle"
+    },
+    "castle.5": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_05",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_05__shadow",
+     "connections": 5,
+     "era": "castle"
+    },
+    "castle.6": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_06",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_06__shadow",
+     "connections": 6,
+     "era": "castle"
+    },
+    "castle.7": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_07",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_07__shadow",
+     "connections": 7,
+     "era": "castle"
+    },
+    "castle.8": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_08",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_08__shadow",
+     "connections": 8,
+     "era": "castle"
+    },
+    "castle.9": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_09",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_09__shadow",
+     "connections": 9,
+     "era": "castle"
+    },
+    "castle.10": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_10",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_10__shadow",
+     "connections": 10,
+     "era": "castle"
+    },
+    "castle.11": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_11",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_11__shadow",
+     "connections": 11,
+     "era": "castle"
+    },
+    "castle.12": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_12",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_12__shadow",
+     "connections": 12,
+     "era": "castle"
+    },
+    "castle.13": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_13",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_13__shadow",
+     "connections": 13,
+     "era": "castle"
+    },
+    "castle.14": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_14",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_14__shadow",
+     "connections": 14,
+     "era": "castle"
+    },
+    "castle.15": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_castle_15",
+     "anchor": [
+      134,
+      133
+     ],
+     "size": [
+      268,
+      139
+     ],
+     "shadow": "wall_castle_15__shadow",
+     "connections": 15,
+     "era": "castle"
+    },
+    "gunpowder.0": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_00",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_00__shadow",
+     "connections": 0,
+     "era": "gunpowder"
+    },
+    "gunpowder.1": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_01",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_01__shadow",
+     "connections": 1,
+     "era": "gunpowder"
+    },
+    "gunpowder.2": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_02",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_02__shadow",
+     "connections": 2,
+     "era": "gunpowder"
+    },
+    "gunpowder.3": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_03",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_03__shadow",
+     "connections": 3,
+     "era": "gunpowder"
+    },
+    "gunpowder.4": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_04",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_04__shadow",
+     "connections": 4,
+     "era": "gunpowder"
+    },
+    "gunpowder.5": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_05",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_05__shadow",
+     "connections": 5,
+     "era": "gunpowder"
+    },
+    "gunpowder.6": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_06",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_06__shadow",
+     "connections": 6,
+     "era": "gunpowder"
+    },
+    "gunpowder.7": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_07",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_07__shadow",
+     "connections": 7,
+     "era": "gunpowder"
+    },
+    "gunpowder.8": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_08",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_08__shadow",
+     "connections": 8,
+     "era": "gunpowder"
+    },
+    "gunpowder.9": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_09",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_09__shadow",
+     "connections": 9,
+     "era": "gunpowder"
+    },
+    "gunpowder.10": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_10",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_10__shadow",
+     "connections": 10,
+     "era": "gunpowder"
+    },
+    "gunpowder.11": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_11",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_11__shadow",
+     "connections": 11,
+     "era": "gunpowder"
+    },
+    "gunpowder.12": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_12",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_12__shadow",
+     "connections": 12,
+     "era": "gunpowder"
+    },
+    "gunpowder.13": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_13",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_13__shadow",
+     "connections": 13,
+     "era": "gunpowder"
+    },
+    "gunpowder.14": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_14",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_14__shadow",
+     "connections": 14,
+     "era": "gunpowder"
+    },
+    "gunpowder.15": {
+     "atlas": "kr-buildings-0",
+     "frame": "wall_gunpowder_15",
+     "anchor": [
+      130,
+      127
+     ],
+     "size": [
+      260,
+      133
+     ],
+     "shadow": "wall_gunpowder_15__shadow",
+     "connections": 15,
+     "era": "gunpowder"
+    }
+   },
+   "defId": "WALL",
+   "construction": "construction.1x1",
+   "rubble": "rubble.1x1",
+   "default": "castle.0"
+  },
+  "construction.1x1": {
+   "kind": "construction",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_1x1_0",
+     "anchor": [
+      153,
+      147
+     ],
+     "size": [
+      306,
+      163
+     ],
+     "shadow": "construction_1x1_0__shadow",
+     "progress": 0.0
+    },
+    "1": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_1x1_1",
+     "anchor": [
+      153,
+      147
+     ],
+     "size": [
+      306,
+      163
+     ],
+     "shadow": "construction_1x1_1__shadow",
+     "progress": 0.34
+    },
+    "2": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_1x1_2",
+     "anchor": [
+      153,
+      147
+     ],
+     "size": [
+      306,
+      163
+     ],
+     "shadow": "construction_1x1_2__shadow",
+     "progress": 0.67
+    }
+   },
+   "stages": [
+    "0",
+    "1",
+    "2"
+   ],
+   "default": "0"
+  },
+  "construction.2x2": {
+   "kind": "construction",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_2x2_0",
+     "anchor": [
+      246,
+      246
+     ],
+     "size": [
+      492,
+      264
+     ],
+     "shadow": "construction_2x2_0__shadow",
+     "progress": 0.0
+    },
+    "1": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_2x2_1",
+     "anchor": [
+      246,
+      246
+     ],
+     "size": [
+      492,
+      264
+     ],
+     "shadow": "construction_2x2_1__shadow",
+     "progress": 0.34
+    },
+    "2": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_2x2_2",
+     "anchor": [
+      246,
+      246
+     ],
+     "size": [
+      492,
+      264
+     ],
+     "shadow": "construction_2x2_2__shadow",
+     "progress": 0.67
+    }
+   },
+   "stages": [
+    "0",
+    "1",
+    "2"
+   ],
+   "default": "0"
+  },
+  "construction.3x3": {
+   "kind": "construction",
+   "footprint": [
+    3,
+    3
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_3x3_0",
+     "anchor": [
+      341,
+      345
+     ],
+     "size": [
+      682,
+      364
+     ],
+     "shadow": "construction_3x3_0__shadow",
+     "progress": 0.0
+    },
+    "1": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_3x3_1",
+     "anchor": [
+      341,
+      345
+     ],
+     "size": [
+      682,
+      364
+     ],
+     "shadow": "construction_3x3_1__shadow",
+     "progress": 0.34
+    },
+    "2": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_3x3_2",
+     "anchor": [
+      341,
+      345
+     ],
+     "size": [
+      682,
+      364
+     ],
+     "shadow": "construction_3x3_2__shadow",
+     "progress": 0.67
+    }
+   },
+   "stages": [
+    "0",
+    "1",
+    "2"
+   ],
+   "default": "0"
+  },
+  "rubble.1x1": {
+   "kind": "rubble",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-buildings-0",
+     "frame": "rubble_1x1",
+     "anchor": [
+      70,
+      75
+     ],
+     "size": [
+      140,
+      81
+     ],
+     "shadow": "rubble_1x1__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "rubble.2x2": {
+   "kind": "rubble",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-buildings-0",
+     "frame": "rubble_2x2",
+     "anchor": [
+      135,
+      137
+     ],
+     "size": [
+      270,
+      143
+     ],
+     "shadow": "rubble_2x2__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "rubble.3x3": {
+   "kind": "rubble",
+   "footprint": [
+    3,
+    3
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-buildings-0",
+     "frame": "rubble_3x3",
+     "anchor": [
+      198,
+      203
+     ],
+     "size": [
+      396,
+      209
+     ],
+     "shadow": "rubble_3x3__shadow"
+    }
+   },
+   "default": "default"
+  }
+ }
+}
