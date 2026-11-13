@@ -18,3 +18,4 @@ tsconfig.tsbuildinfo
 art-source/blender/renders/
 art-source/blender/.tmp/
 art-source/blender/*.blend1
+__pycache__/

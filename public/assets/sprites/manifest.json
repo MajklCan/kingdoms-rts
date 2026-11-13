@@ -26,6 +26,16 @@
     2433
    ],
    "frames": 210
+  },
+  {
+   "key": "kr-nature-0",
+   "image": "nature-0.png",
+   "json": "nature-0.json",
+   "size": [
+    2048,
+    697
+   ],
+   "frames": 42
   }
  ],
  "assets": {
@@ -1556,6 +1566,364 @@
     "2"
    ],
    "default": "0"
+  },
+  "resource.berry_bush": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "full": {
+     "atlas": "kr-nature-0",
+     "frame": "berry_bush_full",
+     "anchor": [
+      70,
+      75
+     ],
+     "size": [
+      140,
+      81
+     ],
+     "shadow": "berry_bush_full__shadow",
+     "amount": 1.0
+    },
+    "half": {
+     "atlas": "kr-nature-0",
+     "frame": "berry_bush_half",
+     "anchor": [
+      70,
+      75
+     ],
+     "size": [
+      140,
+      81
+     ],
+     "shadow": "berry_bush_half__shadow",
+     "amount": 0.5
+    },
+    "low": {
+     "atlas": "kr-nature-0",
+     "frame": "berry_bush_low",
+     "anchor": [
+      70,
+      75
+     ],
+     "size": [
+      140,
+      81
+     ],
+     "shadow": "berry_bush_low__shadow",
+     "amount": 0.2
+    }
+   },
+   "resource": "FOOD",
+   "default": "full"
+  },
+  "resource.gold": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "full": {
+     "atlas": "kr-nature-0",
+     "frame": "gold_full",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "gold_full__shadow",
+     "amount": 1.0
+    },
+    "half": {
+     "atlas": "kr-nature-0",
+     "frame": "gold_half",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "gold_half__shadow",
+     "amount": 0.5
+    },
+    "low": {
+     "atlas": "kr-nature-0",
+     "frame": "gold_low",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "gold_low__shadow",
+     "amount": 0.2
+    }
+   },
+   "resource": "GOLD",
+   "default": "full"
+  },
+  "resource.stone": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "full": {
+     "atlas": "kr-nature-0",
+     "frame": "stone_full",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "stone_full__shadow",
+     "amount": 1.0
+    },
+    "half": {
+     "atlas": "kr-nature-0",
+     "frame": "stone_half",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "stone_half__shadow",
+     "amount": 0.5
+    },
+    "low": {
+     "atlas": "kr-nature-0",
+     "frame": "stone_low",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "stone_low__shadow",
+     "amount": 0.2
+    }
+   },
+   "resource": "STONE",
+   "default": "full"
+  },
+  "resource.stump": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "broadleaf": {
+     "atlas": "kr-nature-0",
+     "frame": "stump_broadleaf",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "stump_broadleaf__shadow"
+    },
+    "conifer": {
+     "atlas": "kr-nature-0",
+     "frame": "stump_conifer",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "stump_conifer__shadow"
+    }
+   },
+   "default": "broadleaf"
+  },
+  "resource.tree": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "beech": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_beech",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_beech__shadow"
+    },
+    "birch": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_birch",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_birch__shadow"
+    },
+    "linden": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_linden",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_linden__shadow"
+    },
+    "oak": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_oak",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_oak__shadow"
+    },
+    "pine": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_pine",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_pine__shadow"
+    },
+    "spruce_a": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_spruce_a",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_spruce_a__shadow"
+    },
+    "spruce_b": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_spruce_b",
+     "anchor": [
+      212,
+      202
+     ],
+     "size": [
+      424,
+      216
+     ],
+     "shadow": "tree_spruce_b__shadow"
+    }
+   },
+   "resource": "WOOD",
+   "default": "beech"
+  },
+  "resource.tree_dead": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_dead",
+     "anchor": [
+      147,
+      153
+     ],
+     "size": [
+      294,
+      159
+     ],
+     "shadow": "tree_dead__shadow"
+    }
+   },
+   "resource": "WOOD",
+   "default": "default"
+  },
+  "resource.tree_snow": {
+   "kind": "resource",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "a": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_snow_a",
+     "anchor": [
+      205,
+      198
+     ],
+     "size": [
+      410,
+      204
+     ],
+     "shadow": "tree_snow_a__shadow"
+    },
+    "b": {
+     "atlas": "kr-nature-0",
+     "frame": "tree_snow_b",
+     "anchor": [
+      205,
+      198
+     ],
+     "size": [
+      410,
+      204
+     ],
+     "shadow": "tree_snow_b__shadow"
+    }
+   },
+   "resource": "WOOD",
+   "default": "a"
   },
   "rubble.1x1": {
    "kind": "rubble",
