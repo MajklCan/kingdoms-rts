@@ -25,7 +25,13 @@ import {
 } from '@sim/components';
 import { AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getAgeDef } from '@sim/defs';
 import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus } from '@sim/tech-tree';
-import { getWorksiteWorkerSlots, selectedQuery } from '@sim/world';
+import {
+  getBuildingBuildTicks,
+  getBuildingCost,
+  getBuildingDisplayName,
+  getWorksiteWorkerSlots,
+  selectedQuery,
+} from '@sim/world';
 import {
   canAffordCost,
   countOwnedArmyProducers,
@@ -72,6 +78,7 @@ const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, 
   ['build-mill', 'MILL', 'I', '◈', 'mill'],
   ['build-foundry', 'FOUNDRY', 'F', '●', 'foundry'],
   ['build-defensive-tower', 'DEFENSIVE_TOWER', 'Y', '♜', 'defensiveTower'],
+  ['build-wall', 'WALL', '', '▬', 'wall'],
 ];
 
 /** Placement prompt shown when a build button is clicked. */
@@ -86,6 +93,7 @@ const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]>
   'build-stable': ['STABLE', 'build STABLE - click to place'],
   'build-foundry': ['FOUNDRY', 'build FOUNDRY - click to place'],
   'build-defensive-tower': ['DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - click to place'],
+  'build-wall': ['WALL', 'build WALL - click the start tile, then the end tile'],
 };
 
 export class ActionGrid {
@@ -183,18 +191,20 @@ export class ActionGrid {
         if (!isBuildingUnlocked(world, playerId, defId)) continue;
         const def = BUILDING_TABLE[defId];
         if (!def) continue;
-        const affordable = canAfford(def.cost);
+        // Walls follow the age tier (palisade, stone, brick); others use the def.
+        const cost = getBuildingCost(world, playerId, defId);
+        const affordable = canAfford(cost);
         actions.push({
           id,
-          label: `Build ${def.name}`,
+          label: `Build ${getBuildingDisplayName(world, playerId, defId)}`,
           key,
           glyph,
           hudIcon,
-          cost: formatCost(def.cost),
+          cost: formatCost(cost),
           enabled: affordable,
           kind: 'build',
-          meta: `${Math.ceil(def.buildTimeTicks / SIM.TICK_HZ)}s`,
-          disabledReason: affordable ? undefined : `Needs ${formatCost(def.cost)}`,
+          meta: `${Math.ceil(getBuildingBuildTicks(world, playerId, defId) / SIM.TICK_HZ)}s`,
+          disabledReason: affordable ? undefined : `Needs ${formatCost(cost)}`,
         });
       }
     };

@@ -98,6 +98,7 @@ export function applyDamage(world: SimWorld, targetEid: number, damage: number, 
   const hpBefore = Health.hp[targetEid];
   Health.hp[targetEid] -= damage;
   if (hpBefore <= 0 || Health.hp[targetEid] > 0) return;
+  world.killingBlows.set(targetEid, attackerOwner);
   if (!hasComponent(world.ecs, Owner, targetEid)) return;
   const victimOwner = Owner.player[targetEid];
   if (victimOwner === 0 || victimOwner === attackerOwner) return;

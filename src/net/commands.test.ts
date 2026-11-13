@@ -63,3 +63,15 @@ describe('sanitizeWireCommand', () => {
     ).toEqual([{ type: 'cmdStop', playerId: 2, eids: [] }]);
   });
 });
+
+describe('placeWallLine', () => {
+  it('keeps a wall line from its own slot and drops another slot or bad tiles', () => {
+    const line = { type: 'placeWallLine', playerId: 2, x0: 10, y0: 12, x1: 18, y1: 12 };
+    expect(sanitizeWireCommand(2, line)).toEqual(line);
+    expect(sanitizeWireCommand(1, line)).toBeNull();
+    expect(sanitizeWireCommand(2, { ...line, playerId: undefined })).toBeNull();
+    expect(sanitizeWireCommand(2, { ...line, x1: 18.5 })).toBeNull();
+    expect(sanitizeWireCommand(2, { ...line, y0: '12' })).toBeNull();
+    expect(sanitizeWireCommand(2, { type: 'placeWallLine', playerId: 2, x0: 1, y0: 1 })).toBeNull();
+  });
+});

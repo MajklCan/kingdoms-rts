@@ -18,7 +18,7 @@ import {
 import { ATTACK_RANGE_TOLERANCE } from '../core/constants';
 import { deterministicEidKey, sortedEids } from '../core/entities';
 import { distToBuildingEdge } from '../core/grid';
-import { pathTo } from '../core/navigation';
+import { pathTo, pathToAttackTarget } from '../core/navigation';
 import { combatQuery, damageableQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { isMovableEntity } from '../input/formation';
@@ -242,7 +242,7 @@ export function targetingSystem(world: SimWorld): void {
         (holdPosition && !attackMoving
           ? canHoldPositionMoveToTarget(world, eid, bestEid)
           : isMovableEntity(world, eid)) &&
-        pathTo(world, eid, Position.x[bestEid], Position.y[bestEid]);
+        pathToAttackTarget(world, eid, bestEid);
       const canEngage = inRange || canMoveIntoRange;
       if (canEngage) {
         AttackTarget.targetEid[eid] = bestEid;

@@ -29,7 +29,7 @@ import { UnitDefId } from '../defs';
 import { ATTACK_RANGE_TOLERANCE } from '../core/constants';
 import { applyDamage } from '../core/match-stats';
 import { sortedEids } from '../core/entities';
-import { pathTo } from '../core/navigation';
+import { pathTo, pathToAttackTarget } from '../core/navigation';
 import { combatQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { isMovableEntity } from '../input/formation';
@@ -102,7 +102,7 @@ export function combatSystem(world: SimWorld): void {
         }
         const path = world.paths.get(eid);
         if (!path || path.length === 0 || dist > range + 2) {
-          if (!pathTo(world, eid, Position.x[target], Position.y[target])) {
+          if (!pathToAttackTarget(world, eid, target)) {
             AttackTarget.targetEid[eid] = -1;
             world.paths.delete(eid);
           }

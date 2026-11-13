@@ -9,6 +9,7 @@ import { selectedQuery } from '../core/queries';
 import type { SimInput, SimWorld } from '../core/types';
 import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
 import { applyCancelProduction, applyTrainUnit } from '../systems/production';
+import { applyPlaceWallLine } from './walls';
 import {
   applyPlaceBuilding,
   applyRemoveBuildingsCommand,
@@ -100,6 +101,9 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       return;
     case 'placeBuilding':
       applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId);
+      return;
+    case 'placeWallLine':
+      applyPlaceWallLine(world, input.playerId, input.x0, input.y0, input.x1, input.y1);
       return;
     case 'removeSelectedBuildings':
       applyRemoveSelectedBuildings(world, input.playerId);

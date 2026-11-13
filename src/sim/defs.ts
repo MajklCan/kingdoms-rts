@@ -427,6 +427,54 @@ export function getAgeDef(ageId: number): AgeDef | null {
   return AGE_TABLE[ageId] ?? null;
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Wall tiers. One WALL def; cost, build time and hp follow the owner's age.
+// Campaign preset walls keep the base def (400 hp) until their owner ages up.
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface WallTier {
+  /** Age the tier starts at. */
+  age: AgeIdValue;
+  name: string;
+  hp: number;
+  /** Cost per wall tile. */
+  cost: CostTuple;
+  buildTimeTicks: number;
+}
+
+/** Ascending by age; ages past the last entry (Total War) keep the last tier. */
+export const WALL_TIERS: readonly WallTier[] = [
+  {
+    age: AgeId.DARK,
+    name: 'Palisade Wall',
+    hp: 400,
+    cost: { food: 0, wood: 2, gold: 0, stone: 0 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 4),
+  },
+  {
+    age: AgeId.CASTLE,
+    name: 'Stone Wall',
+    hp: 1200,
+    cost: { food: 0, wood: 0, gold: 0, stone: 5 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 8),
+  },
+  {
+    age: AgeId.GUNPOWDER,
+    name: 'Brick Wall',
+    hp: 2000,
+    cost: { food: 0, wood: 0, gold: 0, stone: 6 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 10),
+  },
+];
+
+export function getWallTier(ageId: number): WallTier {
+  let tier = WALL_TIERS[0];
+  for (const candidate of WALL_TIERS) {
+    if (candidate.age <= ageId) tier = candidate;
+  }
+  return tier;
+}
+
 /** Look up a building def by its numeric id (the index). */
 export function getBuildingDef(defId: number): BuildingDef | null {
   return BUILDING_TABLE[defId] ?? null;

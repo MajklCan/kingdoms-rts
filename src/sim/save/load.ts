@@ -60,9 +60,9 @@ import {
 } from '../world';
 import { Pathfinder } from '../pathfinding';
 import { TECH_TREE, type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
-import { type SavedEntityV1, type SavedGame, type SavedGameV1, migrateSavedGame } from './schema';
+import { type SavedEntityV1, type SavedGame, type SavedGameV1, type SavedGameV2, migrateSavedGame } from './schema';
 
-export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV1): void {
+export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV2 | SavedGameV1): void {
   const snapshot = migrateSavedGame(saved);
   if (!snapshot) {
     throw new Error(`Unsupported save version ${String((saved as { version?: unknown }).version)}`);
@@ -86,7 +86,9 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   world.aiEvents.length = 0;
   world.soundCues.length = 0;
   world.gameEvents.length = 0;
+  world.killingBlows.clear();
   world.matchStats = snapshot.matchStats.map((stats) => ({ ...stats, gathered: [...stats.gathered] }));
+  world.mapSeed = snapshot.mapSeed;
   world.paused = snapshot.paused;
   world.humanPlayers = new Set(
     (snapshot.humanPlayers ?? [LOCAL_PLAYER_ID])

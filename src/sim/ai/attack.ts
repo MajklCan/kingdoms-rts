@@ -21,11 +21,12 @@ import { AgeId, BuildingDefId, getBuildingDef } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { pushAiEvent } from '../core/events';
 import { findSpawnSpot } from '../core/grid';
-import { pathTo } from '../core/navigation';
+import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { AiPlayerState, SimWorld } from '../core/types';
 import { isMovableEntity } from '../input/formation';
 import { clearCombatOrders, clearFormationSpeedCap, clearWorkOrders } from '../input/unit-orders';
 import { isTargetInAttackRange, isValidHostileTarget } from '../systems/targeting';
+import { findAiBreachTarget } from './breach';
 import { aiElapsedMinutes, aiSettings } from './difficulty';
 import type { AiSnapshot } from './snapshot';
 
@@ -33,6 +34,8 @@ const AI_DEFENSE_RADIUS = 11;
 const AI_DEFENSE_ORDER_RADIUS = 18;
 const AI_STAGE_RADIUS = 3.5;
 const AI_EVENT_COOLDOWN_TICKS = SIM.TICK_HZ * 20;
+/** Units within this many tiles of each other share one breach search. */
+const AI_BREACH_SHARE_RADIUS = 6;
 
 export function findAiDefenseTarget(world: SimWorld, playerId: number, snapshot: AiSnapshot): number | null {
   let best: { eid: number; dist: number } | null = null;
@@ -111,7 +114,9 @@ export function aiManageAttackPlan(
       state.plan = 'recovering';
       state.nextAttackTick = world.tick + settings.attackCooldownTicks;
       state.waveUnitEids = [];
+      return;
     }
+    aiPushStalledWave(world, playerId, state, snapshot);
     return;
   }
 
@@ -149,10 +154,7 @@ export function aiManageAttackPlan(
   const stageTimedOut = world.tick - state.stageStartedTick >= settings.attackStageTimeoutTicks;
   if (!enoughGathered && !stageTimedOut) return;
 
-  const destination = { x: Math.round(Position.x[target]), y: Math.round(Position.y[target]) };
-  for (const unit of state.waveUnitEids) {
-    issueAiAttackMoveOrder(world, unit, destination);
-  }
+  aiSendWave(world, playerId, state.waveUnitEids, target);
   state.plan = 'attacking';
   state.lastAttackTick = world.tick;
   state.nextAttackTick = world.tick + settings.attackCooldownTicks;
@@ -186,11 +188,58 @@ function findAiStagingPoint(world: SimWorld, ownTc: number, target: number): Gri
   return findSpawnSpot(world, sx, sy, 8);
 }
 
+/**
+ * Attack-move `units` on `target`. A unit that cannot path there (the enemy
+ * walled it in) attacks the cheapest wall on the way instead; once that wall
+ * falls it is idle again and aiPushStalledWave sends it on.
+ */
+function aiSendWave(world: SimWorld, playerId: number, units: number[], target: number): void {
+  const destination = { x: Math.round(Position.x[target]), y: Math.round(Position.y[target]) };
+  // One breach search covers the units standing near the unit it was run for.
+  let breach: { x: number; y: number; eid: number | null } | null = null;
+  for (const unit of units) {
+    if (issueAiAttackMoveOrder(world, unit, destination)) continue;
+    const x = Position.x[unit];
+    const y = Position.y[unit];
+    if (!breach || Math.hypot(x - breach.x, y - breach.y) > AI_BREACH_SHARE_RADIUS) {
+      breach = { x, y, eid: findAiBreachTarget(world, playerId, { x, y }, target) };
+    }
+    if (breach.eid !== null) issueAiAttackOrder(world, unit, breach.eid);
+  }
+}
+
+/**
+ * During an attack, wave units left with nothing to do (their path was walled
+ * off, they just broke through a wall, or their objective fell) get the attack
+ * order again, so a wave never stands still while its attack lasts. Units
+ * fighting, walking or attack-moving are left alone.
+ */
+function aiPushStalledWave(
+  world: SimWorld,
+  playerId: number,
+  state: AiPlayerState,
+  snapshot: AiSnapshot
+): void {
+  const target = chooseAiAttackTarget(world, snapshot);
+  if (target === null) return;
+  const stalled = state.waveUnitEids.filter((eid) => {
+    if (AttackTarget.targetEid[eid] >= 0) return false;
+    if ((world.paths.get(eid)?.length ?? 0) > 0) return false;
+    return !hasComponent(world.ecs, AttackMoveGoal, eid) || AttackMoveGoal.active[eid] === 0;
+  });
+  if (stalled.length > 0) aiSendWave(world, playerId, stalled, target);
+}
+
 function chooseAiAttackTarget(world: SimWorld, snapshot: AiSnapshot): number | null {
-  const nonTcTargets = snapshot.enemyBuildings.filter(
+  // Walls are obstacles, not objectives: only aim at one when nothing else is left.
+  const nonWallTargets = snapshot.enemyBuildings.filter(
+    (eid) => Building.defId[eid] !== BuildingDefId.WALL
+  );
+  const pool = nonWallTargets.length > 0 ? nonWallTargets : snapshot.enemyBuildings;
+  const nonTcTargets = pool.filter(
     (eid) => Building.defId[eid] !== BuildingDefId.TOWN_CENTER
   );
-  const candidates = nonTcTargets.length > 0 ? nonTcTargets : snapshot.enemyBuildings;
+  const candidates = nonTcTargets.length > 0 ? nonTcTargets : pool;
   let best: { eid: number; score: number } | null = null;
   for (const eid of candidates) {
     if (hasComponent(world.ecs, ConstructionSite, eid)) continue;
@@ -237,10 +286,11 @@ function issueAiMoveOrder(world: SimWorld, eid: number, to: GridPos): void {
   clearWorkOrders(world, eid);
 }
 
-function issueAiAttackMoveOrder(world: SimWorld, eid: number, to: GridPos): void {
-  if (!isMovableEntity(world, eid)) return;
-  if (!hasComponent(world.ecs, Combat, eid)) return;
-  if (!pathTo(world, eid, to.x, to.y)) return;
+/** False when the unit cannot move or has no path to `to`. */
+function issueAiAttackMoveOrder(world: SimWorld, eid: number, to: GridPos): boolean {
+  if (!isMovableEntity(world, eid)) return false;
+  if (!hasComponent(world.ecs, Combat, eid)) return false;
+  if (!pathTo(world, eid, to.x, to.y)) return false;
   AttackTarget.targetEid[eid] = -1;
   AttackTarget.retainGoal[eid] = 0;
   if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
@@ -250,6 +300,7 @@ function issueAiAttackMoveOrder(world: SimWorld, eid: number, to: GridPos): void
   }
   clearWorkOrders(world, eid);
   clearFormationSpeedCap(world, eid);
+  return true;
 }
 
 function issueAiAttackOrder(world: SimWorld, eid: number, target: number): void {
@@ -259,7 +310,7 @@ function issueAiAttackOrder(world: SimWorld, eid: number, target: number): void 
   const inRange = isTargetInAttackRange(world, eid, target);
   const canReach =
     inRange ||
-    (isMovableEntity(world, eid) && pathTo(world, eid, Position.x[target], Position.y[target]));
+    (isMovableEntity(world, eid) && pathToAttackTarget(world, eid, target));
   if (!canReach) return;
   AttackTarget.targetEid[eid] = target;
   AttackTarget.retainGoal[eid] = 1;

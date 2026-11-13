@@ -48,10 +48,14 @@ export function deathSystem(world: SimWorld): void {
         Owner.player[eid]
       );
       recordDeath(world, eid);
+      const killerOwnerId = world.killingBlows.get(eid) ?? -1;
+      world.killingBlows.delete(eid);
       const ownerId = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : 0;
       if (ownerId !== 0) {
+        const def = isBuilding ? BUILDING_TABLE[Building.defId[eid]] : undefined;
         pushGameEvent(world, {
           kind: 'entityDestroyed',
+          eid,
           ownerId,
           isBuilding,
           defId: isBuilding
@@ -59,6 +63,9 @@ export function deathSystem(world: SimWorld): void {
             : hasComponent(world.ecs, UnitKind, eid) ? UnitKind.kind[eid] : -1,
           x: Position.x[eid],
           y: Position.y[eid],
+          footprint: def ? { w: def.footprint.w, h: def.footprint.h } : { w: 1, h: 1 },
+          wasFoundation: isBuilding && hasComponent(world.ecs, ConstructionSite, eid),
+          killerOwnerId,
         });
       }
     }
@@ -150,6 +157,7 @@ export function cleanupSystem(world: SimWorld): void {
       }
     }
     world.paths.delete(eid);
+    world.killingBlows.delete(eid);
     clearFormationSpeedCap(world, eid);
     removeSimEntity(world, eid);
     if (recalculatePopFor !== null) recalculatePlayerPopCap(world, recalculatePopFor);

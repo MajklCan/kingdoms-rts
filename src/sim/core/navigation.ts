@@ -14,7 +14,7 @@ import {
   Position,
   VillagerTag,
 } from '../components';
-import { BUILDING_TABLE } from '../defs';
+import { BUILDING_TABLE, BuildingDefId } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { deterministicPairAngle } from '../systems/separation';
 import { isTileInMap } from '../systems/visibility';
@@ -55,6 +55,19 @@ export function pathTo(world: SimWorld, eid: number, tx: number, ty: number): bo
   PathTarget.x[eid] = path[0].x;
   PathTarget.y[eid] = path[0].y;
   return true;
+}
+
+/**
+ * Path toward something to attack. A wall tile sits inside a line, so the
+ * plain "first free tile around a blocked goal" can be on the far side of
+ * the wall and unreachable; walls are approached through the free tile next
+ * to them that is nearest the attacker instead.
+ */
+export function pathToAttackTarget(world: SimWorld, eid: number, target: number): boolean {
+  if (hasComponent(world.ecs, Building, target) && Building.defId[target] === BuildingDefId.WALL) {
+    return pathToBuildingContact(world, eid, target);
+  }
+  return pathTo(world, eid, Position.x[target], Position.y[target]);
 }
 
 export function pathToResourceContact(world: SimWorld, eid: number, target: number): boolean {

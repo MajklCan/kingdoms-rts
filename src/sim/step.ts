@@ -16,6 +16,7 @@ import { gatheringSystem } from './systems/gathering';
 import { movementSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
 import { cannonImpactSystem, projectileImpactSystem } from './systems/projectiles';
+import { resourceDepletionSystem } from './systems/resource-depletion';
 import { targetingSystem } from './systems/targeting';
 import { visibilitySystem } from './systems/visibility';
 import { winConditionSystem } from './systems/win-condition';
@@ -64,6 +65,9 @@ export function step(world: SimWorld): void {
 
   // 40 - gatherer state machine.
   gatheringSystem(world);
+
+  // 40b - remove emptied resource nodes, move their gatherers on.
+  resourceDepletionSystem(world);
 
   // 41 - credit player banks for any RETURNING villager that just reached drop-off.
   dropoffSystem(world);

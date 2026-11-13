@@ -18,6 +18,7 @@ import { recordTechResearched } from '../core/match-stats';
 import { getHousePopProvided, recalculatePlayerPopCap } from '../core/population';
 import { buildingQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
+import { upgradePlayerWalls } from '../core/walls';
 
 export function applyAdvanceAge(world: SimWorld, playerId: number): void {
   const age = world.ages[playerId];
@@ -117,6 +118,8 @@ export function ageProgressionSystem(world: SimWorld): void {
       // Non-spatial fanfare; render plays it only for the local player.
       pushSoundCue(world, 'age_up', 0, 0, p);
       pushGameEvent(world, { kind: 'ageAdvanced', playerId: p, ageId: age.current });
+      // Palisade -> stone -> brick: standing walls take the new tier's hp.
+      upgradePlayerWalls(world, p);
     }
   }
 }

@@ -81,7 +81,7 @@ export const TECH_TREE: TechDef[] = [
     x: 9.5,
     y: 18,
     requires: [TechId.LUMBER_HUTS, TechId.STONE_MINES],
-    unlocks: ['Barracks', 'Houses', 'Pikemen'],
+    unlocks: ['Barracks', 'Houses', 'Pikemen', 'Palisade Walls'],
   },
   {
     id: TechId.ARCHERS,
@@ -147,7 +147,7 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.CASTLE_AGE,
     name: 'Castle Age',
-    description: 'Advance into Castle Age and unlock gold mining, stables, and knights.',
+    description: 'Advance into Castle Age and unlock gold mining, stables, and scout cavalry.',
     cost: { food: 0, wood: 750, gold: 0, stone: 500 },
     path: 'age',
     icon: 'castle',
@@ -157,7 +157,7 @@ export const TECH_TREE: TechDef[] = [
       [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS],
       [TechId.LUMBER_CREWS, TechId.MINING_CREWS],
     ],
-    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Knights'],
+    unlocks: ['Castle Town Center', 'Gold Mine', 'Stable', 'Scout Cavalry', 'Stone Walls'],
   },
   {
     id: TechId.MILLS,
@@ -207,7 +207,7 @@ export const TECH_TREE: TechDef[] = [
     x: 69.5,
     y: 18,
     requiresAge: AgeId.CASTLE,
-    unlocks: ['Foundry', 'Gunmen', 'Field Cannons'],
+    unlocks: ['Foundry', 'Gunmen', 'Field Cannons', 'Brick Walls'],
   },
 ];
 
@@ -302,6 +302,7 @@ export function isBuildingUnlocked(
       return hasTech(world, playerId, TechId.STONE_MINES);
     case BuildingDefId.HOUSE:
     case BuildingDefId.BARRACKS:
+    case BuildingDefId.WALL:
       return hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);
     case BuildingDefId.ARCHERY_RANGE:
       return false;

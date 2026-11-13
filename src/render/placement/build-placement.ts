@@ -12,7 +12,14 @@ import { ISO, MAP } from '../../config';
 import { Building, Position, Resource } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId, type BuildingDef } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import { buildingQuery, findResourceAt, resourceQuery, type SimWorld } from '@sim/world';
+import {
+  buildingQuery,
+  findResourceAt,
+  getBuildingCost,
+  resourceQuery,
+  wallLineTiles,
+  type SimWorld,
+} from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -37,7 +44,8 @@ export type BuildMode =
   | 'BARRACKS'
   | 'STABLE'
   | 'FOUNDRY'
-  | 'DEFENSIVE_TOWER';
+  | 'DEFENSIVE_TOWER'
+  | 'WALL';
 
 export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   HOUSE: BuildingDefId.HOUSE,
@@ -50,6 +58,7 @@ export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   STABLE: BuildingDefId.STABLE,
   FOUNDRY: BuildingDefId.FOUNDRY,
   DEFENSIVE_TOWER: BuildingDefId.DEFENSIVE_TOWER,
+  WALL: BuildingDefId.WALL,
 };
 
 export class BuildPlacement {
@@ -60,6 +69,8 @@ export class BuildPlacement {
   private readonly ghost: Phaser.GameObjects.Graphics;
   private ghostSprite: Phaser.GameObjects.Sprite | null = null;
   private ghostRef: SpriteRef | null = null;
+  /** WALL mode: first click of a line, waiting for the end tile. */
+  private wallStart: { x: number; y: number } | null = null;
 
   constructor(
     private readonly ctx: SceneContext,
@@ -115,6 +126,7 @@ export class BuildPlacement {
   /** Drop every mode (Esc, world reload). */
   reset(): void {
     this.mode = 'none';
+    this.wallStart = null;
     this.armyRallyMode = false;
     this.awaitingBuildKind = false;
     this.clear();
@@ -149,10 +161,12 @@ export class BuildPlacement {
     if (this.mode !== 'none') {
       if (pointer.rightButtonDown()) {
         this.mode = 'none';
+        this.wallStart = null;
         this.clear();
         setLastEvent('build mode cancelled');
         return true;
       }
+      if (pointer.leftButtonDown() && this.mode === 'WALL') return this.handleWallClick(tx, ty);
       if (pointer.leftButtonDown()) {
         const defId = BUILD_MODE_TO_DEF[this.mode];
         if (!isBuildingUnlocked(this.ctx.world, playerId, defId)) {
@@ -171,6 +185,33 @@ export class BuildPlacement {
       }
     }
     return false;
+  }
+
+  /** WALL mode: the first click anchors the line, the second sends it. */
+  private handleWallClick(tx: number, ty: number): boolean {
+    const playerId = this.ctx.perspectivePlayerId;
+    if (!isInsideMap(tx, ty)) return true;
+    if (!isBuildingUnlocked(this.ctx.world, playerId, BuildingDefId.WALL)) {
+      setLastEvent('walls are locked');
+      this.audio.playUi(SFX_ERROR);
+      this.mode = 'none';
+      this.wallStart = null;
+      this.clear();
+      return true;
+    }
+    if (!this.wallStart) {
+      this.wallStart = { x: tx, y: ty };
+      setLastEvent(`wall from (${tx},${ty}) - click the end tile`);
+      return true;
+    }
+    const { x: x0, y: y0 } = this.wallStart;
+    this.commands.dispatch({ type: 'placeWallLine', playerId, x0, y0, x1: tx, y1: ty });
+    this.audio.playUi(PLACE_BUILDING);
+    setLastEvent(`wall (${x0},${y0}) to (${tx},${ty})`);
+    this.mode = 'none';
+    this.wallStart = null;
+    this.clear();
+    return true;
   }
 
   /** Standing rally flag + the ghost for whichever mode is armed. */
@@ -193,6 +234,10 @@ export class BuildPlacement {
     if (this.mode === 'none') return;
     const { tx, ty } = this.ctx.pointerTile(this.ctx.scene.input.activePointer);
     if (!isInsideMap(tx, ty)) return;
+    if (this.mode === 'WALL' && this.wallStart) {
+      this.drawWallLineGhost(this.wallStart, { x: tx, y: ty });
+      return;
+    }
 
     const defId = BUILD_MODE_TO_DEF[this.mode];
     const def = BUILDING_TABLE[defId];
@@ -209,11 +254,12 @@ export class BuildPlacement {
       def.requiresNearbyResource === false ||
       hasNearbyResource(world, tx, ty, def.harvestKind, def.harvestRadius ?? 6);
     const bank = world.resources[playerId];
+    const cost = getBuildingCost(world, playerId, defId);
     const canAffordBuild =
-      bank[0] >= def.cost.food &&
-      bank[1] >= def.cost.wood &&
-      bank[2] >= def.cost.gold &&
-      bank[3] >= def.cost.stone;
+      bank[0] >= cost.food &&
+      bank[1] >= cost.wood &&
+      bank[2] >= cost.gold &&
+      bank[3] >= cost.stone;
     const unlocked = isBuildingUnlocked(world, playerId, defId);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
 
@@ -228,6 +274,40 @@ export class BuildPlacement {
     g.fillPath();
     g.lineStyle(2, valid ? 0xfeca57 : 0xff4757, 0.9);
     g.strokePath();
+  }
+
+  /** Footprint diamonds along the wall line; red where a tile cannot take a wall
+   *  or the bank runs out (the sim skips or stops there the same way). */
+  private drawWallLineGhost(from: { x: number; y: number }, to: { x: number; y: number }): void {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const def = BUILDING_TABLE[BuildingDefId.WALL];
+    if (!def) return;
+    const cost = getBuildingCost(world, playerId, BuildingDefId.WALL);
+    const bank = world.resources[playerId];
+    let budget = Number.POSITIVE_INFINITY;
+    for (const [k, need] of [[0, cost.food], [1, cost.wood], [2, cost.gold], [3, cost.stone]] as const) {
+      if (need > 0) budget = Math.min(budget, Math.floor(bank[k] / need));
+    }
+    const g = this.ghost;
+    const w = ISO.TILE_W / 2;
+    const h = ISO.TILE_H / 2;
+    for (const tile of wallLineTiles(from.x, from.y, to.x, to.y)) {
+      const blocked = isBuildFootprintBlocked(world, def, tile.x, tile.y);
+      const valid = !blocked && budget > 0;
+      if (valid) budget--;
+      const c = this.ctx.tileToScreen(tile.x, tile.y);
+      g.fillStyle(valid ? def.color : 0xff4757, 0.4);
+      g.beginPath();
+      g.moveTo(c.x, c.y - h);
+      g.lineTo(c.x + w, c.y);
+      g.lineTo(c.x, c.y + h);
+      g.lineTo(c.x - w, c.y);
+      g.closePath();
+      g.fillPath();
+      g.lineStyle(1, valid ? 0xfeca57 : 0xff4757, 0.9);
+      g.strokePath();
+    }
   }
 
   clear(): void {

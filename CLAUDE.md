@@ -31,13 +31,14 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 - Fixed **20 Hz** tick (`SIM.TICK_HZ` in `src/config.ts`). All durations in defs = `Math.round(SIM.TICK_HZ * seconds)`.
 - Single RNG: `world.rng` (Mulberry32, `src/sim/rng.ts`). Never call `Math.random()` in sim. AI tie-breaks, map-gen, forest regrowth route through it.
+- World creation: the scattered berry bushes are the last rng draws in `createSimWorld`. Add new creation-time draws after them so existing maps keep their layout.
 - Tests may monkey-patch `world.rng.int` / `world.rng.next` for determinism (see `forest-regrowth.test.ts`).
 - `step(world)` is pure fn of `(world, inputs)` → same world + same inputs → same next state.
 - **Note:** RNG state is NOT persisted by `serializeSimWorld` currently. Replays from seed work; mid-game save/load won't reproduce future RNG draws.
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 
-Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction → resourceWorksite → gathering → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
+Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
 `world.paused = true` after `createSimWorld()`. Tests must set it to `false`.
 
@@ -58,12 +59,12 @@ src/
     factories/         spawn helpers (military units are a MilitaryUnitSpec table), late-game fixture
     input/             applyInput switch + command handlers (orders, formations, buildings)
     systems/           one file per tick system (visibility, production, combat, movement, ...)
-    ai/                computer player: difficulty, snapshot, brain, economy, military, attack
+    ai/                computer player: difficulty, snapshot, brain, economy, military, attack, breach (picks the wall to knock down)
     missions/          campaign world setup + scripted mission runtime (one file per mission)
     maps/              map generators; map-gen.ts is their barrel
     save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
-    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE + canAfford/spend/refund
+    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE, WALL_TIERS (palisade/stone/brick per age) + canAfford/spend/refund
     tech-tree.ts       TECH_TREE nodes + pure prereq/age helpers
     campaign.ts        2 missions: SIEGE_OF_BRNO, BATTLE_OF_BILA_HORA
     pathfinding.ts     EasyStar wrapper, LOS smoothing, nearest-walkable fallback
@@ -148,7 +149,7 @@ Scripts in `scripts/` (`gen-minimal.mjs`, `gen-tc-v2.mjs`, `gen-voxel-tc.mjs`) e
 
 ## Save / load
 
-- `SAVE_VERSION=2`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats. v1 saves migrate with zeroed stats (`migrateSavedGame`).
+- `SAVE_VERSION=3`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 

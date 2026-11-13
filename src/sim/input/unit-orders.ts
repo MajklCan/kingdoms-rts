@@ -25,7 +25,7 @@ import {
 import type { GridPos } from '../pathfinding';
 import { LOCAL_PLAYER_ID } from '../core/constants';
 import { findSpawnSpot } from '../core/grid';
-import { pathTo } from '../core/navigation';
+import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { SimWorld } from '../core/types';
 import { routeToNearestDropOff } from '../systems/dropoff';
 import { startGatheringResource } from '../systems/gathering';
@@ -117,7 +117,7 @@ export function applyAttackCommand(
     const canReach =
       inRange ||
       (isMovableEntity(world, eid) &&
-        pathTo(world, eid, Position.x[targetEid], Position.y[targetEid]));
+        pathToAttackTarget(world, eid, targetEid));
     if (!canReach) continue;
 
     AttackTarget.targetEid[eid] = targetEid;

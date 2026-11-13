@@ -46,6 +46,8 @@ export type SimInput =
   // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
+  /** Wall foundations along the 4-connected line (x0, y0) -> (x1, y1), integer tiles. */
+  | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number }
   | { type: 'removeSelectedBuildings'; playerId: number }
   | { type: 'trainUnit'; atEid: number; defId: number; count?: number; playerId?: number }
   /** Cancel queue entry `slot` (0 = the one training now). Without a slot the
@@ -172,15 +174,27 @@ export type GameEvent =
   | { kind: 'buildingCompleted'; tick: number; playerId: number; buildingDefId: number; eid: number; x: number; y: number }
   | { kind: 'researchCompleted'; tick: number; playerId: number; techId: TechIdValue }
   | { kind: 'ageAdvanced'; tick: number; playerId: number; ageId: number }
+  /** A resource node ran dry and was removed (trees leave a stump in render). */
+  | { kind: 'resourceDepleted'; tick: number; eid: number; resourceKind: number; x: number; y: number }
   | {
       kind: 'entityDestroyed';
       tick: number;
+      /** The entity's raw eid this tick (removed by cleanup the same tick). */
+      eid: number;
       ownerId: number;
       isBuilding: boolean;
-      /** Unit def id for units, building def id for buildings. */
+      /** Unit def id (UnitDefId) for units, building def id (BuildingDefId) for buildings. */
       defId: number;
+      /** Position: unit position, or the building's footprint anchor. */
       x: number;
       y: number;
+      /** Footprint in tiles (1x1 for units). Occupied tiles start at
+       *  round(x) - floor(w / 2), round(y) - floor(h / 2), like the sim grid. */
+      footprint: { w: number; h: number };
+      /** True when a building fell before its construction finished. */
+      wasFoundation: boolean;
+      /** Player whose hit took it to zero hp; -1 when no hit is on record. */
+      killerOwnerId: number;
     };
 
 interface CannonWindup {
@@ -327,6 +341,18 @@ export interface SimWorld {
   soundCues: SoundCue[];
   /** Render-consumed player-facing events (trained, built, researched, destroyed). */
   gameEvents: GameEvent[];
+  /**
+   * eid -> owner of the hit that took it to zero hp. Output-only bookkeeping
+   * for the entityDestroyed event: written by applyDamage, consumed by the
+   * death system, never read by gameplay, not saved and not checksummed.
+   */
+  killingBlows: Map<number, number>;
+  /**
+   * uint32 seed the map was generated from (saved since SAVE_VERSION 3; older
+   * saves derive one from the map bytes). Cosmetic only: no system reads it,
+   * not checksummed. See core/map-seed.ts.
+   */
+  mapSeed: number;
   /** Per-player match statistics, indexed by playerId. Write-only for the sim. */
   matchStats: PlayerMatchStats[];
   /** When true, step() is a no-op (title screen, pause menu). */
