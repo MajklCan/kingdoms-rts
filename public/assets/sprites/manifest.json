@@ -28,6 +28,16 @@
    "frames": 210
   },
   {
+   "key": "kr-decor-0",
+   "image": "decor-0.png",
+   "json": "decor-0.json",
+   "size": [
+    1024,
+    393
+   ],
+   "frames": 58
+  },
+  {
    "key": "kr-nature-0",
    "image": "nature-0.png",
    "json": "nature-0.json",
@@ -1576,6 +1586,557 @@
     "2"
    ],
    "default": "0"
+  },
+  "decor.barrels": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "barrels",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "barrels__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.bush": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "a": {
+     "atlas": "kr-decor-0",
+     "frame": "bush_a",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "bush_a__shadow"
+    },
+    "small": {
+     "atlas": "kr-decor-0",
+     "frame": "bush_small",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "bush_small__shadow"
+    }
+   },
+   "default": "a"
+  },
+  "decor.campfire": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "campfire",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "campfire__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.cart": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "empty": {
+     "atlas": "kr-decor-0",
+     "frame": "cart_empty",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "cart_empty__shadow"
+    },
+    "hay": {
+     "atlas": "kr-decor-0",
+     "frame": "cart_hay",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "cart_hay__shadow"
+    },
+    "logs": {
+     "atlas": "kr-decor-0",
+     "frame": "cart_logs",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "cart_logs__shadow"
+    }
+   },
+   "default": "empty"
+  },
+  "decor.crates": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "crates",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "crates__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.fence_rail": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "x": {
+     "atlas": "kr-decor-0",
+     "frame": "fence_rail_x",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "fence_rail_x__shadow",
+     "connections": "x"
+    },
+    "y": {
+     "atlas": "kr-decor-0",
+     "frame": "fence_rail_y",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "fence_rail_y__shadow",
+     "connections": "y"
+    }
+   },
+   "default": "x"
+  },
+  "decor.fence_wattle": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "x": {
+     "atlas": "kr-decor-0",
+     "frame": "fence_wattle_x",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "fence_wattle_x__shadow",
+     "connections": "x"
+    },
+    "y": {
+     "atlas": "kr-decor-0",
+     "frame": "fence_wattle_y",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "fence_wattle_y__shadow",
+     "connections": "y"
+    }
+   },
+   "default": "x"
+  },
+  "decor.fern": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "fern",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "fern__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.flowers": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "meadow": {
+     "atlas": "kr-decor-0",
+     "frame": "flowers_meadow",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "flowers_meadow__shadow"
+    },
+    "poppy": {
+     "atlas": "kr-decor-0",
+     "frame": "flowers_poppy",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "flowers_poppy__shadow"
+    }
+   },
+   "default": "meadow"
+  },
+  "decor.grass": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "a": {
+     "atlas": "kr-decor-0",
+     "frame": "grass_tall_a",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "grass_tall_a__shadow"
+    },
+    "b": {
+     "atlas": "kr-decor-0",
+     "frame": "grass_tall_b",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "grass_tall_b__shadow"
+    },
+    "dry": {
+     "atlas": "kr-decor-0",
+     "frame": "grass_dry",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "grass_dry__shadow"
+    }
+   },
+   "default": "a"
+  },
+  "decor.hay": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "bales": {
+     "atlas": "kr-decor-0",
+     "frame": "hay_bales",
+     "anchor": [
+      70,
+      76
+     ],
+     "size": [
+      140,
+      82
+     ],
+     "shadow": "hay_bales__shadow"
+    },
+    "stack": {
+     "atlas": "kr-decor-0",
+     "frame": "haystack",
+     "anchor": [
+      70,
+      76
+     ],
+     "size": [
+      140,
+      82
+     ],
+     "shadow": "haystack__shadow"
+    }
+   },
+   "default": "bales"
+  },
+  "decor.reeds": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "reeds",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "reeds__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.rocks": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "boulder": {
+     "atlas": "kr-decor-0",
+     "frame": "rocks_boulder",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "rocks_boulder__shadow"
+    },
+    "medium": {
+     "atlas": "kr-decor-0",
+     "frame": "rocks_medium",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "rocks_medium__shadow"
+    },
+    "slabs": {
+     "atlas": "kr-decor-0",
+     "frame": "rocks_slabs",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "rocks_slabs__shadow"
+    },
+    "small": {
+     "atlas": "kr-decor-0",
+     "frame": "rocks_small",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "rocks_small__shadow"
+    }
+   },
+   "default": "boulder"
+  },
+  "decor.signpost": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "signpost",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "signpost__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.wayside_shrine": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "wayside_shrine",
+     "anchor": [
+      70,
+      84
+     ],
+     "size": [
+      140,
+      90
+     ],
+     "shadow": "wayside_shrine__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.well": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "well",
+     "anchor": [
+      70,
+      74
+     ],
+     "size": [
+      140,
+      80
+     ],
+     "shadow": "well__shadow"
+    }
+   },
+   "default": "default"
+  },
+  "decor.woodpile": {
+   "kind": "decor",
+   "footprint": [
+    1,
+    1
+   ],
+   "variants": {
+    "default": {
+     "atlas": "kr-decor-0",
+     "frame": "woodpile",
+     "anchor": [
+      70,
+      70
+     ],
+     "size": [
+      140,
+      76
+     ],
+     "shadow": "woodpile__shadow"
+    }
+   },
+   "default": "default"
   },
   "resource.berry_bush": {
    "kind": "resource",
