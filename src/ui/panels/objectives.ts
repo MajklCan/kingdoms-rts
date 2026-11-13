@@ -1,7 +1,7 @@
 /**
  * Objectives scroll for campaign missions: briefing, objectives with live
  * check marks and the mission note. Opens automatically when a mission
- * starts (sim paused in single player until dismissed), from the top bar,
+ * starts (the mission begins paused and runs once it is dismissed), from the top bar,
  * the pause menu or the O key. Completed objectives raise an alert.
  */
 
@@ -89,14 +89,16 @@ function render(mission: Mission): void {
   );
 }
 
-export function openObjectives(): void {
+/** `missionStart`: the mission begins paused behind its briefing, and closing
+ *  the briefing starts it (instead of restoring the paused state). */
+export function openObjectives(missionStart = false): void {
   const scene = getScene();
   const mission = scene?.getCampaignMission();
   if (!scene || !mission) return;
   render(mission);
   const m = ensureModal();
   if (m.isOpen()) return;
-  wasPaused = scene.isPaused();
+  wasPaused = missionStart ? false : scene.isPaused();
   if (!scene.isMultiplayer()) scene.setPaused(true);
   m.open();
 }
@@ -113,11 +115,13 @@ export function updateObjectives(scene: GameScene): void {
     return;
   }
   if (mission.id !== lastMissionId) {
+    // Wait for the match phase: the mission is paused until its briefing closes.
+    if (appState.phase !== 'match') return;
     lastMissionId = mission.id;
     completed.clear();
     for (const o of mission.objectives) if (o.completed) completed.add(o.id);
     lastSig = '';
-    if (appState.phase === 'match') openObjectives();
+    openObjectives(true);
   }
   const sig = mission.objectives.map((o) => `${o.id}:${o.completed ? 1 : 0}`).join('|');
   if (sig === lastSig) return;

@@ -1,79 +1,51 @@
 /**
- * Event log: the last few game messages (build prompts, training, research)
- * as a faint chronicle above the minimap. Fed from the scene's last-event
- * line (mirrored into a hidden #dbg-event node by the debug overlay updater)
- * until the scene offers an event subscription.
+ * Event log: the last few game messages (training, construction, research,
+ * losses, refused orders) as a faint chronicle above the minimap. Fed by the
+ * scene's typed message subscription; lines with a location jump the camera
+ * when clicked.
  */
 
 import type { GameScene } from '../../render/game-scene';
 import { h, plainDashes } from '../dom';
-import { onTrackerEvent } from '../match/tracker';
-import { UNIT_TABLE } from '../../sim/defs';
-import { pushAlert } from './alerts';
+import { onGameMessage, panToTile, type GameMessage } from '../game-bridge';
 
 const MAX_LINES = 4;
 const LINE_TTL = 9000;
 
 let logEl: HTMLElement | null = null;
-let sourceEl: HTMLElement | null = null;
-let lastRaw = '';
+let unsubscribe: (() => void) | null = null;
 const lines: Array<{ el: HTMLElement; at: number }> = [];
 
-// Debug chatter from the scene (selection echoes, coordinates, entity ids)
-// stays in the dev panel; the player log only keeps meaningful events.
-const NOISE = [
-  /^-$/,
-  /^(placement|build mode|army rally) cancelled$/i,
-  /^game speed/i,
-  /^(selected|box-selected|cleared selection)/i,
-  /^f[12]: selected/i,
-  /eid=\d+/,
-  /\(-?\d+,\s*-?\d+\)$/,
-];
-
 export function buildEventLog(): HTMLElement {
-  sourceEl = h('span', { id: 'dbg-event', hidden: true });
   logEl = h('ol', { class: 'event-log', id: 'event-log', 'aria-label': 'Recent events', 'aria-live': 'off' });
-  return h('div', { class: 'event-log-wrap' }, logEl, sourceEl);
+  return h('div', { class: 'event-log-wrap' }, logEl);
 }
 
-function tidy(raw: string): string {
-  const text = plainDashes(raw).trim();
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-export function logLine(text: string): void {
+export function logLine(text: string, tone: GameMessage['tone'] = 'info', at?: GameMessage['at']): void {
   if (!logEl) return;
-  const el = h('li', { class: 'event-line' }, text);
+  const el = h('li', { class: `event-line tone-${tone}`, 'data-tone': tone }, plainDashes(text));
+  if (at) {
+    el.classList.add('is-located');
+    el.title = 'Show on the map';
+    el.addEventListener('click', () => {
+      const scene = activeScene;
+      if (scene) panToTile(scene, at.x, at.y);
+    });
+  }
   logEl.append(el);
   lines.push({ el, at: performance.now() });
   while (lines.length > MAX_LINES) lines.shift()!.el.remove();
 }
 
+let activeScene: GameScene | null = null;
+
 export function bindEventLog(): void {
-  onTrackerEvent((ev) => {
-    if (ev.type === 'unit-trained') {
-      const name = UNIT_TABLE[ev.defId]?.name;
-      if (name) logLine(`${name} ready`);
-    } else if (ev.type === 'unit-lost') {
-      logLine('A unit has fallen');
-    } else if (ev.type === 'building-lost') {
-      logLine('A building was lost');
-    }
-  });
+  // The subscription is opened lazily once the scene's UI API exists.
 }
 
-export function updateEventLog(_scene: GameScene, now: number): void {
-  if (!sourceEl) return;
-  const raw = sourceEl.textContent ?? '';
-  if (raw !== lastRaw) {
-    lastRaw = raw;
-    if (raw && !NOISE.some((re) => re.test(raw.trim()))) {
-      const text = tidy(raw);
-      logLine(text);
-      if (/\bneeds\b|not enough|pop space/i.test(raw)) pushAlert({ kind: 'resources', text });
-    }
-  }
+export function updateEventLog(scene: GameScene, now: number): void {
+  activeScene = scene;
+  if (!unsubscribe) unsubscribe = onGameMessage((m) => logLine(m.text, m.tone, m.at));
   for (const line of lines) {
     const age = now - line.at;
     line.el.classList.toggle('is-fading', age > LINE_TTL * 0.6);
@@ -84,5 +56,4 @@ export function updateEventLog(_scene: GameScene, now: number): void {
 export function resetEventLog(): void {
   for (const line of lines) line.el.remove();
   lines.length = 0;
-  lastRaw = sourceEl?.textContent ?? '';
 }

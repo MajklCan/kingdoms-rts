@@ -1,14 +1,18 @@
 /**
  * Minimap: an isometric diamond that matches the camera projection, drawn
- * on a device-pixel-ratio canvas. Terrain is cached and only re-baked when
- * exploration changes; units, buildings, combat pings and the camera frame
- * redraw at ~12 fps. Click or drag pans the camera.
+ * on a device-pixel-ratio canvas and stretched to fill its frame. Terrain is
+ * cached and only re-baked when exploration changes; units, buildings,
+ * combat and alert pings and the camera frame (elevation corrected, from the
+ * scene) redraw at ~12 fps.
+ *
+ * Left click or drag pans the camera. Right-click orders the selection to
+ * move there; with A held (or Alt) it attack-moves, as on the battlefield.
  */
 
 import type { GameScene } from '../../render/game-scene';
 import { TileType } from '../../sim/map-gen';
 import { h } from '../dom';
-import { getCameraTileQuad, getScene } from '../game-bridge';
+import { getCameraTileQuad, getScene, issueMapOrder, panToTile, type TilePoint } from '../game-bridge';
 
 const TILE_RGB: Record<number, [number, number, number]> = {
   [TileType.GRASS]: [84, 112, 52],
@@ -41,19 +45,57 @@ let terrainSig = -1;
 let lastDraw = 0;
 let mapN = 64;
 let dragging = false;
+/** A is held: right-click attack-moves (mirrors A+click on the battlefield). */
+let attackKeyHeld = false;
+
+type PingKind = 'attack' | 'loss';
+interface Ping {
+  x: number;
+  y: number;
+  kind: PingKind;
+  at: number;
+}
+const PING_MS = 4000;
+const PING_RGB: Record<PingKind, string> = { attack: '255, 70, 60', loss: '255, 166, 77' };
+let pings: Ping[] = [];
+
+/** Pulse a ring on the minimap (alerts call this). */
+export function addMinimapPing(at: TilePoint, kind: PingKind): void {
+  pings.push({ x: at.x, y: at.y, kind, at: performance.now() });
+  if (pings.length > 12) pings.shift();
+}
 
 export function buildMinimap(): HTMLElement {
   canvas = h('canvas', {
     id: 'minimap-canvas',
     class: 'minimap-canvas',
     role: 'img',
-    'aria-label': 'Minimap. Click to move the camera.',
+    'aria-label': 'Minimap. Click to move the camera, right-click to send the selection.',
   });
   canvas.addEventListener('pointerdown', (ev) => {
+    if (ev.button === 2) {
+      ev.preventDefault();
+      orderFromEvent(ev);
+      return;
+    }
     if (ev.button !== 0) return;
+    if (attackKeyHeld) {
+      orderFromEvent(ev);
+      return;
+    }
     dragging = true;
     canvas!.setPointerCapture(ev.pointerId);
     panFromEvent(ev);
+  });
+  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
+  window.addEventListener('keydown', (ev) => {
+    if (ev.code === 'KeyA') attackKeyHeld = true;
+  });
+  window.addEventListener('keyup', (ev) => {
+    if (ev.code === 'KeyA') attackKeyHeld = false;
+  });
+  window.addEventListener('blur', () => {
+    attackKeyHeld = false;
   });
   canvas.addEventListener('pointermove', (ev) => {
     if (dragging) panFromEvent(ev);
@@ -70,33 +112,65 @@ export function buildMinimap(): HTMLElement {
   );
 }
 
-function geometry(c: HTMLCanvasElement): { k: number; x0: number; y0: number; dpr: number } {
+/** Most a frame may stretch the 2:1 diamond before it reads as distorted. */
+const MAX_STRETCH = 1.4;
+/** Inset (device px) so the gilded rim is not clipped by the frame. */
+const RIM_INSET = 2;
+
+interface Geometry {
+  /** Horizontal px per tile step (half the diamond width / mapN). */
+  kx: number;
+  /** Vertical px per tile step (diamond height / mapN). */
+  ky: number;
+  x0: number;
+  y0: number;
+  dpr: number;
+}
+
+function geometry(c: HTMLCanvasElement): Geometry {
   const dpr = Math.min(3, window.devicePixelRatio || 1);
-  const w = c.width;
-  const hgt = c.height;
-  // Fit a 2:1 diamond of mapN x mapN tiles into the canvas.
-  const k = Math.min(w / (2 * mapN), hgt / mapN);
-  const x0 = w / 2;
-  const y0 = (hgt - mapN * k) / 2;
-  return { k, x0, y0, dpr };
+  const w = Math.max(1, c.width - 2 * RIM_INSET * dpr);
+  const hgt = Math.max(1, c.height - 2 * RIM_INSET * dpr);
+  // Fill the frame: the diamond's bounding box takes the whole canvas, with
+  // the 2:1 iso ratio bent at most MAX_STRETCH either way.
+  let kx = w / (2 * mapN);
+  let ky = hgt / mapN;
+  if (ky > kx * MAX_STRETCH) ky = kx * MAX_STRETCH;
+  if (kx > ky * MAX_STRETCH) kx = ky * MAX_STRETCH;
+  const x0 = c.width / 2;
+  const y0 = (c.height - mapN * ky) / 2;
+  return { kx, ky, x0, y0, dpr };
 }
 
-function toMini(g: { k: number; x0: number; y0: number }, tx: number, ty: number): [number, number] {
-  return [g.x0 + (tx - ty) * g.k, g.y0 + ((tx + ty) * g.k) / 2];
+function toMini(g: Geometry, tx: number, ty: number): [number, number] {
+  return [g.x0 + (tx - ty) * g.kx, g.y0 + ((tx + ty) * g.ky) / 2];
 }
 
-function panFromEvent(ev: PointerEvent): void {
-  const scene = getScene();
-  if (!scene || !canvas) return;
+/** Canvas event -> fractional tile (unclamped). */
+function tileFromEvent(ev: PointerEvent): TilePoint | null {
+  if (!canvas) return null;
   const rect = canvas.getBoundingClientRect();
   const sx = ((ev.clientX - rect.left) / rect.width) * canvas.width;
   const sy = ((ev.clientY - rect.top) / rect.height) * canvas.height;
   const g = geometry(canvas);
-  const a = (sx - g.x0) / g.k; // tx - ty
-  const b = (2 * (sy - g.y0)) / g.k; // tx + ty
-  const tx = Math.max(0, Math.min(mapN - 1, (a + b) / 2));
-  const ty = Math.max(0, Math.min(mapN - 1, (b - a) / 2));
-  scene.panToTile(tx, ty);
+  const a = (sx - g.x0) / g.kx; // tx - ty
+  const b = (2 * (sy - g.y0)) / g.ky; // tx + ty
+  return { x: (a + b) / 2, y: (b - a) / 2 };
+}
+
+function panFromEvent(ev: PointerEvent): void {
+  const scene = getScene();
+  const t = tileFromEvent(ev);
+  if (!scene || !t) return;
+  panToTile(scene, Math.max(0, Math.min(mapN - 1, t.x)), Math.max(0, Math.min(mapN - 1, t.y)));
+}
+
+function orderFromEvent(ev: PointerEvent): void {
+  const scene = getScene();
+  const t = tileFromEvent(ev);
+  if (!scene || !t) return;
+  if (t.x < 0 || t.y < 0 || t.x > mapN - 1 || t.y > mapN - 1) return;
+  issueMapOrder(scene, attackKeyHeld || ev.altKey ? 'attackMove' : 'move', t.x, t.y);
 }
 
 function bakeTerrain(tiles: Uint8Array, w: number, hgt: number): void {
@@ -149,7 +223,7 @@ export function renderMinimap(scene: GameScene, now: number): void {
       const g = geometry(canvas);
       tc.clearRect(0, 0, cw, ch);
       tc.imageSmoothingEnabled = false;
-      tc.setTransform(g.k, g.k / 2, -g.k, g.k / 2, g.x0, g.y0);
+      tc.setTransform(g.kx, g.ky / 2, -g.kx, g.ky / 2, g.x0, g.y0);
       tc.drawImage(topDown, 0, 0);
       tc.setTransform(1, 0, 0, 1, 0, 0);
       // Gilded diamond rim.
@@ -172,13 +246,14 @@ export function renderMinimap(scene: GameScene, now: number): void {
   ctx.clearRect(0, 0, cw, ch);
   if (terrainCanvas) ctx.drawImage(terrainCanvas, 0, 0);
   const g = geometry(canvas);
-  const unitR = Math.max(1.2, g.k * 0.55);
+  const k = Math.min(g.kx, g.ky);
+  const unitR = Math.max(1.2, k * 0.55);
   for (const e of data.entities) {
     if (e.kind >= 10) continue;
     const [x, y] = toMini(g, e.x, e.y);
     ctx.fillStyle = TEAM_HEX[e.player] ?? '#fff';
     if (e.kind === 3) {
-      const s = Math.max(2.5, g.k * 1.6);
+      const s = Math.max(2.5, k * 1.6);
       ctx.fillRect(x - s / 2, y - s / 2, s, s);
       ctx.strokeStyle = 'rgba(0,0,0,0.8)';
       ctx.lineWidth = Math.max(0.75, dpr * 0.5);
@@ -198,6 +273,21 @@ export function renderMinimap(scene: GameScene, now: number): void {
     ctx.arc(x, y, (3 + 9 * pulse) * dpr, 0, Math.PI * 2);
     ctx.stroke();
   }
+  const t = performance.now();
+  pings = pings.filter((p) => t - p.at < PING_MS);
+  for (const p of pings) {
+    const [x, y] = toMini(g, p.x, p.y);
+    const age = (t - p.at) / PING_MS;
+    // Two staggered rings so a ping reads as a pulse, not a static circle.
+    for (const offset of [0, 0.5]) {
+      const phase = (age * 2 + offset) % 1;
+      ctx.strokeStyle = `rgba(${PING_RGB[p.kind]}, ${(1 - phase) * (1 - age) * 0.95})`;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.arc(x, y, (4 + 14 * phase) * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
   const quad = getCameraTileQuad(scene);
   if (quad) {
     ctx.strokeStyle = 'rgba(255, 244, 214, 0.95)';
@@ -215,4 +305,5 @@ export function renderMinimap(scene: GameScene, now: number): void {
 
 export function resetMinimap(): void {
   terrainSig = -1;
+  pings = [];
 }

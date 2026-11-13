@@ -6,7 +6,6 @@
 import { hasComponent } from 'bitecs';
 import { Health, Owner, Position, TownCenterTag } from '@sim/components';
 import { buildingQuery, unitQuery } from '@sim/world';
-import { tileToScreen } from '../iso';
 import { isTextEntryActive } from '../input/text-entry';
 import type { SceneContext } from '../scene-context';
 
@@ -84,11 +83,34 @@ export class CameraController {
     if (keys.D.isDown) cam.scrollX += PAN_SPEED;
   }
 
-  /** Centre the viewport on tile (tx, ty) (flat projection, no elevation). */
+  /** Centre the viewport on tile (tx, ty), on top of the terrain there. */
   panToTile(tx: number, ty: number): void {
-    const c = tileToScreen(tx, ty);
-    const root = this.ctx.layers.root;
-    this.camera.centerOn(root.x + c.x, root.y + c.y);
+    const c = this.ctx.localToWorld(this.ctx.tileToScreen(tx, ty));
+    this.camera.centerOn(c.x, c.y);
+  }
+
+  /**
+   * The four tiles under the viewport corners (top-left, top-right,
+   * bottom-right, bottom-left), elevation corrected like pointer picking, so
+   * the minimap frame matches what is actually on screen.
+   */
+  viewTileQuad(): Array<{ x: number; y: number }> {
+    const view = this.camera.worldView;
+    const corners: Array<[number, number]> = [
+      [view.x, view.y],
+      [view.x + view.width, view.y],
+      [view.x + view.width, view.y + view.height],
+      [view.x, view.y + view.height],
+    ];
+    return corners.map(([wx, wy]) => {
+      const t = this.ctx.pickTile(wx, wy);
+      return { x: t.tileX, y: t.tileY };
+    });
+  }
+
+  /** Is the camera-world point inside the current viewport? */
+  isWorldPointInView(wx: number, wy: number): boolean {
+    return this.camera.worldView.contains(wx, wy);
   }
 
   /** Town centre, else the centroid of own units, else the spawn point. */

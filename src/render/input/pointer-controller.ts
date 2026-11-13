@@ -1,34 +1,48 @@
 /**
  * Mouse input on the battlefield: click / double-click / drag-box selection,
- * right-click context command (attack > resource hint > move), A+click
- * attack-move, and hand-off to placement modes while one is armed.
+ * right-click context command (attack > army rally > resource hint > move),
+ * A+click attack-move, and hand-off to placement modes while one is armed.
+ *
+ * Orders leave a ground marker and refusals are reported through the
+ * command feedback, so the player always sees what a click did.
  *
  * Drag boxes are also tracked through window-level pointer events so a drag
  * released outside the canvas (or over DOM HUD) still completes.
  */
 
-import { Owner, Position, Resource, ResourceKindId } from '@sim/components';
+import { hasComponent } from 'bitecs';
+import {
+  Building,
+  DeadTag,
+  Health,
+  Owner,
+  Position,
+  Resource,
+  ResourceKindId,
+  UnitKind,
+  WorksiteWorker,
+} from '@sim/components';
 import {
   clearSelection,
   findEntityNear,
   findResourceAt,
   isEnemyOf,
-  selectUnitsOfSameKindInRadius,
+  selectedQuery,
   setSelected,
   unitQuery,
 } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
-import { ERROR as SFX_ERROR } from '../audio/sound-map';
+import { isArmyProducerDefId } from '../commands/economy';
+import type { CommandFeedback } from '../commands/feedback';
 import type { PlayerCommands } from '../commands/player-commands';
 import type { GameAudio } from '../game-audio';
 import { entityKindName, resourceKindName } from '../hud/selection-info';
-import type { BuildPlacement } from '../placement/build-placement';
+import { BUILD_MODE_TO_DEF, type BuildPlacement } from '../placement/build-placement';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
 
 const DRAG_THRESHOLD_PX = 6;
 const DOUBLE_CLICK_MS = 300;
-const SAME_TYPE_SELECT_RADIUS_TILES = 12;
 /** Drag box draws above the world (camera space, not in a world layer). */
 const DRAG_BOX_DEPTH = 20000;
 
@@ -37,12 +51,15 @@ interface Point {
   y: number;
 }
 
+export type MapOrderKind = 'move' | 'attackMove';
+
 export class PointerController {
   private dragStart: Point | null = null;
   private dragCurrent: Point | null = null;
   private isDragging = false;
   private dragGfx!: Phaser.GameObjects.Graphics;
   private lastLeftUnitClick: { eid: number; atMs: number } | null = null;
+  private feedback: CommandFeedback | null = null;
 
   constructor(
     private readonly ctx: SceneContext,
@@ -73,6 +90,11 @@ export class PointerController {
     this.dragGfx.setDepth(DRAG_BOX_DEPTH);
   }
 
+  /** Where order markers go (wired by the UI API). */
+  setFeedback(feedback: CommandFeedback): void {
+    this.feedback = feedback;
+  }
+
   selectAllVillagers(): void {
     const n = this.selectOwnUnits(true);
     setLastEvent(`F1: selected ${n} worker${n === 1 ? '' : 's'}`);
@@ -81,6 +103,27 @@ export class PointerController {
   selectAllMilitary(): void {
     const n = this.selectOwnUnits(false);
     setLastEvent(`F2: selected ${n} unit${n === 1 ? '' : 's'}`);
+  }
+
+  /**
+   * Move or attack-move the selection to a tile (minimap right-click and the
+   * battlefield share this). Returns false when nothing commandable is selected.
+   */
+  issueMapOrder(kind: MapOrderKind, tx: number, ty: number): boolean {
+    const { commands, audio } = this.deps;
+    if (!isInsideMap(tx, ty)) return false;
+    if (commands.selectedCommandableCount() === 0) return false;
+    if (kind === 'attackMove') {
+      commands.dispatch({ type: 'attackMoveSelected', to: { x: tx, y: ty } });
+      audio.barkAttack();
+      this.feedback?.orderMarker('attack-move', tx, ty);
+    } else {
+      commands.dispatch({ type: 'moveSelected', to: { x: tx, y: ty } });
+      audio.barkMove();
+      this.feedback?.orderMarker('move', tx, ty);
+    }
+    setLastEvent(`${kind} -> (${tx},${ty})`);
+    return true;
   }
 
   private selectOwnUnits(villagers: boolean): number {
@@ -98,7 +141,25 @@ export class PointerController {
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
     const { tx, ty, tileX, tileY } = this.ctx.pointerTile(pointer);
-    if (this.deps.placement.handlePointerDown(pointer, tx, ty)) return;
+    const { placement, commands } = this.deps;
+
+    // Refuse an invalid placement up front and keep the build mode armed, so
+    // the player sees why and can click somewhere else.
+    if (placement.mode !== 'none' && pointer.leftButtonDown()) {
+      const failure = commands.placementFailure(BUILD_MODE_TO_DEF[placement.mode], tx, ty);
+      if (failure) {
+        commands.fail(failure);
+        return;
+      }
+    }
+    const wasRallyMode = placement.armyRallyMode;
+    if (placement.handlePointerDown(pointer, tx, ty)) {
+      if (wasRallyMode && pointer.leftButtonDown() && isInsideMap(tx, ty)) {
+        this.feedback?.orderMarker('rally', tx, ty);
+        commands.confirm('Army rally point set');
+      }
+      return;
+    }
 
     if (pointer.rightButtonDown()) {
       this.onRightClick(tx, ty, tileX, tileY);
@@ -107,39 +168,47 @@ export class PointerController {
     }
   }
 
-  /** Priority: visible enemy -> attack; explored resource -> hint; else move. */
+  /** Priority: visible enemy -> attack; only army buildings selected -> rally;
+   *  explored resource -> hint; else move. */
   private onRightClick(tx: number, ty: number, tileX: number, tileY: number): void {
     const world = this.ctx.world;
     const { commands, audio } = this.deps;
-    if (!isInsideMap(tx, ty)) {
-      setLastEvent(`right-click outside map (${tx},${ty})`);
-      return;
-    }
+    if (!isInsideMap(tx, ty)) return;
+    const hasUnits = commands.selectedCommandableCount() > 0;
     const targetEid = findEntityNear(world, tileX, tileY, 0.7);
     if (
+      hasUnits &&
       targetEid !== null &&
       this.ctx.isEntityVisible(targetEid) &&
       isEnemyOf(world, targetEid, this.ctx.perspectivePlayerId)
     ) {
       commands.dispatch({ type: 'attackSelected', targetEid });
       audio.barkAttack();
+      this.feedback?.orderMarker('attack', Position.x[targetEid], Position.y[targetEid]);
       setLastEvent(`attack eid=${targetEid}`);
+      return;
+    }
+    if (!hasUnits) {
+      if (this.selectionIsOwnArmyProducers()) {
+        commands.dispatch({ type: 'setArmyRallyPoint', playerId: this.ctx.perspectivePlayerId, x: tx, y: ty });
+        this.feedback?.orderMarker('rally', tx, ty);
+        commands.confirm('Army rally point set');
+      }
       return;
     }
     const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
     if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
       const kind = Resource.kind[resourceEid];
-      audio.playUi(SFX_ERROR);
-      setLastEvent(
-        kind === ResourceKindId.FOOD
-          ? 'food comes from farms'
-          : `${resourceKindName(kind)} is harvested by nearby worksite buildings`
-      );
+      commands.fail({
+        reason: 'unavailable',
+        text:
+          kind === ResourceKindId.FOOD
+            ? 'Food comes from farms'
+            : `${capitalize(resourceKindName(kind))} is harvested by a nearby worksite`,
+      });
       return;
     }
-    commands.dispatch({ type: 'moveSelected', to: { x: tx, y: ty } });
-    audio.barkMove();
-    setLastEvent(`move → (${tx},${ty})`);
+    this.issueMapOrder('move', tx, ty);
   }
 
   private onLeftClick(
@@ -160,25 +229,16 @@ export class PointerController {
     const aKey = this.ctx.scene.input.keyboard?.addKey('A', false);
     if (aKey?.isDown) {
       this.lastLeftUnitClick = null;
-      if (!isInsideMap(tx, ty)) return;
-      this.deps.commands.dispatch({ type: 'attackMoveSelected', to: { x: tx, y: ty } });
-      this.deps.audio.barkAttack();
-      setLastEvent(`attack-move → (${tx},${ty})`);
+      this.cancelDragBox();
+      this.issueMapOrder('attackMove', tx, ty);
       return;
     }
 
     const picked = findEntityNear(world, tileX, tileY, 0.7);
     const eid = picked !== null && this.ctx.isEntityVisible(picked) ? picked : null;
     if (eid !== null && this.ctx.isOwnUnit(eid) && this.isDoubleClickOnSameUnit(eid)) {
-      const n = selectUnitsOfSameKindInRadius(
-        world,
-        eid,
-        SAME_TYPE_SELECT_RADIUS_TILES,
-        this.ctx.perspectivePlayerId
-      );
-      setLastEvent(
-        `double-click: selected ${n} nearby ${entityKindName(world, eid)} unit${n === 1 ? '' : 's'}`
-      );
+      const n = this.selectSameKindOnScreen(eid);
+      setLastEvent(`double-click: selected ${n} ${entityKindName(world, eid)} unit${n === 1 ? '' : 's'}`);
       return;
     }
 
@@ -191,6 +251,40 @@ export class PointerController {
     } else {
       setLastEvent(`cleared selection`);
     }
+  }
+
+  /** Double-click: every own unit of the clicked unit's type that is on screen. */
+  private selectSameKindOnScreen(sourceEid: number): number {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const kind = UnitKind.kind[sourceEid];
+    const view = this.ctx.scene.cameras.main.worldView;
+    clearSelection(world);
+    let n = 0;
+    for (const eid of unitQuery(world.ecs)) {
+      if (Owner.player[eid] !== playerId) continue;
+      if (UnitKind.kind[eid] !== kind) continue;
+      if (!isAliveUnit(world.ecs, eid)) continue;
+      const s = this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
+      if (eid !== sourceEid && !view.contains(s.x, s.y)) continue;
+      setSelected(world, eid, true);
+      n++;
+    }
+    this.deps.audio.barkSelect(sourceEid);
+    return n;
+  }
+
+  /** Selection is non-empty and only our own barracks / stables / foundries. */
+  private selectionIsOwnArmyProducers(): boolean {
+    const world = this.ctx.world;
+    const selected = selectedQuery(world.ecs);
+    if (selected.length === 0) return false;
+    for (const eid of selected) {
+      if (!hasComponent(world.ecs, Building, eid)) return false;
+      if (Owner.player[eid] !== this.ctx.perspectivePlayerId) return false;
+      if (!isArmyProducerDefId(Building.defId[eid])) return false;
+    }
+    return true;
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
@@ -312,4 +406,14 @@ export class PointerController {
     this.lastLeftUnitClick = { eid, atMs: now };
     return last !== null && last.eid === eid && now - last.atMs <= DOUBLE_CLICK_MS;
   }
+}
+
+function isAliveUnit(ecs: Parameters<typeof hasComponent>[0], eid: number): boolean {
+  if (hasComponent(ecs, DeadTag, eid)) return false;
+  if (hasComponent(ecs, WorksiteWorker, eid)) return false;
+  return !hasComponent(ecs, Health, eid) || Health.hp[eid] > 0;
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

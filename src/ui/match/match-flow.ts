@@ -7,10 +7,10 @@
 import { CAMPAIGN_MISSIONS, type CampaignMissionIdValue } from '../../sim/campaign';
 import { AGE_TABLE, type AgeIdValue } from '../../sim/defs';
 import { MAP_DEFS, type MapIdValue } from '../../sim/map-gen';
-import type { SavedGameV1 } from '../../sim/save-load';
+import type { SavedGame } from '../../sim/save-load';
 import type { AiDifficulty, SimWorld } from '../../sim/world';
 import { appState, setPhase, type MatchKind } from '../app-state';
-import { endMatchViaScene, getScene } from '../game-bridge';
+import { endMatch, getScene } from '../game-bridge';
 import { enterMenu, leaveMenu, type MenuScreenId } from '../screens/menu-shell';
 import { runLoading } from '../screens/loading';
 
@@ -67,7 +67,7 @@ export function startCampaign(missionId: CampaignMissionIdValue): void {
   });
 }
 
-export function loadSnapshot(snapshot: SavedGameV1, label: string): void {
+export function loadSnapshot(snapshot: SavedGame, label: string): void {
   void launch('loaded', label, 'Restoring a saved chronicle', () => {
     getScene()?.loadSaveSnapshot(snapshot, label);
   });
@@ -93,23 +93,13 @@ export function startMultiplayerMatch(world: SimWorld, localPlayerId: number): v
   );
 }
 
-/** Leave the running match and return to the title screens. */
+/** Leave the running match and return to the title screens, in every mode
+ *  and without a reload: the scene tears the match down (a multiplayer
+ *  session is left properly, so the relay tells the rival) and idles. */
 export function quitToMenu(screen: MenuScreenId = 'root'): void {
-  const scene = getScene();
   for (const fn of endListeners) fn();
-  if (scene && endMatchViaScene(scene)) {
-    appState.matchKind = null;
-    setPhase('menu');
-    enterMenu(screen);
-    return;
-  }
-  if (appState.matchKind === 'multiplayer' || scene?.isMultiplayer()) {
-    // A lockstep session cannot be torn down from the page without a scene
-    // API; a clean reload is the safe way out.
-    window.location.reload();
-    return;
-  }
-  scene?.setPaused(true);
+  endMatch();
+  appState.mpSession = null;
   appState.matchKind = null;
   setPhase('menu');
   enterMenu(screen);

@@ -298,9 +298,7 @@ export class ActionGrid {
         glyph: '⚑',
         enabled: true,
         kind: 'command',
-        meta: rally
-          ? `${rally.x},${rally.y} / ${ownedArmyProducerCount} buildings`
-          : `${ownedArmyProducerCount} buildings`,
+        meta: `${rally ? 'Set' : 'Not set'} / ${ownedArmyProducerCount} building${ownedArmyProducerCount === 1 ? '' : 's'}`,
         active: this.placement.armyRallyMode,
       });
     }

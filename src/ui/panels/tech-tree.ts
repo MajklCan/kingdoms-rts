@@ -11,7 +11,7 @@ import { hasOpenLayer } from '../a11y/layers';
 import { appState } from '../app-state';
 import { h, isTextEntryTarget, plainDashes } from '../dom';
 import { missingResources, parseCost, RESOURCE_KEYS, type ResourceKey } from '../format';
-import { getScene } from '../game-bridge';
+import { getScene, reportFailure } from '../game-bridge';
 import { TECH_ICON } from '../icons/catalog';
 import { iconHtml } from '../icons/icon';
 import { pushAlert } from '../hud/alerts';
@@ -118,7 +118,7 @@ function ensureModal(): Modal {
     if (!node.affordable) {
       const bank = scene.getResources(scene.getPerspectivePlayerId()) as unknown as Record<ResourceKey, number>;
       const missing = missingResources(parseCost(node.cost), bank);
-      pushAlert({ kind: 'resources', text: `Not enough ${missing.join(' and ') || 'resources'} for ${node.name}` });
+      reportFailure({ reason: 'resources', subject: node.name, missing });
       return;
     }
     scene.researchTech(node.id, scene.getPerspectivePlayerId());

@@ -11,7 +11,7 @@ import { h, plainDashes, setAttr, setText } from '../dom';
 import { missingResources, parseCost, parseMeta, type ResourceKey } from '../format';
 import { actionDescription, actionIcon, actionKeyHint } from '../icons/catalog';
 import { icon, setIcon } from '../icons/icon';
-import { pushAlert } from './alerts';
+import { reportFailure } from '../game-bridge';
 import { attachTip, refreshTip, type TipContent } from './tooltip';
 
 type Action = ReturnType<GameScene['getAvailableActions']>[number];
@@ -69,8 +69,13 @@ function onCellClick(ev: MouseEvent, index: number): void {
   const action = actionAt(index);
   if (!action) return;
   if (!action.enabled) {
-    const tip = tipFor(action);
-    pushAlert({ kind: 'resources', text: tip.disabled ?? 'Not available' });
+    // Same typed path as a refused hotkey: error sound, alert, and the
+    // missing resources flash in the top bar.
+    const missing = missingResources(parseCost(action.cost), bank(scene));
+    const subject = plainDashes(action.label);
+    if (missing.length > 0) reportFailure({ reason: 'resources', subject, missing });
+    else if (/population/i.test(action.disabledReason ?? '')) reportFailure({ reason: 'population', subject: subject.replace(/^Train /, '') });
+    else reportFailure({ reason: 'unavailable', text: tipFor(action).disabled || `${subject} is not available` });
     cell.classList.remove('is-denied');
     void cell.offsetWidth;
     cell.classList.add('is-denied');

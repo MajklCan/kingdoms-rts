@@ -1,6 +1,8 @@
 /**
- * Control groups: Ctrl+1..9 stores the selection, Shift+1..9 adds to a
- * group, 1..9 recalls it and a quick double tap jumps the camera there.
+ * Control groups: Ctrl+1..9 stores the selection (Alt+1..9 does the same,
+ * since Windows browsers take Ctrl+number for tab switching), Shift+1..9
+ * adds to a group, 1..9 recalls it and a quick double tap jumps the camera
+ * there.
  * The strip above the selection panel shows every stored group with its
  * dominant unit and head count; click recalls, double click jumps.
  * Nine fixed slots (empty ones invisible) keep the layout from shifting.
@@ -16,6 +18,7 @@ import {
   filterOwnedAlive,
   getScene,
   getSelectedEids,
+  panToTile,
   selectEntities,
 } from '../game-bridge';
 import { BUILDING_ICON_BY_DEF, UNIT_ICON_BY_DEF } from '../icons/catalog';
@@ -59,7 +62,7 @@ function recall(n: number, jump: boolean): void {
   selectEntities(scene, alive);
   if (jump) {
     const c = centroidOf(scene, alive);
-    if (c) scene.panToTile(c.x, c.y);
+    if (c) panToTile(scene, c.x, c.y);
   }
 }
 
@@ -95,7 +98,7 @@ export function bindControlGroups(): void {
     const scene = getScene();
     if (!scene) return;
     const me = scene.getPerspectivePlayerId();
-    if (ev.ctrlKey || ev.metaKey) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) {
       ev.preventDefault();
       const sel = filterOwnedAlive(scene, getSelectedEids(scene), me);
       if (sel.length === 0) {
@@ -114,7 +117,7 @@ export function bindControlGroups(): void {
       if (merged.length > 0) groups.set(n, merged);
       return;
     }
-    if (ev.altKey || ev.repeat) return;
+    if (ev.repeat) return;
     const now = performance.now();
     const jump = lastTap !== null && lastTap.n === n && now - lastTap.at < DOUBLE_TAP_MS;
     lastTap = { n, at: now };

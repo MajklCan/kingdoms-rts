@@ -16,9 +16,9 @@ import { updateIdleVillagers } from './hud/idle-villagers';
 import { renderMinimap } from './hud/minimap';
 import { updateSelectionPanel } from './hud/selection-panel';
 import { updateTopBar } from './hud/top-bar';
-import { updateTracker } from './match/tracker';
 import { updateObjectives } from './panels/objectives';
 import { renderTechTree } from './panels/tech-tree';
+import { updateConnectionLost } from './screens/connection-lost';
 import { updateGameOver } from './screens/game-over';
 
 function tick(now: number): void {
@@ -27,7 +27,6 @@ function tick(now: number): void {
   if (!isSceneReady(scene)) return;
   updateDevPanel(scene);
   if (appState.phase !== 'match') return;
-  updateTracker(scene, now);
   updateTopBar(scene);
   updatePausedBanner(scene.isPaused());
   renderMinimap(scene, now);
@@ -37,10 +36,11 @@ function tick(now: number): void {
   updateControlGroups(scene);
   updateIdleVillagers(scene, now);
   updateEventLog(scene, now);
-  updateAlerts(scene, now);
+  updateAlerts(scene);
   renderTechTree(scene);
   updateObjectives(scene);
   updateGameOver(scene);
+  updateConnectionLost();
 }
 
 export function startHudLoop(): void {

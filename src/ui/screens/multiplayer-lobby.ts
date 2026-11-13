@@ -32,6 +32,7 @@ const STATE_COPY: Record<SessionState, string> = {
   desync: 'Desync detected. The two chronicles diverged.',
   'peer-left': 'Your rival left the match.',
   disconnected: 'Disconnected from the relay.',
+  left: 'You left the hall.',
 };
 
 function field(label: string, input: HTMLInputElement, note?: string): HTMLLabelElement {
@@ -118,7 +119,10 @@ export function bindMultiplayerLobby(): void {
 
   const onState = (state: SessionState) => {
     setStatus(STATE_COPY[state], state === 'desync' || state === 'disconnected' ? 'error' : 'info');
-    if (state === 'disconnected' && appState.phase === 'menu') {
+    // 'left' is terminal (we left on purpose, from here or by quitting a
+    // match); a drop while still in the menus also frees the form. In a
+    // match the connection-lost screen takes over until the player leaves.
+    if (state === 'left' || (state === 'disconnected' && appState.phase === 'menu')) {
       appState.mpSession = null;
       transport = null;
       resetIdle();
@@ -185,12 +189,12 @@ export function bindMultiplayerLobby(): void {
   });
 
   leaveBtn.addEventListener('click', () => {
-    const t = transport;
+    const session = appState.mpSession;
     appState.mpSession = null;
     transport = null;
     resetIdle();
-    setStatus('You left the hall.');
-    t?.close();
+    setStatus(STATE_COPY.left);
+    session?.leave();
   });
 
   startBtn.addEventListener('click', () => {

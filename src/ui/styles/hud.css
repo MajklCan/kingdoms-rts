@@ -97,6 +97,41 @@
   100% { color: var(--text-hi); text-shadow: 0 1px 0 #000; }
 }
 
+/* A refused command flashes the resource it was short of (no layout shift:
+   only colour, shadow and a transform that does not move siblings). */
+.res-chip.is-short {
+  animation: res-short-chip 900ms var(--ease-out);
+}
+
+.res-chip.is-short .res-val {
+  animation: res-short-val 900ms var(--ease-out);
+}
+
+@keyframes res-short-chip {
+  0%, 60% { box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 2px var(--danger), 0 0 0.6rem rgba(255, 122, 107, 0.55); }
+  10% { transform: translateX(-2px); }
+  20% { transform: translateX(2px); }
+  30% { transform: translateX(-1px); }
+  40% { transform: translateX(0); }
+  100% { box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(246, 221, 134, 0.08); }
+}
+
+@keyframes res-short-val {
+  0%, 60% { color: var(--danger); }
+  100% { color: var(--text-hi); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .res-chip.is-short {
+    animation-name: res-short-chip-still;
+  }
+}
+
+@keyframes res-short-chip-still {
+  0%, 60% { box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 2px var(--danger); }
+  100% { box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(246, 221, 134, 0.08); }
+}
+
 /* Age plaque hangs below the bar like a guild banner. */
 .age-plaque {
   position: relative;
@@ -1019,6 +1054,29 @@
 
 .event-line.is-fading {
   opacity: 0;
+}
+
+.event-line.tone-good {
+  box-shadow: inset 2px 0 0 var(--gold-400);
+}
+
+.event-line.tone-warn {
+  color: #ffd8a8;
+  box-shadow: inset 2px 0 0 #e0a040;
+}
+
+.event-line.tone-bad {
+  color: #ffc2b8;
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+
+.event-line.is-located {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.event-line.is-located:hover {
+  background: rgba(40, 26, 14, 0.85);
 }
 
 @keyframes event-in {

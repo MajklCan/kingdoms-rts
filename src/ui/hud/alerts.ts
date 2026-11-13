@@ -1,44 +1,72 @@
 /**
  * Alerts: heraldic toasts on the right edge for things that need attention
- * (under attack, building finished, age reached, research done, not enough
- * resources). Toasts with a location jump the camera on click; Space jumps
- * to the most recent located alert. Repeats within a short window stack a
- * counter instead of spamming new toasts.
+ * (under attack, building finished or lost, age reached, research done, not
+ * enough resources, population capped). Everything comes typed from the
+ * scene's alert feed (already rate-limited per fight); toasts with a location
+ * jump the camera on click, Space jumps to the latest located alert (and
+ * follows a fight that is still going on). Repeats within a short window
+ * stack a counter instead of spamming new toasts. Refusals for missing
+ * resources also flash those resources in the top bar.
  */
 
 import type { GameScene } from '../../render/game-scene';
-import { BUILDING_TABLE } from '../../sim/defs';
 import { hasOpenLayer } from '../a11y/layers';
 import { appState } from '../app-state';
 import { h, isTextEntryTarget, plainDashes } from '../dom';
-import { drainSceneAlerts, entityTile, getScene, type UiAlert } from '../game-bridge';
+import {
+  drainSceneAlerts,
+  getScene,
+  lastFightPosition,
+  panToTile,
+  type ResourceName,
+  type TilePoint,
+  type UiAlert,
+  type UiAlertKind,
+} from '../game-bridge';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
-import { onTrackerEvent } from '../match/tracker';
+import { addMinimapPing } from './minimap';
+import { flashMissingResources, flashPopulation } from './top-bar';
+
+/** What a toast shows: a scene alert, or a UI-local notice (objectives, tech panel). */
+export interface HudAlert {
+  kind: UiAlertKind;
+  text: string;
+  at?: TilePoint;
+  missing?: readonly ResourceName[];
+}
 
 const MAX_TOASTS = 4;
-const TTL: Record<UiAlert['kind'], number> = {
+const TTL: Record<UiAlertKind, number> = {
   attack: 8000,
+  'building-lost': 7000,
   'building-complete': 5000,
   'unit-trained': 3500,
   'research-complete': 6000,
   'age-up': 7000,
   resources: 3000,
+  population: 4500,
+  denied: 3000,
   info: 4500,
 };
-const ICON: Record<UiAlert['kind'], IconName> = {
+const ICON: Record<UiAlertKind, IconName> = {
   attack: 'alert',
+  'building-lost': 'defeat',
   'building-complete': 'hammer',
   'unit-trained': 'person',
   'research-complete': 'research',
   'age-up': 'crown',
   resources: 'lock',
+  population: 'pop',
+  denied: 'stop',
   info: 'info',
 };
+/** Kinds that also ping the minimap. */
+const PINGED: ReadonlySet<UiAlertKind> = new Set<UiAlertKind>(['attack', 'building-lost']);
 
 interface Toast {
   el: HTMLElement;
-  alert: UiAlert;
+  alert: HudAlert;
   count: number;
   at: number;
   ttl: number;
@@ -48,13 +76,7 @@ interface Toast {
 let stack: HTMLElement | null = null;
 let live: HTMLElement | null = null;
 const toasts: Toast[] = [];
-let lastLocated: UiAlert | null = null;
-let lastAttackAt = 0;
-let lastAttackPos: { x: number; y: number } | null = null;
-let lastAge = -1;
-const researched = new Set<string>();
-let techPrimed = false;
-let lastTechCheck = 0;
+let lastLocated: HudAlert | null = null;
 
 export function buildAlerts(): HTMLElement {
   live = h('div', { class: 'live-region', role: 'status', 'aria-live': 'polite' });
@@ -70,14 +92,19 @@ function removeToast(t: Toast): void {
   window.setTimeout(() => t.el.remove(), 220);
 }
 
-function jumpTo(alert: UiAlert): void {
+function jumpTo(alert: HudAlert): void {
   const scene = getScene();
-  if (!scene || alert.tileX === undefined || alert.tileY === undefined) return;
-  scene.panToTile(alert.tileX, alert.tileY);
+  if (!scene || !alert.at) return;
+  // An attack alert follows the fight if it moved since the toast appeared.
+  const target = alert.kind === 'attack' ? (lastFightPosition(scene) ?? alert.at) : alert.at;
+  panToTile(scene, target.x, target.y);
 }
 
-export function pushAlert(alert: UiAlert): void {
+export function pushAlert(alert: HudAlert): void {
   if (!stack || appState.phase !== 'match') return;
+  if (alert.missing && alert.missing.length > 0) flashMissingResources(alert.missing);
+  if (alert.kind === 'population') flashPopulation();
+  if (alert.at && PINGED.has(alert.kind)) addMinimapPing(alert.at, alert.kind === 'attack' ? 'attack' : 'loss');
   const now = performance.now();
   const same = toasts.find((t) => t.alert.kind === alert.kind && t.alert.text === alert.text && now - t.at < 4000);
   if (same) {
@@ -88,10 +115,10 @@ export function pushAlert(alert: UiAlert): void {
     if (badge) badge.textContent = `x${same.count}`;
     window.clearTimeout(same.timer);
     same.timer = window.setTimeout(() => removeToast(same), same.ttl);
-    if (alert.tileX !== undefined) lastLocated = alert;
+    if (alert.at) lastLocated = alert;
     return;
   }
-  const located = alert.tileX !== undefined && alert.tileY !== undefined;
+  const located = alert.at !== undefined;
   const text = plainDashes(alert.text);
   const el = h(
     located ? 'button' : 'div',
@@ -132,26 +159,6 @@ export function jumpToLastAlert(): boolean {
 }
 
 export function bindAlerts(): void {
-  onTrackerEvent((ev, scene) => {
-    if (ev.type === 'building-complete') {
-      const name = BUILDING_TABLE[ev.defId]?.name ?? 'Building';
-      const pos = entityTile(scene, ev.eid);
-      pushAlert({ kind: 'building-complete', text: `${name} completed`, tileX: pos?.x, tileY: pos?.y });
-    } else if (ev.type === 'under-attack') {
-      const now = performance.now();
-      const far = !lastAttackPos || Math.hypot(lastAttackPos.x - ev.x, lastAttackPos.y - ev.y) > 10;
-      if (now - lastAttackAt > 15000 || (far && now - lastAttackAt > 4000)) {
-        lastAttackAt = now;
-        lastAttackPos = { x: ev.x, y: ev.y };
-        pushAlert({ kind: 'attack', text: ev.isBuilding ? 'Your buildings are under attack!' : 'Your forces are under attack!', tileX: ev.x, tileY: ev.y });
-      } else if (!far) {
-        // Keep the jump target fresh while the same fight goes on.
-        lastLocated = { kind: 'attack', text: '', tileX: ev.x, tileY: ev.y };
-        lastAttackPos = { x: ev.x, y: ev.y };
-      }
-    }
-  });
-
   window.addEventListener('keydown', (ev) => {
     if (appState.phase !== 'match' || hasOpenLayer() || isTextEntryTarget(ev.target)) return;
     if (ev.code === 'Space' && !ev.repeat) {
@@ -160,38 +167,21 @@ export function bindAlerts(): void {
   });
 }
 
-/** Poll scene state for age-ups, finished research and scene-provided alerts. */
-export function updateAlerts(scene: GameScene, now: number): void {
-  const fromScene = drainSceneAlerts(scene);
-  if (fromScene) for (const a of fromScene) pushAlert(a);
+function toHudAlert(alert: UiAlert): HudAlert {
+  return {
+    kind: alert.kind,
+    text: alert.text,
+    ...(alert.at ? { at: alert.at } : {}),
+    ...(alert.missing ? { missing: alert.missing } : {}),
+  };
+}
 
-  const me = scene.getPerspectivePlayerId();
-  const age = scene.getAge(me);
-  if (lastAge >= 0 && age.current > lastAge) {
-    pushAlert({ kind: 'age-up', text: `${age.name} reached` });
-  }
-  lastAge = age.current;
-
-  if (now - lastTechCheck > 500) {
-    lastTechCheck = now;
-    for (const node of scene.getTechTree(me)) {
-      if (node.status !== 'researched') continue;
-      if (!researched.has(node.id)) {
-        researched.add(node.id);
-        if (techPrimed && !/age$/i.test(node.name)) pushAlert({ kind: 'research-complete', text: `Research complete: ${node.name}` });
-      }
-    }
-    techPrimed = true;
-  }
+/** Show the alerts the scene raised since the last frame. */
+export function updateAlerts(scene: GameScene): void {
+  for (const alert of drainSceneAlerts(scene)) pushAlert(toHudAlert(alert));
 }
 
 export function resetAlerts(): void {
   for (const t of [...toasts]) removeToast(t);
   lastLocated = null;
-  lastAttackAt = 0;
-  lastAttackPos = null;
-  lastAge = -1;
-  researched.clear();
-  techPrimed = false;
-  lastTechCheck = 0;
 }

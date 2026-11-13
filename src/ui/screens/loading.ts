@@ -12,7 +12,7 @@ import { isSceneReady, getScene } from '../game-bridge';
 const TIPS = [
   'Houses raise your population cap. Build one before you are blocked.',
   'Press B, then a letter, to place buildings without touching the mouse.',
-  'Ctrl plus a number saves a control group. Tap the number to recall it, twice to jump there.',
+  'Ctrl or Alt plus a number saves a control group. Tap the number to recall it, twice to jump there.',
   'Press . to cycle through idle villagers.',
   'Space jumps the camera to the latest alert.',
   'Mills boost farm deliveries. Place them beside your fields.',

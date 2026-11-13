@@ -1,7 +1,7 @@
 /**
  * Selection panel (bottom centre): portrait medallion, name and owner, HP
- * bar, stat chips, live status line and the production queue with progress
- * and cancel. Multi-selections show a composition grid; clicking a group
+ * bar, stat chips, live status line and the production queue with progress;
+ * every queued slot cancels on click and refunds its cost. Multi-selections show a composition grid; clicking a group
  * narrows the selection to that kind. An empty selection shows a hint.
  */
 
@@ -17,7 +17,7 @@ import {
   isOwnedBy,
   isProducer,
   selectEntities,
-  type ProductionSlot,
+  type ProductionSlotInfo,
 } from '../game-bridge';
 import { BUILDING_ICON_BY_DEF, SELECTION_ICON, UNIT_ICON_BY_DEF } from '../icons/catalog';
 import { icon, setIcon } from '../icons/icon';
@@ -63,6 +63,14 @@ let lastStatsSig = '';
 let lastMultiSig = '';
 let lastQueueSig = '';
 let queueProducer = -1;
+let queueItems: ProductionSlotInfo[] = [];
+
+function refundText(item: ProductionSlotInfo): string {
+  const parts = (['food', 'wood', 'gold', 'stone'] as const)
+    .filter((k) => item.cost[k] > 0)
+    .map((k) => `${item.cost[k]} ${k}`);
+  return parts.length > 0 ? `Refunds ${parts.join(', ')}.` : 'Nothing to refund.';
+}
 
 function kindIcon(key: string): IconName {
   if (key === 'foundation') return 'foundation';
@@ -98,18 +106,18 @@ export function buildSelectionPanel(): HTMLElement {
     const slot = h('button', { type: 'button', class: 'queue-slot', tabindex: '-1', disabled: true }, icon('person', 'queue-icon'), h('span', { class: 'queue-progress' }), h('span', { class: 'queue-x', 'aria-hidden': 'true' }));
     slot.addEventListener('click', () => {
       const scene = activeScene;
-      if (scene && queueProducer >= 0 && slot.classList.contains('is-cancel')) cancelProduction(scene, queueProducer);
+      if (!scene || queueProducer < 0 || !queueItems[i]) return;
+      if (cancelProduction(scene, queueProducer, i)) {
+        // Redraw on the next frame even if the sim has not applied it yet.
+        lastQueueSig = '';
+      }
     });
     attachTip(slot, () => {
-      if (!slot.classList.contains('is-filled')) return null;
-      const def = UNIT_TABLE[Number(slot.dataset.unit)];
+      const item = queueItems[i];
+      if (!slot.classList.contains('is-filled') || !item) return null;
       return {
-        title: def?.name ?? 'Unit',
-        body: slot.classList.contains('is-cancel')
-          ? 'Click to cancel the most recently queued unit. Its cost is refunded.'
-          : i === 0
-            ? 'Training now.'
-            : 'Waiting in the queue.',
+        title: item.name,
+        body: `${i === 0 ? 'Training now.' : 'Waiting in the queue.'} Click to cancel. ${refundText(item)}`,
       };
     });
     queueSlots.push(slot);
@@ -176,7 +184,7 @@ function renderQueue(scene: GameScene, selected: number[], me: number): void {
   if (!refs) return;
   const producers = selected.filter((eid) => isProducer(scene, eid) && isOwnedBy(scene, eid, me));
   let producer = -1;
-  let queue: ProductionSlot[] = [];
+  let queue: ProductionSlotInfo[] = [];
   for (const eid of producers) {
     const q = getProductionQueue(scene, eid);
     if (producer < 0 || (queue.length === 0 && q.length > 0)) {
@@ -185,19 +193,19 @@ function renderQueue(scene: GameScene, selected: number[], me: number): void {
     }
   }
   queueProducer = producer;
+  queueItems = queue;
   refs.queueWrap.classList.toggle('is-visible', producer >= 0);
   const sig = `${producer}|${queue.map((s) => s.unitDefId).join(',')}|${Math.floor((queue[0]?.progressFrac ?? 0) * 50)}`;
   if (sig === lastQueueSig) return;
   lastQueueSig = sig;
   refs.queueSlots.forEach((slot, i) => {
     const item = queue[i];
-    const isLast = item !== undefined && i === Math.min(queue.length, QUEUE_SLOTS) - 1;
     slot.classList.toggle('is-filled', !!item);
     slot.classList.toggle('is-active', i === 0 && !!item);
-    slot.classList.toggle('is-cancel', isLast);
-    (slot as HTMLButtonElement).disabled = !isLast;
-    slot.tabIndex = isLast ? 0 : -1;
-    setAttr(slot, 'aria-label', item ? `${UNIT_TABLE[item.unitDefId]?.name ?? 'Unit'}${isLast ? ', cancel' : ''}` : 'Empty slot');
+    slot.classList.toggle('is-cancel', !!item);
+    (slot as HTMLButtonElement).disabled = !item;
+    slot.tabIndex = item ? 0 : -1;
+    setAttr(slot, 'aria-label', item ? `${item.name}, ${i === 0 ? 'training' : 'queued'}. Cancel and refund` : 'Empty slot');
     if (item) {
       slot.dataset.unit = String(item.unitDefId);
       setIcon(slot.querySelector<HTMLElement>('.queue-icon')!, UNIT_ICON_BY_DEF[item.unitDefId] ?? 'person');
@@ -249,6 +257,7 @@ export function updateSelectionPanel(scene: GameScene): void {
   if (mode === 'empty') {
     lastQueueSig = '';
     queueProducer = -1;
+    queueItems = [];
     return;
   }
 
@@ -285,4 +294,5 @@ export function resetSelectionPanel(): void {
   lastMultiSig = '';
   lastQueueSig = '';
   queueProducer = -1;
+  queueItems = [];
 }

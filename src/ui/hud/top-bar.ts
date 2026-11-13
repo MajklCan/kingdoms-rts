@@ -167,6 +167,23 @@ export function updateTopBar(scene: GameScene): void {
   setAttr(refs.objectives, 'aria-hidden', String(!hasMission));
 }
 
+function restartAnimation(el: HTMLElement, className: string): void {
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+}
+
+/** Flash the resources a refused command was short of. */
+export function flashMissingResources(keys: readonly ResourceKey[]): void {
+  if (!refs) return;
+  for (const key of keys) restartAnimation(refs.resChip[key], 'is-short');
+}
+
+/** Flash the population chip (refused for lack of housing). */
+export function flashPopulation(): void {
+  if (refs) restartAnimation(refs.popChip, 'is-short');
+}
+
 export function setPanelExpanded(which: 'objectives' | 'tech', open: boolean): void {
   if (!refs) return;
   setAttr(which === 'tech' ? refs.tech : refs.objectives, 'aria-expanded', String(open));
