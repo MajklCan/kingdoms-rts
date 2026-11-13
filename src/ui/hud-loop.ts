@@ -1,34 +1,48 @@
-/** rAF pump that refreshes every DOM HUD element from the active GameScene. */
+/**
+ * rAF pump that refreshes the HUD from the active GameScene. Runs every
+ * frame but only does work during a match; each module throttles itself and
+ * skips DOM writes when nothing changed.
+ */
 
-import { updateDebugOverlayFromScene } from './dev/debug-overlay';
-import { getScene } from './game-bridge';
-import { updateActionGrid } from './hud/action-grid';
-import { updateEventTicker } from './hud/event-ticker';
+import { appState } from './app-state';
+import { updateDevPanel } from './dev/dev-panel';
+import { getScene, isSceneReady } from './game-bridge';
+import { updateAlerts } from './hud/alerts';
+import { tickCommandTips, updateCommandGrid } from './hud/command-grid';
+import { updateControlGroups } from './hud/control-groups';
+import { updateEventLog } from './hud/event-log';
+import { updatePausedBanner } from './hud/hud-root';
+import { updateIdleVillagers } from './hud/idle-villagers';
 import { renderMinimap } from './hud/minimap';
-import { updateResourceBarFromScene } from './hud/resource-bar';
 import { updateSelectionPanel } from './hud/selection-panel';
-import { renderMissionCard } from './panels/mission-panel';
+import { updateTopBar } from './hud/top-bar';
+import { updateTracker } from './match/tracker';
+import { updateObjectives } from './panels/objectives';
 import { renderTechTree } from './panels/tech-tree';
 import { updateGameOver } from './screens/game-over';
 
-function tickOverlay(): void {
+function tick(now: number): void {
+  requestAnimationFrame(tick);
   const scene = getScene();
-  if (scene && scene.scene.isActive()) {
-    const me = scene.getPerspectivePlayerId();
-    updateResourceBarFromScene(scene);
-    const status = scene.getStatusInfo();
-    updateDebugOverlayFromScene(scene, status);
-    renderMinimap(scene);
-    updateSelectionPanel(scene);
-    updateActionGrid(scene);
-    renderTechTree(scene);
-    renderMissionCard(scene);
-    updateEventTicker(scene, status);
-    updateGameOver(scene, me);
-  }
-  requestAnimationFrame(tickOverlay);
+  if (!isSceneReady(scene)) return;
+  updateDevPanel(scene);
+  if (appState.phase !== 'match') return;
+  updateTracker(scene, now);
+  updateTopBar(scene);
+  updatePausedBanner(scene.isPaused());
+  renderMinimap(scene, now);
+  updateSelectionPanel(scene);
+  updateCommandGrid(scene);
+  tickCommandTips(now);
+  updateControlGroups(scene);
+  updateIdleVillagers(scene, now);
+  updateEventLog(scene, now);
+  updateAlerts(scene, now);
+  renderTechTree(scene);
+  updateObjectives(scene);
+  updateGameOver(scene);
 }
 
 export function startHudLoop(): void {
-  requestAnimationFrame(tickOverlay);
+  requestAnimationFrame(tick);
 }

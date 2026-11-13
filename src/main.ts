@@ -34,5 +34,13 @@ const config: Phaser.Types.Core.GameConfig = {
 const game = new Phaser.Game(config);
 mountUi(game);
 
+// Phaser only rescales on window resize. A container-only resize (an
+// embedded pane, a docked devtools panel) would leave the canvas at its old
+// size, so refresh the scale whenever the host box changes.
+const host = document.getElementById('game-root');
+if (host && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => game.scale.refresh()).observe(host);
+}
+
 // eslint-disable-next-line no-console
 console.log('[Kingdoms] booted - Phaser', Phaser.VERSION);

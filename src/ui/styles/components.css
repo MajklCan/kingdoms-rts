@@ -1,0 +1,650 @@
+/* Shared components: icons, buttons, frames, parchment, form controls,
+   modals, progress bars. Screens and HUD pieces compose these. */
+
+/* ---- Icon (SVG file used as a mask, tinted by currentColor) ------------- */
+.icon {
+  display: inline-block;
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+  vertical-align: -0.2em;
+}
+
+.icon.res-food { color: var(--res-food); }
+.icon.res-wood { color: var(--res-wood); }
+.icon.res-gold { color: var(--res-gold); }
+.icon.res-stone { color: var(--res-stone); }
+.icon.res-pop { color: var(--res-pop); }
+
+/* ---- Wood frame: carved walnut with a gilded inner trim ----------------- */
+.frame-wood {
+  position: relative;
+  background:
+    var(--grain),
+    var(--surface-wood);
+  background-size: 15rem 15rem, auto;
+  border: 1px solid #000;
+  box-shadow:
+    inset 0 0 0 1px var(--gold-700),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 3px rgba(201, 162, 39, 0.28),
+    var(--shadow-panel);
+  color: var(--text);
+}
+
+.inlay {
+  background: var(--surface-sunken);
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(246, 221, 134, 0.08);
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Parchment scroll --------------------------------------------------- */
+.parchment {
+  position: relative;
+  color: var(--ink-text);
+  background:
+    var(--grain),
+    var(--surface-parchment);
+  background-size: 15rem 15rem, auto;
+  box-shadow:
+    inset 0 0 0 1px var(--gold-200),
+    inset 0 0 0 0.25rem rgba(231, 216, 180, 0.55),
+    inset 0 0 0 calc(0.25rem + 1px) var(--gold-600),
+    inset 0 0 2.5rem rgba(120, 84, 30, 0.28),
+    var(--shadow-modal);
+  clip-path: polygon(0.5rem 0, calc(100% - 0.5rem) 0, 100% 0.5rem, 100% calc(100% - 0.5rem), calc(100% - 0.5rem) 100%, 0.5rem 100%, 0 calc(100% - 0.5rem), 0 0.5rem);
+}
+
+.parchment :focus-visible {
+  outline-color: var(--red-600);
+  box-shadow: 0 0 0 4px rgba(248, 239, 216, 0.9);
+}
+
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--gold-600);
+}
+
+.parchment .eyebrow {
+  color: var(--red-600);
+}
+
+.title-display {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: var(--lh-tight);
+}
+
+/* Ornamental rule: gold line with a centred lozenge. */
+.ornament-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--gold-500);
+}
+
+.ornament-rule::before,
+.ornament-rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, currentColor 70%);
+}
+
+.ornament-rule::after {
+  background: linear-gradient(270deg, transparent, currentColor 70%);
+}
+
+.ornament-rule > span {
+  width: 0.45rem;
+  height: 0.45rem;
+  transform: rotate(45deg);
+  background: currentColor;
+}
+
+/* ---- Buttons -------------------------------------------------------------- */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 1.1rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: filter var(--dur-fast), transform var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.btn:active:not([disabled]):not([aria-disabled="true"]) {
+  transform: translateY(1px);
+}
+
+.btn[disabled],
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  filter: grayscale(0.6) brightness(0.8);
+}
+
+/* Vermilion wax seal: the primary action. */
+.btn-seal {
+  color: var(--gold-100);
+  background: var(--surface-seal);
+  box-shadow:
+    inset 0 0 0 1px var(--gold-300),
+    inset 0 0 0 3px rgba(86, 12, 18, 0.9),
+    inset 0 1px 0 4px rgba(255, 190, 170, 0.15),
+    0 0.25rem 0.75rem rgba(0, 0, 0, 0.5);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+.btn-seal:hover:not([disabled]) {
+  filter: brightness(1.15);
+  box-shadow:
+    inset 0 0 0 1px var(--gold-200),
+    inset 0 0 0 3px rgba(86, 12, 18, 0.9),
+    0 0.25rem 1rem rgba(0, 0, 0, 0.5),
+    var(--shadow-glow-gold);
+}
+
+/* Gilded: secondary emphasis. */
+.btn-gold {
+  color: var(--text-on-gold);
+  background: var(--surface-gold);
+  box-shadow: inset 0 0 0 1px var(--gold-100), inset 0 -2px 0 var(--gold-700), 0 0.2rem 0.6rem rgba(0, 0, 0, 0.45);
+}
+
+.btn-gold:hover:not([disabled]) {
+  filter: brightness(1.08);
+}
+
+/* Wood: neutral action on dark surfaces. */
+.btn-wood {
+  color: var(--text);
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+  box-shadow: inset 0 0 0 1px var(--gold-700), var(--shadow-inset-bevel), 0 0.15rem 0.4rem rgba(0, 0, 0, 0.5);
+}
+
+.btn-wood:hover:not([disabled]) {
+  color: var(--text-hi);
+  box-shadow: inset 0 0 0 1px var(--gold-400), var(--shadow-inset-bevel), 0 0.15rem 0.4rem rgba(0, 0, 0, 0.5);
+}
+
+/* Ink: neutral action on parchment. */
+.btn-ink {
+  color: var(--ink-900);
+  background: rgba(255, 248, 225, 0.55);
+  box-shadow: inset 0 0 0 1px var(--gold-600), 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.btn-ink:hover:not([disabled]) {
+  background: rgba(255, 248, 225, 0.9);
+  box-shadow: inset 0 0 0 1px var(--red-600);
+}
+
+.btn-danger {
+  color: var(--gold-100);
+  background: linear-gradient(180deg, #6b1a12, #3d0c08);
+  box-shadow: inset 0 0 0 1px var(--red-300), 0 0.2rem 0.6rem rgba(0, 0, 0, 0.45);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-lg {
+  min-height: 3rem;
+  padding: 0.5rem 1.6rem;
+  font-size: var(--fs-md);
+}
+
+/* Square icon button used across the HUD. */
+.icon-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--gold-200);
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-800));
+  box-shadow: inset 0 0 0 1px var(--gold-700), var(--shadow-inset-bevel);
+  transition: color var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast);
+}
+
+.icon-btn .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.icon-btn:hover {
+  color: var(--gold-100);
+  box-shadow: inset 0 0 0 1px var(--gold-400), var(--shadow-inset-bevel);
+}
+
+.icon-btn[aria-pressed="true"],
+.icon-btn[aria-expanded="true"] {
+  color: var(--text-on-gold);
+  background: var(--surface-gold);
+  box-shadow: inset 0 0 0 1px var(--gold-100);
+}
+
+.icon-btn.has-label {
+  width: auto;
+  padding: 0 0.55rem;
+  gap: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* Text link style button on parchment. */
+.link-btn {
+  border: 0;
+  background: none;
+  padding: 0.25rem 0.4rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-200);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.link-btn:hover {
+  color: var(--gold-100);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.parchment .link-btn {
+  color: var(--red-600);
+}
+
+/* ---- Keycaps, tags -------------------------------------------------------- */
+kbd,
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  padding: 0.05em 0.35em;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-hi);
+  background: linear-gradient(180deg, var(--wood-600), var(--wood-900));
+  box-shadow: inset 0 0 0 1px var(--gold-700), 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+.parchment kbd,
+.parchment .kbd {
+  color: var(--ink-900);
+  background: linear-gradient(180deg, #fffaf0, var(--parchment-300));
+  box-shadow: inset 0 0 0 1px var(--parchment-600), 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--radius-round);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-700);
+  background: rgba(138, 106, 28, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(138, 106, 28, 0.45);
+}
+
+/* ---- Form controls -------------------------------------------------------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.field-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.text-input {
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0.35rem 0.7rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  color: var(--ink-900);
+  background: rgba(255, 251, 238, 0.82);
+  box-shadow: inset 0 0 0 1px var(--parchment-600), inset 0 2px 3px rgba(80, 56, 20, 0.2);
+}
+
+.text-input:focus-visible {
+  outline: 2px solid var(--red-600);
+  outline-offset: 1px;
+}
+
+/* Segmented control built from native radios (arrow keys work natively). */
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--parchment-600);
+  background: rgba(255, 251, 238, 0.45);
+  padding: 0.2rem;
+}
+
+.seg label {
+  flex: 1 1 0;
+  position: relative;
+  display: flex;
+}
+
+.seg input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.seg span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-700);
+  text-align: center;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.seg label:hover span {
+  background: rgba(201, 162, 39, 0.18);
+}
+
+.seg input:checked + span {
+  color: var(--gold-100);
+  background: var(--surface-seal);
+  box-shadow: inset 0 0 0 1px var(--gold-300);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.seg input:focus-visible + span {
+  outline: 2px solid var(--red-600);
+  outline-offset: 2px;
+}
+
+/* Range slider */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 0.35rem;
+  border-radius: var(--radius-round);
+  background: linear-gradient(90deg, var(--red-600) 0 var(--fill, 50%), rgba(94, 74, 44, 0.3) var(--fill, 50%) 100%);
+  box-shadow: inset 0 0 0 1px rgba(94, 74, 44, 0.5);
+}
+
+.range::-moz-range-track {
+  height: 0.35rem;
+  border-radius: var(--radius-round);
+  background: rgba(94, 74, 44, 0.3);
+}
+
+.range::-moz-range-progress {
+  height: 0.35rem;
+  border-radius: var(--radius-round);
+  background: var(--red-600);
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: -0.38rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--gold-100), var(--gold-400) 55%, var(--gold-700));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), inset 0 0 0 1px var(--gold-700);
+}
+
+.range::-moz-range-thumb {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--gold-100), var(--gold-400) 55%, var(--gold-700));
+}
+
+.range:focus-visible {
+  outline: 2px solid var(--red-600);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Toggle switch (button role="switch") */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 0;
+  background: none;
+  padding: 0.2rem 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  color: inherit;
+}
+
+.switch-track {
+  position: relative;
+  width: 2.6rem;
+  height: 1.4rem;
+  border-radius: var(--radius-round);
+  background: rgba(94, 74, 44, 0.35);
+  box-shadow: inset 0 0 0 1px var(--parchment-600);
+  transition: background var(--dur-fast);
+}
+
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fffaf0, var(--parchment-300));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.switch[aria-checked="true"] .switch-track {
+  background: var(--red-600);
+}
+
+.switch[aria-checked="true"] .switch-track::after {
+  transform: translateX(1.2rem);
+}
+
+/* ---- Progress bars ---------------------------------------------------------- */
+.bar {
+  position: relative;
+  height: 0.45rem;
+  border-radius: var(--radius-round);
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(246, 221, 134, 0.1);
+  overflow: hidden;
+}
+
+.bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  background: var(--surface-gold);
+  border-radius: inherit;
+  transition: transform var(--dur-med) linear;
+}
+
+.bar.hp > i { background: linear-gradient(180deg, #8fdc66, var(--hp-high)); }
+.bar.hp[data-level="mid"] > i { background: linear-gradient(180deg, #f6cf62, var(--hp-mid)); }
+.bar.hp[data-level="low"] > i { background: linear-gradient(180deg, #ff7a6b, var(--hp-low)); }
+
+/* ---- Modals ------------------------------------------------------------------ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  /* A 1fr track lets percentage widths inside resolve against the viewport
+     instead of growing the track to fit the content. */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 1.5rem;
+  background: radial-gradient(80% 80% at 50% 50%, rgba(10, 6, 2, 0.55), rgba(5, 3, 1, 0.82));
+  pointer-events: auto;
+  animation: fade-in var(--dur-med) var(--ease-out);
+}
+
+.modal {
+  position: relative;
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 3rem);
+  display: flex;
+  flex-direction: column;
+  padding: 1.6rem 1.8rem 1.4rem;
+  animation: modal-in var(--dur-med) var(--ease-out);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.modal-head h2 {
+  margin: 0.15rem 0 0;
+  font-size: var(--fs-xl);
+  color: var(--ink-900);
+}
+
+.modal-body {
+  overflow: auto;
+  min-height: 0;
+  padding-right: 0.25rem;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1.1rem;
+}
+
+.modal-close {
+  flex: none;
+  color: var(--ink-700);
+  background: rgba(255, 248, 225, 0.5);
+  box-shadow: inset 0 0 0 1px var(--parchment-600);
+}
+
+.modal-close:hover {
+  color: var(--red-600);
+  background: rgba(255, 248, 225, 0.9);
+  box-shadow: inset 0 0 0 1px var(--red-600);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Scrollbars inside parchment and wood panels. */
+.parchment ::-webkit-scrollbar,
+.frame-wood ::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.parchment ::-webkit-scrollbar-thumb {
+  background: rgba(94, 74, 44, 0.45);
+  border-radius: var(--radius-round);
+}
+
+.frame-wood ::-webkit-scrollbar-thumb {
+  background: rgba(201, 162, 39, 0.35);
+  border-radius: var(--radius-round);
+}
+
+.parchment ::-webkit-scrollbar-track,
+.frame-wood ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Live region text that should not be visible but must be announced. */
+.live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}

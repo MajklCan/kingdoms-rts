@@ -1,0 +1,89 @@
+/* Loading screen between the title and a match. Covers the canvas while
+   the world is built so the player never sees a blank or half drawn frame. */
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-loading);
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  background: var(--wood-950);
+  animation: fade-in var(--dur-med) var(--ease-out);
+}
+
+.loading-screen.is-leaving {
+  opacity: 0;
+  transition: opacity 260ms var(--ease-out);
+}
+
+.loading-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 55% at 50% 45%, rgba(201, 162, 39, 0.16), transparent 70%),
+    linear-gradient(180deg, rgba(15, 10, 6, 0.55), rgba(15, 10, 6, 0.92)),
+    url('/assets/ui/menu-bg.jpg') center / cover no-repeat;
+  filter: saturate(0.7) brightness(0.6);
+}
+
+.loading-card {
+  position: relative;
+  width: min(34rem, calc(100% - 2rem));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+  color: var(--text);
+}
+
+.loading-crest {
+  width: 6.5rem;
+  height: auto;
+  filter: drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.7));
+}
+
+.loading-title {
+  font-size: var(--fs-3xl);
+  color: var(--gold-200);
+  text-shadow: var(--shadow-text);
+}
+
+.loading-sub {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-style: italic;
+  color: var(--text-muted);
+  min-height: 1.5em;
+}
+
+.loading-bar {
+  width: min(22rem, 80%);
+  height: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.loading-status {
+  margin: 0;
+  min-height: 1.4em;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-400);
+}
+
+.loading-card .ornament-rule {
+  width: min(22rem, 80%);
+  margin-top: 0.4rem;
+}
+
+.loading-tip {
+  margin: 0;
+  max-width: 30rem;
+  min-height: 3em;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}

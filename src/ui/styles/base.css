@@ -1,26 +1,189 @@
-html, body {
+/* Base: viewport scaling, page reset, game canvas host, phase visibility. */
+
+/* 1rem = 16px at 1280x720, grows with the viewport (capped for 4K), shrinks
+   on small laptops. Users can scale it further from Settings > Game. */
+html {
+  font-size: calc(clamp(13px, min(1.25vw, 2.2222vh), 36px) * var(--ui-user-scale, 1));
+  -webkit-text-size-adjust: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
   margin: 0;
   padding: 0;
-  background: var(--color-night);
-  color: var(--color-gold);
-  font-family: var(--font-ui);
+  width: 100%;
+  height: 100%;
   overflow: hidden;
+  background: var(--wood-950);
+  color: var(--text);
+  font-family: var(--font-ui);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Body text size lives on body only; html keeps the scaled root size. */
+body {
+  font-size: var(--fs-md);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 #game-root {
-  position: absolute;
+  position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--wood-950);
 }
 
-/* Critical for sharp visuals: tells the browser to use nearest-neighbour
-   scaling instead of bilinear when the canvas is scaled to fit the
-   viewport. Without this, even with pixelArt mode inside Phaser, the
-   canvas element itself is browser-blurred on most displays. */
 #game-root canvas {
+  display: block;
   image-rendering: pixelated;
-  image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-hud);
+}
+
+/* Overlay roots inherit pointer-events: none from #ui-root so clicks reach
+   the canvas; each interactive surface opts back in with
+   pointer-events: auto. Never set visibility: visible below a phase root,
+   it would leak through the phase hiding.
+
+   Phase visibility: the HUD exists only during a match, the menu only on the
+   title screens. Using visibility keeps layout stable (no reflow on swap). */
+body:not([data-app-state="match"]) #hud-root {
+  visibility: hidden;
+}
+
+body:not([data-app-state="menu"]) #menu-root {
+  visibility: hidden;
+}
+
+/* Focus: one strong, consistent ring everywhere. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(15, 10, 6, 0.85);
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Boot splash: shown from first paint until the scene is ready. */
+#boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-boot);
+  display: grid;
+  place-items: center;
+  background: radial-gradient(80% 70% at 50% 45%, #1d140b 0%, var(--wood-950) 70%);
+  transition: opacity var(--dur-slow) var(--ease-out), visibility 0s linear var(--dur-slow);
+}
+
+#boot-splash.is-done {
+  opacity: 0;
+  visibility: hidden;
+}
+
+#boot-splash .boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+#boot-splash img {
+  width: 5.5rem;
+  height: auto;
+  filter: drop-shadow(0 0.5rem 1.2rem rgba(0, 0, 0, 0.6));
+}
+
+#boot-splash .boot-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+#boot-splash .boot-bar {
+  width: 10rem;
+  height: 0.25rem;
+  border-radius: var(--radius-round);
+  background: rgba(201, 162, 39, 0.18);
+  overflow: hidden;
+}
+
+#boot-splash .boot-bar::after {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--surface-gold);
+  animation: boot-sweep 1.4s var(--ease-in-out) infinite;
+}
+
+@keyframes boot-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

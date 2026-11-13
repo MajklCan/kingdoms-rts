@@ -1,0 +1,219 @@
+/* Full screen overlays above the HUD: the game over chronicle and the
+   developer panel (dev builds only, toggled with the backtick key). */
+
+.gameover {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-gameover);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 1.5rem;
+  pointer-events: auto;
+  background: radial-gradient(70% 70% at 50% 45%, rgba(15, 10, 6, 0.55), rgba(5, 3, 1, 0.9));
+  animation: fade-in var(--dur-slow) var(--ease-out);
+}
+
+.gameover-card {
+  width: min(40rem, 100%);
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.8rem 2rem 1.6rem;
+  text-align: center;
+  animation: modal-in var(--dur-slow) var(--ease-out);
+}
+
+.go-emblem {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  color: var(--gold-100);
+  box-shadow: inset 0 0 0 2px var(--gold-300), inset 0 0 0 5px rgba(0, 0, 0, 0.35), 0 0.4rem 1rem rgba(0, 0, 0, 0.35);
+}
+
+.go-emblem .icon {
+  width: 2.8rem;
+  height: 2.8rem;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+
+.go-emblem.is-victory {
+  background: radial-gradient(circle at 40% 30%, #f6dd86, #c9a227 55%, #6b4f10);
+  color: #3a2706;
+}
+
+.go-emblem.is-defeat {
+  background: radial-gradient(circle at 40% 30%, #8d2a2a, #4a0d12 70%);
+}
+
+.go-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-hero);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.go-title.victory {
+  color: #8a6a1c;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 0.3rem 0.8rem rgba(138, 106, 28, 0.35);
+}
+
+.go-title.defeat {
+  color: var(--red-600);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.go-sub {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-style: italic;
+  color: var(--ink-700);
+}
+
+.gameover-card .ornament-rule {
+  width: 70%;
+  margin: 0.4rem 0;
+}
+
+.go-stats {
+  width: 100%;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 1.4rem;
+  text-align: left;
+}
+
+.go-stat {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.1rem;
+  border-bottom: 1px dotted rgba(138, 106, 28, 0.45);
+}
+
+.go-stat-icon {
+  color: var(--red-600);
+}
+
+.go-stat dt {
+  font-size: var(--fs-sm);
+  color: var(--ink-700);
+}
+
+.go-stat dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-900);
+}
+
+.go-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+/* Developer panel */
+.dev-panel {
+  position: fixed;
+  top: calc(var(--hud-top-h) + 1.4rem);
+  right: 0.6rem;
+  z-index: var(--z-dev);
+  width: 15.5rem;
+  padding: 0.6rem 0.7rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #d9f0d0;
+  background: rgba(8, 12, 8, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(120, 200, 110, 0.45), 0 0.5rem 1.2rem rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+}
+
+.dev-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a8e39a;
+}
+
+.dev-head kbd {
+  margin-left: auto;
+}
+
+.dev-stats {
+  margin: 0 0 0.55rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.1rem;
+}
+
+.dev-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.dev-row dt {
+  color: #8fb089;
+}
+
+.dev-row dd {
+  margin: 0;
+  max-width: 9.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.dev-btn {
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #e5f7df;
+  background: rgba(60, 110, 55, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(120, 200, 110, 0.5);
+}
+
+.dev-btn:hover:not([disabled]) {
+  background: rgba(80, 150, 70, 0.75);
+}
+
+.dev-btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dev-note {
+  margin: 0.45rem 0 0;
+  color: #f0c27a;
+}
