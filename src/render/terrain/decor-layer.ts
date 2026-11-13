@@ -8,6 +8,7 @@
 
 import { TileType, type MapData } from '@sim/map-gen';
 import { MAP } from '../../config';
+import { reducedMotion } from '../effects/motion-prefs';
 import type { Occupancy } from '../entities/occupancy';
 import type { ArtCatalog, ArtFrame } from '../sprites/art-catalog';
 import { tileHash01 } from '../tile-hash';
@@ -68,8 +69,39 @@ interface DecorPiece {
   shadow: Phaser.GameObjects.Image | null;
 }
 
+/** A soft plant with sway poses: grass, reeds, ferns. */
+interface SwayPiece {
+  image: Phaser.GameObjects.Image;
+  sx: number;
+  sy: number;
+  base: string;
+  left: string;
+  right: string;
+  current: string;
+}
+
+/** Gust bands roll across the map from the screen left; ms per wave, px per wave. */
+const GUST_PERIOD_MS = 1900;
+const GUST_WAVELENGTH_PX = 210;
+/** Slow envelope so some minutes are calm and some windy. */
+const GUST_ENVELOPE_MS = 6100;
+/** Margin around the camera view in which sway is still animated. */
+const SWAY_VIEW_MARGIN = 48;
+
+/** Gust pose at a screen spot: 1 = bent with the wind, -1 = spring back, 0 = rest. */
+export function gustPose(sx: number, sy: number, now: number): -1 | 0 | 1 {
+  const band = (sx * 0.8 + sy * 1.4) / GUST_WAVELENGTH_PX;
+  const wave = Math.sin((now / GUST_PERIOD_MS) * Math.PI * 2 - band * Math.PI * 2);
+  const envelope = 0.55 + 0.45 * Math.sin(now / GUST_ENVELOPE_MS + sx / 900);
+  const w = wave * envelope;
+  if (w > 0.42) return 1;
+  if (w < -0.72) return -1;
+  return 0;
+}
+
 export class DecorLayer {
   private pieces: DecorPiece[] = [];
+  private swaying: SwayPiece[] = [];
   private occupancyVersion = -1;
 
   constructor(
@@ -95,9 +127,10 @@ export class DecorLayer {
         if (tile === TileType.BRIDGE || tile === TileType.WATER || tile === TileType.WATER_SHALLOW) continue;
         const frame = this.pick(map, names, art, x, y, seed);
         if (!frame) continue;
-        // Jitter inside the tile so the scatter does not read as a grid.
-        const jx = (tileHash01(x, y, seed ^ 0x51) - 0.5) * 22;
-        const jy = (tileHash01(x, y, seed ^ 0x52) - 0.5) * 9;
+        // Jitter inside the tile so the scatter does not read as a grid; whole
+        // voxel steps (2 px across, 1 px down) keep the art on the pixel lattice.
+        const jx = Math.round((tileHash01(x, y, seed ^ 0x51) - 0.5) * 11) * 2;
+        const jy = Math.round((tileHash01(x, y, seed ^ 0x52) - 0.5) * 9);
         const e = map.elevation[y * MAP.WIDTH + x];
         const sx = (x - y) * 32 + jx;
         const sy = (x + y) * 16 + 16 - e * 4 + jy;
@@ -120,12 +153,25 @@ export class DecorLayer {
         this.shadows.add(shadow);
       }
       this.pieces.push({ x: p.x, y: p.y, image, shadow });
+      const poses = p.frame.poses;
+      if (poses?.swayl && poses.swayr) {
+        this.swaying.push({
+          image,
+          sx: p.sx,
+          sy: p.sy,
+          base: p.frame.frame,
+          left: poses.swayl,
+          right: poses.swayr,
+          current: p.frame.frame,
+        });
+      }
     }
     this.occupancyVersion = -1;
   }
 
-  /** Hide pieces whose tile got a building or a resource. */
+  /** Hide pieces under buildings / resources, bend plants in view with the gusts. */
   update(): void {
+    this.sway();
     if (this.occupancy.version === this.occupancyVersion) return;
     this.occupancyVersion = this.occupancy.version;
     for (const piece of this.pieces) {
@@ -143,6 +189,30 @@ export class DecorLayer {
       piece.shadow?.destroy();
     }
     this.pieces = [];
+    this.swaying = [];
+  }
+
+  /** Swap sway poses of the plants in view (render-only, a pure function of time and place). */
+  private sway(): void {
+    if (this.swaying.length === 0) return;
+    const still = reducedMotion();
+    const now = this.scene.time.now;
+    const view = this.scene.cameras.main.worldView;
+    const root = this.container.parentContainer;
+    const ox = root ? root.x : 0;
+    const oy = root ? root.y : 0;
+    const left = view.x - ox - SWAY_VIEW_MARGIN;
+    const top = view.y - oy - SWAY_VIEW_MARGIN;
+    const right = view.right - ox + SWAY_VIEW_MARGIN;
+    const bottom = view.bottom - oy + SWAY_VIEW_MARGIN * 2;
+    for (const piece of this.swaying) {
+      if (piece.sx < left || piece.sx > right || piece.sy < top || piece.sy > bottom) continue;
+      const pose = still ? 0 : gustPose(piece.sx, piece.sy, now);
+      const frame = pose === 1 ? piece.right : pose === -1 ? piece.left : piece.base;
+      if (frame === piece.current) continue;
+      piece.current = frame;
+      piece.image.setFrame(frame, false, false);
+    }
   }
 
   private pick(

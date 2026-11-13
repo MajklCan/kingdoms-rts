@@ -74,11 +74,14 @@ describe('AtlasSpriteSource (shipped manifest)', () => {
     expect(full?.frame).not.toBe(low?.frame);
   });
 
-  it('scales the rock spire boulder with the footprint', () => {
+  it('draws a real rock spire per footprint size, at the atlas scale', () => {
     const small = source.mapFeature({ kind: MapFeatureKind.ROCK_SPIRE, size: 2, x: 0, y: 0 });
     const big = source.mapFeature({ kind: MapFeatureKind.ROCK_SPIRE, size: 4, x: 0, y: 0 });
     expect(small?.anchor).toBe('footprint');
-    expect(big!.scale).toBeCloseTo(small!.scale * 2);
+    expect(big?.anchor).toBe('footprint');
+    expect(small?.frame).not.toBe(big?.frame);
+    // Own art per size: no upscaling, the pixels stay on the voxel lattice.
+    expect(big!.scale).toBeCloseTo(small!.scale);
   });
 
   it('leaves units to the voxel fallback', () => {

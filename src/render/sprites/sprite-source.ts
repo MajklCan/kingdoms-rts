@@ -61,6 +61,18 @@ export interface SpriteRef extends SpriteFrameRef {
   top: number;
   /** Where the ref came from. Debug / introspection only. */
   source: 'voxel' | 'atlas';
+  /** Whole-sprite pose frames in the same texture (tree sway: swayl, swayr). */
+  poses?: Readonly<Record<string, string>>;
+  /** Looping animated parts drawn over the sprite (flags, mill sails). */
+  overlays?: readonly SpriteOverlayRef[];
+}
+
+/** Frames of one animated part: same texture, origin and scale as the sprite. */
+export interface SpriteOverlayRef {
+  group: string;
+  frames: readonly string[];
+  /** Team mask per frame (tinted with `SpriteRef.teamMask.tint`). */
+  masks: readonly (string | undefined)[];
 }
 
 export type FarmStage = 'sown' | 'growing' | 'ripe' | 'depleted';

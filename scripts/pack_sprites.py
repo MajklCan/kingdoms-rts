@@ -12,7 +12,9 @@ family and writes:
 Runs with any Python 3.9+ that has numpy plus either Pillow (system python)
 or OpenImageIO (Blender's bundled python):
 
-  python3 scripts/pack_sprites.py [--quantize]
+  python3 scripts/pack_sprites.py [--quantize | --no-quantize]
+
+Style A atlases are written as 256 colour palettes by default (Pillow only).
   /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P scripts/pack_sprites.py
 
 See docs/BLENDER_SPRITE_PIPELINE.md for the manifest format.
@@ -35,7 +37,8 @@ RAW = os.path.join(REPO, "art-source", "blender", "renders")
 OUT = os.path.join(REPO, "public", "assets", "sprites")
 MAX_SIZE = 4096
 PAD = 2
-RENDER_SCALE = 2
+#: families this script owns; other atlases in OUT (e.g. units-*) are left alone
+WORLD_FAMILIES = ("buildings", "nature", "terrain", "decor", "fx")
 
 # ---------------------------------------------------------------------------
 # Image IO (Pillow or OpenImageIO)
@@ -188,9 +191,14 @@ def shaded_mask(mask: np.ndarray, colour: np.ndarray) -> np.ndarray:
     return out
 
 
+def is_smooth(rec: dict) -> bool:
+    return rec.get("style", "smooth") == "smooth"
+
+
 def is_graded(rec: dict) -> bool:
-    """Colour frames get the sprite grade; terrain transition masks (alpha only) do not."""
-    return rec.get("meta", {}).get("asset") != "terrain.transition"
+    """Smooth colour frames get the pack-time grade; style A is graded at render
+    time (kr_lib.grade_a) and terrain transition masks are alpha only."""
+    return is_smooth(rec) and rec.get("meta", {}).get("asset") != "terrain.transition"
 
 
 def pack_family(family: str, records: list[dict], quantize: bool) -> tuple[list[dict], dict[str, dict]]:
@@ -211,8 +219,8 @@ def pack_family(family: str, records: list[dict], quantize: bool) -> tuple[list[
             if kind == "mask" and colour is not None and colour.shape == arr.shape:
                 arr = shaded_mask(arr, colour)
             t, ox, oy = trim(arr)
-            if kind in ("frame", "mask"):
-                t = bleed(t)
+            if kind in ("frame", "mask") and is_smooth(rec):
+                t = bleed(t)  # only linear filtering at 0.5 scale needs it
             sprites.append({"name": name, "img": t, "ox": ox, "oy": oy, "sw": arr.shape[1], "sh": arr.shape[0],
                             "anchor": rec["anchor"]})
     sprites.sort(key=lambda s: (-s["img"].shape[0], -s["img"].shape[1], s["name"]))
@@ -291,10 +299,46 @@ def sprite_ref(rec: dict, index: dict[str, dict]) -> dict:
     return ref
 
 
-def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], index: dict[str, dict]) -> dict:
-    assets: dict[str, dict] = {}
+def attach_poses(all_records: list[dict], assets: dict[str, dict], index: dict[str, dict]) -> None:
+    """Pose frames (whole-sprite, e.g. tree sway) and looping overlay frames
+    (animated parts: flags, sails) hang off the variant they belong to."""
+    by_name: dict[str, dict] = {}
+    for a in assets.values():
+        for ref in a["variants"].values():
+            by_name[ref["frame"]] = ref
+    overlays: dict[tuple[str, str], list[tuple[int, dict]]] = {}
     for rec in all_records:
         meta = rec.get("meta", {})
+        pose = meta.get("pose")
+        if not pose:
+            continue
+        base = by_name.get(meta.get("of", ""))
+        if base is None:
+            continue
+        if meta.get("overlay"):
+            group = pose.rstrip("0123456789")
+            frame = {"frame": rec["name"]}
+            if f"{rec['name']}__mask" in index:
+                frame["mask"] = f"{rec['name']}__mask"
+            overlays.setdefault((meta["of"], group), []).append((int(pose[len(group):] or 0), frame))
+        else:
+            base.setdefault("poses", {})[pose] = rec["name"]
+    for (of, group), frames in overlays.items():
+        by_name[of].setdefault("overlays", {})[group] = [f for _i, f in sorted(frames, key=lambda t: t[0])]
+
+
+def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], index: dict[str, dict]) -> dict:
+    assets: dict[str, dict] = {}
+    scales = {rec.get("renderScale", 2) for rec in all_records}
+    styles = {rec.get("style", "smooth") for rec in all_records}
+    if len(scales) > 1 or len(styles) > 1:
+        raise RuntimeError(f"mixed render styles in one pack: {styles} {scales}; re-render every family")
+    render_scale = scales.pop() if scales else 1
+    style = styles.pop() if styles else "A"
+    for rec in all_records:
+        meta = rec.get("meta", {})
+        if meta.get("pose"):
+            continue
         aid = meta.get("asset", rec["name"])
         a = assets.setdefault(aid, {"kind": meta.get("kind", "sprite"), "footprint": rec["footprint"], "variants": {}})
         for k in ("defId", "tileType", "construction", "rubble", "resource", "period", "stepPx"):
@@ -320,13 +364,15 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
         else:
             a["default"] = "default" if "default" in keys else sorted(keys)[0]
         a["variants"] = dict(sorted(a["variants"].items(), key=lambda kv: _vkey(kv[0])))
+    attach_poses(all_records, assets, index)
     return {
         "version": 1,
         "generator": "scripts/blender/render_all.py + scripts/pack_sprites.py",
         "doc": "docs/BLENDER_SPRITE_PIPELINE.md",
-        "grade": GRADE,
-        "renderScale": RENDER_SCALE,
-        "scale": 1.0 / RENDER_SCALE,
+        "style": style,
+        "grade": GRADE if style == "smooth" else "render-time (kr_lib.grade_a)",
+        "renderScale": render_scale,
+        "scale": 1.0 / render_scale,
         "tile": {"w": 64, "h": 32, "elevationStepPx": 4},
         "eraOrder": ERA_ORDER,
         "conventions": {
@@ -344,6 +390,14 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
             "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",
             "sun": "from screen top-left, shadows fall to the screen right",
             "gameToBlender": "game tile +x = Blender +X, game tile +y = Blender -Y, 1 tile = 1 Blender unit",
+            "poses": "variant.poses[name] = whole-sprite frame drawn instead of the base (tree sway: swayl, swayr)",
+            "overlays": "variant.overlays[group] = looping frames (+ team mask) drawn over the base with the same "
+                        "sourceSize and anchor (flag: banners, sails: windmill blades)",
+            "foam": "terrain.foam '<transition key>.<frame>': shore foam ring outside that transition mask, drawn on "
+                    "water tiles under the land",
+            "edge": "terrain.edge ao_mx / ao_my (lower tile, back neighbour higher), rim_px / rim_py (raised tile, "
+                    "front neighbour lower)",
+            "bridgeRail": "terrain.bridge_rail '<edge>' overlay drawn after a bridge tile on its open sides",
         },
         "atlases": [a for fam in sorted(atlases) for a in atlases[fam]],
         "assets": dict(sorted(assets.items())),
@@ -364,19 +418,28 @@ def _vkey(k: str):
 
 
 def main() -> None:
-    quantize = "--quantize" in sys.argv
+    families: list[tuple[str, list[dict]]] = []
+    for rec_path in sorted(glob.glob(os.path.join(RAW, "*", "records.json"))):
+        family = os.path.basename(os.path.dirname(rec_path))
+        if family not in WORLD_FAMILIES:
+            continue
+        with open(rec_path) as fh:
+            records = json.load(fh)
+        if records:
+            families.append((family, records))
+    # Style A is flat lit voxels: a 256 colour palette per atlas is visually
+    # lossless there (mean error ~2/255) and cuts the payload ~5x. Smooth
+    # renders band, so they stay full colour unless asked.
+    style_a = all(not is_smooth(r) for _, recs in families for r in recs)
+    quantize = "--quantize" in sys.argv or (style_a and "--no-quantize" not in sys.argv)
     os.makedirs(OUT, exist_ok=True)
-    for f in glob.glob(os.path.join(OUT, "*-[0-9]*.png")) + glob.glob(os.path.join(OUT, "*-[0-9]*.json")):
-        os.remove(f)
+    for fam in WORLD_FAMILIES:
+        for f in glob.glob(os.path.join(OUT, f"{fam}-[0-9]*.png")) + glob.glob(os.path.join(OUT, f"{fam}-[0-9]*.json")):
+            os.remove(f)
     all_records: list[dict] = []
     atlases: dict[str, list[dict]] = {}
     index: dict[str, dict] = {}
-    for rec_path in sorted(glob.glob(os.path.join(RAW, "*", "records.json"))):
-        family = os.path.basename(os.path.dirname(rec_path))
-        with open(rec_path) as fh:
-            records = json.load(fh)
-        if not records:
-            continue
+    for family, records in families:
         fam_atlases, fam_index = pack_family(family, records, quantize)
         atlases[family] = fam_atlases
         index.update(fam_index)
@@ -385,8 +448,9 @@ def main() -> None:
     manifest = build_manifest(all_records, atlases, index)
     with open(os.path.join(OUT, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=1)
-    total = sum(os.path.getsize(f) for f in glob.glob(os.path.join(OUT, "*.png")))
-    print(f"[pack] {len(manifest['assets'])} assets, PNG payload {total / 1e6:.2f} MB")
+    total = sum(os.path.getsize(os.path.join(OUT, a["image"])) for fam in atlases.values() for a in fam)
+    print(f"[pack] {len(manifest['assets'])} assets, world PNG payload {total / 1e6:.2f} MB"
+          f"{' (256 colour)' if quantize else ''}")
 
 
 if __name__ == "__main__":

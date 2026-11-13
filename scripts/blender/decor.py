@@ -315,8 +315,13 @@ def jobs(only: str | None = None) -> list[Job]:
             meta={"asset": "decor.fence_wattle", "variant": "y", "kind": "decor", "connections": "y"}),
     ]
 
+    # soft plants get the two sway poses; the engine swaps them in gust bands
+    swaying = ("decor.grass", "decor.reeds", "decor.fern")
+
     def add(name: str, fn, asset: str, variant: str) -> None:
-        out.append(Job(name, fn, (1, 1), group=asset, meta={"asset": asset, "variant": variant, "kind": "decor"}))
+        poses = ("swayl", "swayr") if asset in swaying else ()
+        out.append(Job(name, fn, (1, 1), group=asset, poses=poses,
+                       meta={"asset": asset, "variant": variant, "kind": "decor"}))
 
     add("hay_bales", lambda c, r: hay(c, r, "bales"), "decor.hay", "bales")
     add("haystack", lambda c, r: hay(c, r, "stack"), "decor.hay", "stack")

@@ -30,6 +30,7 @@ import {
 import { MAP, SIM } from '../../config';
 import type { ScreenPos } from '../iso';
 import { FOG_DIM_TINT } from '../overlays/fog-style';
+import { PartAnimator } from '../effects/part-animator';
 import type { StatusOverlay } from '../overlays/status-overlay';
 import type { SceneContext } from '../scene-context';
 import type { FarmStage, SpriteSource } from '../sprites/sprite-source';
@@ -99,6 +100,9 @@ export class BuildingRenderer {
   private readonly live: SpriteSync<number>;
   private readonly remembered: SpriteSync<number>;
   private readonly ruinViews: SpriteSync<number>;
+  /** Flags and mill sails of live / remembered buildings (pixel-art overlays). */
+  private readonly parts: PartAnimator<number>;
+  private readonly rememberedParts: PartAnimator<number>;
   private readonly tracked = new Map<number, TrackedBuilding>();
   private readonly ruins = new Map<number, Ruin>();
   private nextRuinId = 1;
@@ -122,6 +126,8 @@ export class BuildingRenderer {
     this.live = new SpriteSync(ctx.scene, ctx.layers, (eid) => this.flash.forget(eid));
     this.remembered = new SpriteSync(ctx.scene, ctx.layers);
     this.ruinViews = new SpriteSync(ctx.scene, ctx.layers);
+    this.parts = new PartAnimator(ctx.scene, ctx.layers.entities);
+    this.rememberedParts = new PartAnimator(ctx.scene, ctx.layers.entities);
   }
 
   /** Visible buildings: sprites + construction / production / worker bars. */
@@ -133,6 +139,7 @@ export class BuildingRenderer {
     this.trackRemovals();
     this.tops.clear();
     this.live.begin();
+    this.parts.begin();
     for (const eid of buildingQuery(world.ecs)) {
       const defId = Building.defId[eid];
       const def = BUILDING_TABLE[defId];
@@ -161,6 +168,7 @@ export class BuildingRenderer {
       view.setFlash(this.flash.colorFor(eid, Health.hp[eid]));
       view.setAlpha(isFoundation && ref.source === 'voxel' ? 0.5 : 1.0);
       view.setDepth(buildingDepth(def, c));
+      this.parts.show(eid, view, ref, null);
       const topY = p.y - ref.top;
       this.tops.set(eid, topY);
 
@@ -204,6 +212,7 @@ export class BuildingRenderer {
       }
     }
     this.live.end();
+    this.parts.end();
     this.drawRuins();
   }
 
@@ -222,6 +231,7 @@ export class BuildingRenderer {
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
     this.remembered.begin();
+    this.rememberedParts.begin();
     const vis = getPlayerVisibility(world, playerId);
     for (const snap of vis?.lastSeenBuildings.values() ?? []) {
       if (!this.isRememberedShown(snap.defId, snap.x, snap.y)) continue;
@@ -245,8 +255,10 @@ export class BuildingRenderer {
       view.setDepth(buildingDepth(def, c) - 0.5);
       view.setAlpha(snap.isFoundation && ref.source === 'voxel' ? 0.4 : 1);
       view.setTint(FOG_DIM_TINT);
+      this.rememberedParts.show(snap.eid, view, ref, FOG_DIM_TINT, true);
     }
     this.remembered.end();
+    this.rememberedParts.end();
   }
 
   /** Current on-screen anchor of a live building sprite (effects attach here). */
@@ -312,6 +324,8 @@ export class BuildingRenderer {
     this.live.clear();
     this.remembered.clear();
     this.ruinViews.clear();
+    this.parts.clear();
+    this.rememberedParts.clear();
     this.tracked.clear();
     this.ruins.clear();
     this.farmCycleStart.clear();

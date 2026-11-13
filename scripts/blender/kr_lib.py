@@ -33,10 +33,15 @@ from mathutils import Euler, Vector
 # Projection constants
 # ---------------------------------------------------------------------------
 
-RENDER_SCALE = 2
+#: Art style of the whole pipeline. "A" = hi-res voxel diorama (default, 1x
+#: render, everything voxelised, no anti-aliasing), "smooth" = the previous
+#: anti-aliased 2x render. Switch with `configure()` before importing families.
+STYLE = "A"
+VOXEL = True
+RENDER_SCALE = 1
 TILE_W_PX = 64 * RENDER_SCALE
 TILE_H_PX = 32 * RENDER_SCALE
-#: Screen pixels per world unit along the camera's right and up axes (2x).
+#: Screen pixels per world unit along the camera's right and up axes.
 PPU = TILE_W_PX / math.sqrt(2.0)
 
 CAM_EULER = Euler((math.radians(60.0), 0.0, math.radians(45.0)), "XYZ")
@@ -58,18 +63,76 @@ SUN_DIR = Vector(
         math.sin(SUN_ELEVATION),
     )
 ).normalized()
-SUN_STRENGTH = 3.0
-SUN_COLOR = (1.0, 0.93, 0.80)
-SUN_ANGLE = math.radians(3.5)
-SKY_COLOR = (0.50, 0.62, 0.85)
-SKY_STRENGTH = 0.55
+@dataclass(frozen=True)
+class StyleConfig:
+    """Render settings of one art style."""
 
-FRAME_MARGIN_PX = 6
+    name: str
+    voxel: bool
+    render_scale: int
+    samples: int
+    shadow_samples: int
+    denoise: bool
+    filter_type: str
+    filter_width: float
+    sun_strength: float
+    sun_color: tuple[float, float, float]
+    sun_angle_deg: float
+    sky_color: tuple[float, float, float]
+    sky_strength: float
+    frame_margin_px: int
+
+
+STYLES: dict[str, StyleConfig] = {
+    # Hi-res voxel diorama: 1 voxel = 2 px wide, 1 px per layer at 1x, soft
+    # sun, GI occlusion, no pixel filter (every sample through the pixel
+    # centre, so voxels stay crisp), no denoiser (it would smear voxels).
+    "A": StyleConfig("A", True, 1, 192, 128, False, "GAUSSIAN", 0.01, 3.4, (1.0, 0.92, 0.78), 9.0,
+                     (0.55, 0.66, 0.9), 0.75, 3),
+    # Previous look: smooth anti-aliased 2x render, drawn at 0.5.
+    "smooth": StyleConfig("smooth", False, 2, 96, 48, True, "BLACKMAN_HARRIS", 1.2, 3.0, (1.0, 0.93, 0.80), 3.5,
+                          (0.50, 0.62, 0.85), 0.55, 6),
+}
+
+SUN_STRENGTH = STYLES["A"].sun_strength
+SUN_COLOR = STYLES["A"].sun_color
+SUN_ANGLE = math.radians(STYLES["A"].sun_angle_deg)
+SKY_COLOR = STYLES["A"].sky_color
+SKY_STRENGTH = STYLES["A"].sky_strength
+
+FRAME_MARGIN_PX = STYLES["A"].frame_margin_px
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ART_DIR = os.path.join(REPO_ROOT, "art-source", "blender")
 RAW_DIR = os.path.join(ART_DIR, "renders")
 TMP_DIR = os.path.join(ART_DIR, ".tmp")
+
+
+def configure(style: str) -> StyleConfig:
+    """Select the art style. Call before importing the family modules, which
+    read the projection constants (RENDER_SCALE, PPU...) at import time."""
+    global STYLE, VOXEL, RENDER_SCALE, TILE_W_PX, TILE_H_PX, PPU
+    global SUN_STRENGTH, SUN_COLOR, SUN_ANGLE, SKY_COLOR, SKY_STRENGTH, FRAME_MARGIN_PX
+    if style not in STYLES:
+        raise ValueError(f"unknown style {style!r}, pick one of {sorted(STYLES)}")
+    cfg = STYLES[style]
+    STYLE = cfg.name
+    VOXEL = cfg.voxel
+    RENDER_SCALE = cfg.render_scale
+    TILE_W_PX = 64 * RENDER_SCALE
+    TILE_H_PX = 32 * RENDER_SCALE
+    PPU = TILE_W_PX / math.sqrt(2.0)
+    SUN_STRENGTH = cfg.sun_strength
+    SUN_COLOR = cfg.sun_color
+    SUN_ANGLE = math.radians(cfg.sun_angle_deg)
+    SKY_COLOR = cfg.sky_color
+    SKY_STRENGTH = cfg.sky_strength
+    FRAME_MARGIN_PX = cfg.frame_margin_px
+    return cfg
+
+
+def style_config() -> StyleConfig:
+    return STYLES[STYLE]
 
 
 def project_px(p: Vector, anchor_world: Vector) -> tuple[float, float]:
@@ -119,12 +182,14 @@ def configure_gpu() -> str:
     return "CPU"
 
 
-def new_scene(name: str, samples: int = 96) -> bpy.types.Scene:
+def new_scene(name: str, samples: int | None = None) -> bpy.types.Scene:
     """Create (or reset) a dedicated scene with camera, sun, sky and passes.
 
     Never touches other scenes, so it is safe to run inside a user's live
-    Blender session through MCP.
+    Blender session through MCP. `samples` overrides the style's default.
     """
+    cfg = style_config()
+    samples = samples or cfg.samples
     old = bpy.data.scenes.get(name)
     if old is not None:
         for ob in list(old.collection.all_objects):
@@ -136,16 +201,16 @@ def new_scene(name: str, samples: int = 96) -> bpy.types.Scene:
     device = configure_gpu()
     scene.cycles.device = "GPU" if device != "CPU" else "CPU"
     scene.cycles.samples = samples
-    scene.cycles.use_adaptive_sampling = True
+    scene.cycles.use_adaptive_sampling = not cfg.voxel
     scene.cycles.adaptive_threshold = 0.02
-    scene.cycles.use_denoising = True
+    scene.cycles.use_denoising = cfg.denoise
     _set_enum(scene.cycles, "denoiser", "OPENIMAGEDENOISE")
     scene.cycles.max_bounces = 6
     scene.cycles.diffuse_bounces = 3
     scene.cycles.glossy_bounces = 2
     scene.cycles.transparent_max_bounces = 8
-    scene.cycles.pixel_filter_type = "BLACKMAN_HARRIS"
-    scene.cycles.filter_width = 1.2
+    scene.cycles.pixel_filter_type = cfg.filter_type
+    scene.cycles.filter_width = cfg.filter_width
     scene.cycles.seed = 7
     scene.render.film_transparent = True
     scene.render.use_persistent_data = True
@@ -213,7 +278,7 @@ def new_scene(name: str, samples: int = 96) -> bpy.types.Scene:
     shadow.use_pass_combined = True
     shadow.cycles.use_pass_shadow_catcher = True
     scene.cycles.use_layer_samples = "USE"
-    shadow.samples = max(32, samples // 2)
+    shadow.samples = max(32, cfg.shadow_samples if samples == cfg.samples else samples // 2)
     scene["kr_ground"] = ground.name
     return scene
 
@@ -277,11 +342,11 @@ class Frame:
         return Frame(left + right, top + bottom, left, top)
 
 
-def collection_points(col: bpy.types.Collection) -> list[Vector]:
-    """World-space evaluated vertices of every mesh in a collection."""
+def collection_points(col: bpy.types.Collection) -> np.ndarray:
+    """World-space evaluated vertices of every renderable mesh in a collection (N, 3)."""
     deps = bpy.context.evaluated_depsgraph_get()
     deps.update()
-    pts: list[Vector] = []
+    pts: list[np.ndarray] = []
     for ob in col.all_objects:
         if ob.type not in {"MESH", "CURVE", "SURFACE", "META", "FONT"}:
             continue
@@ -292,10 +357,42 @@ def collection_points(col: bpy.types.Collection) -> list[Vector]:
             me = ev.to_mesh()
         except RuntimeError:
             continue
-        mw = ev.matrix_world
-        pts.extend(mw @ v.co for v in me.vertices)
+        co = np.empty(len(me.vertices) * 3)
+        me.vertices.foreach_get("co", co)
+        mw = np.array(ev.matrix_world)
+        pts.append(co.reshape(-1, 3) @ mw[:3, :3].T + mw[:3, 3])
         ev.to_mesh_clear()
-    return pts
+    return np.concatenate(pts) if pts else np.zeros((0, 3))
+
+
+def frame_from_points(
+    pts: np.ndarray,
+    footprint: tuple[float, float],
+    include_shadow: bool = True,
+    symmetric: bool = True,
+    margin: int | None = None,
+) -> tuple[Frame, Vector]:
+    """Frame that contains the footprint diamond, the points and their shadow."""
+    margin = FRAME_MARGIN_PX if margin is None else margin
+    fw, fh = footprint
+    anchor_world = Vector((fw / 2.0, -fh / 2.0, 0.0))
+    corners = np.array([(-fw / 2, -fh / 2, 0), (fw / 2, -fh / 2, 0), (fw / 2, fh / 2, 0), (-fw / 2, fh / 2, 0)])
+    all_pts = [corners, pts]
+    if include_shadow and len(pts):
+        z = np.maximum(pts[:, 2], 0.0)
+        t = z / SUN_DIR.z
+        sh = np.stack([pts[:, 0] - SUN_DIR.x * t, pts[:, 1] - SUN_DIR.y * t, np.zeros(len(pts))], axis=1)
+        all_pts.append(sh)
+    p = np.concatenate(all_pts) - np.array(anchor_world)
+    xs = p @ np.array(SCREEN_RIGHT) * PPU
+    ys = -(p @ np.array(SCREEN_UP)) * PPU
+    left = math.ceil(max(0.0, -xs.min()) - 1e-6) + margin
+    right = math.ceil(max(0.0, xs.max()) - 1e-6) + margin
+    if symmetric:
+        left = right = max(left, right)
+    top = math.ceil(max(0.0, -ys.min()) - 1e-6) + margin
+    bottom = math.ceil(max(0.0, ys.max()) - 1e-6) + margin
+    return Frame(left + right, top + bottom, left, top), anchor_world
 
 
 def compute_frame(
@@ -303,33 +400,10 @@ def compute_frame(
     footprint: tuple[float, float],
     include_shadow: bool = True,
     symmetric: bool = True,
-    margin: int = FRAME_MARGIN_PX,
+    margin: int | None = None,
 ) -> tuple[Frame, Vector]:
     """Frame that contains the footprint diamond, the geometry and its shadow."""
-    fw, fh = footprint
-    anchor_world = Vector((fw / 2.0, -fh / 2.0, 0.0))
-    pts = collection_points(col)
-    corners = [
-        Vector((-fw / 2, -fh / 2, 0)),
-        Vector((fw / 2, -fh / 2, 0)),
-        Vector((fw / 2, fh / 2, 0)),
-        Vector((-fw / 2, fh / 2, 0)),
-    ]
-    all_pts = list(corners) + pts
-    if include_shadow:
-        all_pts += [ground_shadow_point(p) for p in pts]
-    xs, ys = [], []
-    for p in all_pts:
-        x, y = project_px(p, anchor_world)
-        xs.append(x)
-        ys.append(y)
-    left = math.ceil(max(0.0, -min(xs))) + margin
-    right = math.ceil(max(0.0, max(xs))) + margin
-    if symmetric:
-        left = right = max(left, right)
-    top = math.ceil(max(0.0, -min(ys))) + margin
-    bottom = math.ceil(max(0.0, max(ys))) + margin
-    return Frame(left + right, top + bottom, left, top), anchor_world
+    return frame_from_points(collection_points(col), footprint, include_shadow, symmetric, margin)
 
 
 def place_camera(scene: bpy.types.Scene, frame: Frame, anchor_world: Vector) -> None:
@@ -445,12 +519,18 @@ def render_collection(
     comb = _find(ch, "beauty", "Combined", "RGBA")
     if comb is None:
         raise RuntimeError(f"no beauty pass in {sorted(ch)[:12]}")
+    voxel = style_config().voxel
     alpha = np.clip(comb[..., 3], 0.0, 1.0)
     rgb = comb[..., :3]
     safe = np.where(alpha > 1e-4, alpha, 1.0)[..., None]
     straight = np.where(alpha[..., None] > 1e-4, rgb / safe, 0.0)
+    srgb = _srgb_encode(straight)
+    if voxel:
+        # style A: graded at render time, hard (binary) alpha, no fringe
+        srgb = grade_a(srgb)
+        alpha = np.where(alpha > 0.5, 1.0, 0.0)
     beauty = np.zeros(comb.shape, dtype=np.uint8)
-    beauty[..., :3] = np.round(_srgb_encode(straight) * 255.0).astype(np.uint8)
+    beauty[..., :3] = np.round(srgb * 255.0).astype(np.uint8)
     beauty[..., 3] = np.round(alpha * 255.0).astype(np.uint8)
     beauty[alpha < 1.0 / 255.0] = 0
 
@@ -462,21 +542,50 @@ def render_collection(
             break
     if team is not None and float(team.max()) > 0.01:
         m = np.clip(team, 0.0, 1.0)
+        if voxel:
+            m = np.where((m > 0.5) & (alpha > 0.5), 1.0, 0.0)
         mask = np.zeros(comb.shape, dtype=np.uint8)
         mask[..., :3] = 255
         mask[..., 3] = np.round(m * 255.0).astype(np.uint8)
+        if not mask[..., 3].any():
+            mask = None
 
     shadow = None
     if want_shadow:
         sc = _find(ch, "shadow", "Shadow Catcher", "RGB")
         if sc is not None:
             occl = 1.0 - np.clip(sc.mean(axis=-1), 0.0, 1.0)
+            if voxel:
+                occl = _box_blur3(occl)  # no-AA catcher is grainy
             a = np.clip(occl, 0.0, 1.0) * shadow_strength
             shadow = np.zeros(comb.shape, dtype=np.uint8)
             shadow[..., :3] = (18, 14, 8)
             shadow[..., 3] = np.round(np.clip(a, 0, 1) * 255.0).astype(np.uint8)
             shadow[shadow[..., 3] < 2] = 0
     return RenderResult(beauty, mask, shadow, frame)
+
+
+def _box_blur3(a: np.ndarray) -> np.ndarray:
+    p = np.pad(a, 1, mode="edge")
+    out = np.zeros_like(a)
+    for dy in range(3):
+        for dx in range(3):
+            out += p[dy: dy + a.shape[0], dx: dx + a.shape[1]]
+    return out / 9.0
+
+
+def grade_a(srgb: np.ndarray, sat: float = 1.06, contrast: float = 1.04, warm: float = 0.4,
+            cool_shadows: float = 0.5) -> np.ndarray:
+    """Style A colour grade (sRGB 0..1 in and out), same as style-explore."""
+    w = np.array([0.2126, 0.7152, 0.0722])
+    x = srgb.copy()
+    lum = (x @ w)[..., None]
+    x = lum + (x - lum) * sat
+    x = (x - 0.5) * contrast + 0.5
+    lum = (np.clip(x, 0, 1) @ w)[..., None]
+    x = x + warm * lum * np.array([1.0, 0.45, -0.6]) * 0.1
+    x = x + cool_shadows * (1 - lum) ** 2 * np.array([-0.4, -0.1, 0.8]) * 0.1
+    return np.clip(x, 0, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +609,20 @@ class Job:
     shadow_strength: float = 0.62
     symmetric: bool = True
     meta: dict = field(default_factory=dict)
+    #: extra voxel poses rendered as `<name>__<pose>` frames (style A only),
+    #: see kr_voxel.POSES (e.g. "swayl", "swayr" for trees)
+    poses: tuple[str, ...] = ()
+
+
+def _write_record(rec: dict, base: str, res: RenderResult) -> None:
+    write_png(base + ".png", res.beauty)
+    rec["files"]["frame"] = base + ".png"
+    if res.mask is not None:
+        write_png(base + "__mask.png", res.mask)
+        rec["files"]["mask"] = base + "__mask.png"
+    if res.shadow is not None:
+        write_png(base + "__shadow.png", res.shadow)
+        rec["files"]["shadow"] = base + "__shadow.png"
 
 
 def run_jobs(
@@ -511,46 +634,68 @@ def run_jobs(
 ) -> list[dict]:
     """Build every job into its own collection, frame per group, render, save PNGs.
 
-    Returns a list of records (frame name, files, size, anchor, meta) that the
-    packer turns into atlases and the manifest.
+    Style A voxelises each collection right after it is built (the voxel
+    grid, not the mesh, is what gets framed and rendered). Returns a list of
+    records (frame name, files, size, anchor, meta) that the packer turns
+    into atlases and the manifest.
     """
+    import kr_voxel
+
     jobs = list(jobs)
-    built: list[tuple[Job, bpy.types.Collection, Frame, Vector]] = []
-    for i, job in enumerate(jobs):
+    built: list[tuple[Job, bpy.types.Collection, Frame, Vector, dict | None]] = []
+    for job in jobs:
         col = asset_collection(scene, job.name)
         rng = random.Random(f"{seed}:{job.name}")
         job.build(col, rng)
         finalize_collection(col)
-        frame, anchor_world = compute_frame(col, job.footprint, job.shadow, job.symmetric)
-        built.append((job, col, frame, anchor_world))
+        vox = None
+        if VOXEL:
+            vox = kr_voxel.voxelize_collection(scene, col, job.poses, seed)
+            pts = kr_voxel.corner_points(vox)
+            log(f"voxelised {job.name}: {len(vox[''].ijk)} voxels")
+        else:
+            pts = collection_points(col)
+        frame, anchor_world = frame_from_points(pts, job.footprint, job.shadow, job.symmetric)
+        built.append((job, col, frame, anchor_world, vox))
     group_frames: dict[str, Frame] = {}
-    for job, _col, frame, _a in built:
+    for job, _col, frame, _a, _v in built:
         key = job.group or job.name
         group_frames[key] = group_frames[key].union(frame) if key in group_frames else frame
     records = []
-    for job, col, _frame, anchor_world in built:
+    for job, col, _frame, anchor_world, vox in built:
         frame = group_frames[job.group or job.name]
-        res = render_collection(scene, col, frame, anchor_world, job.shadow, job.shadow_strength)
-        rec = {
-            "name": job.name,
-            "width": frame.width,
-            "height": frame.height,
-            "anchor": [frame.anchor_x, frame.anchor_y],
-            "footprint": list(job.footprint),
-            "meta": job.meta,
-            "files": {},
-        }
-        base = os.path.join(out_dir, job.name)
-        write_png(base + ".png", res.beauty)
-        rec["files"]["frame"] = base + ".png"
-        if res.mask is not None:
-            write_png(base + "__mask.png", res.mask)
-            rec["files"]["mask"] = base + "__mask.png"
-        if res.shadow is not None:
-            write_png(base + "__shadow.png", res.shadow)
-            rec["files"]["shadow"] = base + "__shadow.png"
-        records.append(rec)
-        log(f"rendered {job.name} {frame.width}x{frame.height} anchor {frame.anchor_x},{frame.anchor_y}")
+        poses = [""]
+        objs: dict = {}
+        if vox is not None:
+            objs = kr_voxel.build_pose_objects(vox, col, job.name)
+            poses += [p for p in objs if p]
+        for pose in poses:
+            hold = None
+            if objs:
+                kr_voxel.show_pose(objs, pose)
+                if kr_voxel.is_overlay(pose):
+                    hold = kr_voxel.build_holdout(vox[""], vox[pose], col, job.name)
+            want_shadow = job.shadow and not pose
+            res = render_collection(scene, col, frame, anchor_world, want_shadow, job.shadow_strength)
+            if hold is not None:
+                me = hold.data
+                bpy.data.objects.remove(hold, do_unlink=True)
+                bpy.data.meshes.remove(me)
+            name = job.name + (f"__{pose}" if pose else "")
+            rec = {
+                "name": name,
+                "width": frame.width,
+                "height": frame.height,
+                "anchor": [frame.anchor_x, frame.anchor_y],
+                "footprint": list(job.footprint),
+                "meta": dict(job.meta, pose=pose, of=job.name, overlay=kr_voxel.is_overlay(pose)) if pose else job.meta,
+                "files": {},
+            }
+            _write_record(rec, os.path.join(out_dir, name), res)
+            records.append(rec)
+            log(f"rendered {name} {frame.width}x{frame.height} anchor {frame.anchor_x},{frame.anchor_y}")
+        if vox is not None:
+            kr_voxel.restore_collection(col)
     return records
 
 
@@ -682,12 +827,18 @@ class Surface:
     coords: str = "uv"  # uv | object | generated
 
 
+#: Blender material name -> Surface recipe. The style A voxeliser colours
+#: voxels from these recipes instead of the shader graph.
+SURFACES: dict[str, Surface] = {}
+
+
 def material(name: str, s: Surface) -> bpy.types.Material:
     if name in _MAT_CACHE and _MAT_CACHE[name].name in bpy.data.materials:
         return _MAT_CACHE[name]
     mat = bpy.data.materials.new("kr_" + name)
     _build_surface(mat, s)
     _MAT_CACHE[name] = mat
+    SURFACES[mat.name] = s
     return mat
 
 

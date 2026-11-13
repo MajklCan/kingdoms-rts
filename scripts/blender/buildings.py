@@ -523,6 +523,12 @@ def _sails(b: B, hx: float, hy: float, hz: float, length: float = 0.86, width: f
     """Four sails in the XZ plane at y=hy (facing -y)."""
     b.cyl((hx, hy + 0.12, hz + 0.02), (hx, hy - 0.03, hz), 0.035, "log", segs=10)
     b.sphere((hx, hy - 0.035, hz), 0.04, "iron", subdiv=1)
+    with b.anim("sails", pivot=(hx, hy, hz), axis=(0.0, 1.0, 0.0)):
+        _sail_blades(b, hx, hy, hz, length, width, angle0, spar_m)
+
+
+def _sail_blades(b: B, hx: float, hy: float, hz: float, length: float, width: float, angle0: float,
+                 spar_m: str) -> None:
     for k in range(4):
         a = math.radians(angle0 + 90 * k)
         d = (math.cos(a), math.sin(a))
@@ -685,9 +691,10 @@ def gold_mine(col, rng, era: str) -> None:
     b.pad(1, 1, "gravel")
     from nature import gold_ore_material
 
-    # The hill fills the tile (it read as a pebble on its footprint before).
-    _mound(b, -0.04, 0.12, 0.52, 0.46, 0.8, gold_ore_material())
-    _mound(b, 0.3, 0.32, 0.22, 0.2, 0.42, gold_ore_material())
+    # A proper hill that towers over its tile (it read as a pebble next to trees before).
+    _mound(b, -0.04, 0.14, 0.58, 0.52, 1.3, gold_ore_material())
+    _mound(b, 0.32, 0.34, 0.26, 0.24, 0.72, gold_ore_material())
+    _mound(b, -0.36, 0.36, 0.24, 0.22, 0.85, gold_ore_material())
     ex, ey = -0.08, -0.2
     pm = "log" if era == "dark" else "ashlar"
     if era == "dark":
@@ -701,10 +708,10 @@ def gold_mine(col, rng, era: str) -> None:
                   arch=True, depth=0.02)
         # winding gear on top of the hill
         for dx in (-0.14, 0.14):
-            b.beam((-0.05 + dx, 0.2, 0.62), (-0.05, 0.2, 1.02), 0.026, "timber")
-        b.cyl((-0.19, 0.2, 0.96), (0.09, 0.2, 0.96), 0.014, "iron", segs=6)
-        b.cyl((-0.08, 0.2, 0.96), (-0.06, 0.2, 0.96), 0.11, "timber", segs=14, smooth=False)
-        b.gable_roof(-0.24, 0.1, 0.1, 0.34, 1.05, 0.12, "tile_red", axis="y", overhang=0.02, thick=0.02)
+            b.beam((-0.05 + dx, 0.2, 1.08), (-0.05, 0.2, 1.48), 0.026, "timber")
+        b.cyl((-0.19, 0.2, 1.42), (0.09, 0.2, 1.42), 0.014, "iron", segs=6)
+        b.cyl((-0.08, 0.2, 1.42), (-0.06, 0.2, 1.42), 0.11, "timber", segs=14, smooth=False)
+        b.gable_roof(-0.24, 0.1, 0.1, 0.34, 1.51, 0.12, "tile_red", axis="y", overhang=0.02, thick=0.02)
     # rails out of the adit
     for dx in (-0.045, 0.045):
         b.beam((ex + dx, ey - 0.02, 0.012), (ex + dx + 0.04, -0.47, 0.012), 0.01, "iron", d=0.01)
@@ -737,13 +744,14 @@ def stone_quarry(col, rng, era: str) -> None:
     b.pad(1, 1, "gravel")
     # stepped rock face at the back
     # Tall stepped face that fills the tile (it read as a pebble on its footprint before).
-    blocks = [(-0.48, 0.02, -0.02, 0.48, 0.74), (-0.04, 0.16, 0.36, 0.48, 0.52), (-0.48, -0.26, -0.18, 0.06, 0.38),
-              (0.04, 0.02, 0.36, 0.18, 0.24), (-0.24, 0.24, 0.12, 0.48, 0.9)]
+    # (heights x1.5 in the style A pass: the quarry now stands up next to trees)
+    blocks = [(-0.48, 0.02, -0.02, 0.48, 1.1), (-0.04, 0.16, 0.36, 0.48, 0.78), (-0.48, -0.26, -0.18, 0.06, 0.56),
+              (0.04, 0.02, 0.36, 0.18, 0.34), (-0.24, 0.24, 0.12, 0.48, 1.35), (-0.48, 0.3, -0.2, 0.48, 1.2)]
     for (bx0, by0, bx1, by1, h) in blocks:
         ob = b.box(bx0, by0, 0, bx1, by1, h, "rock_cut", 0.02)
         b.roughen(ob, 0.014, 0.08, 2)
     for _ in range(5):
-        p = (rng.uniform(-0.42, 0.2), rng.uniform(0.3, 0.44), 0.72 + rng.uniform(0, 0.12))
+        p = (rng.uniform(-0.42, 0.2), rng.uniform(0.3, 0.44), 1.18 + rng.uniform(0, 0.16))
         r = b.sphere(p, rng.uniform(0.08, 0.12), "rock", scale=(1.2, 1, 0.7), subdiv=1)
         b.roughen(r, 0.02, 0.1, 1)
     # cut blocks
@@ -751,7 +759,7 @@ def stone_quarry(col, rng, era: str) -> None:
         b.box(px - 0.055, py - 0.045, z, px + 0.055, py + 0.045, z + 0.07, "ashlar" if era != "dark" else "rock_cut",
               0.006, rng.uniform(-0.1, 0.1))
     # tripod crane
-    cx, cy, top = -0.12, -0.2, 0.95
+    cx, cy, top = -0.12, -0.2, 1.15
     for a in (0.3, 2.4, 4.4):
         b.cyl((cx + math.cos(a) * 0.2, cy + math.sin(a) * 0.2, 0), (cx, cy, top), 0.016, "log", segs=6)
     b.beam((cx, cy, top), (cx + 0.18, cy - 0.12, top - 0.05), 0.02, "log")

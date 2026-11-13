@@ -106,13 +106,21 @@ export class AtlasSpriteSource implements SpriteSource {
 
   mapFeature(query: MapFeatureSpriteQuery): SpriteRef | null {
     if (query.kind === MapFeatureKind.LINDEN_TREE) {
+      const own = this.art.defaultFrame('feature.linden');
+      if (own) return this.ref(own, -1);
       const frame = this.art.frame('resource.tree', 'linden');
       return frame ? this.ref(frame, -1, LINDEN_LANDMARK_SCALE) : null;
     }
     if (query.kind === MapFeatureKind.ROCK_SPIRE) {
-      // No spire art yet: the big boulder blown up to the spire's footprint.
+      const size = Math.max(1, query.size);
+      const exact = this.art.frame('feature.rock_spire', String(size));
+      if (exact) return this.ref(exact, -1);
+      const built = size >= 3 ? 4 : 2;
+      const near = this.art.frame('feature.rock_spire', String(built));
+      if (near) return this.ref(near, -1, size / built);
+      // Older art without a spire: the big boulder blown up to the spire's footprint.
       const frame = this.art.frame('decor.rocks', 'boulder');
-      return frame ? this.ref(frame, -1, Math.max(1, query.size) * ROCK_SPIRE_SCALE) : null;
+      return frame ? this.ref(frame, -1, size * ROCK_SPIRE_SCALE) : null;
     }
     return null;
   }
@@ -145,6 +153,15 @@ export class AtlasSpriteSource implements SpriteSource {
     };
     if (frame.mask && playerId >= 0) {
       ref.teamMask = { texture: frame.texture, frame: frame.mask, tint: this.teamColors[playerId] ?? 0xffffff };
+    }
+    if (frame.poses) ref.poses = frame.poses;
+    if (frame.overlays) {
+      const teamed = ref.teamMask !== undefined;
+      ref.overlays = frame.overlays.map((o) => ({
+        group: o.group,
+        frames: o.frames,
+        masks: teamed ? o.masks : o.frames.map(() => undefined),
+      }));
     }
     if (frame.shadow) {
       ref.shadow = {

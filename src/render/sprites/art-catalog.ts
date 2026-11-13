@@ -41,6 +41,16 @@ export interface ArtFrame {
   /** Screen pixels (at scale) from the anchor up to the first opaque row. */
   top: number;
   variant: ArtVariant;
+  /** Pose frames present in the atlas (tree sway). */
+  poses?: Readonly<Record<string, string>>;
+  /** Animated part overlays whose frames are all present in the atlas. */
+  overlays?: readonly ArtOverlay[];
+}
+
+export interface ArtOverlay {
+  group: string;
+  frames: readonly string[];
+  masks: readonly (string | undefined)[];
 }
 
 export class ArtCatalog {
@@ -183,6 +193,22 @@ export class ArtCatalog {
     };
     if (variant.mask && this.lookup.hasFrame(texture, variant.mask)) resolved.mask = variant.mask;
     if (variant.shadow && this.lookup.hasFrame(texture, variant.shadow)) resolved.shadow = variant.shadow;
+    if (variant.poses) {
+      const poses = Object.entries(variant.poses).filter(([, f]) => this.lookup.hasFrame(texture, f));
+      if (poses.length > 0) resolved.poses = Object.fromEntries(poses);
+    }
+    if (variant.overlays) {
+      const overlays: ArtOverlay[] = [];
+      for (const [group, frames] of Object.entries(variant.overlays)) {
+        if (!frames.every((f) => this.lookup.hasFrame(texture, f.frame))) continue;
+        overlays.push({
+          group,
+          frames: frames.map((f) => f.frame),
+          masks: frames.map((f) => (f.mask && this.lookup.hasFrame(texture, f.mask) ? f.mask : undefined)),
+        });
+      }
+      if (overlays.length > 0) resolved.overlays = overlays;
+    }
     return resolved;
   }
 }

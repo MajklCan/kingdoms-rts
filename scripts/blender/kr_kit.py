@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import math
 import random
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import bmesh
 import bpy
 from mathutils import Matrix, Vector, noise
 
+import kr_lib
 from kr_lib import Surface, material
 
 # ---------------------------------------------------------------------------
@@ -122,6 +124,24 @@ class B:
         self.col = col
         self.rng = rng
         self._n = 0
+
+    @contextmanager
+    def anim(self, kind: str, **props):
+        """Tag every object built inside the block as an animated part.
+
+        Style A renders tagged parts as separate overlay frames
+        (`<sprite>__<group><n>`, see kr_voxel.ANIM) instead of baking them
+        into the sprite. kind: flag | hang | sails. Props are stored as
+        `kr_<name>` custom properties (pivot, dir, len, axis...).
+        """
+        before = set(self.col.objects.keys())
+        yield
+        for ob in self.col.objects:
+            if ob.name in before:
+                continue
+            ob["kr_anim"] = kind
+            for k, v in props.items():
+                ob["kr_" + k] = v
 
     # -- core ------------------------------------------------------------
     def obj(self, bm: bmesh.types.BMesh, m: str | bpy.types.Material | list, name: str = "part",
@@ -546,6 +566,8 @@ class B:
     def banner(self, x: float, y: float, z: float, pole_h: float = 0.5, flag_w: float = 0.16, flag_h: float = 0.11,
                direction: tuple[float, float] = (1.0, -0.2), pole_m: str = "timber", pennant: bool = False) -> None:
         """Team-coloured flag on a pole. Flag hangs in the given ground direction."""
+        if kr_lib.VOXEL:  # style A: a few voxels more cloth so the flutter reads
+            flag_w, flag_h = flag_w * 1.35, flag_h * 1.35
         self.cyl((x, y, z), (x, y, z + pole_h), 0.012, pole_m, segs=6)
         self.sphere((x, y, z + pole_h + 0.01), 0.018, "gold", subdiv=1)
         d = Vector((direction[0], direction[1], 0)).normalized()
@@ -568,7 +590,8 @@ class B:
         for r in range(rows):
             for c in range(cols):
                 bm.faces.new((grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c]))
-        ob = self.obj(bm, "team", "flag", smooth=True)
+        with self.anim("flag", pivot=(x, y, top), dir=(d.x, d.y), len=flag_w, height=flag_h):
+            ob = self.obj(bm, "team", "flag", smooth=True)
         sol = ob.modifiers.new("solid", "SOLIDIFY")
         sol.thickness = 0.006
 

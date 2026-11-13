@@ -120,7 +120,8 @@ export class TerrainLayer {
         if (textures.exists(key)) textures.remove(key);
         // A canvas is a valid texture source; Phaser uploads it once.
         const texture = textures.addImage(key, canvas as unknown as HTMLImageElement);
-        texture?.setFilter(LINEAR_FILTER);
+        // Pixel art (scale 1) keeps the game's nearest sampling; smooth 2x art is filtered.
+        if (art.scale < 1) texture?.setFilter(LINEAR_FILTER);
         keys.push(key);
       }
       index++;

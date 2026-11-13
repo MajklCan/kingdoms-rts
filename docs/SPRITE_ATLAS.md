@@ -13,9 +13,16 @@ frame missing from a loaded atlas falls back per query.
 
 `queueSpriteManifest()` loads `public/assets/sprites/manifest.json` in the
 scene preload, then every atlas under texture key `sprite-atlas:<key>`
-(for example `sprite-atlas:kr-buildings-0`). Atlas textures switch to LINEAR
-filtering: frames are rendered at 2x and drawn at `manifest.scale` (0.5), which
-the game's pixel-art NEAREST default would shred.
+(for example `sprite-atlas:kr-buildings-0`). Style A art (`manifest.scale` 1)
+keeps the game's NEAREST filtering and is drawn at integer positions, so every
+art pixel lands on whole screen pixels. Smooth 2x art (`scale` 0.5) switches
+its atlases to LINEAR filtering instead.
+
+## Camera zoom
+
+Zoom moves in fixed steps (0.5, 0.75, 1, 1.5, 2, 2.5; a match starts at 1.5)
+and the scroll is snapped, so style A pixels never shimmer while panning.
+`camera/camera-controller.ts` owns the steps.
 
 | Module (`src/render/`) | Role |
 | --- | --- |
@@ -40,7 +47,9 @@ the game's pixel-art NEAREST default would shred.
 | Felled tree | `resource.stump` (`conifer` / `broadleaf`) for 4 min where a tree vanished |
 | Gold, stone, berries | `resource.gold` / `resource.stone` / `resource.berry_bush`, look by remaining fraction (`full` / `half` / `low`) |
 | Linden landmark | `resource.tree` `linden` at 1.35x |
-| Rock spire | `decor.rocks` `boulder` scaled to the 2x2 / 4x4 footprint (no spire art yet) |
+| Rock spire | `feature.rock_spire`, own art per footprint size (2x2, 4x4) |
+| Flags, windmill | `variant.overlays` `flag` / `sails` frames, looped per building with a seeded phase (`effects/part-animator.ts`) |
+| Tree and grass sway | `variant.poses` `swayl` / `swayr`, picked by rolling gust bands (`gustPose` in `terrain/decor-layer.ts`), frozen under reduced motion |
 | Units | `units-manifest.json` frames `<unit>/<anim>/<facing>/<frame>` ([UNIT_SPRITES.md](UNIT_SPRITES.md)); machine gun and mortar stay voxel |
 | Terrain `TileType` | `terrain.<name>` via `TILE_TERRAIN` in `terrain/terrain-art.ts`; GRASS also draws `meadow` in noise patches, BRIDGE as `bridge_x` / `bridge_y`, BARBED_WIRE as `mud` with wire drawn on top |
 
@@ -87,10 +96,30 @@ colour frame's luma * 1.25, so tint (multiply) plus normal blending gives
 `terrain/terrain-baker.ts` composes each tile on a 2D canvas: cliff faces
 down to the lower neighbour (`cliff_<kind>`, lip on the top step), the tile
 frame (`(x mod p) + p * (y mod p)`), then each higher-priority neighbour
-terrain masked by the transition masks. Tiles are clipped to their diamond
-with a small bleed on edges that meet a same-height neighbour. The result is
-one image per chunk (four for chunks with water), baked once per map in
-about 0.2 to 1 s.
+terrain masked by the transition masks, shore foam on water next to land,
+edge AO and lit rims at elevation steps, and bridge rails last. Style A tiles
+are clipped to their exact pixel staircase (smooth art: the diamond with a
+small bleed). The result is one image per chunk (four for chunks with water),
+baked once per map in about 1.5 s.
+
+Chunk origins sit on a 4 px grid, and every chunk bakes the ring of neighbour
+tiles from later chunks under its own tiles. At 1.5x or 2.5x a screen pixel can
+sample exactly on a chunk seam, and each chunk may round to the other one's
+transparent texel; the underlay keeps those pixels opaque (later chunks paint
+over it, so it never shows otherwise).
+
+## Ambient life
+
+`effects/life-fx.ts` adds render-only life on top of the world FX: perched
+birds that flush from units and chopping, flyers and flocks, falling leaves,
+snow slipping off spruces (`forest-life.ts`); deer herds, rabbits, ducks, fish
+rings, frogs and dragonflies (`wildlife.ts`); chickens, a dog, braziers and
+voxel chimney smoke around buildings (`village-life.ts`). Sprites are small
+pixel grids baked into one canvas texture (`life-sprites.ts`). Everything is
+seeded from the map (`LifeRng`, never `world.rng`), pooled with hard caps,
+culled to the view and fog, never interactive, and stopped under
+`prefers-reduced-motion`. `__RENDER__.scene().worldFx.stats.life` counts the
+live pieces.
 
 Render-only randomness (meadow patches, decor, tree species, farm phase)
 hashes tile coordinates with a seed taken from the map bytes, never

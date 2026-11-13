@@ -81,17 +81,20 @@ export class SpriteSourceRegistry implements SpriteSource {
 
 /**
  * Build the registry for a scene after preload: voxel bakes as the base, atlas
- * art from the loaded manifest (if any) on top. Atlas textures switch to
- * linear filtering: the art is rendered at 2x and drawn at 0.5, which nearest
- * sampling (the game's pixel-art default) would shred.
+ * art from the loaded manifest (if any) on top. Style A art is drawn at 1x and
+ * keeps the game's nearest (pixel-art) sampling; downscaled art (the older
+ * smooth 2x renders drawn at 0.5) switches to linear filtering, which nearest
+ * sampling would shred.
  */
 export function createSpriteRegistry(scene: Phaser.Scene): SpriteSourceRegistry {
   const voxel = new VoxelSpriteSource(scene.textures);
   const manifest = readSpriteManifest(scene.cache);
-  for (const atlas of manifest.atlases) {
-    const key = atlasTextureKey(atlas.key);
-    if (scene.textures.exists(key)) {
-      scene.textures.get(key).setFilter(LINEAR_FILTER);
+  if (manifest.scale < 1) {
+    for (const atlas of manifest.atlases) {
+      const key = atlasTextureKey(atlas.key);
+      if (scene.textures.exists(key)) {
+        scene.textures.get(key).setFilter(LINEAR_FILTER);
+      }
     }
   }
   const art = new ArtCatalog(manifest, phaserFrameLookup(scene.textures));

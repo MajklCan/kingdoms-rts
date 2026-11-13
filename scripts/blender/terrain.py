@@ -744,6 +744,14 @@ def transition_masks(rng: random.Random) -> dict[str, np.ndarray]:
 
 
 def render(scene: bpy.types.Scene, out_dir: str, only: str | None) -> list[dict]:
+    if K.VOXEL:
+        # style A: voxel tiles straight from numpy (see terrain_vox.py)
+        import importlib
+
+        import terrain_vox
+
+        importlib.reload(terrain_vox)
+        return terrain_vox.render(out_dir, only, K.write_png)
     records = []
     keys = [k.strip() for k in only.split(",")] if only else None
 

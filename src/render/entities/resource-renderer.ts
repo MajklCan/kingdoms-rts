@@ -144,12 +144,19 @@ export class ResourceRenderer {
     return eid === undefined ? undefined : this.resources.get(eid);
   }
 
+  /** Live trees by eid (tile + species group), for the ambient life. */
+  get liveTrees(): ReadonlyMap<number, { readonly x: number; readonly y: number; readonly conifer: boolean }> {
+    return this.trees;
+  }
+
   /** Number of valid entries at the front of {@link goldInView}. */
   get goldInViewCount(): number {
     return this.goldCount;
   }
 
   drawMapFeatures(): void {
+    const now = this.ctx.scene.time.now;
+    const sway = !reducedMotion();
     this.features.begin();
     for (const feature of this.ctx.world.map.features) {
       if (!this.isFeatureExplored(feature)) continue;
@@ -162,7 +169,13 @@ export class ResourceRenderer {
       const p = spriteAnchorPoint(ref.anchor, c, size, size);
       const view = this.features.show(id, ref, p.x, p.y);
       view.setDepth(c.y - 1);
-      view.setTintOrClear(this.isFeatureVisible(feature) ? null : FOG_DIM_TINT);
+      const visible = this.isFeatureVisible(feature);
+      view.setTintOrClear(visible ? null : FOG_DIM_TINT);
+      if (ref.poses) {
+        // The linden landmark sways like the trees (slower, it is big).
+        const lean = visible && sway ? this.swayLean(feature.x, feature.y, now * 0.7, SWAY_BROADLEAF) : 0;
+        applyLean(view, ref.poses, lean, SWAY_BROADLEAF);
+      }
     }
     this.features.end();
   }
@@ -211,7 +224,8 @@ export class ResourceRenderer {
       }
       if (kind === ResourceKindId.WOOD) {
         this.treeByTile.set(tileIndex(x, y), eid);
-        view.sprite.rotation = visible ? this.treeLean(eid, x, y, conifer, now, sway) : 0;
+        const lean = visible ? this.treeLean(eid, x, y, conifer, now, sway) : 0;
+        applyLean(view, ref.poses, lean, conifer ? SWAY_CONIFER : SWAY_BROADLEAF);
       } else if (kind === ResourceKindId.GOLD && visible) {
         this.noteGold(c.x, c.y - ref.top * 0.45);
       }
@@ -248,14 +262,7 @@ export class ResourceRenderer {
 
   /** Sway (stable per-tile phase, slow gusts) plus the decaying chop shake. */
   private treeLean(eid: number, x: number, y: number, conifer: boolean, now: number, sway: boolean): number {
-    let lean = 0;
-    if (sway) {
-      const phase = tileHash01(Math.round(x), Math.round(y), 0x5a7) * Math.PI * 2;
-      const period = SWAY_PERIOD_MS * (0.8 + tileHash01(Math.round(x), Math.round(y), 0x9e1) * 0.5);
-      // Gusts roll across the map from the left: slow envelope keyed to screen x.
-      const gust = 0.65 + 0.35 * Math.sin(now / 2600 - (x - y) * 0.09);
-      lean = Math.sin((now / period) * Math.PI * 2 + phase) * (conifer ? SWAY_CONIFER : SWAY_BROADLEAF) * gust;
-    }
+    let lean = sway ? this.swayLean(x, y, now, conifer ? SWAY_CONIFER : SWAY_BROADLEAF) : 0;
     const at = this.shakeAt.get(eid);
     if (at !== undefined) {
       const age = now - at;
@@ -267,6 +274,14 @@ export class ResourceRenderer {
       }
     }
     return lean;
+  }
+
+  /** Wind lean (rad): stable per-tile phase, gusts rolling in from the left. */
+  private swayLean(x: number, y: number, now: number, amplitude: number): number {
+    const phase = tileHash01(Math.round(x), Math.round(y), 0x5a7) * Math.PI * 2;
+    const period = SWAY_PERIOD_MS * (0.8 + tileHash01(Math.round(x), Math.round(y), 0x9e1) * 0.5);
+    const gust = 0.65 + 0.35 * Math.sin(now / 2600 - (x - y) * 0.09);
+    return Math.sin((now / period) * Math.PI * 2 + phase) * amplitude * gust;
   }
 
   private hit(eid: number, kind: number, x: number, y: number, screen: ScreenPos, top: number, now: number): void {
@@ -390,6 +405,31 @@ export class ResourceRenderer {
 
 function tileIndex(x: number, y: number): number {
   return Math.round(y) * MAP.WIDTH + Math.round(x);
+}
+
+/** Lean past this share of the sway amplitude shows the bent pose frame. */
+const POSE_THRESHOLD = 0.55;
+
+/**
+ * Show a lean: pixel art swaps to its pre-rendered bent frames (rotation
+ * would smear the pixels), other art rotates.
+ */
+function applyLean(
+  view: SpriteView,
+  poses: Readonly<Record<string, string>> | undefined,
+  lean: number,
+  amplitude: number
+): void {
+  const sprite = view.sprite;
+  if (!poses) {
+    sprite.rotation = lean;
+    return;
+  }
+  if (sprite.rotation !== 0) sprite.rotation = 0;
+  const s = lean / amplitude;
+  const pose = s > POSE_THRESHOLD ? poses.swayr : s < -POSE_THRESHOLD ? poses.swayl : undefined;
+  const frame = pose ?? view.ref.frame;
+  if (frame !== undefined && sprite.frame.name !== frame) sprite.setFrame(frame);
 }
 
 /** Footprint size in tiles: rock spires cover 2x2 or 4x4, everything else one tile. */
