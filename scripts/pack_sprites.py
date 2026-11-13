@@ -165,18 +165,42 @@ def bleed(arr: np.ndarray) -> np.ndarray:
     return out
 
 
+MASK_LUMA_GAIN = 1.25
+
+
+def shaded_mask(mask: np.ndarray, colour: np.ndarray) -> np.ndarray:
+    """Team mask RGB = the colour frame's luma * MASK_LUMA_GAIN (alpha unchanged).
+
+    The engine tints the mask with the team colour and draws it over the frame
+    with normal blending, which gives mix(rgb, team * luma * 1.25, alpha): the
+    painted cloth keeps the render's light and shade instead of a flat fill.
+    """
+    rgb = colour[..., :3].astype(np.float32)
+    luma = rgb[..., 0] * 0.299 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.114
+    shade = np.clip(luma * MASK_LUMA_GAIN, 0, 255).astype(np.uint8)
+    out = mask.copy()
+    out[..., 0] = shade
+    out[..., 1] = shade
+    out[..., 2] = shade
+    return out
+
+
 def pack_family(family: str, records: list[dict], quantize: bool) -> tuple[list[dict], dict[str, dict]]:
     """Returns (atlas descriptors, frame index name -> {atlas, w, h})."""
     sprites = []
     for rec in records:
+        frame_path = os.path.join(REPO, rec["files"].get("frame", ""))
+        colour = load_rgba(frame_path) if "frame" in rec["files"] and os.path.exists(frame_path) else None
         for kind, rel in rec["files"].items():
             path = os.path.join(REPO, rel)
             if not os.path.exists(path):
                 continue
             arr = load_rgba(path)
             name = rec["name"] if kind == "frame" else f"{rec['name']}__{kind}"
+            if kind == "mask" and colour is not None and colour.shape == arr.shape:
+                arr = shaded_mask(arr, colour)
             t, ox, oy = trim(arr)
-            if kind == "frame":
+            if kind in ("frame", "mask"):
                 t = bleed(t)
             sprites.append({"name": name, "img": t, "ox": ox, "oy": oy, "sw": arr.shape[1], "sh": arr.shape[0],
                             "anchor": rec["anchor"]})
@@ -303,8 +327,8 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
                           "= neighbour at x+1, corner_px_py = diagonal neighbour at x+1,y+1 (only when neither "
                           "adjacent edge neighbour matches)",
             "walls": "variant '<era>.<mask>', mask bits 1 = +x, 2 = +y, 4 = -x, 8 = -y (game tile directions)",
-            "mask": "white RGB, alpha = team colour coverage; tint per player and draw over the frame (multiply or "
-                    "overlay), same sourceSize and anchor",
+            "mask": "RGB = colour frame luma * 1.25 (grey shading), alpha = team colour coverage; tint (multiply) "
+                    "with the team colour and draw over the frame with normal blending, same sourceSize and anchor",
             "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",
             "sun": "from screen top-left, shadows fall to the screen right",
             "gameToBlender": "game tile +x = Blender +X, game tile +y = Blender -Y, 1 tile = 1 Blender unit",

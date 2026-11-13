@@ -20,7 +20,7 @@
   "terrain": "tile frame = variant str((x mod period) + period * (y mod period)); animated water '<index>.<frame>'; cliff faces are one elevationStepPx step, stack them down to the lower tile, use the *_lip variant for the topmost step",
   "transition": "white masks, alpha = how much of the neighbour's ground to draw over this tile; edge_px = neighbour at x+1, corner_px_py = diagonal neighbour at x+1,y+1 (only when neither adjacent edge neighbour matches)",
   "walls": "variant '<era>.<mask>', mask bits 1 = +x, 2 = +y, 4 = -x, 8 = -y (game tile directions)",
-  "mask": "white RGB, alpha = team colour coverage; tint per player and draw over the frame (multiply or overlay), same sourceSize and anchor",
+  "mask": "RGB = colour frame luma * 1.25 (grey shading), alpha = team colour coverage; tint (multiply) with the team colour and draw over the frame with normal blending, same sourceSize and anchor",
   "shadow": "black RGB, alpha = shadow; draw on a ground layer below all objects, same sourceSize and anchor",
   "sun": "from screen top-left, shadows fall to the screen right",
   "gameToBlender": "game tile +x = Blender +X, game tile +y = Blender -Y, 1 tile = 1 Blender unit"
@@ -32,7 +32,7 @@
    "json": "buildings-0.json",
    "size": [
     4096,
-    2403
+    2447
    ],
    "frames": 210
   },
@@ -184,12 +184,12 @@
      "atlas": "kr-buildings-0",
      "frame": "defensive_tower_dark",
      "anchor": [
-      276,
-      254
+      269,
+      248
      ],
      "size": [
-      552,
-      275
+      538,
+      269
      ],
      "mask": "defensive_tower_dark__mask",
      "shadow": "defensive_tower_dark__shadow"
@@ -349,12 +349,12 @@
      "atlas": "kr-buildings-0",
      "frame": "gold_mine_dark",
      "anchor": [
-      111,
-      120
+      139,
+      144
      ],
      "size": [
-      222,
-      131
+      278,
+      180
      ],
      "mask": "gold_mine_dark__mask",
      "shadow": "gold_mine_dark__shadow"
@@ -363,12 +363,12 @@
      "atlas": "kr-buildings-0",
      "frame": "gold_mine_castle",
      "anchor": [
-      111,
-      120
+      139,
+      144
      ],
      "size": [
-      222,
-      131
+      278,
+      180
      ],
      "mask": "gold_mine_castle__mask",
      "shadow": "gold_mine_castle__shadow"
@@ -604,12 +604,12 @@
      "atlas": "kr-buildings-0",
      "frame": "stone_quarry_dark",
      "anchor": [
-      102,
-      106
+      133,
+      135
      ],
      "size": [
-      204,
-      118
+      266,
+      147
      ],
      "mask": "stone_quarry_dark__mask",
      "shadow": "stone_quarry_dark__shadow"
@@ -618,12 +618,12 @@
      "atlas": "kr-buildings-0",
      "frame": "stone_quarry_castle",
      "anchor": [
-      102,
-      106
+      133,
+      135
      ],
      "size": [
-      204,
-      118
+      266,
+      147
      ],
      "mask": "stone_quarry_castle__mask",
      "shadow": "stone_quarry_castle__shadow"
@@ -710,11 +710,11 @@
      "frame": "wall_dark_00",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_00__shadow",
      "connections": 0,
@@ -725,11 +725,11 @@
      "frame": "wall_dark_01",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_01__shadow",
      "connections": 1,
@@ -740,11 +740,11 @@
      "frame": "wall_dark_02",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_02__shadow",
      "connections": 2,
@@ -755,11 +755,11 @@
      "frame": "wall_dark_03",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_03__shadow",
      "connections": 3,
@@ -770,11 +770,11 @@
      "frame": "wall_dark_04",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_04__shadow",
      "connections": 4,
@@ -785,11 +785,11 @@
      "frame": "wall_dark_05",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_05__shadow",
      "connections": 5,
@@ -800,11 +800,11 @@
      "frame": "wall_dark_06",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_06__shadow",
      "connections": 6,
@@ -815,11 +815,11 @@
      "frame": "wall_dark_07",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_07__shadow",
      "connections": 7,
@@ -830,11 +830,11 @@
      "frame": "wall_dark_08",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_08__shadow",
      "connections": 8,
@@ -845,11 +845,11 @@
      "frame": "wall_dark_09",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_09__shadow",
      "connections": 9,
@@ -860,11 +860,11 @@
      "frame": "wall_dark_10",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_10__shadow",
      "connections": 10,
@@ -875,11 +875,11 @@
      "frame": "wall_dark_11",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_11__shadow",
      "connections": 11,
@@ -890,11 +890,11 @@
      "frame": "wall_dark_12",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_12__shadow",
      "connections": 12,
@@ -905,11 +905,11 @@
      "frame": "wall_dark_13",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_13__shadow",
      "connections": 13,
@@ -920,11 +920,11 @@
      "frame": "wall_dark_14",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_14__shadow",
      "connections": 14,
@@ -935,11 +935,11 @@
      "frame": "wall_dark_15",
      "anchor": [
       134,
-      131
+      133
      ],
      "size": [
       268,
-      137
+      139
      ],
      "shadow": "wall_dark_15__shadow",
      "connections": 15,
