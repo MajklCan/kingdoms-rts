@@ -9,15 +9,15 @@
 
 import { SIM } from '../config';
 import { checksumWorld } from '@sim/checksum';
+import { LOCAL_PLAYER_ID, createSimWorld, step, type SimInput, type SimWorld } from '@sim/world';
+import { ChecksumLedger, type ChecksumComparison } from './checksum-ledger';
 import {
-  createSimWorld,
-  entityForNetId,
-  netIdForEntity,
-  step,
-  type SimInput,
-  type SimWorld,
-} from '@sim/world';
-import { LOCAL_PLAYER_ID } from '@sim/world';
+  decodeInputFromWire,
+  encodeInputForWire,
+  isWireCommandType,
+  sanitizeTurnCommands,
+  sanitizeWireCommand,
+} from './commands';
 import { Lockstep } from './lockstep';
 import {
   CHECKSUM_INTERVAL_TICKS,
@@ -58,14 +58,6 @@ interface ChecksumDebug {
   hash: number;
 }
 
-interface ChecksumCompareDebug {
-  tick: number;
-  peerId: number;
-  localHash: number;
-  peerHash: number;
-  match: boolean;
-}
-
 export interface MultiplayerSessionEventDebug {
   atMs: number;
   wallTime: string;
@@ -99,7 +91,7 @@ export interface MultiplayerSessionDebugSnapshot {
   lastReceivedTurn: TurnDebug | null;
   lastSentChecksum: ChecksumDebug | null;
   lastReceivedChecksum: ChecksumDebug | null;
-  lastChecksumCompare: ChecksumCompareDebug | null;
+  lastChecksumCompare: ChecksumComparison | null;
   pendingPeerChecksums: Array<{ tick: number; peerId: number; hash: number }>;
   lockstep: ReturnType<Lockstep['debugSnapshot']> | null;
   eventLog: MultiplayerSessionEventDebug[];
@@ -124,8 +116,7 @@ export class MultiplayerSession {
 
   private lockstep: Lockstep | null = null;
   private sendAccumMs = 0;
-  private readonly localChecksums = new Map<number, number>();
-  private readonly pendingPeerChecksums = new Map<number, { peerId: number; hash: number }>();
+  private readonly checksums = new ChecksumLedger();
   private updates = 0;
   private sentTurns = 0;
   private receivedTurns = 0;
@@ -139,7 +130,7 @@ export class MultiplayerSession {
   private lastReceivedTurn: TurnDebug | null = null;
   private lastSentChecksum: ChecksumDebug | null = null;
   private lastReceivedChecksum: ChecksumDebug | null = null;
-  private lastChecksumCompare: ChecksumCompareDebug | null = null;
+  private lastChecksumCompare: ChecksumComparison | null = null;
   private readonly eventLog: MultiplayerSessionEventDebug[] = [];
   private lastStalled = false;
   private stalledSinceMs = 0;
@@ -171,12 +162,19 @@ export class MultiplayerSession {
   }
 
   /** Issue a local, already self-describing command. It is scheduled for a
-   *  future tick and applied identically on every client. */
+   *  future tick and applied identically on every client. Commands peers would
+   *  reject (selection-relative, malformed, another player's id) are dropped
+   *  here too, so the local client never applies what its peers drop. */
   sendCommand(input: SimInput): void {
     if (!this.world) return;
-    const encoded = this.encodeInputForWire(input);
-    this.recordEvent('command-enqueued', inputDebug(encoded));
-    this.lockstep?.enqueueLocal(encoded);
+    const encoded = isWireCommandType(input.type) ? encodeInputForWire(this.world, input) : input;
+    const cmd = sanitizeWireCommand(this.localPlayerId, encoded);
+    if (!cmd) {
+      this.recordEvent('command-rejected', inputDebug(input));
+      return;
+    }
+    this.recordEvent('command-enqueued', inputDebug(cmd));
+    this.lockstep?.enqueueLocal(cmd);
   }
 
   /** Drive from the multiplayer pump with the real elapsed delta (ms). Advances the
@@ -193,6 +191,12 @@ export class MultiplayerSession {
     this.sendAccumMs += boundedDelta;
 
     while (this.sendAccumMs >= SIM.TICK_MS) {
+      if (!this.lockstep.canSend()) {
+        // Waiting on a peer with a full send window: drop the backlog instead
+        // of turning it into a burst (and lasting input lag) later.
+        this.sendAccumMs = SIM.TICK_MS;
+        break;
+      }
       this.sendAccumMs -= SIM.TICK_MS;
       const pkt = this.lockstep.nextSendPacket();
       this.sentTurns++;
@@ -210,7 +214,7 @@ export class MultiplayerSession {
 
     const readyTicks = this.lockstep.drainReadyTicks();
     for (const ready of readyTicks) {
-      for (const input of ready.inputs) this.world.inputs.push(this.decodeInputFromWire(input));
+      for (const input of ready.inputs) this.world.inputs.push(decodeInputFromWire(this.world, input));
       step(this.world);
       this.lastStepAtMs = nowMs();
       this.maybeChecksum(ready.tick + 1); // tick just completed
@@ -268,11 +272,7 @@ export class MultiplayerSession {
       lastSentChecksum: this.lastSentChecksum ? { ...this.lastSentChecksum } : null,
       lastReceivedChecksum: this.lastReceivedChecksum ? { ...this.lastReceivedChecksum } : null,
       lastChecksumCompare: this.lastChecksumCompare ? { ...this.lastChecksumCompare } : null,
-      pendingPeerChecksums: [...this.pendingPeerChecksums.entries()].map(([tick, pending]) => ({
-        tick,
-        peerId: pending.peerId,
-        hash: pending.hash,
-      })),
+      pendingPeerChecksums: this.checksums.pendingPeerChecksums(),
       lockstep: this.lockstep?.debugSnapshot() ?? null,
       eventLog: this.eventLog.map((event) => ({
         ...event,
@@ -284,30 +284,25 @@ export class MultiplayerSession {
   private maybeChecksum(tick: number): void {
     if (tick % CHECKSUM_INTERVAL_TICKS !== 0 || !this.world) return;
     const hash = checksumWorld(this.world);
-    this.localChecksums.set(tick, hash);
     this.sentChecksums++;
     this.lastSentChecksum = { playerId: this.localPlayerId, tick, hash };
     this.recordEvent('checksum-sent', { tick, hash, sentChecksums: this.sentChecksums });
     this.transport.send({ t: 'checksum', tick, hash });
-    const pending = this.pendingPeerChecksums.get(tick);
-    if (pending) {
-      this.pendingPeerChecksums.delete(tick);
-      this.compareChecksum(tick, hash, pending.hash, pending.peerId);
-    }
+    for (const comparison of this.checksums.recordLocal(tick, hash)) this.onChecksumComparison(comparison);
   }
 
-  private compareChecksum(tick: number, local: number, peer: number, peerId: number): void {
-    this.lastChecksumCompare = { tick, localHash: local, peerHash: peer, peerId, match: local === peer };
-    this.recordEvent(local === peer ? 'checksum-match' : 'checksum-mismatch', {
-      tick,
-      peerId,
-      localHash: local,
-      peerHash: peer,
+  private onChecksumComparison(c: ChecksumComparison): void {
+    this.lastChecksumCompare = c;
+    this.recordEvent(c.match ? 'checksum-match' : 'checksum-mismatch', {
+      tick: c.tick,
+      peerId: c.peerId,
+      localHash: c.localHash,
+      peerHash: c.peerHash,
     });
-    if (local !== peer) {
+    if (!c.match) {
       // eslint-disable-next-line no-console
       console.warn('[Kingdoms MP] desync', this.debugSnapshot());
-      this.cb.onDesync?.(tick, local, peer, peerId);
+      this.cb.onDesync?.(c.tick, c.localHash, c.peerHash, c.peerId);
       this.setState('desync');
     }
   }
@@ -336,20 +331,26 @@ export class MultiplayerSession {
         this.recordEvent('start-received', { seed: msg.seed, players: msg.players.map((p) => p.playerId) });
         this.beginMatch(msg.seed, msg.players);
         return;
-      case 'turn':
+      case 'turn': {
+        // Validated against the sending slot (stamped by the relay) exactly
+        // as the sender validated them, so every client keeps the same set.
+        const cmds = sanitizeTurnCommands(msg.playerId, msg.cmds);
+        const dropped = msg.cmds.length - cmds.length;
         this.receivedTurns++;
-        this.lastReceivedTurn = { playerId: msg.playerId, forTick: msg.forTick, cmdCount: msg.cmds.length };
-        if (msg.cmds.length > 0 || msg.forTick % CHECKSUM_INTERVAL_TICKS === 0) {
-          this.recordEvent(msg.cmds.length > 0 ? 'turn-received-command' : 'turn-received-checkpoint', {
+        this.lastReceivedTurn = { playerId: msg.playerId, forTick: msg.forTick, cmdCount: cmds.length };
+        if (dropped > 0) this.recordEvent('turn-commands-rejected', { playerId: msg.playerId, forTick: msg.forTick, dropped });
+        if (cmds.length > 0 || msg.forTick % CHECKSUM_INTERVAL_TICKS === 0) {
+          this.recordEvent(cmds.length > 0 ? 'turn-received-command' : 'turn-received-checkpoint', {
             playerId: msg.playerId,
             forTick: msg.forTick,
-            cmdCount: msg.cmds.length,
-            cmdTypes: msg.cmds.map((cmd) => cmd.type),
+            cmdCount: cmds.length,
+            cmdTypes: cmds.map((cmd) => cmd.type),
             receivedTurns: this.receivedTurns,
           });
         }
-        this.lockstep?.receivePeerTurn(msg.playerId, msg.forTick, msg.cmds);
+        this.lockstep?.receivePeerTurn(msg.playerId, msg.forTick, cmds);
         return;
+      }
       case 'checksum':
         this.receivedChecksums++;
         this.lastReceivedChecksum = { playerId: msg.playerId, tick: msg.tick, hash: msg.hash };
@@ -359,7 +360,10 @@ export class MultiplayerSession {
           hash: msg.hash,
           receivedChecksums: this.receivedChecksums,
         });
-        this.handlePeerChecksum(msg.playerId, msg.tick, msg.hash);
+        {
+          const comparison = this.checksums.recordPeer(msg.playerId, msg.tick, msg.hash);
+          if (comparison) this.onChecksumComparison(comparison);
+        }
         return;
       case 'peer-left':
         this.recordEvent('peer-left', { playerId: msg.playerId });
@@ -370,16 +374,6 @@ export class MultiplayerSession {
         this.cb.onError?.(msg.message);
         this.setState('disconnected');
         return;
-    }
-  }
-
-  private handlePeerChecksum(peerId: number, tick: number, hash: number): void {
-    const local = this.localChecksums.get(tick);
-    if (local !== undefined) {
-      this.localChecksums.delete(tick);
-      this.compareChecksum(tick, local, hash, peerId);
-    } else {
-      this.pendingPeerChecksums.set(tick, { peerId, hash });
     }
   }
 
@@ -394,8 +388,7 @@ export class MultiplayerSession {
     const peerIds = players.map((p) => p.playerId).filter((id) => id !== this.localPlayerId);
     this.lockstep = new Lockstep(this.localPlayerId, peerIds, DEFAULT_INPUT_DELAY);
     this.sendAccumMs = 0;
-    this.localChecksums.clear();
-    this.pendingPeerChecksums.clear();
+    this.checksums.clear();
     this.updates = 0;
     this.sentTurns = 0;
     this.receivedTurns = 0;
@@ -417,72 +410,6 @@ export class MultiplayerSession {
     this.setState('playing');
     this.recordEvent('match-start', { seed, localPlayerId: this.localPlayerId, players: players.map((p) => p.playerId) });
     this.cb.onMatchStart?.(world, this.localPlayerId);
-  }
-
-  private encodeInputForWire(input: SimInput): SimInput {
-    if (!this.world) return input;
-    const eidsToNetIds = (eids: number[]) =>
-      eids
-        .map((eid) => netIdForEntity(this.world!, eid))
-        .filter((netId): netId is number => netId !== null);
-    const eidToNetId = (eid: number) => netIdForEntity(this.world!, eid) ?? -1;
-    switch (input.type) {
-      case 'cmdMove':
-        return { ...input, eids: eidsToNetIds(input.eids) };
-      case 'cmdGather':
-        return { ...input, eids: eidsToNetIds(input.eids), targetEid: eidToNetId(input.targetEid) };
-      case 'cmdStop':
-      case 'cmdToggleStance':
-      case 'cmdAttackMove':
-      case 'cmdRemoveBuildings':
-      case 'cmdSetStance':
-      case 'cmdSetFormationMode':
-      case 'cmdAdjustFormationMode':
-      case 'cmdRotateFormation':
-      case 'cmdReformFormation':
-        return { ...input, eids: eidsToNetIds(input.eids) };
-      case 'cmdAttack':
-        return { ...input, eids: eidsToNetIds(input.eids), targetEid: eidToNetId(input.targetEid) };
-      case 'trainUnit':
-        return { ...input, atEid: eidToNetId(input.atEid) };
-      case 'cancelProduction':
-        return { ...input, atEid: eidToNetId(input.atEid) };
-      default:
-        return input;
-    }
-  }
-
-  private decodeInputFromWire(input: SimInput): SimInput {
-    if (!this.world) return input;
-    const netIdsToEids = (netIds: number[]) =>
-      netIds
-        .map((netId) => entityForNetId(this.world!, netId))
-        .filter((eid): eid is number => eid !== null);
-    const netIdToEid = (netId: number) => entityForNetId(this.world!, netId) ?? -1;
-    switch (input.type) {
-      case 'cmdMove':
-        return { ...input, eids: netIdsToEids(input.eids) };
-      case 'cmdGather':
-        return { ...input, eids: netIdsToEids(input.eids), targetEid: netIdToEid(input.targetEid) };
-      case 'cmdStop':
-      case 'cmdToggleStance':
-      case 'cmdAttackMove':
-      case 'cmdRemoveBuildings':
-      case 'cmdSetStance':
-      case 'cmdSetFormationMode':
-      case 'cmdAdjustFormationMode':
-      case 'cmdRotateFormation':
-      case 'cmdReformFormation':
-        return { ...input, eids: netIdsToEids(input.eids) };
-      case 'cmdAttack':
-        return { ...input, eids: netIdsToEids(input.eids), targetEid: netIdToEid(input.targetEid) };
-      case 'trainUnit':
-        return { ...input, atEid: netIdToEid(input.atEid) };
-      case 'cancelProduction':
-        return { ...input, atEid: netIdToEid(input.atEid) };
-      default:
-        return input;
-    }
   }
 
   private setState(state: SessionState): void {

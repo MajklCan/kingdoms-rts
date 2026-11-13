@@ -8,8 +8,9 @@
  * Ticks below the input delay execute immediately with no commands (warm-up).
  *
  * The send clock is decoupled from the exec clock: we keep emitting (even empty)
- * packets while stalled, so a slow peer can never deadlock the room. The sim
- * advances only through {@link drainReadyTicks}.
+ * packets while stalled, up to {@link MAX_SEND_AHEAD_TICKS} ahead, so a slow
+ * peer can never deadlock the room and a long stall cannot turn into permanent
+ * input lag. The sim advances only through {@link drainReadyTicks}.
  *
  * Determinism: commands for a tick are replayed in ascending playerId order,
  * and within a player in the order they were enqueued. Every client sees the
@@ -51,6 +52,11 @@ export interface LockstepDebugSnapshot {
  *  spiral the sim and freeze the render thread. */
 const MAX_CATCHUP_TICKS = 8;
 
+/** How many ticks beyond the input delay our send clock may run ahead of the
+ *  exec clock (1 s at 20 Hz). Without a cap, every second spent waiting on a
+ *  stalled peer became a permanent second of local command latency. */
+export const MAX_SEND_AHEAD_TICKS = 20;
+
 export class Lockstep {
   private readonly playerIds: number[];
   private readonly inputDelay: number;
@@ -85,6 +91,13 @@ export class Lockstep {
     this.localPending.push(input);
   }
 
+  /** False while the send clock is {@link MAX_SEND_AHEAD_TICKS} past the
+   *  input delay ahead of execution; the caller skips that send. Never blocks
+   *  progress: the exec clock only waits on ticks we have already sent. */
+  canSend(): boolean {
+    return this.sendTick < this.execTick + this.inputDelay + MAX_SEND_AHEAD_TICKS;
+  }
+
   /**
    * Produce the next outgoing packet (called once per wall-clock loop tick).
    * Also records our own packet locally so execution includes our commands.
@@ -106,7 +119,7 @@ export class Lockstep {
   }
 
   private recordReceived(tick: number, playerId: number, cmds: SimInput[]): void {
-    if (tick < this.execTick) return; // too late to matter; drop
+    if (!Number.isInteger(tick) || tick < this.execTick) return; // malformed or too late to matter; drop
     let m = this.received.get(tick);
     if (!m) {
       m = new Map();

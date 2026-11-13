@@ -22,17 +22,23 @@ import {
   buildingQuery,
   findBuildingAt,
   findResourceAt,
+  netIdForEntity,
   resourceQuery,
+  setSelected,
+  spawnCompletedBuilding,
   townCenterQuery,
   unitQuery,
+  type SimInput,
   type SimWorld,
 } from '@sim/world';
 import { Building, Owner, Position, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
-import { BuildingDefId } from '@sim/defs';
+import { BuildingDefId, UnitDefId } from '@sim/defs';
+import { createAllTechSet } from '@sim/tech-tree';
 import { MultiplayerSession, type SessionCallbacks } from './session';
 import type { Transport, TransportCloseInfo } from './transport';
 import {
   CHECKSUM_INTERVAL_TICKS,
+  DEFAULT_INPUT_DELAY,
   PROTOCOL_VERSION,
   type ClientMessage,
   type PlayerSlot,
@@ -600,5 +606,140 @@ describe('multiplayer lobby + transport', () => {
     tC.fireOpen();
     expect(errMsg).toBe('room full');
     expect(cState).toBe('disconnected');
+  });
+});
+
+interface ScriptedMatch {
+  sess: MultiplayerSession;
+  world: SimWorld;
+  /** One wall-clock tick: the session updates, then the peer sends its next turn. */
+  pump: (peerCmds?: unknown[]) => void;
+  /** The peer's next turn frame only (no session update). */
+  peerSendTurn: (cmds?: unknown[]) => void;
+}
+
+/** A real session (player 1) against a scripted peer (player 2) that writes
+ *  raw turn frames to the relay, the way a buggy or modified client could. */
+function setupScriptedMatch(seed = 4242): ScriptedMatch {
+  const relay = new RelayShim();
+  const tA = new PairedTransport(relay);
+  const tPeer = new PairedTransport(relay);
+  const cap = makeCapture();
+  const sess = new MultiplayerSession(tA, 'room', 'Alice', callbacks(cap));
+  tA.fireOpen();
+  tPeer.send({ t: 'join', v: PROTOCOL_VERSION, room: 'room', name: 'Mallory' });
+  sess.start(seed);
+  let peerTick = DEFAULT_INPUT_DELAY;
+  const peerSendTurn = (cmds: unknown[] = []) => {
+    tPeer.send({ t: 'turn', forTick: peerTick++, cmds: cmds as SimInput[] });
+  };
+  const pump = (peerCmds: unknown[] = []) => {
+    sess.update(SIM.TICK_MS);
+    peerSendTurn(peerCmds);
+  };
+  return { sess, world: cap.world!, pump, peerSendTurn };
+}
+
+/** Play the same scripted match twice, once with `peerCmds` injected by the
+ *  peer, and return the end-state checksum of each run. */
+function checksumWithAndWithout(
+  peerCmds: (world: SimWorld) => unknown[],
+  prepare?: (world: SimWorld) => void
+): { control: number; injected: number } {
+  const hashes: number[] = [];
+  const ticks: number[] = [];
+  for (const inject of [false, true]) {
+    const m = setupScriptedMatch();
+    prepare?.(m.world);
+    for (let i = 0; i < 10; i++) m.pump();
+    m.pump(inject ? peerCmds(m.world) : []);
+    for (let i = 0; i < CHECKSUM_INTERVAL_TICKS * 2; i++) m.pump();
+    for (let i = 0; i < 4; i++) m.sess.update(0);
+    expect(m.sess.state).toBe('playing');
+    hashes.push(checksumWorld(m.world));
+    ticks.push(m.world.tick);
+  }
+  expect(ticks[1]).toBe(ticks[0]);
+  return { control: hashes[0], injected: hashes[1] };
+}
+
+const netIds = (world: SimWorld, eids: number[]): number[] => eids.map((eid) => netIdForEntity(world, eid)!);
+
+describe('multiplayer robustness: commands from the wire', () => {
+  it('still applies the peer\'s own well-formed commands', () => {
+    const { control, injected } = checksumWithAndWithout((world) => [
+      { type: 'cmdMove', playerId: 2, eids: netIds(world, ownedUnits(world, 2).slice(0, 3)), to: { x: 20, y: 20 } },
+    ]);
+    expect(injected).not.toBe(control);
+  });
+
+  it('drops a peer command that claims another player\'s id', () => {
+    const { control, injected } = checksumWithAndWithout((world) => [
+      { type: 'cmdMove', playerId: 1, eids: netIds(world, ownedUnits(world, 1).slice(0, 3)), to: { x: 20, y: 20 } },
+    ]);
+    expect(injected).toBe(control);
+  });
+
+  it('does not let a peer queue units in our barracks by omitting playerId', () => {
+    const barracksOf = (world: SimWorld) =>
+      ownedBuildings(world, 1).find((eid) => Building.defId[eid] === BuildingDefId.BARRACKS)!;
+    const { control, injected } = checksumWithAndWithout(
+      (world) => [{ type: 'trainUnit', atEid: netIds(world, [barracksOf(world)])[0], defId: UnitDefId.SPEARMAN }],
+      (world) => {
+        world.resources[1].fill(5000);
+        world.researchedTechs[1] = createAllTechSet();
+        const tile = buildableTileNearTown(world, 1, 0)!;
+        spawnCompletedBuilding(world, BuildingDefId.BARRACKS, tile.x, tile.y, 1);
+      }
+    );
+    expect(injected).toBe(control);
+  });
+
+  it('ignores selection-relative commands, which would read the receiver\'s own selection', () => {
+    const selectOwnUnits = (world: SimWorld) => {
+      for (const eid of ownedUnits(world, 1).slice(0, 3)) setSelected(world, eid, true);
+    };
+    const { control, injected } = checksumWithAndWithout(
+      () => [{ type: 'moveSelected', to: { x: 20, y: 20 } }],
+      selectOwnUnits
+    );
+    expect(injected).toBe(control);
+  });
+
+  it('survives malformed command payloads without throwing or applying them', () => {
+    const { control, injected } = checksumWithAndWithout(() => [
+      null,
+      42,
+      { type: 'cmdMove', playerId: 2, eids: 'boom', to: null },
+      { type: 'placeBuilding', playerId: 2, defId: BuildingDefId.HOUSE },
+    ]);
+    expect(injected).toBe(control);
+  });
+
+  it('keeps local command latency bounded after the peer stalls and recovers', () => {
+    const m = setupScriptedMatch(4243);
+    for (let i = 0; i < 10; i++) m.pump();
+    // The peer's tab freezes for 10 s while we keep running.
+    for (let i = 0; i < SIM.TICK_HZ * 10; i++) m.sess.update(SIM.TICK_MS);
+    // It wakes with one bounded catch-up burst, then resumes its cadence.
+    for (let i = 0; i < 40; i++) m.peerSendTurn();
+    for (let i = 0; i < SIM.TICK_HZ * 3; i++) m.pump();
+
+    const tc = ownTownCenter(m.world, 1)!;
+    const before = JSON.stringify(m.world.armyRallyPoints[1]);
+    m.sess.sendCommand({
+      type: 'setArmyRallyPoint',
+      playerId: 1,
+      x: Math.round(Position.x[tc]) + 4,
+      y: Math.round(Position.y[tc]) + 4,
+    });
+    let waited = 0;
+    while (JSON.stringify(m.world.armyRallyPoints[1]) === before && waited < SIM.TICK_HZ * 30) {
+      m.pump();
+      waited++;
+    }
+    expect(JSON.stringify(m.world.armyRallyPoints[1])).not.toBe(before);
+    // Input delay plus at most a second of buffered turns, not the stall length.
+    expect(waited).toBeLessThanOrEqual(SIM.TICK_HZ * 2);
   });
 });
