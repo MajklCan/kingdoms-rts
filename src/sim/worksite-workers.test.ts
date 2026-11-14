@@ -390,4 +390,27 @@ describe('resource worksite workers', () => {
     expect(world.population[1].cap).toBe(capBefore);
     expect(hasComponent(world.ecs, Building, house)).toBe(false);
   });
+
+  it('a returning farmer keeps its path instead of being re-routed every tick', () => {
+    // The movement system inserts detours and stuck recoveries into a path;
+    // the farm used to plan a fresh drop-off route every tick and throw them away.
+    const world = createSimWorld(48);
+    world.paused = false;
+    const spawn = world.map.spawns[1];
+    const farm = spawnCompletedBuilding(world, BuildingDefId.FARM, spawn.x + 6, spawn.y + 4, 1);
+    stepN(world, 2);
+    const farmer = worksiteWorkerQuery(world.ecs).find((eid) => WorksiteWorker.siteEid[eid] === farm);
+    expect(farmer).toBeDefined();
+    if (farmer === undefined) return;
+
+    const detour = findOpenTileAtRange(world, Position.x[farmer], Position.y[farmer], 4, 5);
+    ResourceCarry.kind[farmer] = ResourceKindId.FOOD;
+    ResourceCarry.amount[farmer] = 10;
+    Gatherer.state[farmer] = GathererStateId.RETURNING;
+    world.paths.set(farmer, [{ x: detour.x, y: detour.y }]);
+    stepN(world, 3);
+
+    expect(Gatherer.state[farmer]).toBe(GathererStateId.RETURNING);
+    expect(world.paths.get(farmer)?.[0]).toEqual({ x: detour.x, y: detour.y });
+  });
 });

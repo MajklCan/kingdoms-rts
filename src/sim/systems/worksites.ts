@@ -104,7 +104,14 @@ function runFarmWorksite(world: SimWorld, siteEid: number, def: BuildingDef): vo
       Gatherer.state[worker] === GathererStateId.RETURNING ||
       Gatherer.state[worker] === GathererStateId.DEPOSITING
     ) {
-      if (Gatherer.state[worker] !== GathererStateId.DEPOSITING) {
+      // Route once; the gathering system re-routes a returning worker that has
+      // lost its path. Re-planning every tick threw away the movement
+      // system's detours and stuck recovery, so a farmer at a bad spot stood
+      // there with a full load for good.
+      if (
+        Gatherer.state[worker] !== GathererStateId.DEPOSITING &&
+        (Gatherer.state[worker] !== GathererStateId.RETURNING || !world.paths.has(worker))
+      ) {
         Gatherer.state[worker] = GathererStateId.RETURNING;
         routeToNearestDropOff(world, worker);
       }
