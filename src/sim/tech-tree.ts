@@ -86,14 +86,14 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.ARCHERS,
     name: 'Archers',
-    description: 'Unlocks ranged infantry and defensive towers.',
+    description: 'Unlocks ranged infantry, the archery range and defensive towers.',
     cost: { food: 0, wood: 300, gold: 0, stone: 200 },
     path: 'military',
     icon: 'archer',
     x: 29.5,
     y: 18,
     requires: [TechId.BARRACKS_PIKEMEN],
-    unlocks: ['Barracks Archers', 'Defensive Towers'],
+    unlocks: ['Barracks Archers', 'Archery Range', 'Defensive Towers'],
   },
   {
     id: TechId.HOUSING_I,
@@ -305,7 +305,7 @@ export function isBuildingUnlocked(
     case BuildingDefId.WALL:
       return hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);
     case BuildingDefId.ARCHERY_RANGE:
-      return false;
+      return hasTech(world, playerId, TechId.ARCHERS);
     case BuildingDefId.DEFENSIVE_TOWER:
       return hasTech(world, playerId, TechId.ARCHERS) ||
         (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE;

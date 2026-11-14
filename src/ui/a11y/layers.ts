@@ -5,7 +5,9 @@
  * the camera or fires a hotkey.
  */
 
+import { isTouchUi } from '../../render/input/input-mode';
 import { appState, onPhaseChange } from '../app-state';
+import { isTextEntryTarget } from '../dom';
 import { setSceneKeyboardEnabled } from '../game-bridge';
 
 export interface Layer {
@@ -43,7 +45,9 @@ export function openLayer(layer: Layer): void {
   stack.push({ dismissible: true, ...layer, returnFocus });
   syncSceneKeyboard();
   requestAnimationFrame(() => {
-    const target = layer.initialFocus ?? focusablesIn(layer.el)[0] ?? layer.el;
+    let target = layer.initialFocus ?? focusablesIn(layer.el)[0] ?? layer.el;
+    // On touch, focusing a text field would throw up the on-screen keyboard.
+    if (isTouchUi() && isTextEntryTarget(target)) target = layer.el;
     if (!layer.el.contains(document.activeElement)) target.focus({ preventScroll: true });
   });
 }

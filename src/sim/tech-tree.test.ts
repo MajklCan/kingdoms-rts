@@ -102,7 +102,7 @@ describe('technology tree', () => {
     expect(castle.ages[2].current).toBe(AgeId.CASTLE);
     expect(Array.from(castle.resources[1])).toEqual([600, 1800, 0, 1600]);
     expect(castle.researchedTechs[1]).toEqual(createStartingTechSetForAge(AgeId.CASTLE));
-    expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(true);
     expect(isUnitUnlocked(castle, 1, UnitDefId.ARCHER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.DEFENSIVE_TOWER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.GOLD_MINE)).toBe(true);
@@ -319,7 +319,8 @@ describe('technology tree', () => {
     const world = createSimWorld(513);
     world.paused = false;
     world.ages[1].current = AgeId.GUNPOWDER;
-    world.resources[1].set([45 * 3, 1000, 75 * 3, 1000]);
+    const gunman = UNIT_TABLE[UnitDefId.GUNMAN].cost;
+    world.resources[1].set([gunman.food * 3, 1000, gunman.gold * 3, 1000]);
     world.population[1].cap = world.population[1].current + 5;
     const spot = findOpenBuildingTile(world, 2);
     const foundry = spawnCompletedBuilding(world, BuildingDefId.FOUNDRY, spot.x, spot.y, 1);
@@ -400,7 +401,7 @@ describe('technology tree', () => {
     const untrainable = UNIT_TABLE.filter(
       (unit, defId) => isUnitUnlocked(state, 1, defId) && !trainable.has(unit.id)
     ).map((unit) => unit.id);
-    // Known gap: the worksite economy has no villager production.
-    expect(untrainable).toEqual(['VILLAGER']);
+    // The town center trains villagers; every unlocked unit has a producer.
+    expect(untrainable).toEqual([]);
   });
 });

@@ -6,7 +6,7 @@
 
 import { UnitStanceId } from '@sim/components';
 import { setLastEvent } from '../../debug/overlay';
-import { ZOOM_KEY_STEP, type CameraController } from '../camera/camera-controller';
+import type { CameraController } from '../camera/camera-controller';
 import type { PlayerCommands } from '../commands/player-commands';
 import type { BuildMode, BuildPlacement } from '../placement/build-placement';
 import type { PointerController } from './pointer-controller';
@@ -28,9 +28,11 @@ const BUILD_KEYS: Array<[string, Exclude<BuildMode, 'none'>, string]> = [
   ['G', 'GOLD_MINE', 'build GOLD MINE - left-click near gold'],
   ['C', 'STONE_QUARRY', 'build STONE QUARRY - left-click near stone'],
   ['R', 'BARRACKS', 'build BARRACKS - left-click to place'],
+  ['A', 'ARCHERY_RANGE', 'build ARCHERY RANGE - left-click to place'],
   ['T', 'STABLE', 'build STABLE - left-click to place'],
   ['F', 'FOUNDRY', 'build FOUNDRY - left-click to place'],
   ['Y', 'DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - left-click to place'],
+  ['W', 'WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
 ];
 
 export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
@@ -58,12 +60,6 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
       if (placement.awaitingBuildKind) placement.startBuildMode(mode, message);
     });
   }
-  onHotkey('keydown-A', () => {
-    if (placement.awaitingBuildKind) {
-      placement.awaitingBuildKind = false;
-      setLastEvent('archers train at barracks - no separate range');
-    }
-  });
   onHotkey('keydown-ESC', () => {
     if (placement.isActive) {
       placement.reset();
@@ -75,9 +71,11 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-V', () => placement.startArmyRallyMode());
   onHotkey('keydown-DELETE', () => commands.removeSelectedBuildings());
 
-  onHotkey('keydown-PLUS', () => camera.applyZoom(ZOOM_KEY_STEP));
-  onHotkey('keydown-EQUALS', () => camera.applyZoom(ZOOM_KEY_STEP));
-  onHotkey('keydown-MINUS', () => camera.applyZoom(-ZOOM_KEY_STEP));
+  onHotkey('keydown-PLUS', () => camera.zoomStep(1));
+  onHotkey('keydown-EQUALS', () => camera.zoomStep(1));
+  onHotkey('keydown-MINUS', () => camera.zoomStep(-1));
+  onHotkey('keydown-NUMPAD_ADD', () => camera.zoomStep(1));
+  onHotkey('keydown-NUMPAD_SUBTRACT', () => camera.zoomStep(-1));
   onHotkey('keydown-F1', (ev) => {
     ev.preventDefault();
     pointer.selectAllVillagers();

@@ -36,21 +36,24 @@ interface TargetScore {
   eid: number;
 }
 
+/** `candidates`: every damageable entity in deterministic order. */
 function findBestAutoTarget(
   world: SimWorld,
   attacker: number,
   aggro: number,
+  candidates: readonly number[],
   targetAllowed: (target: number) => boolean = () => true
 ): number {
   const maxDistance = isMovableEntity(world, attacker)
     ? aggro + ATTACK_RANGE_TOLERANCE
     : Combat.range[attacker] + ATTACK_RANGE_TOLERANCE;
   let best: TargetScore | null = null;
-  for (const target of sortedEids(world, damageableQuery(world.ecs))) {
-    if (!isValidHostileTarget(world, attacker, target)) continue;
-    if (!targetAllowed(target)) continue;
+  for (const target of candidates) {
+    // Range first: it is the cheapest test and rejects almost every candidate.
     const distance = distanceToAttackTarget(world, attacker, target);
     if (distance > maxDistance) continue;
+    if (!isValidHostileTarget(world, attacker, target)) continue;
+    if (!targetAllowed(target)) continue;
     const score = targetScore(world, attacker, target, distance);
     if (!best || compareTargetScore(score, best) < 0) {
       best = score;
@@ -168,6 +171,9 @@ export function canHoldPositionMoveToTarget(world: SimWorld, eid: number, target
 
 export function targetingSystem(world: SimWorld): void {
   const ents = sortedEids(world, combatQuery(world.ecs));
+  // Every target search scans the same candidates in the same order; nothing
+  // in this loop spawns or removes an entity, so sort them once per tick.
+  let candidates: number[] | null = null;
   for (const eid of ents) {
     if (Health.hp[eid] <= 0) continue;
     const cur = AttackTarget.targetEid[eid];
@@ -228,10 +234,12 @@ export function targetingSystem(world: SimWorld): void {
     const searchRadius = holdPosition && !attackMoving
       ? holdPositionAutoSearchRadius(world, eid)
       : aggro;
+    candidates ??= sortedEids(world, damageableQuery(world.ecs));
     const bestEid = findBestAutoTarget(
       world,
       eid,
       searchRadius,
+      candidates,
       holdPosition && !attackMoving
         ? (target) => isHoldPositionTargetAllowed(world, eid, target)
         : undefined

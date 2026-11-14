@@ -26,7 +26,7 @@ export interface PlayerSlot {
 
 /** Client → relay messages. */
 export type ClientMessage =
-  | { t: 'join'; v: number; room: string; name: string }
+  | { t: 'join'; v: number; room: string; name: string; pass?: string }
   | { t: 'start'; seed: number }
   | { t: 'turn'; forTick: number; cmds: SimInput[] }
   | { t: 'checksum'; tick: number; hash: number };

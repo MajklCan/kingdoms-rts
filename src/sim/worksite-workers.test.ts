@@ -10,6 +10,9 @@ import {
   ResourceCarry,
   ResourceKindId,
   ResourceWorksite,
+  Health,
+  UnitStance,
+  UnitStanceId,
   WorksiteWorker,
   type ResourceKind,
 } from './components';
@@ -20,6 +23,7 @@ import {
   spawnCompletedBuilding,
   spawnFoundation,
   spawnResource,
+  spawnSpearman,
   spawnVillager,
   step,
   worksiteWorkerQuery,
@@ -278,6 +282,36 @@ describe('resource worksite workers', () => {
     expect(assignedTargets.size).toBeGreaterThan(1);
   });
 
+  it('workers share the only node in range instead of re-routing out and back forever', () => {
+    const world = createSimWorld(49);
+    world.paused = false;
+    world.researchedTechs[1].add(TechId.LUMBER_CREWS);
+    removeResources(world, ResourceKindId.WOOD);
+
+    const spawn = world.map.spawns[1];
+    const siteEid = spawnCompletedBuilding(world, BuildingDefId.LUMBER_CAMP, spawn.x + 5, spawn.y - 1, 1);
+    ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
+    const [tile] = findOpenResourceTiles(world, Position.x[siteEid], Position.y[siteEid], 1);
+    spawnResource(world, ResourceKindId.WOOD, tile.x, tile.y, 500);
+
+    const workers: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const worker = spawnVillager(world, Position.x[siteEid] + i * 0.05, Position.y[siteEid], 1, 0);
+      addComponent(world.ecs, WorksiteWorker, worker);
+      WorksiteWorker.siteEid[worker] = siteEid;
+      workers.push(worker);
+    }
+
+    const gathered = new Set<number>();
+    for (let i = 0; i < 600; i++) {
+      step(world);
+      for (const worker of workers) {
+        if (Gatherer.state[worker] === GathererStateId.GATHERING) gathered.add(worker);
+      }
+    }
+    expect(gathered.size).toBe(3);
+  });
+
   it('deposits carried resources when a worksite worker cannot path to a crowded drop-off', () => {
     const world = createSimWorld(50);
     world.paused = false;
@@ -359,5 +393,49 @@ describe('resource worksite workers', () => {
 
     expect(world.population[1].cap).toBe(capBefore);
     expect(hasComponent(world.ecs, Building, house)).toBe(false);
+  });
+
+  it('an AI worksite gets no free worker back while enemy soldiers stand at it', () => {
+    const world = createSimWorld(48);
+    world.paused = false;
+    const spawn = world.map.spawns[2];
+    const farm = spawnCompletedBuilding(world, BuildingDefId.FARM, spawn.x + 6, spawn.y + 4, 2);
+    stepN(world, 2);
+    ResourceWorksite.freeWorkersSpawned[farm] = 1;
+    const raider = spawnSpearman(world, Position.x[farm] + 2, Position.y[farm], 1);
+    UnitStance.stance[raider] = UnitStanceId.HOLD_POSITION;
+    for (const worker of worksiteWorkerQuery(world.ecs)) {
+      if (WorksiteWorker.siteEid[worker] === farm) Health.hp[worker] = 0;
+    }
+
+    stepN(world, 3);
+    expect(countWorkers(world, farm)).toBe(0);
+
+    Health.hp[raider] = 0;
+    stepN(world, 3);
+    expect(countWorkers(world, farm)).toBe(1);
+  });
+
+  it('a returning farmer keeps its path instead of being re-routed every tick', () => {
+    // The movement system inserts detours and stuck recoveries into a path;
+    // the farm used to plan a fresh drop-off route every tick and throw them away.
+    const world = createSimWorld(48);
+    world.paused = false;
+    const spawn = world.map.spawns[1];
+    const farm = spawnCompletedBuilding(world, BuildingDefId.FARM, spawn.x + 6, spawn.y + 4, 1);
+    stepN(world, 2);
+    const farmer = worksiteWorkerQuery(world.ecs).find((eid) => WorksiteWorker.siteEid[eid] === farm);
+    expect(farmer).toBeDefined();
+    if (farmer === undefined) return;
+
+    const detour = findOpenTileAtRange(world, Position.x[farmer], Position.y[farmer], 4, 5);
+    ResourceCarry.kind[farmer] = ResourceKindId.FOOD;
+    ResourceCarry.amount[farmer] = 10;
+    Gatherer.state[farmer] = GathererStateId.RETURNING;
+    world.paths.set(farmer, [{ x: detour.x, y: detour.y }]);
+    stepN(world, 3);
+
+    expect(Gatherer.state[farmer]).toBe(GathererStateId.RETURNING);
+    expect(world.paths.get(farmer)?.[0]).toEqual({ x: detour.x, y: detour.y });
   });
 });

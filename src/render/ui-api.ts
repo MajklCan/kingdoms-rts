@@ -10,6 +10,8 @@
  *   alerts        drainUiAlerts / onGameMessage (typed event subscription)
  *   match         getMatchStats (exact, from sim counters) / endMatch
  *   input         setKeyboardEnabled, pointerHoverKind (HUD cursor)
+ *   touch HUD     deselect, select all villagers / army, attack-move,
+ *                 zoomStep, placement Confirm / Cancel
  *
  * Built once by GameScene.create(); it pumps the alert feed after every
  * scene update, so the UI only has to drain.
@@ -61,12 +63,14 @@ import {
 } from './hud/ui-alerts';
 import type { GameScene } from './game-scene';
 import type { MapOrderKind, PointerController } from './input/pointer-controller';
-import { BUILD_MODE_TO_DEF } from './placement/build-placement';
+import type { TouchController } from './input/touch-controller';
+import { BUILD_MODE_TO_DEF, type BuildPlacement, type TouchPlacementState } from './placement/build-placement';
 import type { SceneContext } from './scene-context';
 
 export type { GameMessage, GameMessageListener, GameMessageTone, TilePoint, UiAlert, UiAlertKind } from './hud/ui-alerts';
 export type { CommandFailure, ResourceName } from './commands/feedback';
 export type { MapOrderKind } from './input/pointer-controller';
+export type { TouchPlacementState } from './placement/build-placement';
 
 /** Cursor intent for the battlefield tile under the pointer (see pointerHoverKind). */
 export type PointerHoverKind =
@@ -106,6 +110,8 @@ export interface UiApiDeps {
   camera: CameraController;
   commands: PlayerCommands;
   pointer: PointerController;
+  touch: TouchController;
+  placement: BuildPlacement;
   alerts: MinimapAlerts;
   effects: EffectsLayer;
   audio: GameAudio;
@@ -127,6 +133,7 @@ export class UiApi {
     this.feedback = new CommandFeedback(deps.effects, deps.audio);
     deps.commands.setFeedback(this.feedback);
     deps.pointer.setFeedback(this.feedback);
+    deps.touch.setFeedback(this.feedback);
     this.feed = new UiAlertFeed(ctx, { alerts: deps.alerts, feedback: this.feedback });
     this.rally = new RallyDisplay(ctx, deps.effects);
     ctx.scene.events.on(Phaser.Scenes.Events.POST_UPDATE, () => {
@@ -254,6 +261,61 @@ export class UiApi {
   endMatch(): void {
     this.deps.endMatch();
     this.reset();
+  }
+
+  // ── Touch HUD (buttons for what only has a hotkey) ────────────────────────
+
+  deselect(): void {
+    this.deps.pointer.orders.deselect();
+  }
+
+  selectAllVillagers(): void {
+    this.deps.pointer.selectAllVillagers();
+  }
+
+  selectAllMilitary(): void {
+    this.deps.pointer.selectAllMilitary();
+  }
+
+  /** Arm (or disarm) attack-move: the next tap on the map attack-moves there. */
+  toggleAttackMove(): boolean {
+    const orders = this.deps.pointer.orders;
+    if (orders.attackMoveArmed) {
+      orders.attackMoveArmed = false;
+      return false;
+    }
+    if (this.deps.commands.selectedCommandableCount() === 0) {
+      this.deps.commands.fail({ reason: 'unavailable', text: 'Select units to attack-move' });
+      return false;
+    }
+    orders.attackMoveArmed = true;
+    this.deps.commands.confirm('Tap the map to attack-move');
+    return true;
+  }
+
+  isAttackMoveArmed(): boolean {
+    return this.deps.pointer.orders.attackMoveArmed;
+  }
+
+  canCommandSelection(): boolean {
+    return this.deps.commands.selectedCommandableCount() > 0;
+  }
+
+  /** One zoom level in (+) or out (-) around the view centre. */
+  zoomStep(steps: number): void {
+    this.deps.camera.zoomStep(steps);
+  }
+
+  placementState(): TouchPlacementState {
+    return this.deps.placement.touchState();
+  }
+
+  confirmPlacement(): boolean {
+    return this.deps.placement.confirmTouch();
+  }
+
+  cancelPlacement(): void {
+    this.deps.placement.cancel();
   }
 
   setKeyboardEnabled(enabled: boolean): void {

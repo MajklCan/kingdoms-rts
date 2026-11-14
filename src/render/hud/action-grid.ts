@@ -72,13 +72,14 @@ const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, 
   ['build-stone-quarry', 'STONE_QUARRY', 'C', '▣', 'stoneQuarry'],
   ['build-house', 'HOUSE', 'H', '⌂', 'house'],
   ['build-barracks', 'BARRACKS', 'R', '⚒', 'barracks'],
+  ['build-archery-range', 'ARCHERY_RANGE', 'A', '🏹', 'archeryRange'],
   ['build-gold-mine', 'GOLD_MINE', 'G', '⛏', 'goldMine'],
   ['build-stable', 'STABLE', 'T', '♞', 'stable'],
   ['build-farm', 'FARM', 'M', '🌾', 'farm'],
   ['build-mill', 'MILL', 'I', '◈', 'mill'],
   ['build-foundry', 'FOUNDRY', 'F', '●', 'foundry'],
   ['build-defensive-tower', 'DEFENSIVE_TOWER', 'Y', '♜', 'defensiveTower'],
-  ['build-wall', 'WALL', '', '▬', 'wall'],
+  ['build-wall', 'WALL', 'W', '▬', 'wall'],
 ];
 
 /** Placement prompt shown when a build button is clicked. */
@@ -90,10 +91,11 @@ const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]>
   'build-gold-mine': ['GOLD_MINE', 'build GOLD MINE - click near gold'],
   'build-stone-quarry': ['STONE_QUARRY', 'build STONE QUARRY - click near stone'],
   'build-barracks': ['BARRACKS', 'build BARRACKS - click to place'],
+  'build-archery-range': ['ARCHERY_RANGE', 'build ARCHERY RANGE - click to place'],
   'build-stable': ['STABLE', 'build STABLE - click to place'],
   'build-foundry': ['FOUNDRY', 'build FOUNDRY - click to place'],
   'build-defensive-tower': ['DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - click to place'],
-  'build-wall': ['WALL', 'build WALL - click the start tile, then the end tile'],
+  'build-wall': ['WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
 };
 
 export class ActionGrid {
@@ -180,7 +182,7 @@ export class ActionGrid {
         const buildingDef = BUILDING_TABLE[Building.defId[eid]];
         const unit = UNIT_TABLE[unitDefId];
         if (!buildingDef || !unit) return sum;
-        if (unit.trainAt !== buildingDef.id && unitDefId !== UnitDefId.VILLAGER) return sum;
+        if (!buildingDef.trains.includes(unit.id) && unitDefId !== UnitDefId.VILLAGER) return sum;
         const queued = world.productionQueues.get(eid) ?? [];
         return sum + queued.filter((defId) => defId === unitDefId).length;
       }, 0);
@@ -214,8 +216,7 @@ export class ActionGrid {
       if (!unit) return;
       if (!isUnitUnlocked(world, playerId, unitDefId)) return;
       const affordable = canAfford(unit.cost);
-      const hasPopRoom =
-        unitDefId === UnitDefId.VILLAGER || hasPopulationRoomForUnit(world, playerId, unitDefId);
+      const hasPopRoom = hasPopulationRoomForUnit(world, playerId, unitDefId);
       actions.push({
         id: `train-unit-${unitDefId}`,
         label: `Train ${unit.name}`,
@@ -286,9 +287,13 @@ export class ActionGrid {
     }
 
     if (selectedWorksiteEids.length > 0) addWorksiteWorkerAction();
+    else if (hasTc) addTrainAction(UnitDefId.VILLAGER, 'Q', '🧑');
     if (selectedProducerDefs.has(BuildingDefId.BARRACKS)) {
       addTrainAction(UnitDefId.SPEARMAN, 'Q', '♜');
       addTrainAction(UnitDefId.ARCHER, 'E', '🏹');
+    }
+    if (selectedProducerDefs.has(BuildingDefId.ARCHERY_RANGE) && !selectedProducerDefs.has(BuildingDefId.BARRACKS)) {
+      addTrainAction(UnitDefId.ARCHER, 'Q', '🏹');
     }
     if (selectedProducerDefs.has(BuildingDefId.STABLE)) {
       addTrainAction(UnitDefId.SCOUT_CAVALRY, 'Q', '♞');

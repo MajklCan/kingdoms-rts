@@ -72,7 +72,6 @@ function applyTrainUnitOnce(world: SimWorld, atEid: number, defId: number): bool
     return true;
   }
 
-  if (unitDef.trainAt !== producerDef.id) return false;
   if (!producerDef.trains.includes(unitDef.id)) return false;
   if (!isUnitUnlocked(world, playerId, defId)) return false;
   if (!canAfford(bank, unitDef.cost)) return false;
@@ -222,6 +221,7 @@ function issueProductionRallyOrder(
 
 function isArmyProducerDefId(defId: number): boolean {
   return defId === BuildingDefId.BARRACKS ||
+    defId === BuildingDefId.ARCHERY_RANGE ||
     defId === BuildingDefId.STABLE ||
     defId === BuildingDefId.FOUNDRY;
 }

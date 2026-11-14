@@ -22,6 +22,7 @@ import { containerLifeLayer, entityLifeLayer, isOpenVisible, LifePool, type Life
 import { cycle, drawMob, fleeFrom, leashHome, makeMob, stepMob, wander, type Mob } from './life-mobs';
 import { LIFE_SHEET, type LifeFrame } from './life-sprites';
 import { reducedMotion } from './motion-prefs';
+import { SmokeBudget } from './smoke-budget';
 
 const MAX_CHICKENS = 7;
 const SPAWN_MS = 1600;
@@ -34,6 +35,8 @@ const CHICKEN_HOMES: ReadonlySet<number> = new Set([
 const BRAZIER_DEFS: ReadonlySet<number> = new Set([BuildingDefId.TOWN_CENTER, BuildingDefId.BARRACKS]);
 const MAX_BRAZIER_BUILDINGS = 4;
 const MAX_PUFFS = 56;
+/** A chimney counts toward the puff split this long after its last puff request. */
+const PUFF_ACTIVE_MS = 4000;
 const FLAMES: readonly LifeFrame[] = ['flame0', 'flame1', 'flame2'];
 
 interface Brazier {
@@ -311,6 +314,8 @@ function destroyBrazier(b: Brazier): void {
 
 interface Puff {
   img: Phaser.GameObjects.Image;
+  /** Chimney that emitted it (SmokeBudget source). */
+  source: number;
   x: number;
   y: number;
   vx: number;
@@ -324,6 +329,8 @@ interface Puff {
 export class VoxelSmoke {
   private readonly pool: LifePool;
   private readonly puffs: Puff[] = [];
+  /** Splits MAX_PUFFS across the chimneys smoking right now. */
+  private readonly budget = new SmokeBudget(MAX_PUFFS, PUFF_ACTIVE_MS);
 
   constructor(
     private readonly host: FxHost,
@@ -333,14 +340,19 @@ export class VoxelSmoke {
     this.pool = new LifePool(host.ctx.scene, containerLifeLayer(layer), MAX_PUFFS);
   }
 
-  /** One puff at a chimney mouth (layer px). */
-  puff(x: number, y: number, alpha: number, dark = false): void {
+  /** One puff at a chimney mouth (layer px); `source` identifies the chimney. */
+  puff(x: number, y: number, alpha: number, dark: boolean, source: number): void {
     if (reducedMotion() || !this.host.fx.onScreen(x, y, 60)) return;
+    if (!this.budget.tryTake(source, this.host.time)) return;
     const img = this.pool.take('puff0');
-    if (!img) return;
+    if (!img) {
+      this.budget.release(source);
+      return;
+    }
     img.setTint(dark ? 0x7d7f86 : 0xffffff);
     this.puffs.push({
       img,
+      source,
       x: x + this.rng.range(-1, 1),
       y,
       vx: this.rng.range(4, 8) * (dark ? 1.2 : 1),
@@ -360,6 +372,7 @@ export class VoxelSmoke {
       const age = now - p.born;
       if (age >= p.life) {
         this.pool.give(p.img);
+        this.budget.release(p.source);
         this.puffs.splice(i, 1);
         continue;
       }
@@ -372,11 +385,13 @@ export class VoxelSmoke {
       p.img.setPosition(Math.round(p.x), Math.round(p.y));
       p.img.setAlpha(p.alpha * clamp01(age / 250) * clamp01((p.life - age) / (p.life * 0.45)));
     }
+    this.budget.prune(now);
   }
 
   clear(): void {
     for (const p of this.puffs) this.pool.give(p.img);
     this.puffs.length = 0;
+    this.budget.clear();
   }
 
   get count(): number {

@@ -1,7 +1,8 @@
 /**
- * Game-side audio direction on top of AudioManager: the adaptive in-match
- * music director, world-positioned SFX (stereo pan + falloff from the camera),
- * sim sound cues, combat sounds + "under attack" stinger, and unit voice barks.
+ * Game-side audio direction on top of AudioManager: match lifecycle (menu,
+ * match, paused, match over), the adaptive music mood, camera-relative world
+ * SFX (pan + distance + fog), the off-screen "under attack" alarm, and unit
+ * voice barks.
  */
 
 import { hasComponent } from 'bitecs';
@@ -25,123 +26,104 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from '@sim/components';
-import { buildingQuery, selectedQuery, unitQuery, type CombatEvent, type SoundCue } from '@sim/world';
-import { AudioManager } from './audio/audio-manager';
+import { buildingQuery, selectedQuery, type CombatEvent, type GameEvent, type SoundCue } from '@sim/world';
+import { AudioManager, type BarkResult } from './audio/audio-manager';
+import { installAudioDebug } from './audio/audio-debug';
+import { MusicDirector } from './audio/music-director';
 import {
   ALERT,
   BATTLE_AMBIENCE,
-  BATTLE_TRACKS,
   COMMAND_MOVE,
   NATURE_AMBIENCE,
   UNIT_SELECT,
-  VILLAGE_MUSIC,
   VOICE_LINE_COUNTS,
   combatSound,
   cueSound,
   isNonSpatialCue,
+  isNotificationCue,
   type SfxConfig,
   type VoiceBarkType,
   type VoiceCategory,
 } from './audio/sound-map';
+import { SPATIAL_CULL_GAIN, isInView, spatialMix, type ViewRect } from './audio/spatial';
 import { tileToScreen } from './iso';
 import type { SceneContext } from './scene-context';
 
-type MusicContext = 'playlist' | 'village' | 'battle';
+type Phase = 'menu' | 'match' | 'over';
 
-/** How long battle music/ambience persist after the last local combat event. */
-const BATTLE_HOLD_TICKS = SIM.TICK_HZ * 15;
-/** Minimum dwell in village/playlist before switching to the other (anti-flap). */
-const CONTEXT_MIN_DWELL_TICKS = SIM.TICK_HZ * 10;
-/** Minimum gap between "under attack" alert stingers. */
-const ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 10;
-/** Max stereo pan for world SFX, so off-screen sounds never hard-pan to one ear. */
-const MAX_SPATIAL_PAN = 0.6;
-/** Camera dwell on the home base (while safe) before the village theme starts. */
-const VILLAGE_LINGER_TICKS = SIM.TICK_HZ * 6;
-/** Grace window where the base still counts as "home" after panning away. */
-const HOME_LEAVE_GRACE_TICKS = SIM.TICK_HZ * 2;
+/** Minimum gap between "under attack" alarms. */
+const ALERT_COOLDOWN_TICKS = SIM.TICK_HZ * 15;
 /** Camera-to-town-centre distance (world px) that counts as "at home". */
 const HOME_RADIUS_PX = 260;
+/** Off-screen notifications (building done, unit ready) keep this level. */
+const NOTIFICATION_FLOOR = 0.45;
+/** Research done: the build-complete chime, a little softer. */
+const RESEARCH_CHIME = { key: 'build_complete', volume: 0.45, minIntervalMs: 250 } as const;
 
 export class GameAudio {
   readonly manager: AudioManager;
-  /** Tick of the latest combat event involving the local player; -1 = never. */
-  private lastLocalCombatTick = -1;
-  /** Tick the last "under attack" alert fired. */
+  private readonly director = new MusicDirector({ tickHz: SIM.TICK_HZ });
+  private phase: Phase = 'menu';
+  /** Tick the last "under attack" alarm fired; -1 = never. */
   private lastAlertTick = -1;
-  /** True once a match is running (drives the music director). */
-  private inMatch = false;
-  private villageEnteredTick = -1;
-  private lastHomeTick = -1;
-  /** Battle track for the current combat episode; re-picked each episode. */
-  private battleTrack: string | null = null;
-  private musicContext: MusicContext = 'playlist';
-  private contextSinceTick = -1;
   private readonly cueListeners: Array<(cue: SoundCue) => void> = [];
+  /** Game events already heard (the HUD feed drains them after this peek). */
+  private readonly heardEvents = new WeakSet<GameEvent>();
 
   constructor(private readonly ctx: SceneContext) {
     this.manager = new AudioManager(ctx.scene);
+    if (import.meta.env.DEV) installAudioDebug(this.manager, () => this.debugState());
   }
 
-  /** Hand music from the menu to the in-game director, resetting every
-   *  adaptive timer so a new/loaded match never inherits stale state. */
+  /** A match (new, loaded or multiplayer) starts: menu music hands over. */
   enterMatch(): void {
-    this.inMatch = true;
-    this.villageEnteredTick = -1;
-    this.lastHomeTick = -1;
-    this.lastLocalCombatTick = -1;
+    this.phase = 'match';
+    this.director.reset(this.ctx.world.tick);
     this.lastAlertTick = -1;
-    this.musicContext = 'playlist';
-    this.contextSinceTick = -1;
-    this.battleTrack = null;
-    this.manager.playGamePlaylist();
+    this.manager.setWorldSilenced(false);
+    this.manager.setGamePaused(false);
+    this.manager.setAmbience(NATURE_AMBIENCE, 3);
+    this.manager.playPeaceMusic({ fadeOut: 2.5, delay: 1 });
   }
 
-  /** Back to the title screens: stop the in-game director, play menu music. */
+  /** Back to the title screens: world audio off, menu music. */
   leaveMatch(): void {
-    this.inMatch = false;
-    this.manager.stopAmbience();
-    this.manager.playMenuMusic();
+    this.phase = 'menu';
+    this.manager.setGamePaused(false);
+    this.manager.setWorldSilenced(true);
+    this.manager.setAmbience(null, 1.5);
+    this.manager.playMenuMusic({ fadeOut: 1.5, delay: 0.5 });
   }
 
-  /** Per-frame music director: combat > lingering at home > playlist. */
+  /** Per frame: lifecycle + music mood. */
   update(): void {
-    if (!this.inMatch) return;
-    const tick = this.ctx.world.tick;
-    const recentCombat =
-      this.lastLocalCombatTick >= 0 && tick - this.lastLocalCombatTick < BATTLE_HOLD_TICKS;
-    const recentlyAttacked =
-      this.lastAlertTick >= 0 && tick - this.lastAlertTick < BATTLE_HOLD_TICKS;
-    // Stay in battle only while there's a live reason: an army in the field or
-    // the base under recent attack. A wiped army lets the score wind down.
-    const danger = recentCombat && (recentlyAttacked || this.localHasLivingMilitary());
-
-    this.manager.playAmbience(danger ? BATTLE_AMBIENCE : NATURE_AMBIENCE);
-
-    let desired: MusicContext;
-    if (danger) {
-      desired = 'battle';
-      this.villageEnteredTick = -1;
-    } else {
-      const rawHome = this.cameraNearHomeBase();
-      if (rawHome) this.lastHomeTick = tick;
-      const atHome =
-        rawHome || (this.lastHomeTick >= 0 && tick - this.lastHomeTick < HOME_LEAVE_GRACE_TICKS);
-      if (atHome) {
-        if (this.villageEnteredTick < 0) this.villageEnteredTick = tick;
-        desired = tick - this.villageEnteredTick >= VILLAGE_LINGER_TICKS ? 'village' : 'playlist';
-      } else {
-        this.villageEnteredTick = -1;
-        desired = 'playlist';
-      }
+    this.manager.update();
+    if (this.phase !== 'match') return;
+    const world = this.ctx.world;
+    if (world.outcome.state === 'victory') {
+      this.matchOver(world.outcome.winnerPlayerId === this.ctx.perspectivePlayerId);
+      return;
     }
-    this.applyMusicContext(desired);
+    this.manager.setGamePaused(world.paused);
+    this.peekGameEvents();
+    if (world.paused) return;
+    const state = this.director.update(world.tick, this.cameraNearHomeBase());
+    this.manager.setPeaceFlavor(state.flavor);
+    if (state.mood === 'battle') {
+      this.manager.playBattleMusic({ fadeOut: 2.5, delay: 0 });
+      this.manager.setAmbience(BATTLE_AMBIENCE, 3);
+    } else {
+      // Leaving a battle: the score fades, a breath of ambience, then a song.
+      this.manager.playPeaceMusic(state.changed ? { fadeOut: 4, delay: 6 } : { fadeOut: 2.5, delay: 1 });
+      this.manager.setAmbience(NATURE_AMBIENCE, 4);
+    }
   }
 
-  /** Fire sound (fog-gated) + adaptive music / alert bookkeeping for one event. */
+  /** Fire sound (fog-gated) + music intensity / alarm bookkeeping. */
   onCombatEvent(event: CombatEvent): void {
+    if (this.phase !== 'match') return;
     this.playCombatSound(event);
-    this.noteCombatForAdaptiveAudio(event);
+    this.noteCombat(event);
   }
 
   /** Extra render-side consumer of every drained sound cue (world VFX). */
@@ -149,11 +131,7 @@ export class GameAudio {
     this.cueListeners.push(listener);
   }
 
-  /**
-   * World-positioned SFX for render-only triggers (construction knocks,
-   * collapse rumble), with the same fog gate, pan, falloff and rate limit as
-   * sim cues.
-   */
+  /** World-positioned SFX for render-only triggers (construction knocks). */
   playWorld(cfg: SfxConfig, tileX: number, tileY: number): void {
     if (!this.ctx.isTileVisible(tileX, tileY)) return;
     this.playSpatial(cfg, tileX, tileY);
@@ -167,41 +145,38 @@ export class GameAudio {
     for (const cue of cues) {
       for (const listener of this.cueListeners) listener(cue);
       const cfg = cueSound(cue.kind);
+      const own = cue.player === this.ctx.perspectivePlayerId;
       if (isNonSpatialCue(cue.kind)) {
-        if (cue.player === this.ctx.perspectivePlayerId) {
-          this.manager.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
-        }
+        if (own) this.manager.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
         continue;
       }
-      if (cue.player !== this.ctx.perspectivePlayerId && !this.ctx.isTileVisible(cue.x, cue.y)) {
-        continue;
-      }
-      this.playSpatial(cfg, cue.x, cue.y);
+      if (!own && !this.ctx.isTileVisible(cue.x, cue.y)) continue;
+      this.playSpatial(cfg, cue.x, cue.y, own && isNotificationCue(cue.kind) ? NOTIFICATION_FLOOR : 0);
     }
   }
 
-  /** Non-spatial UI / command sound (centre pan, fixed volume). */
+  /** Non-spatial UI / command sound. */
   playUi(cfg: SfxConfig): void {
     this.manager.play(cfg.key, { volume: cfg.volume, minIntervalMs: cfg.minIntervalMs });
   }
 
-  /** Voice bark (or blip fallback) for a single selected unit. */
+  /** Voice line for a selected unit; a blip only when it has no voice. */
   barkSelect(eid: number): void {
-    if (!this.playUnitBark(eid, 'select')) this.playUi(UNIT_SELECT);
+    if (this.playUnitBark(eid, 'select') === 'none') this.playUi(UNIT_SELECT);
   }
 
-  /** "On our way" from the representative selected unit; blip fallback. */
+  /** "On our way"; the order blip when no line plays, so every order is heard. */
   barkMove(): void {
     const eid = this.representativeSelectedUnit();
     if (eid === null) return;
-    if (!this.playUnitBark(eid, 'move')) this.playUi(COMMAND_MOVE);
+    if (this.playUnitBark(eid, 'move') !== 'played') this.playUi(COMMAND_MOVE);
   }
 
-  /** Battle cry from the representative selected unit; blip fallback. */
+  /** Battle cry; the order blip when no line plays. */
   barkAttack(): void {
     const eid = this.representativeSelectedUnit();
     if (eid === null) return;
-    if (!this.playUnitBark(eid, 'attack')) this.playUi(COMMAND_MOVE);
+    if (this.playUnitBark(eid, 'attack') !== 'played') this.playUi(COMMAND_MOVE);
   }
 
   /** First perspective-owned unit in the selection (the one that "speaks"). */
@@ -215,54 +190,56 @@ export class GameAudio {
     return null;
   }
 
-  private applyMusicContext(desired: MusicContext): void {
-    if (desired !== this.musicContext) {
-      const dwell = this.contextSinceTick < 0 ? Infinity : this.ctx.world.tick - this.contextSinceTick;
-      const canSwitch =
-        desired === 'battle' || this.musicContext === 'battle' || dwell >= CONTEXT_MIN_DWELL_TICKS;
-      if (!canSwitch) {
-        this.playContext(this.musicContext);
-        return;
+  /** Sounds for HUD events that have no sim sound cue (research done). Reads
+   *  world.gameEvents without draining: the HUD feed owns that queue. */
+  private peekGameEvents(): void {
+    const me = this.ctx.perspectivePlayerId;
+    for (const event of this.ctx.world.gameEvents) {
+      if (this.heardEvents.has(event)) continue;
+      this.heardEvents.add(event);
+      if (event.kind === 'researchCompleted' && event.playerId === me) {
+        this.manager.play(RESEARCH_CHIME.key, { volume: RESEARCH_CHIME.volume, minIntervalMs: RESEARCH_CHIME.minIntervalMs });
       }
-      this.musicContext = desired;
-      this.contextSinceTick = this.ctx.world.tick;
-      if (desired !== 'battle') this.battleTrack = null;
     }
-    this.playContext(this.musicContext);
   }
 
-  /** Drive the audio layer for the active context (idempotent every frame). */
-  private playContext(context: MusicContext): void {
-    if (context === 'battle') {
-      if (this.battleTrack === null) this.battleTrack = this.pickBattleTrack();
-      if (this.battleTrack) {
-        this.manager.setMusicDucked(false);
-        this.manager.playLooping(this.battleTrack);
-      } else {
-        // No battle track supplied: keep the playlist but duck it.
-        this.manager.playGamePlaylist();
-        this.manager.setMusicDucked(true);
-      }
-      return;
-    }
-    this.manager.setMusicDucked(false);
-    // Village + playlist both breathe (song, ambience-only gap, song).
-    if (context === 'village') this.manager.playGappedSingle(VILLAGE_MUSIC);
-    else this.manager.playGamePlaylist();
+  private matchOver(won: boolean): void {
+    this.phase = 'over';
+    this.manager.setGamePaused(false);
+    this.manager.setWorldSilenced(true);
+    this.manager.setAmbience(null, 4);
+    // Score fades over 3 s, the fanfare (victory) lands, then the menu theme.
+    this.manager.playMenuMusic({ fadeOut: 3, delay: won ? 5 : 4 });
+    if (won) this.manager.play('age_up', { volume: 0.8, ui: true });
   }
 
-  private pickBattleTrack(): string | null {
-    const present = BATTLE_TRACKS.filter((key) => this.manager.hasTrack(key));
-    if (present.length === 0) return null;
-    return present[Math.floor(Math.random() * present.length)];
+  private debugState(): Record<string, unknown> {
+    const tick = this.ctx.world.tick;
+    return {
+      phase: this.phase,
+      tick,
+      mood: this.director.currentMood,
+      intensity: Math.round(this.director.intensityAt(tick) * 10) / 10,
+      moodChanges: [...this.director.transitions],
+      lastAlertTick: this.lastAlertTick,
+    };
+  }
+
+  private view(): ViewRect {
+    const v = this.ctx.scene.cameras.main.worldView;
+    return { centerX: v.centerX, centerY: v.centerY, width: v.width, height: v.height };
+  }
+
+  private worldPoint(tileX: number, tileY: number): { x: number; y: number } {
+    return this.ctx.localToWorld(tileToScreen(tileX, tileY));
   }
 
   private cameraNearHomeBase(): boolean {
     const tc = this.localTownCenterPos();
     if (!tc) return false;
-    const abs = this.ctx.localToWorld(tileToScreen(tc.x, tc.y));
-    const view = this.ctx.scene.cameras.main.worldView;
-    return Math.hypot(abs.x - view.centerX, abs.y - view.centerY) <= HOME_RADIUS_PX;
+    const p = this.worldPoint(tc.x, tc.y);
+    const v = this.view();
+    return Math.hypot(p.x - v.centerX, p.y - v.centerY) <= HOME_RADIUS_PX;
   }
 
   private localTownCenterPos(): { x: number; y: number } | null {
@@ -276,17 +253,6 @@ export class GameAudio {
     return null;
   }
 
-  private localHasLivingMilitary(): boolean {
-    const world = this.ctx.world;
-    for (const eid of unitQuery(world.ecs)) {
-      if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
-      if (hasComponent(world.ecs, VillagerTag, eid)) continue;
-      if (hasComponent(world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
-      return true;
-    }
-    return false;
-  }
-
   private playCombatSound(event: CombatEvent): void {
     const isBuildingAttacker = hasComponent(this.ctx.world.ecs, Building, event.attackerEid);
     const cfg = combatSound(event.attackerKind, event.range, event.phase, isBuildingAttacker);
@@ -294,45 +260,34 @@ export class GameAudio {
     const fromVisible = this.ctx.isTileVisible(event.fromX, event.fromY);
     const toVisible = this.ctx.isTileVisible(event.toX, event.toY);
     if (!fromVisible && !toVisible) return;
-    // Pan around the attacker for fire, the target for melee impact.
-    const x = event.range <= 1 ? event.toX : event.fromX;
-    const y = event.range <= 1 ? event.toY : event.fromY;
-    this.playSpatial(cfg, x, y);
+    // Melee sounds at the target; a shot at the shooter, unless the shooter is
+    // hidden in fog (then at the target, so the sound gives nothing away).
+    const atTarget = event.range <= 1 || !fromVisible;
+    this.playSpatial(cfg, atTarget ? event.toX : event.fromX, atTarget ? event.toY : event.fromY);
   }
 
-  private noteCombatForAdaptiveAudio(event: CombatEvent): void {
+  private noteCombat(event: CombatEvent): void {
     if (event.phase === 'windup') return;
-    const attackerPlayer = this.ctx.ownerOf(event.attackerEid);
-    const targetPlayer = this.ctx.ownerOf(event.targetEid);
+    const me = this.ctx.perspectivePlayerId;
+    const attacker = this.ctx.ownerOf(event.attackerEid);
+    const target = this.ctx.ownerOf(event.targetEid);
     const tick = this.ctx.world.tick;
-    if (attackerPlayer === this.ctx.perspectivePlayerId || targetPlayer === this.ctx.perspectivePlayerId) {
-      this.lastLocalCombatTick = tick;
-    }
-    if (targetPlayer === this.ctx.perspectivePlayerId) {
-      const elapsed = tick - this.lastAlertTick;
-      if (this.lastAlertTick < 0 || elapsed >= ALERT_COOLDOWN_TICKS) {
-        this.lastAlertTick = tick;
-        this.manager.play(ALERT.key, { volume: ALERT.volume, minIntervalMs: ALERT.minIntervalMs });
-      }
-    }
+    if (attacker === me || target === me) this.director.noteCombat(tick);
+    if (target !== me) return;
+    // The alarm is for fights the player cannot see.
+    const p = this.worldPoint(event.toX, event.toY);
+    if (isInView(p.x, p.y, this.view(), 48)) return;
+    if (this.lastAlertTick >= 0 && tick - this.lastAlertTick < ALERT_COOLDOWN_TICKS) return;
+    this.lastAlertTick = tick;
+    this.manager.play(ALERT.key, { volume: ALERT.volume, minIntervalMs: ALERT.minIntervalMs });
   }
 
-  /** World-positioned sound: stereo pan + volume falloff from the camera view. */
-  private playSpatial(cfg: SfxConfig, tileX: number, tileY: number): void {
-    const abs = this.ctx.localToWorld(tileToScreen(tileX, tileY));
-    const view = this.ctx.scene.cameras.main.worldView;
-    const halfW = Math.max(1, view.width / 2);
-    const halfH = Math.max(1, view.height / 2);
-    const pan = clamp(((abs.x - view.centerX) / halfW) * MAX_SPATIAL_PAN, -MAX_SPATIAL_PAN, MAX_SPATIAL_PAN);
-    const overshootX = Math.max(0, Math.abs(abs.x - view.centerX) - halfW);
-    const overshootY = Math.max(0, Math.abs(abs.y - view.centerY) - halfH);
-    const overshoot = Math.hypot(overshootX, overshootY);
-    const falloff = clamp(1 - overshoot / halfW, 0.2, 1);
-    this.manager.play(cfg.key, {
-      pan,
-      volume: cfg.volume * falloff,
-      minIntervalMs: cfg.minIntervalMs,
-    });
+  /** World-positioned sound: stereo pan + distance falloff from the camera. */
+  private playSpatial(cfg: SfxConfig, tileX: number, tileY: number, floor = 0): void {
+    const p = this.worldPoint(tileX, tileY);
+    const mix = spatialMix(p.x, p.y, this.view(), { floor });
+    if (mix.gain < SPATIAL_CULL_GAIN) return;
+    this.manager.play(cfg.key, { pan: mix.pan, volume: cfg.volume * mix.gain, minIntervalMs: cfg.minIntervalMs });
   }
 
   /** Voice persona: villagers by gender (farm -> female), soldiers by kind. */
@@ -361,13 +316,9 @@ export class GameAudio {
       ResourceWorksite.kind[site] === ResourceKindId.FOOD;
   }
 
-  private playUnitBark(eid: number, type: VoiceBarkType): boolean {
+  private playUnitBark(eid: number, type: VoiceBarkType): BarkResult {
     const category = this.voiceCategoryForUnit(eid);
-    if (!category) return false;
+    if (!category) return 'none';
     return this.manager.playVoiceBark(category, type, VOICE_LINE_COUNTS[type]);
   }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }

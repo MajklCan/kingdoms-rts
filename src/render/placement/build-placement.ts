@@ -6,20 +6,17 @@
  * The ghost is the footprint diamond on the ground layer plus, when a sprite
  * source is given, a translucent preview of the building itself on the
  * overlay layer (red-tinted where it cannot be placed).
+ *
+ * Mouse: the ghost follows the cursor and a click places. Touch (the
+ * "confirm" flow): the ghost starts at the view centre, follows the finger
+ * while it drags, stays where it is released and only an on-screen Confirm
+ * places it; a wall line is dragged from its start tile to its end tile.
  */
 
-import { ISO, MAP } from '../../config';
-import { Building, Position, Resource } from '@sim/components';
-import { BUILDING_TABLE, BuildingDefId, type BuildingDef } from '@sim/defs';
+import { ISO } from '../../config';
+import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import {
-  buildingQuery,
-  findResourceAt,
-  getBuildingCost,
-  resourceQuery,
-  wallLineTiles,
-  type SimWorld,
-} from '@sim/world';
+import { getBuildingCost, wallLineTiles } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -29,8 +26,11 @@ import type { SceneContext } from '../scene-context';
 import type { SpriteRef, SpriteSource } from '../sprites/sprite-source';
 import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, isInsideMap, spriteAnchorPoint } from '../world-projection';
+import { hasNearbyResource, isBuildFootprintBlocked } from './placement-rules';
 
 const GHOST_ALPHA = 0.6;
+/** Multiplicative tints on the ghost sprite: green = can build here, red = can't. */
+const GHOST_VALID_TINT = 0xa8f0a0;
 const GHOST_INVALID_TINT = 0xff6b6b;
 
 export type BuildMode =
@@ -42,6 +42,7 @@ export type BuildMode =
   | 'GOLD_MINE'
   | 'STONE_QUARRY'
   | 'BARRACKS'
+  | 'ARCHERY_RANGE'
   | 'STABLE'
   | 'FOUNDRY'
   | 'DEFENSIVE_TOWER'
@@ -55,22 +56,45 @@ export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   GOLD_MINE: BuildingDefId.GOLD_MINE,
   STONE_QUARRY: BuildingDefId.STONE_QUARRY,
   BARRACKS: BuildingDefId.BARRACKS,
+  ARCHERY_RANGE: BuildingDefId.ARCHERY_RANGE,
   STABLE: BuildingDefId.STABLE,
   FOUNDRY: BuildingDefId.FOUNDRY,
   DEFENSIVE_TOWER: BuildingDefId.DEFENSIVE_TOWER,
   WALL: BuildingDefId.WALL,
 };
 
+interface Tile {
+  x: number;
+  y: number;
+}
+
+/** What the touch Confirm / Cancel bar needs to show. */
+export interface TouchPlacementState {
+  kind: 'none' | 'building' | 'wall' | 'rally';
+  /** A ghost (or wall line) is down and Confirm would send it. */
+  canConfirm: boolean;
+  /** The ghost reads green (the sim is expected to accept it). */
+  valid: boolean;
+  label: string;
+}
+
 export class BuildPlacement {
   mode: BuildMode = 'none';
   armyRallyMode = false;
   /** B was pressed; waiting for the building key. */
   awaitingBuildKind = false;
+  /** Touch confirm flow: the ghost stays put until Confirm (set by the touch UI mode). */
+  confirmFlow = false;
   private readonly ghost: Phaser.GameObjects.Graphics;
   private ghostSprite: Phaser.GameObjects.Sprite | null = null;
   private ghostRef: SpriteRef | null = null;
   /** WALL mode: first click of a line, waiting for the end tile. */
-  private wallStart: { x: number; y: number } | null = null;
+  private wallStart: Tile | null = null;
+  /** The anchor was just pressed: releasing elsewhere finishes the line (drag). */
+  private wallDragArmed = false;
+  /** Confirm flow: where the ghost (or the wall line's end) sits. */
+  private touchTile: Tile | null = null;
+  private lastValid = false;
 
   constructor(
     private readonly ctx: SceneContext,
@@ -103,6 +127,8 @@ export class BuildPlacement {
     const def = BUILDING_TABLE[defId];
     this.awaitingBuildKind = false;
     this.armyRallyMode = false;
+    this.wallStart = null;
+    this.touchTile = null;
     if (!isBuildingUnlocked(this.ctx.world, this.ctx.perspectivePlayerId, defId)) {
       this.mode = 'none';
       setLastEvent(`${def?.name ?? mode} is locked`);
@@ -127,6 +153,8 @@ export class BuildPlacement {
   reset(): void {
     this.mode = 'none';
     this.wallStart = null;
+    this.wallDragArmed = false;
+    this.touchTile = null;
     this.armyRallyMode = false;
     this.awaitingBuildKind = false;
     this.clear();
@@ -137,7 +165,6 @@ export class BuildPlacement {
    * was consumed (placed, picked or cancelled).
    */
   handlePointerDown(pointer: Phaser.Input.Pointer, tx: number, ty: number): boolean {
-    const playerId = this.ctx.perspectivePlayerId;
     if (this.armyRallyMode) {
       if (pointer.rightButtonDown()) {
         this.armyRallyMode = false;
@@ -145,17 +172,7 @@ export class BuildPlacement {
         setLastEvent('army rally cancelled');
         return true;
       }
-      if (pointer.leftButtonDown()) {
-        if (!isInsideMap(tx, ty)) {
-          setLastEvent(`rally outside map (${tx},${ty})`);
-          return true;
-        }
-        this.commands.dispatch({ type: 'setArmyRallyPoint', playerId, x: tx, y: ty });
-        setLastEvent(`army rally → (${tx},${ty})`);
-        this.armyRallyMode = false;
-        this.clear();
-        return true;
-      }
+      if (pointer.leftButtonDown()) return this.rallyAt(tx, ty);
     }
 
     if (this.mode !== 'none') {
@@ -168,51 +185,169 @@ export class BuildPlacement {
       }
       if (pointer.leftButtonDown() && this.mode === 'WALL') return this.handleWallClick(tx, ty);
       if (pointer.leftButtonDown()) {
-        const defId = BUILD_MODE_TO_DEF[this.mode];
-        if (!isBuildingUnlocked(this.ctx.world, playerId, defId)) {
-          setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.mode} is locked`);
-          this.audio.playUi(SFX_ERROR);
-          this.mode = 'none';
-          this.clear();
-          return true;
-        }
-        this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId });
-        this.audio.playUi(PLACE_BUILDING);
-        setLastEvent(`place ${this.mode} → (${tx},${ty})`);
-        this.mode = 'none';
-        this.clear();
+        this.placeBuildingAt(tx, ty);
         return true;
       }
     }
     return false;
   }
 
-  /** WALL mode: the first click anchors the line, the second sends it. */
-  private handleWallClick(tx: number, ty: number): boolean {
-    const playerId = this.ctx.perspectivePlayerId;
-    if (!isInsideMap(tx, ty)) return true;
-    if (!isBuildingUnlocked(this.ctx.world, playerId, BuildingDefId.WALL)) {
-      setLastEvent('walls are locked');
-      this.audio.playUi(SFX_ERROR);
-      this.mode = 'none';
-      this.wallStart = null;
-      this.clear();
+  /** Army rally pick: set the point (when inside the map) and leave the mode. */
+  rallyAt(tx: number, ty: number): boolean {
+    if (!isInsideMap(tx, ty)) {
+      setLastEvent(`rally outside map (${tx},${ty})`);
       return true;
     }
-    if (!this.wallStart) {
-      this.wallStart = { x: tx, y: ty };
-      setLastEvent(`wall from (${tx},${ty}) - click the end tile`);
-      return true;
-    }
-    const { x: x0, y: y0 } = this.wallStart;
-    this.commands.dispatch({ type: 'placeWallLine', playerId, x0, y0, x1: tx, y1: ty });
-    this.audio.playUi(PLACE_BUILDING);
-    setLastEvent(`wall (${x0},${y0}) to (${tx},${ty})`);
-    this.mode = 'none';
-    this.wallStart = null;
+    this.commands.dispatch({ type: 'setArmyRallyPoint', playerId: this.ctx.perspectivePlayerId, x: tx, y: ty });
+    setLastEvent(`army rally → (${tx},${ty})`);
+    this.armyRallyMode = false;
     this.clear();
     return true;
   }
+
+  private placeBuildingAt(tx: number, ty: number): void {
+    if (this.mode === 'none' || this.mode === 'WALL') return;
+    const playerId = this.ctx.perspectivePlayerId;
+    const defId = BUILD_MODE_TO_DEF[this.mode];
+    if (!isBuildingUnlocked(this.ctx.world, playerId, defId)) {
+      setLastEvent(`${BUILDING_TABLE[defId]?.name ?? this.mode} is locked`);
+      this.audio.playUi(SFX_ERROR);
+      this.reset();
+      return;
+    }
+    this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId });
+    this.audio.playUi(PLACE_BUILDING);
+    setLastEvent(`place ${this.mode} → (${tx},${ty})`);
+    this.reset();
+  }
+
+  /**
+   * Pointer released. In WALL mode a drag from the anchor tile sends the line
+   * on release; releasing on the anchor itself keeps the two-click flow.
+   */
+  handlePointerUp(tx: number, ty: number): boolean {
+    if (this.mode !== 'WALL' || !this.wallStart || !this.wallDragArmed) return false;
+    this.wallDragArmed = false;
+    if (!isInsideMap(tx, ty) || (tx === this.wallStart.x && ty === this.wallStart.y)) return false;
+    return this.handleWallClick(tx, ty);
+  }
+
+  /** WALL mode: the first click anchors the line, the second (or a drag release) sends it. */
+  private handleWallClick(tx: number, ty: number): boolean {
+    if (!isInsideMap(tx, ty)) return true;
+    if (!this.wallsUnlocked()) return true;
+    if (!this.wallStart) {
+      this.wallStart = { x: tx, y: ty };
+      this.wallDragArmed = true;
+      setLastEvent(`wall from (${tx},${ty}) - drag or click the end tile`);
+      return true;
+    }
+    this.placeWallLine(this.wallStart, { x: tx, y: ty });
+    return true;
+  }
+
+  private wallsUnlocked(): boolean {
+    if (isBuildingUnlocked(this.ctx.world, this.ctx.perspectivePlayerId, BuildingDefId.WALL)) return true;
+    setLastEvent('walls are locked');
+    this.audio.playUi(SFX_ERROR);
+    this.reset();
+    return false;
+  }
+
+  private placeWallLine(from: Tile, to: Tile): void {
+    const playerId = this.ctx.perspectivePlayerId;
+    this.commands.dispatch({ type: 'placeWallLine', playerId, x0: from.x, y0: from.y, x1: to.x, y1: to.y });
+    this.audio.playUi(PLACE_BUILDING);
+    setLastEvent(`wall (${from.x},${from.y}) to (${to.x},${to.y})`);
+    this.reset();
+  }
+
+  /** A tap outside the confirm flow: place (or anchor the wall line) right away, like a click. */
+  clickPlace(tx: number, ty: number): void {
+    if (this.armyRallyMode) {
+      this.rallyAt(tx, ty);
+      return;
+    }
+    if (this.mode === 'WALL') {
+      this.handleWallClick(tx, ty);
+      return;
+    }
+    if (this.mode === 'none') return;
+    const failure = this.commands.placementFailure(BUILD_MODE_TO_DEF[this.mode], tx, ty);
+    if (failure) {
+      this.commands.fail(failure);
+      return;
+    }
+    this.placeBuildingAt(tx, ty);
+  }
+
+  // ── Touch confirm flow ────────────────────────────────────────────────────
+
+  /** Put the ghost (or the wall line's end) on a tile; a drag calls this every move. */
+  setTouchGhost(tx: number, ty: number, wallStart?: Tile): void {
+    if (this.mode === 'none' || !isInsideMap(tx, ty)) return;
+    if (this.mode === 'WALL' && wallStart && isInsideMap(wallStart.x, wallStart.y)) this.wallStart = { ...wallStart };
+    else if (this.mode === 'WALL' && !this.wallStart) this.wallStart = { x: tx, y: ty };
+    this.touchTile = { x: tx, y: ty };
+  }
+
+  /** Confirm: place at the ghost. A refusal keeps the mode armed and says why. */
+  confirmTouch(): boolean {
+    const tile = this.touchTile;
+    if (this.mode === 'none' || !tile) return false;
+    if (this.mode === 'WALL') {
+      if (!this.wallsUnlocked()) return false;
+      this.placeWallLine(this.wallStart ?? tile, tile);
+      return true;
+    }
+    const failure = this.commands.placementFailure(BUILD_MODE_TO_DEF[this.mode], tile.x, tile.y);
+    if (failure) {
+      this.commands.fail(failure);
+      return false;
+    }
+    this.placeBuildingAt(tile.x, tile.y);
+    return true;
+  }
+
+  /** Cancel (touch bar, Esc): drop whatever mode is armed. */
+  cancel(): void {
+    if (!this.isActive) return;
+    this.reset();
+    setLastEvent('placement cancelled');
+  }
+
+  touchState(): TouchPlacementState {
+    if (this.armyRallyMode) return { kind: 'rally', canConfirm: false, valid: true, label: 'Tap the map to set the rally point' };
+    if (this.mode === 'none') return { kind: 'none', canConfirm: false, valid: false, label: '' };
+    const name = BUILDING_TABLE[BUILD_MODE_TO_DEF[this.mode]]?.name ?? this.mode.toLowerCase();
+    if (this.mode === 'WALL') {
+      return {
+        kind: 'wall',
+        canConfirm: this.touchTile !== null,
+        valid: this.touchTile !== null,
+        label: this.touchTile ? 'Drag to change the wall line' : 'Drag from start to end',
+      };
+    }
+    return { kind: 'building', canConfirm: this.touchTile !== null, valid: this.lastValid, label: `Place ${name}` };
+  }
+
+  /** Where the ghost goes this frame: the touch tile, else the mouse. */
+  private ghostTile(): Tile | null {
+    if (this.confirmFlow) {
+      if (!this.touchTile && this.mode !== 'none' && this.mode !== 'WALL') this.touchTile = this.viewCentreTile();
+      return this.touchTile;
+    }
+    const { tx, ty } = this.ctx.pointerTile(this.ctx.scene.input.activePointer);
+    return { x: tx, y: ty };
+  }
+
+  private viewCentreTile(): Tile | null {
+    const view = this.ctx.scene.cameras.main.worldView;
+    const { tx, ty } = this.ctx.pickTile(view.centerX, view.centerY);
+    return isInsideMap(tx, ty) ? { x: tx, y: ty } : null;
+  }
+
+  // ── Drawing ───────────────────────────────────────────────────────────────
 
   /** Standing rally flag + the ghost for whichever mode is armed. */
   draw(): void {
@@ -224,6 +359,7 @@ export class BuildPlacement {
     if (rally) this.drawRallyMarker(rally, 0x4ecdc4, 0.9);
 
     if (this.armyRallyMode) {
+      if (this.confirmFlow) return;
       const { tx, ty } = this.ctx.pointerTile(this.ctx.scene.input.activePointer);
       if (isInsideMap(tx, ty)) {
         const valid = world.map.walkability[ty][tx] === 0;
@@ -232,8 +368,9 @@ export class BuildPlacement {
       return;
     }
     if (this.mode === 'none') return;
-    const { tx, ty } = this.ctx.pointerTile(this.ctx.scene.input.activePointer);
-    if (!isInsideMap(tx, ty)) return;
+    const tile = this.ghostTile();
+    if (!tile || !isInsideMap(tile.x, tile.y)) return;
+    const { x: tx, y: ty } = tile;
     if (this.mode === 'WALL' && this.wallStart) {
       this.drawWallLineGhost(this.wallStart, { x: tx, y: ty });
       return;
@@ -262,6 +399,7 @@ export class BuildPlacement {
       bank[3] >= cost.stone;
     const unlocked = isBuildingUnlocked(world, playerId, defId);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
+    this.lastValid = valid;
 
     const preview = this.drawGhostSprite(defId, playerId, c, def.footprint.w, def.footprint.h, valid);
     g.fillStyle(valid ? def.color : 0xff4757, preview ? 0.22 : 0.4);
@@ -278,7 +416,7 @@ export class BuildPlacement {
 
   /** Footprint diamonds along the wall line; red where a tile cannot take a wall
    *  or the bank runs out (the sim skips or stops there the same way). */
-  private drawWallLineGhost(from: { x: number; y: number }, to: { x: number; y: number }): void {
+  private drawWallLineGhost(from: Tile, to: Tile): void {
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
     const def = BUILDING_TABLE[BuildingDefId.WALL];
@@ -343,13 +481,12 @@ export class BuildPlacement {
     const p = spriteAnchorPoint(ref.anchor, c, w, h);
     sprite.setPosition(p.x, p.y);
     sprite.setAlpha(GHOST_ALPHA);
-    if (valid) sprite.clearTint();
-    else sprite.setTint(GHOST_INVALID_TINT);
+    sprite.setTint(valid ? GHOST_VALID_TINT : GHOST_INVALID_TINT);
     sprite.setVisible(true);
     return true;
   }
 
-  private drawRallyMarker(point: { x: number; y: number }, color: number, alpha: number): void {
+  private drawRallyMarker(point: Tile, color: number, alpha: number): void {
     const g = this.ghost;
     const c = this.ctx.tileToScreen(point.x, point.y);
     g.lineStyle(2, color, alpha);
@@ -361,57 +498,4 @@ export class BuildPlacement {
     g.fillStyle(color, alpha);
     g.fillTriangle(c.x + 1, c.y - 24, c.x + 17, c.y - 19, c.x + 1, c.y - 14);
   }
-}
-
-function isBuildFootprintBlocked(world: SimWorld, def: BuildingDef, x: number, y: number): boolean {
-  const x0 = x - Math.floor(def.footprint.w / 2);
-  const y0 = y - Math.floor(def.footprint.h / 2);
-  for (let dy = 0; dy < def.footprint.h; dy++) {
-    for (let dx = 0; dx < def.footprint.w; dx++) {
-      const tx = x0 + dx;
-      const ty = y0 + dy;
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return true;
-      if (world.map.walkability[ty][tx] !== 0) return true;
-      if (findResourceAt(world, tx, ty, 0.6) !== null) return true;
-      if (findBuildingNear(world, tx, ty, 0.01) !== null) return true;
-    }
-  }
-  return false;
-}
-
-function hasNearbyResource(world: SimWorld, x: number, y: number, kind: number, radius: number): boolean {
-  for (const eid of resourceQuery(world.ecs)) {
-    if (Resource.kind[eid] !== kind) continue;
-    if (Resource.amount[eid] <= 0) continue;
-    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) return true;
-  }
-  return false;
-}
-
-/** Closest building whose footprint is within `radius` tiles of (x, y). */
-function findBuildingNear(world: SimWorld, x: number, y: number, radius: number): number | null {
-  let best: number | null = null;
-  let bestDist = radius;
-  for (const eid of buildingQuery(world.ecs)) {
-    const d = distToBuildingFootprint(x, y, eid);
-    if (d < bestDist) {
-      bestDist = d;
-      best = eid;
-    }
-  }
-  return best;
-}
-
-function distToBuildingFootprint(x: number, y: number, eid: number): number {
-  const def = BUILDING_TABLE[Building.defId[eid]];
-  if (!def) return Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
-  const x0 = Math.round(Position.x[eid]) - Math.floor(def.footprint.w / 2);
-  const y0 = Math.round(Position.y[eid]) - Math.floor(def.footprint.h / 2);
-  const minX = x0 - 0.5;
-  const maxX = x0 + def.footprint.w - 0.5;
-  const minY = y0 - 0.5;
-  const maxY = y0 + def.footprint.h - 0.5;
-  const dx = x < minX ? minX - x : x > maxX ? x - maxX : 0;
-  const dy = y < minY ? minY - y : y > maxY ? y - maxY : 0;
-  return Math.hypot(dx, dy);
 }

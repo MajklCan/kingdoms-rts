@@ -10,6 +10,7 @@
  * a still flame).
  */
 
+import { getMapSeed } from '@sim/world';
 import type { BuildingRenderer } from '../entities/building-renderer';
 import type { ResourceHit, ResourceRenderer } from '../entities/resource-renderer';
 import { ForestLife } from './forest-life';
@@ -17,6 +18,7 @@ import type { FxHost } from './fx-host';
 import { LifeRng, mapLifeSeed, UnitPresence } from './life-kit';
 import { ensureLifeSheet } from './life-sprites';
 import { reducedMotion } from './motion-prefs';
+import { performanceMode } from './perf-mode';
 import { VillageLife, VoxelSmoke } from './village-life';
 import { Wildlife, type WildClimate } from './wildlife';
 
@@ -47,7 +49,7 @@ export class LifeFx {
 
   /** New world: reseed from the map and read its climate. */
   reset(climate: WildClimate): void {
-    this.rng.reseed(mapLifeSeed(this.host.ctx.world.map.tiles));
+    this.rng.reseed(mapLifeSeed(getMapSeed(this.host.ctx.world)));
     this.units.clear();
     this.forest.reset(climate.snow);
     this.wild.reset(climate);
@@ -60,7 +62,7 @@ export class LifeFx {
   }
 
   update(dtMs: number): void {
-    const still = reducedMotion();
+    const still = reducedMotion() || performanceMode();
     this.units.refresh(this.host.time);
     this.forest.update(dtMs, still);
     this.wild.update(dtMs, still);

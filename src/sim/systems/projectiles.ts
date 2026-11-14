@@ -14,7 +14,7 @@ import type { PendingCannonImpact, PendingProjectileImpact, SimWorld } from '../
 import { retaliateWhenEngaged } from './combat';
 
 const CANNON_SPLASH_FULL_DAMAGE_RADIUS = 0.48;
-const CANNON_SPLASH_MAX_RADIUS = 2.6;
+const CANNON_SPLASH_MAX_RADIUS = 1.8;
 const CANNON_SPLASH_MIN_DAMAGE_FRACTION = 0.08;
 const CANNON_SPLASH_FALLOFF_EXPONENT = 2.3;
 const CANNON_BUILDING_DIRECT_HIT_RADIUS = 0.35;

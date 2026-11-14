@@ -231,6 +231,9 @@ export interface AiPlayerState {
   waveUnitEids: number[];
   lastAttackEventTick: number;
   lastDefenseEventTick: number;
+  /** This AI's own difficulty; unset means the world's aiDifficulty. Lets a
+   *  headless match pit two AIs of different strength against each other. */
+  difficulty?: AiDifficulty;
 }
 
 export interface AiEvent {

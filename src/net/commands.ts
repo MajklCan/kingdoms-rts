@@ -51,7 +51,7 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   cmdRotateFormation: { eids: 'eids', delta: 'num' },
   cmdReformFormation: { eids: 'eids' },
   setArmyRallyPoint: { x: 'num', y: 'num' },
-  placeBuilding: { defId: 'int', x: 'num', y: 'num' },
+  placeBuilding: { defId: 'int', x: 'int', y: 'int' },
   placeWallLine: { x0: 'int', y0: 'int', x1: 'int', y1: 'int' },
   trainUnit: { atEid: 'int', defId: 'int', count: 'optInt' },
   cancelProduction: { atEid: 'int', slot: 'optInt' },

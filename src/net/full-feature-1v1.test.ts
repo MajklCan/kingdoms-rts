@@ -487,9 +487,9 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('build:defensive_tower', placeAndConfirm(d, pid, BuildingDefId.DEFENSIVE_TOWER, 1) !== null);
     }
 
-    // ── Code-gap probe: ARCHERY_RANGE gated false → must NOT place ──────────────
+    // ── Archery range: unlocked by the Archers tech researched above ───────────
     for (const pid of PLAYERS) {
-      mark('codegap:archery_range_unplaceable', placeAndConfirm(d, pid, BuildingDefId.ARCHERY_RANGE, 2) === null);
+      mark('build:archery_range', placeAndConfirm(d, pid, BuildingDefId.ARCHERY_RANGE, 2) !== null);
     }
 
     // ── Walls: one tile via placeBuilding, a line via the wire placeWallLine ───
@@ -504,11 +504,12 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
 
     // ── Phase 3: train Dark / early infantry ────────────────────────────────────
     for (const pid of PLAYERS) {
-      // Villagers in this game are worksite WORKERS (TOWN_CENTER.trains is empty);
-      // train one at the lumber camp via the worksite-worker production path.
+      // Worksite workers come from the worksite; free villagers from the TC.
       mark('train:villager', trainAndConfirm(d, pid, BuildingDefId.LUMBER_CAMP, UnitKindId.VILLAGER));
+      mark('train:villager_tc', trainAndConfirm(d, pid, BuildingDefId.TOWN_CENTER, UnitKindId.VILLAGER));
       mark('train:spearman', trainAndConfirm(d, pid, BuildingDefId.BARRACKS, UnitKindId.SPEARMAN));
       mark('train:archer', trainAndConfirm(d, pid, BuildingDefId.BARRACKS, UnitKindId.ARCHER));
+      mark('train:archer_range', trainAndConfirm(d, pid, BuildingDefId.ARCHERY_RANGE, UnitKindId.ARCHER));
     }
     d.refill();
     d.liftPop();

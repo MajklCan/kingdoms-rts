@@ -42,6 +42,9 @@ import { bindSkirmishSetup } from './screens/skirmish-setup';
 import { bindCursor } from './skin/cursors';
 import { bindPixelScale } from './skin/pixel-scale';
 import { bindUiSounds } from './ui-sounds';
+import { buildRotateHint } from './touch/rotate-hint';
+import { resetTouchBar } from './touch/touch-bar';
+import { bindTouchMode, onTouchModeChange } from './touch/touch-mode';
 
 function resetMatchUi(): void {
   dismissAllModals();
@@ -57,6 +60,7 @@ function resetMatchUi(): void {
   resetConnectionLost();
   resetObjectives();
   resetTopBar();
+  resetTouchBar();
   hideAgeBanner();
 }
 
@@ -76,7 +80,10 @@ async function revealWhenReady(): Promise<void> {
 export function mountUi(game: Phaser.Game): void {
   attachGame(game);
   bindNativeFeel();
-  applyStoredUiScale();
+  // Touch mode first: the UI scale default depends on it.
+  onTouchModeChange(() => applyStoredUiScale());
+  bindTouchMode();
+  window.addEventListener('resize', () => applyStoredUiScale());
   bindPixelScale();
   setPhase('boot');
 
@@ -90,7 +97,7 @@ export function mountUi(game: Phaser.Game): void {
   bindMultiplayerLobby();
 
   const dev = buildDevPanel();
-  root.append(buildHud(), getMenuRoot(), getModalRoot(), getGameOverRoot(), getConnectionLostRoot(), getLoadingRoot(), getTooltipRoot());
+  root.append(buildHud(), getMenuRoot(), getModalRoot(), getGameOverRoot(), getConnectionLostRoot(), getLoadingRoot(), getTooltipRoot(), buildRotateHint());
   if (dev) root.append(dev);
 
   bindLayerKeys();

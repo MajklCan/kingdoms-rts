@@ -118,6 +118,10 @@ export {
 export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
 export { getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
 export { canPlaceBuildingAt } from './input/buildings';
-export { createAiPlayerState, normalizeAiDifficulty } from './ai/difficulty';
+export { aiPlayerDifficulty, aiSettingsFor, createAiPlayerState, normalizeAiDifficulty } from './ai/difficulty';
+export { aiThink } from './ai/brain';
+export { directAiActuator } from './ai/direct-actuator';
+export type { AiActuator } from './ai/context';
+export { isAiControlledPlayer, isRivalPlayer } from './core/players';
 export { createCampaignWorld } from './missions/campaign-world';
 export { step } from './step';

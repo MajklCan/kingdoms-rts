@@ -9,6 +9,7 @@
 import { TileType, type MapData } from '@sim/map-gen';
 import { MAP } from '../../config';
 import { reducedMotion } from '../effects/motion-prefs';
+import { performanceMode } from '../effects/perf-mode';
 import type { Occupancy } from '../entities/occupancy';
 import type { ArtCatalog, ArtFrame } from '../sprites/art-catalog';
 import { tileHash01 } from '../tile-hash';
@@ -195,7 +196,7 @@ export class DecorLayer {
   /** Swap sway poses of the plants in view (render-only, a pure function of time and place). */
   private sway(): void {
     if (this.swaying.length === 0) return;
-    const still = reducedMotion();
+    const still = reducedMotion() || performanceMode();
     const now = this.scene.time.now;
     const view = this.scene.cameras.main.worldView;
     const root = this.container.parentContainer;

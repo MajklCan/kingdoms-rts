@@ -19,23 +19,24 @@ import {
   ResourceKindId,
   ResourceWorksite,
   VILLAGER_CARRY_CAPACITY,
+  VillagerTag,
   WorksiteWorker,
 } from '../components';
 import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } from '../defs';
 import { TechId, hasTech, worksiteWorkerSlotsForKind } from '../tech-tree';
 import { aiResourceWorksiteCanStillProduce } from '../ai/snapshot';
 import {
-  AI_PLAYER_ID,
   DROP_OFF_EDGE_DISTANCE,
   FARM_WORK_EDGE_DISTANCE,
-  RESOURCE_GATHER_DISTANCE,
+  RESOURCE_GATHER_REACH,
 } from '../core/constants';
 import { sortedEids } from '../core/entities';
+import { isAiControlledPlayer } from '../core/players';
 import { distToBuildingEdge, findSpawnSpot } from '../core/grid';
 import { findNearestResource } from '../core/lookup';
 import { recordGathered } from '../core/match-stats';
 import { pathToBuildingContact } from '../core/navigation';
-import { resourceWorksiteQuery, worksiteWorkerQuery } from '../core/queries';
+import { resourceWorksiteQuery, unitQuery, worksiteWorkerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnVillager } from '../factories/units';
 import { clearFormationSpeedCap } from '../input/unit-orders';
@@ -92,7 +93,7 @@ export function worksiteUsesResourceNodes(def: BuildingDef): boolean {
 
 function runFarmWorksite(world: SimWorld, siteEid: number, def: BuildingDef): void {
   const workTicks = farmWorkCycleTicks(world, siteEid, def);
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
@@ -104,7 +105,14 @@ function runFarmWorksite(world: SimWorld, siteEid: number, def: BuildingDef): vo
       Gatherer.state[worker] === GathererStateId.RETURNING ||
       Gatherer.state[worker] === GathererStateId.DEPOSITING
     ) {
-      if (Gatherer.state[worker] !== GathererStateId.DEPOSITING) {
+      // Route once; the gathering system re-routes a returning worker that has
+      // lost its path. Re-planning every tick threw away the movement
+      // system's detours and stuck recovery, so a farmer at a bad spot stood
+      // there with a full load for good.
+      if (
+        Gatherer.state[worker] !== GathererStateId.DEPOSITING &&
+        (Gatherer.state[worker] !== GathererStateId.RETURNING || !world.paths.has(worker))
+      ) {
         Gatherer.state[worker] = GathererStateId.RETURNING;
         routeToNearestDropOff(world, worker);
       }
@@ -190,7 +198,7 @@ function runSelfProducingWorksite(
 
 function assignSelfProducingWorksiteWorkers(world: SimWorld, siteEid: number): number {
   let activeWorkers = 0;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
@@ -223,11 +231,17 @@ function worksiteProductionRateTicks(
 
 export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number): void {
   if (ResourceWorksite.freeWorkersSpawned[siteEid] > 0) {
-    if (Owner.player[siteEid] !== AI_PLAYER_ID || countWorksiteWorkers(world, siteEid) > 0) return;
+    // The AI cannot re-crew a worksite by hand, so its empty sites get their
+    // free worker back. Human players (every seat in multiplayer) re-train.
+    if (!isAiControlledPlayer(world, Owner.player[siteEid]) || countWorksiteWorkers(world, siteEid) > 0) return;
     const def = getBuildingDef(Building.defId[siteEid]);
     if (def && worksiteUsesResourceNodes(def) && !aiResourceWorksiteCanStillProduce(world, siteEid, def)) {
       return;
     }
+    // Not while enemy soldiers stand at the site: a raid that killed the
+    // worker met a fresh one every tick (one AI lost 4500 villagers to that
+    // after training 115), so raiding an AI economy did nothing.
+    if (enemySoldierNear(world, siteEid, WORKSITE_RECREW_SAFE_RADIUS)) return;
     spawnWorksiteWorker(world, siteEid);
     return;
   }
@@ -239,6 +253,22 @@ export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number):
   if (spawnWorksiteWorker(world, siteEid) !== null) {
     ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
   }
+}
+
+const WORKSITE_RECREW_SAFE_RADIUS = 8;
+
+function enemySoldierNear(world: SimWorld, siteEid: number, radius: number): boolean {
+  const owner = Owner.player[siteEid];
+  const x = Position.x[siteEid];
+  const y = Position.y[siteEid];
+  for (const eid of unitQuery(world.ecs)) {
+    const player = Owner.player[eid];
+    if (player === owner || player === 0) continue;
+    if (Health.hp[eid] <= 0) continue;
+    if (hasComponent(world.ecs, VillagerTag, eid)) continue;
+    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) return true;
+  }
+  return false;
 }
 
 export function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | null {
@@ -273,12 +303,25 @@ export function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | 
 
 export function countWorksiteWorkers(world: SimWorld, siteEid: number): number {
   let count = 0;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  // A count does not depend on order, so no sort.
+  for (const worker of worksiteWorkerQuery(world.ecs)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     count++;
   }
   return count;
+}
+
+/**
+ * This site's workers in deterministic order: the same order as filtering the
+ * sorted list of every worker, but sorting a handful instead of all of them
+ * (this runs for every site on every tick).
+ */
+function siteWorkers(world: SimWorld, siteEid: number): number[] {
+  return sortedEids(
+    world,
+    worksiteWorkerQuery(world.ecs).filter((worker) => WorksiteWorker.siteEid[worker] === siteEid)
+  );
 }
 
 export function countQueuedWorksiteWorkers(world: SimWorld, siteEid: number): number {
@@ -308,7 +351,7 @@ function assignWorksiteHarvestOrders(
   radius: number
 ): void {
   const claimedTargets = countClaimedWorksiteResourceTargets(world, siteEid, kind);
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     if (ResourceCarry.amount[worker] > 0) {
@@ -330,18 +373,35 @@ function assignWorksiteHarvestOrders(
         Gatherer.state[worker] === GathererStateId.WALKING_TO &&
         !world.paths.has(worker) &&
         Math.hypot(Position.x[worker] - Position.x[target], Position.y[worker] - Position.y[target]) >
-          RESOURCE_GATHER_DISTANCE;
+          RESOURCE_GATHER_REACH;
       const duplicateTarget = (claimedTargets.get(target) ?? 0) > 1;
       if (!stalled && !duplicateTarget) continue;
       if (duplicateTarget) {
         claimedTargets.set(target, (claimedTargets.get(target) ?? 1) - 1);
       }
+      if (!stalled) {
+        // Spread out to a free node when one is reachable. With none left in
+        // range, keep sharing this one: re-routing to the same node every
+        // think sent the worker out and back without ever gathering.
+        if (routeToNearestReachableResource(
+          world,
+          worker,
+          kind,
+          radius,
+          Position.x[siteEid],
+          Position.y[siteEid],
+          claimedTargetSet(claimedTargets),
+          false
+        )) {
+          const assignedTarget = Gatherer.targetEid[worker];
+          claimedTargets.set(assignedTarget, (claimedTargets.get(assignedTarget) ?? 0) + 1);
+        } else {
+          claimedTargets.set(target, (claimedTargets.get(target) ?? 0) + 1);
+        }
+        continue;
+      }
     }
 
-    const avoidedTargets = new Set<number>();
-    for (const [target, count] of claimedTargets) {
-      if (count > 0) avoidedTargets.add(target);
-    }
     if (routeToNearestReachableResource(
       world,
       worker,
@@ -349,7 +409,7 @@ function assignWorksiteHarvestOrders(
       radius,
       Position.x[siteEid],
       Position.y[siteEid],
-      avoidedTargets
+      claimedTargetSet(claimedTargets)
     )) {
       const assignedTarget = Gatherer.targetEid[worker];
       if (assignedTarget >= 0) {
@@ -359,13 +419,21 @@ function assignWorksiteHarvestOrders(
   }
 }
 
+function claimedTargetSet(claimedTargets: Map<number, number>): Set<number> {
+  const out = new Set<number>();
+  for (const [target, count] of claimedTargets) {
+    if (count > 0) out.add(target);
+  }
+  return out;
+}
+
 function countClaimedWorksiteResourceTargets(
   world: SimWorld,
   siteEid: number,
   kind: ResourceKind
 ): Map<number, number> {
   const claimed = new Map<number, number>();
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     if (ResourceCarry.amount[worker] > 0) continue;
@@ -386,7 +454,7 @@ function countClaimedWorksiteResourceTargets(
 
 export function markWorksiteWorkersDead(world: SimWorld, siteEid: number): void {
   if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     addComponent(world.ecs, DeadTag, worker);
     Gatherer.targetEid[worker] = -1;

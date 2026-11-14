@@ -7,9 +7,10 @@
  */
 
 import type { GameScene } from '../../render/game-scene';
+import { isTouchUi } from '../../render/input/input-mode';
 import { h, plainDashes, setAttr, setText } from '../dom';
 import { missingResources, parseCost, parseMeta, type ResourceKey } from '../format';
-import { actionDescription, actionIcon, actionKeyHint } from '../icons/catalog';
+import { actionDescription, actionIcon, actionKeyHint, eraIcon } from '../icons/catalog';
 import { icon, setIcon } from '../icons/icon';
 import { reportFailure } from '../game-bridge';
 import { attachTip, refreshTip, type TipContent } from './tooltip';
@@ -52,7 +53,7 @@ function tipFor(action: Action): TipContent {
     pop: meta.pop,
     meta: meta.extra && meta.extra !== 'Research' ? plainDashes(meta.extra) : undefined,
     disabled,
-    hint: isTrain && action.enabled ? 'Shift-click to queue five.' : undefined,
+    hint: isTrain && action.enabled ? (isTouchUi() ? 'Tap again to queue more.' : 'Shift-click to queue five.') : undefined,
   };
 }
 
@@ -61,8 +62,9 @@ function onCellClick(ev: MouseEvent, index: number): void {
   if (!scene) return;
   const cell = cells[index]!;
   if (cell.dataset.more === '1') {
+    // Keep lastSig: clearing it made the redraw below treat the list as new
+    // and reset to page 0, so the button never turned the page.
     page = (page + 1) % Math.ceil(current.length / (CELLS - 1));
-    lastSig = '';
     updateCommandGrid(scene);
     return;
   }
@@ -149,6 +151,8 @@ export function updateCommandGrid(scene: GameScene): void {
     if (page >= pages) page = 0;
   }
   const size = pageSize();
+  const me = scene.getPerspectivePlayerId();
+  const age = scene.getAge(me).current;
   // Build actions light up while their placement ghost is active.
   const buildMode = scene.getBuildMode().replace(/[\s-]+/g, '_');
   let firstFocusable = -1;
@@ -156,9 +160,9 @@ export function updateCommandGrid(scene: GameScene): void {
     const isMore = actions.length > CELLS && i === CELLS - 1;
     cell.dataset.more = isMore ? '1' : '';
     if (isMore) {
-      cell.classList.remove('is-empty', 'is-disabled', 'is-active');
+      cell.classList.remove('is-empty', 'is-disabled', 'is-active', 'is-short');
       cell.classList.add('is-more');
-      setIcon(cell.querySelector<HTMLElement>('.cmd-icon')!, 'chevron-right');
+      setIcon(cell.querySelector<HTMLElement>('.cmd-icon')!, 'c-more');
       setText(cell.querySelector('.cmd-key'), '');
       setText(cell.querySelector('.cmd-queue'), `${page + 1}/${Math.ceil(actions.length / size)}`);
       setAttr(cell, 'aria-label', 'More commands');
@@ -171,7 +175,7 @@ export function updateCommandGrid(scene: GameScene): void {
     const action = actionAt(i);
     if (!action) {
       cell.classList.add('is-empty');
-      cell.classList.remove('is-disabled', 'is-active');
+      cell.classList.remove('is-disabled', 'is-active', 'is-short');
       cell.setAttribute('aria-hidden', 'true');
       cell.tabIndex = -1;
       setText(cell.querySelector('.cmd-key'), '');
@@ -184,10 +188,14 @@ export function updateCommandGrid(scene: GameScene): void {
     cell.removeAttribute('aria-hidden');
     cell.dataset.action = action.id;
     cell.dataset.kind = action.kind;
-    setIcon(cell.querySelector<HTMLElement>('.cmd-icon')!, actionIcon(action.id));
-    setText(cell.querySelector('.cmd-key'), action.key && action.key.length <= 3 ? action.key : '');
+    setIcon(cell.querySelector<HTMLElement>('.cmd-icon')!, eraIcon(actionIcon(action.id), age));
+    const keyEl = cell.querySelector<HTMLElement>('.cmd-key')!;
+    setText(keyEl, action.key && action.key.length <= 3 ? action.key : '');
+    keyEl.classList.toggle('is-long', !!action.key && action.key.length > 1);
     setText(cell.querySelector('.cmd-queue'), action.queue ? String(action.queue) : '');
     cell.classList.toggle('is-disabled', !action.enabled);
+    // Unaffordable ("Needs 160 wood") reads red; locked or capped reads grey.
+    cell.classList.toggle('is-short', !action.enabled && /^Needs\s/.test(action.disabledReason ?? ''));
     const placing = action.kind === 'build' && action.id.replace(/^build-/, '').replace(/-/g, '_') === buildMode;
     cell.classList.toggle('is-active', !!action.active || placing);
     setAttr(cell, 'aria-disabled', String(!action.enabled));

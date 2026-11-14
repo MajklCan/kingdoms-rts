@@ -5,33 +5,60 @@
 import { SIM } from '../../config';
 import { AGE_TABLE, AgeId, BuildingDefId, canAfford, getAgeDef } from '../defs';
 import { TechId, type TechIdValue, hasTech, techDef, techStatus } from '../tech-tree';
-import { AI_PLAYER_ID } from '../core/constants';
-import { pushAiEvent } from '../core/events';
+import { isAiControlledPlayer } from '../core/players';
 import { countQueuedPopCost } from '../core/population';
-import type { AiPlayerState, SimWorld } from '../core/types';
-import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
+import type { AiDifficulty, AiPlayerState, SimWorld } from '../core/types';
 import { aiHandleDefense, aiManageAttackPlan, findAiDefenseTarget } from './attack';
-import { aiSettings, createAiPlayerState } from './difficulty';
+import { type AiActuator, currentAiThinkScope, withAiThinkScope } from './context';
+import { activeAiActuator, directAiActuator } from './direct-actuator';
+import {
+  aiDifficultyOf,
+  aiPlayerDifficulty,
+  aiSettings,
+  aiSettingsFor,
+  createAiPlayerState,
+} from './difficulty';
 import { aiMaintainEconomy } from './economy';
 import { aiMaintainMilitaryInfrastructure, aiTrainArmy } from './military';
 import { type AiSnapshot, aiHasAnyBuilding, collectAiSnapshot, countAiBuildings } from './snapshot';
 
+/**
+ * Think for every AI-controlled player, in ascending player order. Player 2
+ * is the AI of a skirmish (its state is created on demand); any other player
+ * is AI-controlled only when it has an AI state and is not human, which is
+ * how a headless AI-vs-AI match runs. Humans (every seat in multiplayer) are
+ * always left alone: their commands arrive as inputs.
+ */
 export function aiSystem(world: SimWorld): void {
-  // In multiplayer the second player is human; their commands arrive over the
-  // wire, so the AI controller must stay silent for them.
-  if (world.humanPlayers.has(AI_PLAYER_ID)) return;
-  const settings = aiSettings(world);
-  if (world.tick % settings.thinkIntervalTicks !== 0) return;
-  // Player 2 is the only AI for now.
-  aiPlayerTick(world, AI_PLAYER_ID);
+  for (let playerId = 1; playerId < world.resources.length; playerId++) {
+    if (!isAiControlledPlayer(world, playerId)) continue;
+    const difficulty = aiPlayerDifficulty(world, playerId);
+    if (world.tick % aiSettingsFor(difficulty).thinkIntervalTicks !== 0) continue;
+    const state = ensureAiPlayerState(world, playerId);
+    aiThink(world, playerId, state, difficulty, directAiActuator);
+  }
 }
 
-function aiPlayerTick(world: SimWorld, playerId: number): void {
+/**
+ * One full think of `playerId`'s AI. `state` is the AI's memory (normally
+ * world.aiPlayers[playerId]); `actuator` decides how its decisions reach the
+ * world. Public so a harness can run the brain as a command-issuing player.
+ */
+export function aiThink(
+  world: SimWorld,
+  playerId: number,
+  state: AiPlayerState,
+  difficulty: AiDifficulty,
+  actuator: AiActuator
+): void {
+  withAiThinkScope({ playerId, difficulty, actuator }, () => aiPlayerTick(world, playerId, state));
+}
+
+function aiPlayerTick(world: SimWorld, playerId: number, state: AiPlayerState): void {
   const bank = world.resources[playerId];
   const pop = world.population[playerId];
   if (!bank || !pop) return;
 
-  const state = ensureAiPlayerState(world, playerId);
   const snapshot = collectAiSnapshot(world, playerId);
   if (!snapshot) return;
 
@@ -43,6 +70,8 @@ function aiPlayerTick(world: SimWorld, playerId: number): void {
   aiResearchTechs(world, playerId, snapshot);
   aiMaintainMilitaryInfrastructure(world, playerId, snapshot);
   aiMaintainEconomy(world, playerId, snapshot);
+  const scope = currentAiThinkScope();
+  if (scope) scope.reserve = aiAgeUpReserve(world, playerId, state, snapshot);
   aiTrainArmy(world, playerId, snapshot);
   aiMaybeAdvanceAge(world, playerId, state, snapshot);
 
@@ -63,7 +92,7 @@ function aiPlayerTick(world: SimWorld, playerId: number): void {
 function ensureAiPlayerState(world: SimWorld, playerId: number): AiPlayerState {
   let state = world.aiPlayers[playerId];
   if (!state) {
-    state = createAiPlayerState(world.tick, world.aiDifficulty);
+    state = createAiPlayerState(world.tick, aiPlayerDifficulty(world, playerId));
     world.aiPlayers[playerId] = state;
   }
   return state;
@@ -113,7 +142,7 @@ function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot
     hasBarracks &&
     hasStone &&
     houseCount >= 3 &&
-    (capPressure || houseCount >= 5 || world.aiDifficulty === 'hard')
+    (capPressure || houseCount >= 5 || aiDifficultyOf(world) === 'hard')
   ) {
     if (aiTryResearchTech(world, playerId, TechId.HOUSING_I)) return;
   }
@@ -130,7 +159,7 @@ function aiResearchTechs(world: SimWorld, playerId: number, snapshot: AiSnapshot
     hasTech(world, playerId, TechId.HOUSING_I) &&
     hasTech(world, playerId, TechId.FARMS) &&
     houseCount >= 6 &&
-    (capPressure || world.aiDifficulty === 'hard')
+    (capPressure || aiDifficultyOf(world) === 'hard')
   ) {
     if (aiTryResearchTech(world, playerId, TechId.HOUSING_II)) return;
   }
@@ -142,8 +171,7 @@ function aiTryResearchTech(world: SimWorld, playerId: number, techId: TechIdValu
   if (techStatus(world, playerId, techId) !== 'available') return false;
   const bank = world.resources[playerId];
   if (!bank || !canAfford(bank, tech.cost)) return false;
-  applyResearchTech(world, playerId, techId);
-  return hasTech(world, playerId, techId);
+  return activeAiActuator().researchTech(world, playerId, techId);
 }
 
 function aiMaybeAdvanceAge(
@@ -157,12 +185,31 @@ function aiMaybeAdvanceAge(
   if (!aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS)) return;
   if (!aiHasEconomyForAgeAdvance(world, snapshot, age.current + 1)) return;
   const nextAge = getAgeDef(age.current + 1);
-  const before = age.progress;
-  applyAdvanceAge(world, playerId);
-  if (before < 0 && age.progress >= 0) {
-    pushAiEvent(world, playerId, `Frankia has started advancing to ${nextAge?.name ?? 'the next age'}`);
+  if (activeAiActuator().advanceAge(world, playerId)) {
+    activeAiActuator().event(world, playerId, `Frankia has started advancing to ${nextAge?.name ?? 'the next age'}`);
     state.nextAttackTick = Math.max(state.nextAttackTick, world.tick + SIM.TICK_HZ * 45);
   }
+}
+
+/**
+ * Gold and stone to save for the next age once the economy is otherwise ready
+ * for it. Without this, scouts and gunmen spent gold as fast as it came in and
+ * a Castle Age AI never banked the 1200 gold Gunpowder costs. Not while
+ * defending: an army now beats an age later.
+ */
+function aiAgeUpReserve(
+  world: SimWorld,
+  playerId: number,
+  state: AiPlayerState,
+  snapshot: AiSnapshot
+): { gold: number; stone: number } | null {
+  const age = world.ages[playerId];
+  if (!age || age.progress >= 0 || age.current >= AgeId.GUNPOWDER) return null;
+  if (state.plan === 'defending') return null;
+  if (!aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS)) return null;
+  if (!aiHasEconomyForAgeAdvance(world, snapshot, age.current + 1)) return null;
+  const cost = getAgeDef(age.current + 1)?.advanceCost;
+  return cost ? { gold: cost.gold, stone: cost.stone } : null;
 }
 
 function aiHasEconomyForAgeAdvance(
@@ -174,12 +221,12 @@ function aiHasEconomyForAgeAdvance(
   const lumber = countAiBuildings(snapshot, BuildingDefId.LUMBER_CAMP);
   const stone = countAiBuildings(snapshot, BuildingDefId.STONE_QUARRY);
   const gold = countAiBuildings(snapshot, BuildingDefId.GOLD_MINE);
-  if (world.aiDifficulty === 'easy') {
+  if (aiDifficultyOf(world) === 'easy') {
     return nextAge === AgeId.CASTLE
       ? farms >= 2 && lumber >= 1
       : farms >= 5 && lumber >= 2 && gold >= 1;
   }
-  if (world.aiDifficulty === 'hard') {
+  if (aiDifficultyOf(world) === 'hard') {
     return nextAge === AgeId.CASTLE
       ? farms >= 8 && lumber >= 4 && stone >= 2
       : farms >= 12 && lumber >= 5 && stone >= 3 && gold >= 3;

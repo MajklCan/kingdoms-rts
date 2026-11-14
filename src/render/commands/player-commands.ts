@@ -9,6 +9,7 @@
 import { hasComponent } from 'bitecs';
 import {
   Building,
+  Gatherer,
   Owner,
   Producer,
   ResourceWorksite,
@@ -74,6 +75,14 @@ export class PlayerCommands {
     const ecs = this.ctx.world.ecs;
     return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
       hasComponent(ecs, UnitKind, eid)
+    ).length;
+  }
+
+  /** Own selected free villagers a gather order would send (town center trained). */
+  selectedGathererCount(): number {
+    const ecs = this.ctx.world.ecs;
+    return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
+      hasComponent(ecs, Gatherer, eid)
     ).length;
   }
 

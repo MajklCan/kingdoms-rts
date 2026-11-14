@@ -25,7 +25,7 @@ import {
   ZBOROV_MID_LINE_FRAC,
   ZBOROV_REAR_LINE_FRAC,
 } from '../core/constants';
-import { isLiveEntity } from '../core/entities';
+import { compareDeterministicEids, isLiveEntity } from '../core/entities';
 import { pushAiEvent } from '../core/events';
 import { buildingQuery, unitQuery } from '../core/queries';
 import type { CampaignState, SimWorld } from '../core/types';
@@ -97,7 +97,7 @@ function zborovMaybeReleaseEnemyWave(world: SimWorld, campaign: CampaignState): 
   }
 
   const wave = candidates
-    .sort((a, b) => Position.y[b] - Position.y[a] || a - b)
+    .sort((a, b) => Position.y[b] - Position.y[a] || compareDeterministicEids(world, a, b))
     .slice(0, ZBOROV_ENEMY_WAVE_MAX_SIZE);
   const target = zborovCampaignTarget(
     world,

@@ -34,6 +34,7 @@ import type { TechIdValue } from '@sim/tech-tree';
 import {
   LOCAL_PLAYER_ID,
   createSimWorld,
+  getMapSeed,
   positionQuery,
   pruneHiddenSelectionForPlayer,
   selectedQuery,
@@ -73,7 +74,9 @@ import {
 } from './hud/player-queries';
 import { getSelectionInfo, getStatusInfo, type SelectionInfo } from './hud/selection-info';
 import { installHotkeys } from './input/hotkeys';
+import { isTouchUi } from './input/input-mode';
 import { PointerController } from './input/pointer-controller';
+import { TouchController } from './input/touch-controller';
 import { createInspectionSheet, requestedInspectionSheet } from './inspection/inspection-sheets';
 import { FogRenderer } from './overlays/fog-renderer';
 import { StatusOverlay } from './overlays/status-overlay';
@@ -84,7 +87,6 @@ import { createSpriteRegistry, type SpriteSourceRegistry } from './sprites/sprit
 import { bakeVoxelTextures } from './sprites/voxel-bake';
 import { DecorLayer } from './terrain/decor-layer';
 import { TerrainLayer } from './terrain/terrain-layer';
-import { hashBytes } from './tile-hash';
 import { createWorldLayers, type WorldLayers } from './world-layers';
 import { UiApi } from './ui-api';
 
@@ -110,6 +112,7 @@ export class GameScene extends Phaser.Scene {
   private commands!: PlayerCommands;
   private placement!: BuildPlacement;
   private pointer!: PointerController;
+  private touch!: TouchController;
   private actions!: ActionGrid;
   private cheats!: Cheats;
   private occupancy!: Occupancy;
@@ -187,7 +190,7 @@ export class GameScene extends Phaser.Scene {
     this.cheats = this.createCheats();
 
     this.refreshTerrain();
-    this.camera = new CameraController(this.ctx);
+    this.camera = new CameraController(this.ctx, () => this.terrain.bounds);
     this.camera.install();
     this.camera.panToLocalTownCenter();
 
@@ -206,6 +209,13 @@ export class GameScene extends Phaser.Scene {
       pickBuilding: (x, y) => this.buildings.pickAt(x, y),
     });
     this.pointer.install();
+    this.touch = new TouchController(this.ctx, {
+      camera: this.camera,
+      orders: this.pointer.orders,
+      placement: this.placement,
+      commands: this.commands,
+    });
+    this.touch.install();
     installHotkeys(this, {
       placement: this.placement,
       commands: this.commands,
@@ -214,8 +224,8 @@ export class GameScene extends Phaser.Scene {
       toggleGameSpeed: () => this.toggleGameSpeed(),
     });
     this.uiApi = new UiApi(this.ctx, {
-      camera: this.camera, commands: this.commands, pointer: this.pointer, alerts: this.alerts,
-      effects: this.effects, audio: this.audio, endMatch: () => this.endMatch(),
+      camera: this.camera, commands: this.commands, pointer: this.pointer, touch: this.touch, placement: this.placement,
+      alerts: this.alerts, effects: this.effects, audio: this.audio, endMatch: () => this.endMatch(),
     });
 
     this.installDebugWindowApi();
@@ -238,6 +248,7 @@ export class GameScene extends Phaser.Scene {
     this.stepSim(delta);
     pruneHiddenSelectionForPlayer(this.world, ctx.perspectivePlayerId);
     ctx.snapshotSelection();
+    this.touch.update(delta);
     this.camera.update();
     this.terrain.update(delta);
     this.occupancy.update();
@@ -259,7 +270,7 @@ export class GameScene extends Phaser.Scene {
     this.worldFx.update(delta);
     this.placement.draw();
     const pointer = this.input.activePointer;
-    if (this.placement.mode === 'none' && !this.placement.armyRallyMode && !pointer.rightButtonDown()) {
+    if (this.placement.mode === 'none' && !this.placement.armyRallyMode && !pointer.rightButtonDown() && !isTouchUi()) {
       this.status.drawAttackHover(ctx.pointerTile(pointer));
     }
     this.fog.draw();
@@ -595,7 +606,17 @@ export class GameScene extends Phaser.Scene {
       startSkirmish: (mapId, age) => this.startNewGame(age as AgeIdValue | undefined, mapId as MapIdValue),
       startCampaign: (missionId) => this.startCampaignMission(missionId as CampaignMissionIdValue),
       loadLateGame: () => this.loadLateGameTestSave(),
-      setZoom: (zoom) => this.camera.applyZoom(zoom - this.camera.zoom),
+      setZoom: (zoom) => this.camera.zoomTo(zoom, undefined, undefined, true),
+      camera: () => {
+        const cam = this.cameras.main;
+        return { zoom: this.camera.zoom, targetZoom: this.camera.targetZoom, zooming: this.camera.isZooming, scrollX: cam.scrollX, scrollY: cam.scrollY };
+      },
+      worldAtClient: (clientX, clientY) => {
+        const rect = this.scale.canvas.getBoundingClientRect();
+        const k = this.scale.width / Math.max(1, rect.width);
+        return this.camera.screenToWorld((clientX - rect.left) * k, (clientY - rect.top) * k);
+      },
+      touch: () => this.touch.state,
       panToTile: (x, y) => this.camera.panToTile(x, y),
       fps: () => this.game.loop.actualFps,
       scene: () => this,
@@ -636,12 +657,12 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Re-bake the ground and decor for the current map and rebuild the fog to
-   * match. The render seed comes from the map bytes (the sim keeps no seed),
-   * so every peer of a multiplayer match draws the same details.
+   * match. The render seed is the world's map seed, identical on every peer
+   * and kept by saves (old saves get the map-byte hash this used to compute).
    */
   private refreshTerrain(): void {
     const map = this.world.map;
-    const seed = hashBytes(map.elevation, hashBytes(map.tiles));
+    const seed = getMapSeed(this.world);
     this.terrain.build(map, this.sprites.art, seed);
     this.decor.build(map, this.terrain.names, this.sprites.art, seed);
     this.fog.rebuild();

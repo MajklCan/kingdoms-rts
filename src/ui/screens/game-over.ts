@@ -12,6 +12,7 @@ import { openLayer, releaseLayer } from '../a11y/layers';
 import { h } from '../dom';
 import { formatAmount, formatClock } from '../format';
 import { getMatchStats } from '../game-bridge';
+import { RESOURCE_ICON_SMALL } from '../icons/catalog';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { quitToMenu } from '../match/match-flow';
@@ -86,10 +87,10 @@ function show(scene: GameScene, won: boolean): void {
       ),
       ledger(
         'The treasury',
-        stat('food', 'Food gathered', formatAmount(food)),
-        stat('wood', 'Wood gathered', formatAmount(wood)),
-        stat('gold', 'Gold gathered', formatAmount(gold)),
-        stat('stone', 'Stone gathered', formatAmount(stone))
+        stat(RESOURCE_ICON_SMALL.food, 'Food gathered', formatAmount(food)),
+        stat(RESOURCE_ICON_SMALL.wood, 'Wood gathered', formatAmount(wood)),
+        stat(RESOURCE_ICON_SMALL.gold, 'Gold gathered', formatAmount(gold)),
+        stat(RESOURCE_ICON_SMALL.stone, 'Stone gathered', formatAmount(stone))
       )
     ),
     h('div', { class: 'go-actions' }, watchBtn, returnBtn)

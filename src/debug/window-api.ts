@@ -6,10 +6,12 @@
 
 import { hasComponent } from 'bitecs';
 import {
+  LOCAL_PLAYER_ID,
   clearSelection,
   positionQuery,
   selectedQuery,
   setSelected,
+  townCenterQuery,
 } from '../sim/world';
 import {
   AttackTarget,
@@ -78,10 +80,10 @@ export interface WindowGameApi {
   ): void;
   /** Queue an advance to the next age (cost spent immediately). */
   advanceAge(playerId?: number): void;
-  /** Deprecated no-op: villagers are spawned by specialist resource buildings. */
+  /** Queue one villager at the local player's town center. */
   trainVillager(): void;
   /** Train a unit def at the first selected producer that can make it. */
-  trainUnit(defName: 'ARCHER' | 'SPEARMAN' | 'SCOUT_CAVALRY' | 'GUNMAN' | 'CANNON'): void;
+  trainUnit(defName: 'VILLAGER' | 'ARCHER' | 'SPEARMAN' | 'SCOUT_CAVALRY' | 'GUNMAN' | 'CANNON'): void;
   /** Player population state. */
   pop(playerId?: number): { current: number; cap: number };
   /** Player resource bank. */
@@ -171,8 +173,13 @@ export function installWindowApi(
       world.inputs.push({ type: 'advanceAge', playerId });
     },
     trainVillager() {
-      // eslint-disable-next-line no-console
-      console.warn('[Kingdoms] trainVillager(): villagers are spawned by specialist resource buildings.');
+      const tc = townCenterQuery(world.ecs).find((eid) => Owner.player[eid] === LOCAL_PLAYER_ID);
+      if (tc === undefined) {
+        // eslint-disable-next-line no-console
+        console.warn('[Kingdoms] trainVillager(): no town center');
+        return;
+      }
+      world.inputs.push({ type: 'trainUnit', atEid: tc, defId: UnitDefId.VILLAGER, playerId: LOCAL_PLAYER_ID });
     },
     trainUnit(defName) {
       const defId = UnitDefId[defName];

@@ -5,6 +5,7 @@ import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { openSaveLoad } from '../panels/save-load';
 import { openSettings } from '../panels/settings';
+import { buildFullscreenButton } from '../touch/fullscreen';
 import { previousMenuScreen, registerMenuScreen, rovingFocus, showMenuScreen, type MenuScreenId } from './menu-shell';
 
 export const PLAYER_NAME_KEY = 'kingdoms.playerName';
@@ -53,6 +54,10 @@ export function bindMainMenu(): void {
     pill('settings', 'Settings', () => openSettings('audio')),
     pill('keyboard', 'Controls', () => openSettings('controls'))
   );
+  // In-car and phone browsers: hide the browser bars with one tap.
+  const fullscreen = buildFullscreenButton('pill touch-only', 'menu-fullscreen');
+  fullscreen.append('Fullscreen');
+  secondary.append(fullscreen);
 
   const nameEl = h('span', { class: 'nameplate-name', id: 'nameplate-name' }, storedPlayerName());
   const el = h(
@@ -75,7 +80,7 @@ export function bindMainMenu(): void {
       h('span', { class: 'nameplate-text' }, nameEl, h('span', { class: 'nameplate-rank' }, 'Lord of Bohemia'))
     ),
     h('div', { class: 'build-tag', id: 'build-info', 'aria-label': 'Game version' }, buildTagText()),
-    h('p', { class: 'menu-hint', 'aria-hidden': 'true' }, h('kbd', null, '↑'), h('kbd', null, '↓'), ' choose  ', h('kbd', null, 'Enter'), ' confirm')
+    h('p', { class: 'menu-hint mouse-only', 'aria-hidden': 'true' }, h('kbd', null, '↑'), h('kbd', null, '↓'), ' choose  ', h('kbd', null, 'Enter'), ' confirm')
   );
   rovingFocus(nav, '.charter');
   rovingFocus(secondary, '.pill', 'horizontal');

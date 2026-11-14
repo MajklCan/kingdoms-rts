@@ -10,7 +10,9 @@ import {
   Owner,
   Position,
   type ResourceKind,
+  ResourceKindId,
   ResourceWorksite,
+  UnitKind,
 } from '../components';
 import {
   AgeId,
@@ -20,18 +22,18 @@ import {
   canAfford,
   getBuildingDef,
   getUnitDef,
-  spend,
 } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { distToBuildingEdge } from '../core/grid';
-import { findNearestResource } from '../core/lookup';
+import { ResourceProbe } from '../core/placement-probe';
+import { sortedEids } from '../core/entities';
 import { countQueuedPopCost } from '../core/population';
-import { buildingQuery } from '../core/queries';
+import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { spawnFoundation } from '../factories/buildings';
-import { hasEnemyEntityNear } from '../factories/late-game';
 import { canPlaceBuildingAt } from '../input/buildings';
+import { currentAiThinkScope } from './context';
+import { activeAiActuator } from './direct-actuator';
 import {
   countQueuedWorksiteWorkers,
   countWorksiteWorkers,
@@ -56,15 +58,20 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
     const slots = getWorksiteWorkerSlots(world, atEid);
     const occupied = countWorksiteWorkers(world, atEid) + countQueuedWorksiteWorkers(world, atEid);
     if (occupied >= slots) return false;
-    spend(bank, unitDef.cost);
-    queue.push(defId);
-    world.productionQueues.set(atEid, queue);
+    activeAiActuator().commitQueueUnit(world, atEid, defId);
     return true;
   }
 
-  if (unitDef.trainAt !== producerDef.id) return false;
   if (!producerDef.trains.includes(unitDef.id)) return false;
   if (!isUnitUnlocked(world, playerId, defId)) return false;
+  const reserve = currentAiThinkScope()?.reserve;
+  if (
+    reserve &&
+    ((unitDef.cost.gold > 0 && bank[ResourceKindId.GOLD] - unitDef.cost.gold < reserve.gold) ||
+      (unitDef.cost.stone > 0 && bank[ResourceKindId.STONE] - unitDef.cost.stone < reserve.stone))
+  ) {
+    return false;
+  }
   if (
     defId === UnitDefId.SCOUT_CAVALRY &&
     (world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE
@@ -74,9 +81,7 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
   const pop = world.population[playerId];
   if (!pop) return false;
   if (pop.current + countQueuedPopCost(world, playerId) + unitDef.popCost > pop.cap) return false;
-  spend(bank, unitDef.cost);
-  queue.push(defId);
-  world.productionQueues.set(atEid, queue);
+  activeAiActuator().commitQueueUnit(world, atEid, defId);
   return true;
 }
 
@@ -98,15 +103,15 @@ export function aiPlaceBuilding(
   ) {
     return false;
   }
-  const spot = aiFindBuildingSpot(world, def, nearX, nearY, playerId);
+  const spot = aiFindBuildingSpot(world, defId, def, nearX, nearY, playerId);
   if (!spot) return false;
-  spend(bank, def.cost);
-  spawnFoundation(world, defId, spot.x, spot.y, playerId);
+  activeAiActuator().commitPlaceBuilding(world, defId, spot.x, spot.y, playerId);
   return true;
 }
 
 function aiFindBuildingSpot(
   world: SimWorld,
+  defId: number,
   def: BuildingDef,
   nearX: number,
   nearY: number,
@@ -115,6 +120,11 @@ function aiFindBuildingSpot(
   const cx = Math.round(nearX);
   const cy = Math.round(nearY);
   const maxR = aiBuildingPlacementSearchRadius(def);
+  // Nothing changes while we scan, so index resources and enemies once
+  // instead of rescanning every entity for each candidate spot.
+  const probe = new ResourceProbe(world);
+  const enemies = aiEnemyPoints(world, playerId);
+  const actuator = activeAiActuator();
   let bestSpot: GridPos | null = null;
   let bestScore = Infinity;
   for (let r = 2; r <= maxR; r++) {
@@ -124,9 +134,10 @@ function aiFindBuildingSpot(
         const x = cx + dx;
         const y = cy + dy;
         if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
-        if (!canPlaceBuildingAt(world, def, x, y)) continue;
-        if (hasEnemyEntityNear(world, x, y, playerId, 8)) continue;
-        const score = aiBuildingPlacementScore(world, def, x, y, nearX, nearY, playerId);
+        if (!canPlaceBuildingAt(world, def, x, y, probe)) continue;
+        if (actuator.isSpotClaimed(defId, x, y)) continue;
+        if (hasPointNear(enemies, x, y, 8)) continue;
+        const score = aiBuildingPlacementScore(world, def, x, y, nearX, nearY, playerId, probe);
         if (score < bestScore) {
           bestScore = score;
           bestSpot = { x, y };
@@ -144,18 +155,14 @@ function aiBuildingPlacementScore(
   y: number,
   baseX: number,
   baseY: number,
-  playerId: number
+  playerId: number,
+  probe: ResourceProbe
 ): number {
   const baseDist = Math.hypot(x - baseX, y - baseY);
   const spacingPenalty = aiOwnedBuildingSpacingPenalty(world, def, x, y, playerId);
   if (worksiteUsesResourceNodes(def)) {
-    const resourceDist = aiNearestResourceDistance(
-      world,
-      x,
-      y,
-      def.harvestKind as ResourceKind,
-      def.harvestRadius ?? 6
-    );
+    const radius = def.harvestRadius ?? 6;
+    const resourceDist = probe.nearestDistance(x, y, def.harvestKind as ResourceKind, radius) ?? radius;
     return resourceDist * 5 + baseDist * 0.08 + spacingPenalty;
   }
   if (def.id === 'FARM') {
@@ -194,7 +201,8 @@ function aiOwnedBuildingSpacingPenalty(
 ): number {
   const desiredGap = aiDesiredBuildingGap(def);
   let penalty = 0;
-  for (const eid of buildingQuery(world.ecs)) {
+  // NetId order: a float sum in query order can differ in the last bit after a load.
+  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
     if (Owner.player[eid] !== playerId) continue;
     if (Health.hp[eid] <= 0) continue;
     const edgeDist = distToBuildingEdge(world, x, y, eid);
@@ -240,14 +248,23 @@ function aiBuildingPlacementSearchRadius(def: BuildingDef): number {
   return 12;
 }
 
-function aiNearestResourceDistance(
-  world: SimWorld,
-  x: number,
-  y: number,
-  kind: ResourceKind,
-  radius: number
-): number {
-  const target = findNearestResource(world, x, y, kind, radius);
-  if (target === null) return radius;
-  return Math.hypot(Position.x[target] - x, Position.y[target] - y);
+/** Live enemy units and buildings, as points (what hasEnemyEntityNear scans). */
+function aiEnemyPoints(world: SimWorld, playerId: number): Array<{ x: number; y: number }> {
+  const out: Array<{ x: number; y: number }> = [];
+  for (const eid of positionQuery(world.ecs)) {
+    if (!hasComponent(world.ecs, Owner, eid)) continue;
+    if (Owner.player[eid] === playerId || Owner.player[eid] === 0) continue;
+    if (hasComponent(world.ecs, Health, eid) && Health.hp[eid] <= 0) continue;
+    if (!hasComponent(world.ecs, UnitKind, eid) && !hasComponent(world.ecs, Building, eid)) continue;
+    out.push({ x: Position.x[eid], y: Position.y[eid] });
+  }
+  return out;
+}
+
+/** Same test as hasEnemyEntityNear over a precomputed point list. */
+function hasPointNear(points: ReadonlyArray<{ x: number; y: number }>, x: number, y: number, radius: number): boolean {
+  for (const p of points) {
+    if (Math.hypot(p.x - x, p.y - y) < radius) return true;
+  }
+  return false;
 }

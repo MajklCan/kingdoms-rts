@@ -55,6 +55,18 @@ export interface SessionCallbacks {
   onDesync?: (tick: number, localHash: number, peerHash: number, peerId: number) => void;
   /** Fired when the relay rejects us (protocol mismatch, room full, already started). */
   onError?: (message: string) => void;
+  /** Fired after every lockstep tick the session steps (tick = the one just run). */
+  onTickStepped?: (world: SimWorld, tick: number) => void;
+}
+
+export interface SessionOptions {
+  /** Builds the match world from the agreed seed. Defaults to the skirmish
+   *  start every client uses; headless soak tests pass other maps and ages. */
+  createWorld?: (seed: number) => SimWorld;
+  /** Lockstep input delay in ticks (default DEFAULT_INPUT_DELAY). */
+  inputDelay?: number;
+  /** Relay password, if the relay asks for one. Never logged. */
+  password?: string;
 }
 
 interface TurnDebug {
@@ -151,11 +163,18 @@ export class MultiplayerSession {
     private readonly transport: Transport,
     private readonly room: string,
     private readonly name: string,
-    private readonly cb: SessionCallbacks = {}
+    private readonly cb: SessionCallbacks = {},
+    private readonly options: SessionOptions = {}
   ) {
     transport.onOpen(() => {
       this.recordEvent('transport-open', { room: this.room, name: this.name });
-      transport.send({ t: 'join', v: PROTOCOL_VERSION, room: this.room, name: this.name });
+      transport.send({
+        t: 'join',
+        v: PROTOCOL_VERSION,
+        room: this.room,
+        name: this.name,
+        ...(this.options.password ? { pass: this.options.password } : {}),
+      });
       this.recordEvent('join-sent', { room: this.room, protocol: PROTOCOL_VERSION });
     });
     transport.onMessage((msg) => this.handle(msg));
@@ -238,9 +257,11 @@ export class MultiplayerSession {
 
     const readyTicks = this.lockstep.drainReadyTicks();
     for (const ready of readyTicks) {
+      this.guardLockstepWorld(this.world, ready.tick);
       for (const input of ready.inputs) this.world.inputs.push(decodeInputFromWire(this.world, input));
       step(this.world);
       this.lastStepAtMs = nowMs();
+      this.cb.onTickStepped?.(this.world, ready.tick);
       this.maybeChecksum(ready.tick + 1); // tick just completed
     }
     if (readyTicks.length > 0 && (readyTicks.some((tick) => tick.inputs.length > 0) || this.world.tick % CHECKSUM_INTERVAL_TICKS === 0)) {
@@ -303,6 +324,24 @@ export class MultiplayerSession {
         data: event.data ? { ...event.data } : undefined,
       })),
     };
+  }
+
+  /**
+   * Only the lockstep may change what a tick does. A paused world would skip
+   * the tick (and defer its inputs) on this client alone, and an input pushed
+   * straight into world.inputs (debug API, a stray UI path) would run here
+   * only; either desyncs the match. Pause is not a multiplayer feature, so
+   * both are undone here and logged.
+   */
+  private guardLockstepWorld(world: SimWorld, tick: number): void {
+    if (world.paused) {
+      world.paused = false;
+      this.recordEvent('local-pause-ignored', { tick });
+    }
+    if (world.inputs.length > 0) {
+      this.recordEvent('local-inputs-dropped', { tick, count: world.inputs.length, types: world.inputs.map((i) => i.type) });
+      world.inputs.length = 0;
+    }
   }
 
   private maybeChecksum(tick: number): void {
@@ -404,14 +443,14 @@ export class MultiplayerSession {
 
   private beginMatch(seed: number, players: PlayerSlot[]): void {
     this.players = players;
-    const world = createSimWorld(seed);
+    const world = this.options.createWorld?.(seed) ?? createSimWorld(seed);
     // Every listed player is human → suppress the AI controller for all of them.
     world.humanPlayers = new Set(players.map((p) => p.playerId));
     world.paused = false;
     this.world = world;
 
     const peerIds = players.map((p) => p.playerId).filter((id) => id !== this.localPlayerId);
-    this.lockstep = new Lockstep(this.localPlayerId, peerIds, DEFAULT_INPUT_DELAY);
+    this.lockstep = new Lockstep(this.localPlayerId, peerIds, this.options.inputDelay ?? DEFAULT_INPUT_DELAY);
     this.sendAccumMs = 0;
     this.checksums.clear();
     this.updates = 0;

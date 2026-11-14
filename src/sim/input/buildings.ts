@@ -9,6 +9,7 @@ import { type BuildingDef, BuildingDefId, canAfford, getBuildingDef, spend } fro
 import { isBuildingUnlocked } from '../tech-tree';
 import { sortedEids } from '../core/entities';
 import { findBuildingAt, findNearestResource, findResourceAt } from '../core/lookup';
+import type { ResourceProbe } from '../core/placement-probe';
 import { selectedQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnFoundation } from '../factories/buildings';
@@ -25,9 +26,9 @@ export function applyRemoveSelectedBuildings(world: SimWorld, playerId: number):
 
 /** Self-describing (network-safe) building removal: the sender resolves the
  *  exact building eids, and we validate ownership here so a peer can replay it
- *  identically. Ascending eid order keeps the mutation order deterministic. */
+ *  identically. NetId order keeps the mutation order the same on every client. */
 export function applyRemoveBuildingsCommand(world: SimWorld, playerId: number, eids: number[]): void {
-  for (const eid of [...eids].sort((a, b) => a - b)) {
+  for (const eid of sortedEids(world, eids)) {
     if (!isRemovableBuilding(world, eid, playerId)) continue;
     markWorksiteWorkersDead(world, eid);
     addComponent(world.ecs, DeadTag, eid);
@@ -50,6 +51,8 @@ export function applyPlaceBuilding(
 ): void {
   const def = getBuildingDef(defId);
   if (!def) return;
+  // Tiles only: a fractional spot indexes no grid row (a peer could crash us).
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return;
   if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return;
   if (defId === BuildingDefId.WALL) {
     // A one-tile line: same tier cost, hp and unit check as a dragged line.
@@ -67,23 +70,25 @@ export function applyPlaceBuilding(
   spawnFoundation(world, defId, x, y, playerId);
 }
 
+/**
+ * Footprint free and, for resource worksites, a node in reach. `probe` (for
+ * batches of queries in one tick, like the AI's spot search) gives the same
+ * answer from an index instead of scanning every resource node.
+ */
 export function canPlaceBuildingAt(
   world: SimWorld,
   def: BuildingDef,
   x: number,
-  y: number
+  y: number,
+  probe?: ResourceProbe
 ): boolean {
-  if (
-    worksiteUsesResourceNodes(def) &&
-    findNearestResource(
-      world,
-      x,
-      y,
-      def.harvestKind as ResourceKind,
-      def.harvestRadius ?? 6
-    ) === null
-  ) {
-    return false;
+  if (worksiteUsesResourceNodes(def)) {
+    const kind = def.harvestKind as ResourceKind;
+    const radius = def.harvestRadius ?? 6;
+    const inReach = probe
+      ? probe.nearestDistance(x, y, kind, radius) !== null
+      : findNearestResource(world, x, y, kind, radius) !== null;
+    if (!inReach) return false;
   }
 
   const fw = def.footprint.w;
@@ -96,7 +101,7 @@ export function canPlaceBuildingAt(
       const ty = y0 + dy;
       if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
       if (world.map.walkability[ty][tx] !== 0) return false;
-      if (findResourceAt(world, tx, ty, 0.6) !== null) return false;
+      if (probe ? probe.hasResourceAt(tx, ty, 0.6) : findResourceAt(world, tx, ty, 0.6) !== null) return false;
       if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;
     }
   }

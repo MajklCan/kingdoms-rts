@@ -19,15 +19,13 @@ import {
 } from '../components';
 import { AgeId, BuildingDefId, getBuildingDef } from '../defs';
 import type { GridPos } from '../pathfinding';
-import { pushAiEvent } from '../core/events';
+import { compareDeterministicEids } from '../core/entities';
 import { findSpawnSpot } from '../core/grid';
-import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { AiPlayerState, SimWorld } from '../core/types';
-import { isMovableEntity } from '../input/formation';
-import { clearCombatOrders, clearFormationSpeedCap, clearWorkOrders } from '../input/unit-orders';
 import { isTargetInAttackRange, isValidHostileTarget } from '../systems/targeting';
 import { findAiBreachTarget } from './breach';
-import { aiElapsedMinutes, aiSettings } from './difficulty';
+import { activeAiActuator } from './direct-actuator';
+import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
 import type { AiSnapshot } from './snapshot';
 
 const AI_DEFENSE_RADIUS = 11;
@@ -93,7 +91,7 @@ export function aiHandleDefense(
   }
 
   if (world.tick - state.lastDefenseEventTick >= AI_EVENT_COOLDOWN_TICKS) {
-    pushAiEvent(world, playerId, 'Frankia pulls its army home to defend');
+    activeAiActuator().event(world, playerId, 'Frankia pulls its army home to defend');
     state.lastDefenseEventTick = world.tick;
   }
 }
@@ -106,7 +104,13 @@ export function aiManageAttackPlan(
 ): void {
   const settings = aiSettings(world);
   state.waveUnitEids = state.waveUnitEids.filter((eid) => isLiveOwnedMilitary(world, eid, playerId));
+  const ahead = aiHasArmyAdvantage(world, snapshot);
   if (state.plan === 'attacking') {
+    if (ahead && state.waveUnitEids.length >= 3) {
+      // Winning: keep the attack alive and feed it instead of turning home.
+      state.lastAttackTick = world.tick;
+      aiReinforceWave(world, playerId, state, snapshot);
+    }
     if (
       state.waveUnitEids.length < 3 ||
       world.tick - state.lastAttackTick > settings.attackCooldownTicks
@@ -121,7 +125,8 @@ export function aiManageAttackPlan(
   }
 
   const required = aiRequiredWaveSize(world, playerId);
-  if (world.tick < state.nextAttackTick || snapshot.myMilitary.length < required) {
+  const cooling = world.tick < state.nextAttackTick && !ahead;
+  if (cooling || snapshot.myMilitary.length < required) {
     if (state.plan !== 'opening') state.plan = 'massing';
     return;
   }
@@ -136,7 +141,7 @@ export function aiManageAttackPlan(
     state.stageStartedTick = world.tick;
     state.waveUnitEids = aiSelectWaveUnits(world, snapshot.myMilitary, rally);
     if (world.tick - state.lastAttackEventTick >= AI_EVENT_COOLDOWN_TICKS) {
-      pushAiEvent(world, playerId, 'Frankish raiding party is gathering near the river');
+      activeAiActuator().event(world, playerId, 'Frankish raiding party is gathering near the river');
       state.lastAttackEventTick = world.tick;
     }
   }
@@ -158,8 +163,38 @@ export function aiManageAttackPlan(
   state.plan = 'attacking';
   state.lastAttackTick = world.tick;
   state.nextAttackTick = world.tick + settings.attackCooldownTicks;
-  pushAiEvent(world, playerId, `Frankish attack is moving toward your ${aiTargetLabel(target)}`);
+  activeAiActuator().event(world, playerId, `Frankish attack is moving toward your ${aiTargetLabel(target)}`);
   state.lastAttackEventTick = world.tick;
+}
+
+/**
+ * Clearly ahead on army (medium and hard). Without this an AI that won a
+ * fight still turned home after a fixed attack window and sat out a full
+ * cooldown while the loser rebuilt, so evenly matched AIs traded armies in
+ * midfield for the whole game and almost never ended it.
+ */
+function aiHasArmyAdvantage(world: SimWorld, snapshot: AiSnapshot): boolean {
+  if (aiDifficultyOf(world) === 'easy') return false;
+  return snapshot.myMilitary.length >= Math.max(6, Math.ceil(snapshot.enemyMilitary.length * 1.5) + 2);
+}
+
+/** Send idle soldiers that are not part of the wave after it. */
+function aiReinforceWave(world: SimWorld, playerId: number, state: AiPlayerState, snapshot: AiSnapshot): void {
+  const target = chooseAiAttackTarget(world, snapshot);
+  if (target === null) return;
+  const inWave = new Set(state.waveUnitEids);
+  const idle = snapshot.myMilitary
+    .filter((eid) => !inWave.has(eid) && isIdleMilitary(world, eid))
+    .sort((a, b) => compareDeterministicEids(world, a, b));
+  if (idle.length === 0) return;
+  state.waveUnitEids = [...state.waveUnitEids, ...idle];
+  aiSendWave(world, playerId, idle, target);
+}
+
+function isIdleMilitary(world: SimWorld, eid: number): boolean {
+  if (AttackTarget.targetEid[eid] >= 0) return false;
+  if ((world.paths.get(eid)?.length ?? 0) > 0) return false;
+  return !hasComponent(world.ecs, AttackMoveGoal, eid) || AttackMoveGoal.active[eid] === 0;
 }
 
 export function aiRequiredWaveSize(world: SimWorld, playerId: number): number {
@@ -177,7 +212,7 @@ function aiSelectWaveUnits(world: SimWorld, units: number[], rally: GridPos): nu
       const da = Math.hypot(Position.x[a] - rally.x, Position.y[a] - rally.y);
       const db = Math.hypot(Position.x[b] - rally.x, Position.y[b] - rally.y);
       if (Math.abs(da - db) > 0.001) return da - db;
-      return a - b;
+      return compareDeterministicEids(world, a, b);
     })
     .slice(0, aiSettings(world).maxWaveUnits);
 }
@@ -222,11 +257,7 @@ function aiPushStalledWave(
 ): void {
   const target = chooseAiAttackTarget(world, snapshot);
   if (target === null) return;
-  const stalled = state.waveUnitEids.filter((eid) => {
-    if (AttackTarget.targetEid[eid] >= 0) return false;
-    if ((world.paths.get(eid)?.length ?? 0) > 0) return false;
-    return !hasComponent(world.ecs, AttackMoveGoal, eid) || AttackMoveGoal.active[eid] === 0;
-  });
+  const stalled = state.waveUnitEids.filter((eid) => isIdleMilitary(world, eid));
   if (stalled.length > 0) aiSendWave(world, playerId, stalled, target);
 }
 
@@ -256,6 +287,7 @@ function aiAttackTargetPriority(world: SimWorld, eid: number): number {
   if (hasComponent(world.ecs, ResourceWorksite, eid)) return 0;
   if (
     defId === BuildingDefId.BARRACKS ||
+    defId === BuildingDefId.ARCHERY_RANGE ||
     defId === BuildingDefId.STABLE ||
     defId === BuildingDefId.FOUNDRY
   ) return 1;
@@ -280,42 +312,18 @@ function isLiveOwnedMilitary(world: SimWorld, eid: number, playerId: number): bo
 }
 
 function issueAiMoveOrder(world: SimWorld, eid: number, to: GridPos): void {
-  if (!isMovableEntity(world, eid)) return;
-  if (!pathTo(world, eid, to.x, to.y)) return;
-  clearCombatOrders(world, eid);
-  clearWorkOrders(world, eid);
+  activeAiActuator().move(world, eid, to);
 }
 
 /** False when the unit cannot move or has no path to `to`. */
 function issueAiAttackMoveOrder(world: SimWorld, eid: number, to: GridPos): boolean {
-  if (!isMovableEntity(world, eid)) return false;
   if (!hasComponent(world.ecs, Combat, eid)) return false;
-  if (!pathTo(world, eid, to.x, to.y)) return false;
-  AttackTarget.targetEid[eid] = -1;
-  AttackTarget.retainGoal[eid] = 0;
-  if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-    AttackMoveGoal.active[eid] = 1;
-    AttackMoveGoal.x[eid] = to.x;
-    AttackMoveGoal.y[eid] = to.y;
-  }
-  clearWorkOrders(world, eid);
-  clearFormationSpeedCap(world, eid);
-  return true;
+  return activeAiActuator().attackMove(world, eid, to);
 }
 
 function issueAiAttackOrder(world: SimWorld, eid: number, target: number): void {
   if (!hasComponent(world.ecs, Combat, eid)) return;
   if (!hasComponent(world.ecs, AttackTarget, eid)) return;
   if (!isValidHostileTarget(world, eid, target)) return;
-  const inRange = isTargetInAttackRange(world, eid, target);
-  const canReach =
-    inRange ||
-    (isMovableEntity(world, eid) && pathToAttackTarget(world, eid, target));
-  if (!canReach) return;
-  AttackTarget.targetEid[eid] = target;
-  AttackTarget.retainGoal[eid] = 1;
-  if (hasComponent(world.ecs, AttackMoveGoal, eid)) AttackMoveGoal.active[eid] = 0;
-  if (inRange) world.paths.delete(eid);
-  clearWorkOrders(world, eid);
-  clearFormationSpeedCap(world, eid);
+  activeAiActuator().attack(world, eid, target, isTargetInAttackRange(world, eid, target));
 }

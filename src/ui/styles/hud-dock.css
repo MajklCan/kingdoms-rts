@@ -136,6 +136,13 @@
   border-image-source: var(--tex-btn-pressed);
 }
 
+/* Unit and building pictures squeezed under the group number. */
+.cg-icon.is-px {
+  --ix: 0.4;
+  --icon-sheet: var(--icon-sheet-2x);
+  --icon-render: auto;
+}
+
 .cg-slot:active > .icon {
   transform: translateY(calc(2 * var(--px)));
 }
@@ -420,12 +427,7 @@
 }
 
 .tip-res .icon {
-  width: 1.05rem;
-  height: 1.05rem;
-}
-
-.tip-res .icon.res-time {
-  color: var(--gold-300);
+  flex: none;
 }
 
 .tip-res.is-short {

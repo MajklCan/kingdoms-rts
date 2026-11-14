@@ -25,6 +25,7 @@ import { FX_COLORS, glint } from './fx-recipes';
 import { FX_CLOUD, FX_SHEET } from './fx-textures';
 import { LIFE_SHEET } from './life-sprites';
 import { reducedMotion } from './motion-prefs';
+import { performanceMode } from './perf-mode';
 
 /** Wind, px/s (layer space): drifts clouds, smoke leans the same way. */
 const WIND_X = 9;
@@ -141,10 +142,11 @@ export class AmbientFx {
   }
 
   update(dtMs: number): void {
-    const still = reducedMotion();
+    const lowPower = performanceMode();
+    const still = reducedMotion() || lowPower;
     const v = this.host.fx.view;
     this.drift(this.clouds, still ? 0 : dtMs, 900, 500, !still);
-    if (this.climate.marsh) this.drift(this.mist, still ? 0 : dtMs, 600, 200, true);
+    if (this.climate.marsh) this.drift(this.mist, still ? 0 : dtMs, 600, 200, !lowPower);
     if (dtMs <= 0) return;
     const fx = this.host.fx;
     const now = this.host.time;

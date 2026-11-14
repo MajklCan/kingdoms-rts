@@ -28,6 +28,8 @@ const TOWN_CENTER_LINE_OF_SIGHT = 10;
 const TOWER_LINE_OF_SIGHT = 12;
 const VISION_TILE_FOOTPRINT_RADIUS = 0.5;
 const VISION_EDGE_SOFTENING_TILES = 1;
+const MAP_W = MAP.WIDTH;
+const MAP_H = MAP.HEIGHT;
 
 export function createVisibilityState(): PlayerVisibility {
   const size = MAP.WIDTH * MAP.HEIGHT;
@@ -178,58 +180,65 @@ function revealCircle(
   const effectiveRadius = radius + VISION_EDGE_SOFTENING_TILES;
   const r = Math.ceil(effectiveRadius + VISION_TILE_FOOTPRINT_RADIUS);
   const r2 = effectiveRadius * effectiveRadius;
-  for (let ty = cy - r; ty <= cy + r; ty++) {
-    for (let tx = cx - r; tx <= cx + r; tx++) {
-      if (!isTileInMap(tx, ty)) continue;
-      // Reveal if the vision circle touches the tile footprint, not only when
-      // it reaches the tile centre. This removes one-tile notches around the
-      // visible frontier without turning vision into a square.
+  const x0 = Math.max(0, cx - r);
+  const x1 = Math.min(MAP_W - 1, cx + r);
+  const y0 = Math.max(0, cy - r);
+  const y1 = Math.min(MAP_H - 1, cy + r);
+  const { visible, explored } = vis;
+  for (let ty = y0; ty <= y1; ty++) {
+    // Reveal if the vision circle touches the tile footprint, not only when
+    // it reaches the tile centre. This removes one-tile notches around the
+    // visible frontier without turning vision into a square.
+    const dy = Math.max(0, Math.abs(ty - y) - VISION_TILE_FOOTPRINT_RADIUS);
+    const dy2 = dy * dy;
+    if (dy2 > r2) continue;
+    const row = ty * MAP_W;
+    for (let tx = x0; tx <= x1; tx++) {
       const dx = Math.max(0, Math.abs(tx - x) - VISION_TILE_FOOTPRINT_RADIUS);
-      const dy = Math.max(0, Math.abs(ty - y) - VISION_TILE_FOOTPRINT_RADIUS);
-      if (dx * dx + dy * dy > r2) continue;
-      const idx = tileVisibilityIndex(tx, ty);
-      vis.visible[idx] = 1;
-      vis.explored[idx] = 1;
+      if (dx * dx + dy2 > r2) continue;
+      visible[row + tx] = 1;
+      explored[row + tx] = 1;
     }
   }
 }
 
+let frontierScratch = new Uint8Array(0);
+
+/** Fill fog notches: a hidden tile with 5+ visible neighbours, or 3+ visible
+ *  cardinal neighbours, becomes visible (judged on the pre-pass state). */
 function smoothVisibilityFrontier(vis: PlayerVisibility): void {
-  const before = vis.visible.slice();
-  for (let y = 0; y < MAP.HEIGHT; y++) {
-    for (let x = 0; x < MAP.WIDTH; x++) {
-      const idx = tileVisibilityIndex(x, y);
+  const { visible, explored } = vis;
+  if (frontierScratch.length !== visible.length) frontierScratch = new Uint8Array(visible.length);
+  const before = frontierScratch;
+  before.set(visible);
+  for (let y = 0; y < MAP_H; y++) {
+    const row = y * MAP_W;
+    const hasUp = y > 0;
+    const hasDown = y < MAP_H - 1;
+    for (let x = 0; x < MAP_W; x++) {
+      const idx = row + x;
       if (before[idx] === 1) continue;
-      const neighbors = countVisibleNeighbors(before, x, y);
-      const cardinals = countVisibleCardinalNeighbors(before, x, y);
-      if (neighbors < 5 && cardinals < 3) continue;
-      vis.visible[idx] = 1;
-      vis.explored[idx] = 1;
+      const hasLeft = x > 0;
+      const hasRight = x < MAP_W - 1;
+      const cardinals =
+        (hasLeft ? before[idx - 1] : 0) +
+        (hasRight ? before[idx + 1] : 0) +
+        (hasUp ? before[idx - MAP_W] : 0) +
+        (hasDown ? before[idx + MAP_W] : 0);
+      // Without a visible cardinal neighbour at most 4 diagonals can be.
+      if (cardinals === 0) continue;
+      if (cardinals < 3) {
+        const diagonals =
+          (hasUp && hasLeft ? before[idx - MAP_W - 1] : 0) +
+          (hasUp && hasRight ? before[idx - MAP_W + 1] : 0) +
+          (hasDown && hasLeft ? before[idx + MAP_W - 1] : 0) +
+          (hasDown && hasRight ? before[idx + MAP_W + 1] : 0);
+        if (cardinals + diagonals < 5) continue;
+      }
+      visible[idx] = 1;
+      explored[idx] = 1;
     }
   }
-}
-
-function countVisibleNeighbors(visible: Uint8Array, x: number, y: number): number {
-  let count = 0;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const tx = x + dx;
-      const ty = y + dy;
-      if (!isTileInMap(tx, ty)) continue;
-      count += visible[tileVisibilityIndex(tx, ty)];
-    }
-  }
-  return count;
-}
-
-function countVisibleCardinalNeighbors(visible: Uint8Array, x: number, y: number): number {
-  let count = 0;
-  if (x > 0) count += visible[tileVisibilityIndex(x - 1, y)];
-  if (x < MAP.WIDTH - 1) count += visible[tileVisibilityIndex(x + 1, y)];
-  if (y > 0) count += visible[tileVisibilityIndex(x, y - 1)];
-  if (y < MAP.HEIGHT - 1) count += visible[tileVisibilityIndex(x, y + 1)];
-  return count;
 }
 
 function lineOfSightRadius(world: SimWorld, eid: number): number {

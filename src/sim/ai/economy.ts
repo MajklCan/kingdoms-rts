@@ -30,7 +30,7 @@ import {
   worksiteUsesResourceNodes,
 } from '../systems/worksites';
 import { aiRequiredWaveSize } from './attack';
-import { aiElapsedMinutes, aiSettings } from './difficulty';
+import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
 import { aiPlaceBuilding, aiQueueUnit } from './placement';
 import {
   type AiSnapshot,
@@ -256,7 +256,13 @@ function aiHardEconomyTargets(
 
   let farms = Math.max(currentFarms, supportProducers * 3);
   let lumber = Math.max(currentLumber, 3, supportProducers + 2, Math.ceil(farms / 4));
-  let stone = Math.max(currentStone, 1);
+  // Units cost no stone, so the production bottleneck below never asks for a
+  // quarry; age-ups (500 and 1000 stone) and techs do. Follow the time-based
+  // quarry target while an age-up is still ahead.
+  const stoneForAges = age < AgeId.GUNPOWDER
+    ? aiDesiredStoneQuarryCount(world, playerId, snapshot)
+    : settings.stoneQuarries;
+  let stone = Math.max(currentStone, 1, stoneForAges);
   let gold = currentGold;
   if (age >= AgeId.CASTLE) {
     gold = Math.max(gold, settings.goldMinesCastle);
@@ -350,8 +356,8 @@ function aiDesiredMillCount(world: SimWorld, playerId: number, snapshot: AiSnaps
   if (!hasTech(world, playerId, TechId.MILLS)) return 0;
   const farms = countAiBuildings(snapshot, BuildingDefId.FARM);
   if (farms < 3) return 0;
-  if (world.aiDifficulty === 'hard' && farms >= 14) return 3;
-  if (farms >= 8 && world.aiDifficulty !== 'easy') return 2;
+  if (aiDifficultyOf(world) === 'hard' && farms >= 14) return 3;
+  if (farms >= 8 && aiDifficultyOf(world) !== 'easy') return 2;
   return 1;
 }
 
@@ -364,7 +370,7 @@ function aiBottleneckBuildingDef(kind: ResourceKind | null): number | null {
 }
 
 export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  if (world.aiDifficulty !== 'easy') {
+  if (aiDifficultyOf(world) !== 'easy') {
     aiMaintainAdaptiveEconomy(world, playerId, snapshot);
     return;
   }

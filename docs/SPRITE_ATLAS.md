@@ -125,6 +125,25 @@ Render-only randomness (meadow patches, decor, tree species, farm phase)
 hashes tile coordinates with a seed taken from the map bytes, never
 `Math.random`, so every peer draws the same and the sim never sees it.
 
+## HUD icons
+
+The coloured HUD icons (resource bar, command grid, production queue, tech
+tree, stats) are one indexed sheet per scale, `public/assets/ui/icons/icons.png`
+and `icons@2x.png`, written by `python3 scripts/ui/gen_icons.py` together with
+the frame table `src/ui/icons/raster-icons.ts`. Building pictures are crops of
+the buildings atlas with the blue team mask applied (one per era where the
+art differs, picked by the owner's age through `eraIcon`); the barracks,
+archery range, stable and lumber camp show the unit they train in front.
+Unit pictures come from the unit puppets in `scripts/blender/units_rig.py`.
+Resources, commands, stats and tech symbols are drawn procedurally
+(`iconkit.py`, `icons_resources.py`, `icons_commands.py`) with the light from
+the top left. Re-run the generator after changing any of these or the atlas.
+
+One 1x sheet pixel is half a texel: the 1x sheet is drawn pixel for pixel at
+texel 2 (1280x720), the 2x sheet at texel 4; other texel sizes scale the 2x
+sheet smoothly. Menus, panels and alerts keep the cream SVG silhouettes in the
+same folder.
+
 ## Debugging
 
 `window.__RENDER__.snapshot()` reports sprite counts (incl. `atlas`, `ruins`,

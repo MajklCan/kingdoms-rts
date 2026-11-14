@@ -145,6 +145,8 @@ export interface SavedAiPlayerStateV1 {
   waveUnitEids?: number[];
   lastAttackEventTick: number;
   lastDefenseEventTick: number;
+  /** Per-AI difficulty (headless AI-vs-AI); absent means the world's. */
+  difficulty?: AiDifficulty;
 }
 
 export interface SavedVisibilityV1 {

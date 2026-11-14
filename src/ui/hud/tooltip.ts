@@ -1,12 +1,14 @@
 /**
- * Rich tooltip singleton (stitched leather with a red ribbon header). Shows on hover and keyboard
- * focus, positions itself above the anchor (flipping when there is no
+ * Rich tooltip singleton (stitched leather with a red ribbon header). Shows on hover, keyboard
+ * focus or a long press with a finger (the release then does not click),
+ * positions itself above the anchor (flipping when there is no
  * room), and re-reads its content a few times a second so costs turn red or
  * back as resources change while it is open.
  */
 
 import { h } from '../dom';
 import { RESOURCE_KEYS, formatAmount, type CostMap, type ResourceKey } from '../format';
+import { RESOURCE_ICON_SMALL } from '../icons/catalog';
 import { icon } from '../icons/icon';
 
 export interface TipContent {
@@ -63,13 +65,13 @@ function render(content: TipContent): void {
         h(
           'span',
           { class: `tip-res${short ? ' is-short' : ''}`, 'aria-label': `${need} ${k}${short ? ', not enough' : ''}` },
-          icon(k, `res-${k}`),
+          icon(RESOURCE_ICON_SMALL[k]),
           h('span', { class: 'num' }, formatAmount(need))
         )
       );
     }
-    if (content.seconds) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.seconds} seconds` }, icon('hourglass', 'res-time'), h('span', { class: 'num' }, `${content.seconds}s`)));
-    if (content.pop) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.pop} population` }, icon('pop', 'res-pop'), h('span', { class: 'num' }, String(content.pop))));
+    if (content.seconds) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.seconds} seconds` }, icon('r-time-s'), h('span', { class: 'num' }, `${content.seconds}s`)));
+    if (content.pop) row.append(h('span', { class: 'tip-res', 'aria-label': `${content.pop} population` }, icon('r-pop-s'), h('span', { class: 'num' }, String(content.pop))));
     parts.push(row);
   }
   if (content.body) parts.push(h('p', { class: 'tip-body' }, content.body));
@@ -122,13 +124,76 @@ export function hideTip(): void {
   lastRender = '';
 }
 
+// Touch has no hover: holding a control shows its tooltip, a tap runs it.
+const LONG_PRESS_MS = 450;
+const PRESS_SLOP = 10;
+const HELD_TIP_MS = 2600;
+let press: { el: HTMLElement; id: number; x: number; y: number; timer: number } | null = null;
+/** The control whose long press showed a tip; its release must not click it. */
+let heldEl: HTMLElement | null = null;
+let heldHideTimer = 0;
+
+function endPress(): void {
+  if (!press) return;
+  window.clearTimeout(press.timer);
+  press = null;
+}
+
+function startPress(el: HTMLElement, ev: PointerEvent): void {
+  endPress();
+  heldEl = null;
+  window.clearTimeout(heldHideTimer);
+  if (anchor && anchor !== el) hideTip();
+  const timer = window.setTimeout(() => {
+    press = null;
+    heldEl = el;
+    show(el, true);
+    navigator.vibrate?.(8);
+  }, LONG_PRESS_MS);
+  press = { el, id: ev.pointerId, x: ev.clientX, y: ev.clientY, timer };
+}
+
+function bindTouchTip(el: HTMLElement): void {
+  el.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType === 'touch') startPress(el, ev);
+  });
+  el.addEventListener('pointermove', (ev) => {
+    if (press && press.el === el && ev.pointerId === press.id && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > PRESS_SLOP) endPress();
+  });
+  const release = (ev: PointerEvent): void => {
+    if (press && press.el === el && ev.pointerId === press.id) endPress();
+    if (heldEl === el) {
+      window.clearTimeout(heldHideTimer);
+      heldHideTimer = window.setTimeout(() => {
+        if (anchor === el) hideTip();
+      }, HELD_TIP_MS);
+    }
+  };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener(
+    'click',
+    (ev) => {
+      if (heldEl !== el) return;
+      heldEl = null;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+    },
+    true
+  );
+}
+
 export function attachTip(el: HTMLElement, src: TipSource): void {
   sources.set(el, src);
-  el.addEventListener('pointerenter', () => show(el, getTooltipRoot().hidden === false));
-  el.addEventListener('pointerleave', () => {
+  el.addEventListener('pointerenter', (ev) => {
+    if (ev.pointerType !== 'touch') show(el, getTooltipRoot().hidden === false);
+  });
+  el.addEventListener('pointerleave', (ev) => {
+    if (ev.pointerType === 'touch') return;
     if (anchor === el || !getTooltipRoot().hidden) hideTip();
     else window.clearTimeout(showTimer);
   });
+  bindTouchTip(el);
   el.addEventListener('focus', () => {
     if (el.matches(':focus-visible')) show(el, true);
   });
@@ -164,4 +229,12 @@ export function bindTooltipDismiss(): void {
     if (ev.key === 'Escape' && anchor) hideTip();
   });
   window.addEventListener('blur', hideTip);
+  // A held tooltip goes away as soon as a finger lands anywhere else.
+  window.addEventListener(
+    'pointerdown',
+    (ev) => {
+      if (ev.pointerType === 'touch' && anchor && !(ev.target instanceof Node && anchor.contains(ev.target))) hideTip();
+    },
+    true
+  );
 }

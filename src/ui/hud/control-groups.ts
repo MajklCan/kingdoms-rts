@@ -21,7 +21,7 @@ import {
   panToTile,
   selectEntities,
 } from '../game-bridge';
-import { BUILDING_ICON_BY_DEF, UNIT_ICON_BY_DEF } from '../icons/catalog';
+import { BUILDING_ICON_BY_DEF, eraIcon, UNIT_ICON_BY_DEF } from '../icons/catalog';
 import { icon, setIcon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { logLine } from './event-log';
@@ -45,7 +45,9 @@ function dominantIcon(scene: GameScene, eids: number[]): IconName {
   let bestN = 0;
   for (const [k, n] of counts) if (n > bestN) [best, bestN] = [k, n];
   if (best.startsWith('u')) return UNIT_ICON_BY_DEF[Number(best.slice(1))] ?? 'person';
-  if (best.startsWith('b')) return BUILDING_ICON_BY_DEF[Number(best.slice(1))] ?? 'house';
+  if (best.startsWith('b')) {
+    return eraIcon(BUILDING_ICON_BY_DEF[Number(best.slice(1))] ?? 'house', scene.getAge(scene.getPerspectivePlayerId()).current);
+  }
   return 'banners';
 }
 
