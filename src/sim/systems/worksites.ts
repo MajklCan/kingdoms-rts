@@ -19,6 +19,7 @@ import {
   ResourceKindId,
   ResourceWorksite,
   VILLAGER_CARRY_CAPACITY,
+  VillagerTag,
   WorksiteWorker,
 } from '../components';
 import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } from '../defs';
@@ -35,7 +36,7 @@ import { distToBuildingEdge, findSpawnSpot } from '../core/grid';
 import { findNearestResource } from '../core/lookup';
 import { recordGathered } from '../core/match-stats';
 import { pathToBuildingContact } from '../core/navigation';
-import { resourceWorksiteQuery, worksiteWorkerQuery } from '../core/queries';
+import { resourceWorksiteQuery, unitQuery, worksiteWorkerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnVillager } from '../factories/units';
 import { clearFormationSpeedCap } from '../input/unit-orders';
@@ -237,6 +238,10 @@ export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number):
     if (def && worksiteUsesResourceNodes(def) && !aiResourceWorksiteCanStillProduce(world, siteEid, def)) {
       return;
     }
+    // Not while enemy soldiers stand at the site: a raid that killed the
+    // worker met a fresh one every tick (one AI lost 4500 villagers to that
+    // after training 115), so raiding an AI economy did nothing.
+    if (enemySoldierNear(world, siteEid, WORKSITE_RECREW_SAFE_RADIUS)) return;
     spawnWorksiteWorker(world, siteEid);
     return;
   }
@@ -248,6 +253,22 @@ export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number):
   if (spawnWorksiteWorker(world, siteEid) !== null) {
     ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
   }
+}
+
+const WORKSITE_RECREW_SAFE_RADIUS = 8;
+
+function enemySoldierNear(world: SimWorld, siteEid: number, radius: number): boolean {
+  const owner = Owner.player[siteEid];
+  const x = Position.x[siteEid];
+  const y = Position.y[siteEid];
+  for (const eid of unitQuery(world.ecs)) {
+    const player = Owner.player[eid];
+    if (player === owner || player === 0) continue;
+    if (Health.hp[eid] <= 0) continue;
+    if (hasComponent(world.ecs, VillagerTag, eid)) continue;
+    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) return true;
+  }
+  return false;
 }
 
 export function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | null {

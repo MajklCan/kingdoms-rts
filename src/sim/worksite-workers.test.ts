@@ -10,6 +10,9 @@ import {
   ResourceCarry,
   ResourceKindId,
   ResourceWorksite,
+  Health,
+  UnitStance,
+  UnitStanceId,
   WorksiteWorker,
   type ResourceKind,
 } from './components';
@@ -20,6 +23,7 @@ import {
   spawnCompletedBuilding,
   spawnFoundation,
   spawnResource,
+  spawnSpearman,
   spawnVillager,
   step,
   worksiteWorkerQuery,
@@ -389,6 +393,27 @@ describe('resource worksite workers', () => {
 
     expect(world.population[1].cap).toBe(capBefore);
     expect(hasComponent(world.ecs, Building, house)).toBe(false);
+  });
+
+  it('an AI worksite gets no free worker back while enemy soldiers stand at it', () => {
+    const world = createSimWorld(48);
+    world.paused = false;
+    const spawn = world.map.spawns[2];
+    const farm = spawnCompletedBuilding(world, BuildingDefId.FARM, spawn.x + 6, spawn.y + 4, 2);
+    stepN(world, 2);
+    ResourceWorksite.freeWorkersSpawned[farm] = 1;
+    const raider = spawnSpearman(world, Position.x[farm] + 2, Position.y[farm], 1);
+    UnitStance.stance[raider] = UnitStanceId.HOLD_POSITION;
+    for (const worker of worksiteWorkerQuery(world.ecs)) {
+      if (WorksiteWorker.siteEid[worker] === farm) Health.hp[worker] = 0;
+    }
+
+    stepN(world, 3);
+    expect(countWorkers(world, farm)).toBe(0);
+
+    Health.hp[raider] = 0;
+    stepN(world, 3);
+    expect(countWorkers(world, farm)).toBe(1);
   });
 
   it('a returning farmer keeps its path instead of being re-routed every tick', () => {
