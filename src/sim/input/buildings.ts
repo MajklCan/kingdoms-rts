@@ -7,6 +7,7 @@ import { MAP } from '../../config';
 import { Building, DeadTag, Health, Owner, type ResourceKind } from '../components';
 import { type BuildingDef, BuildingDefId, canAfford, getBuildingDef, spend } from '../defs';
 import { isBuildingUnlocked } from '../tech-tree';
+import { houseLimitReached } from '../core/population';
 import { sortedEids } from '../core/entities';
 import { findBuildingAt, findNearestResource, findResourceAt } from '../core/lookup';
 import type { ResourceProbe } from '../core/placement-probe';
@@ -63,6 +64,7 @@ export function applyPlaceBuilding(
   const bank = world.resources[playerId];
   if (!bank || !canAfford(bank, def.cost)) return;
   if (!isBuildingUnlocked(world, playerId, defId)) return;
+  if (houseLimitReached(world, playerId, defId)) return;
 
   if (!canPlaceBuildingAt(world, def, x, y)) return;
 

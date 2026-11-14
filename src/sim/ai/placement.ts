@@ -28,7 +28,7 @@ import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { distToBuildingEdge } from '../core/grid';
 import { ResourceProbe } from '../core/placement-probe';
 import { sortedEids } from '../core/entities';
-import { countQueuedPopCost } from '../core/population';
+import { countQueuedPopCost, houseLimitReached } from '../core/population';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { canPlaceBuildingAt } from '../input/buildings';
@@ -97,6 +97,7 @@ export function aiPlaceBuilding(
   const bank = world.resources[playerId];
   if (!bank || !canAfford(bank, def.cost)) return false;
   if (!isBuildingUnlocked(world, playerId, defId)) return false;
+  if (houseLimitReached(world, playerId, defId)) return false;
   if (
     defId === BuildingDefId.STABLE &&
     (world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE

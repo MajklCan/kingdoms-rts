@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
-import { Owner, Producer, ResourceKindId, ResourceWorksite, UnitKind } from './components';
+import { Building, Owner, Producer, ResourceKindId, ResourceWorksite, UnitKind } from './components';
 import { AGE_TABLE, AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
 import {
+  EARLY_HOUSE_ALLOWANCE,
   buildingQuery,
   createSimWorld,
+  remainingHouseAllowance,
   findBuildingAt,
   findResourceAt,
   getBuildingPopProvided,
@@ -152,6 +154,36 @@ describe('technology tree', () => {
     world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.BARRACKS, x: spot.x, y: spot.y, playerId: 1 });
     step(world);
     expect(countPlayerBuildings(world, 1)).toBe(before + 1);
+  });
+
+  it('allows a few houses from the start and lifts the limit with the Barracks tech', () => {
+    const world = createSimWorld(512);
+    world.paused = false;
+    world.resources[1].set([0, 5000, 0, 0]);
+    const countHouses = () => {
+      let n = 0;
+      for (const eid of buildingQuery(world.ecs)) {
+        if (Owner.player[eid] === 1 && Building.defId[eid] === BuildingDefId.HOUSE) n++;
+      }
+      return n;
+    };
+    const placeHouse = () => {
+      const spot = findOpenBuildingTile(world, 1);
+      world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: spot.x, y: spot.y, playerId: 1 });
+      step(world);
+    };
+
+    expect(isBuildingUnlocked(world, 1, BuildingDefId.HOUSE)).toBe(true);
+    expect(remainingHouseAllowance(world, 1)).toBe(EARLY_HOUSE_ALLOWANCE);
+    for (let i = 0; i < EARLY_HOUSE_ALLOWANCE + 2; i++) placeHouse();
+    expect(countHouses()).toBe(EARLY_HOUSE_ALLOWANCE);
+    expect(remainingHouseAllowance(world, 1)).toBe(0);
+
+    world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.BARRACKS_PIKEMEN });
+    step(world);
+    expect(remainingHouseAllowance(world, 1)).toBeNull();
+    placeHouse();
+    expect(countHouses()).toBe(EARLY_HOUSE_ALLOWANCE + 1);
   });
 
   it('raises worksite worker caps only after the matching economy upgrades', () => {

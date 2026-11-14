@@ -527,7 +527,9 @@ describe('multiplayer 1v1 - per-command parity matrix', () => {
     assertParity(ctx);
 
     // Sampled effects (each asserted to have happened on world A).
-    expect(ownedBuildings(worldA, 1).length).toBe(buildBaselineA); // placed then removed → net zero
+    // Two houses placed (placeBuilding + cmdRemoveBuildings), one removed;
+    // houses are buildable from the start (early house allowance).
+    expect(ownedBuildings(worldA, 1).length).toBe(buildBaselineA + 1);
     if (moverA !== undefined && preMove) {
       const moved = Position.x[moverA] !== preMove.x || Position.y[moverA] !== preMove.y;
       expect(moved).toBe(true);

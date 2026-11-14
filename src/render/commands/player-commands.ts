@@ -22,7 +22,9 @@ import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getBuildingDef, t
 import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
 import {
   canPlaceBuildingAt,
+  EARLY_HOUSE_ALLOWANCE,
   getWorksiteWorkerSlots,
+  remainingHouseAllowance,
   selectedCommandableEids,
   selectedQuery,
   worksiteUsesResourceNodes,
@@ -133,6 +135,12 @@ export class PlayerCommands {
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
     if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
     if (!isBuildingUnlocked(world, playerId, defId)) return { reason: 'locked', subject: def.name };
+    if (defId === BuildingDefId.HOUSE && remainingHouseAllowance(world, playerId) === 0) {
+      return {
+        reason: 'unavailable',
+        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before the Barracks tech. Research Barracks to build more`,
+      };
+    }
     const missing = this.missingResources(def.cost);
     if (missing.length > 0) return { reason: 'resources', subject: def.name, missing };
     if (!canPlaceBuildingAt(world, def, tx, ty)) {

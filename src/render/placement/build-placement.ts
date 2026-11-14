@@ -16,7 +16,7 @@
 import { ISO } from '../../config';
 import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import { getBuildingCost, wallLineTiles } from '@sim/world';
+import { getBuildingCost, remainingHouseAllowance, wallLineTiles } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -132,6 +132,11 @@ export class BuildPlacement {
     if (!isBuildingUnlocked(this.ctx.world, this.ctx.perspectivePlayerId, defId)) {
       this.mode = 'none';
       setLastEvent(`${def?.name ?? mode} is locked`);
+      return;
+    }
+    if (defId === BuildingDefId.HOUSE && remainingHouseAllowance(this.ctx.world, this.ctx.perspectivePlayerId) === 0) {
+      this.mode = 'none';
+      this.commands.fail({ reason: 'unavailable', text: 'House limit reached. Research Barracks to build more' });
       return;
     }
     this.mode = mode;
@@ -397,7 +402,8 @@ export class BuildPlacement {
       bank[1] >= cost.wood &&
       bank[2] >= cost.gold &&
       bank[3] >= cost.stone;
-    const unlocked = isBuildingUnlocked(world, playerId, defId);
+    const unlocked = isBuildingUnlocked(world, playerId, defId) &&
+      !(defId === BuildingDefId.HOUSE && remainingHouseAllowance(world, playerId) === 0);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
     this.lastValid = valid;
 

@@ -74,14 +74,14 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.BARRACKS_PIKEMEN,
     name: 'Barracks',
-    description: 'Unlocks barracks, houses, and pikemen as the first military line.',
+    description: 'Unlocks barracks and pikemen as the first military line, and lifts the early limit on houses.',
     cost: { food: 0, wood: 250, gold: 0, stone: 0 },
     path: 'military',
     icon: 'barracks',
     x: 9.5,
     y: 18,
     requires: [TechId.LUMBER_HUTS, TechId.STONE_MINES],
-    unlocks: ['Barracks', 'Houses', 'Pikemen', 'Palisade Walls'],
+    unlocks: ['Barracks', 'Unlimited Houses', 'Pikemen', 'Palisade Walls'],
   },
   {
     id: TechId.ARCHERS,
@@ -296,11 +296,13 @@ export function isBuildingUnlocked(
   switch (defId) {
     case BuildingDefId.TOWN_CENTER:
       return true;
+    case BuildingDefId.HOUSE:
+      // A few from the start (EARLY_HOUSE_ALLOWANCE), unlimited after Barracks.
+      return true;
     case BuildingDefId.LUMBER_CAMP:
       return hasTech(world, playerId, TechId.LUMBER_HUTS);
     case BuildingDefId.STONE_QUARRY:
       return hasTech(world, playerId, TechId.STONE_MINES);
-    case BuildingDefId.HOUSE:
     case BuildingDefId.BARRACKS:
     case BuildingDefId.WALL:
       return hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);

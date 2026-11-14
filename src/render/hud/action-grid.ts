@@ -30,6 +30,7 @@ import {
   getBuildingCost,
   getBuildingDisplayName,
   getWorksiteWorkerSlots,
+  remainingHouseAllowance,
   selectedQuery,
 } from '@sim/world';
 import {
@@ -196,6 +197,10 @@ export class ActionGrid {
         // Walls follow the age tier (palisade, stone, brick); others use the def.
         const cost = getBuildingCost(world, playerId, defId);
         const affordable = canAfford(cost);
+        // Houses before the Barracks tech: a few, with the count left shown.
+        const housesLeft = defId === BuildingDefId.HOUSE ? remainingHouseAllowance(world, playerId) : null;
+        const capped = housesLeft === 0;
+        const buildTime = `${Math.ceil(getBuildingBuildTicks(world, playerId, defId) / SIM.TICK_HZ)}s`;
         actions.push({
           id,
           label: `Build ${getBuildingDisplayName(world, playerId, defId)}`,
@@ -203,10 +208,12 @@ export class ActionGrid {
           glyph,
           hudIcon,
           cost: formatCost(cost),
-          enabled: affordable,
+          enabled: affordable && !capped,
           kind: 'build',
-          meta: `${Math.ceil(getBuildingBuildTicks(world, playerId, defId) / SIM.TICK_HZ)}s`,
-          disabledReason: affordable ? undefined : `Needs ${formatCost(cost)}`,
+          meta: housesLeft === null ? buildTime : `${buildTime} / ${housesLeft} left`,
+          disabledReason: capped
+            ? 'House limit reached. Research Barracks to build more'
+            : affordable ? undefined : `Needs ${formatCost(cost)}`,
         });
       }
     };

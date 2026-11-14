@@ -461,14 +461,10 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
   }
 
   let placementsRemaining = aiSettings(world).economyPlacementsPerThink;
-  if (aiTryPlaceHouseIfNeeded(
-    world,
-    playerId,
-    snapshot,
-    tcX,
-    tcY,
-    macro.popBlockedProducers > 0 ? 4 : 0
-  )) {
+  const houseHeadroom = macro.popBlockedProducers > 0 ? 4 : 0;
+  // Before the Barracks tech the few early houses wait for the economy
+  // plan (first farm and lumber huts); afterwards housing comes first.
+  if (hasBarracksTech && aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom)) {
     placementsRemaining--;
   }
 
@@ -486,6 +482,8 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
     }
     if (!placed) break;
   }
+
+  if (!hasBarracksTech) aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom);
 
   aiTrainWorksiteWorkers(world, playerId, snapshot);
 }
