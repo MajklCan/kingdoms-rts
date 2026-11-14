@@ -99,11 +99,12 @@ configs.forEach((cfg, i) => {
     for (const line of result.diff.slice(0, 25)) process.stdout.write(`    ${line.path}: ${line.a} | ${line.b}\n`);
   }
   rows.push({ ...cfg, result });
+  // Rewritten after every match so a soak that is stopped early still leaves
+  // the matches it finished.
+  if (args.out) {
+    mkdirSync(dirname(args.out), { recursive: true });
+    writeFileSync(args.out, JSON.stringify(rows));
+  }
 });
-
-if (args.out) {
-  mkdirSync(dirname(args.out), { recursive: true });
-  writeFileSync(args.out, JSON.stringify(rows));
-}
 process.stdout.write(`done: ${rows.length} matches, ${failures} failed\n`);
 process.exitCode = failures > 0 ? 1 : 0;

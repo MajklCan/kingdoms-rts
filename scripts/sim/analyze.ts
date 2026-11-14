@@ -187,10 +187,11 @@ out.push(table(['tech', 'players'], Object.entries(techCounts).sort((a, b) => b[
 // Flags.
 const flagCounts: Record<string, number> = {};
 for (const g of games) {
-  for (const f of g.flags) {
-    const key = f.startsWith('plan-stuck') ? f.split(':').slice(0, 3).join(':').replace(/:p\d/, '') : f.replace(/:p\d/, '').replace(/:\d+$/, '');
-    flagCounts[key] = (flagCounts[key] ?? 0) + 1;
-  }
+  // Once per game, even when both players carry the flag.
+  const keys = new Set(g.flags.map((f) =>
+    f.startsWith('plan-stuck') ? f.split(':').slice(0, 3).join(':').replace(/:p\d/, '') : f.replace(/:p\d/, '').replace(/:\d+$/, '')
+  ));
+  for (const key of keys) flagCounts[key] = (flagCounts[key] ?? 0) + 1;
 }
 out.push('\n### Flags (games with flag)');
 out.push(table(['flag', 'games'], Object.entries(flagCounts).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, v])));

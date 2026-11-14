@@ -59,9 +59,10 @@ for (const config of mine) {
   ].filter(Boolean).join(' ');
   process.stdout.write(`${summary}\n`);
   results.push(keepTimeline ? result : { ...result, timeline: [] });
-}
-
-if (args.out) {
-  mkdirSync(dirname(args.out), { recursive: true });
-  writeFileSync(args.out, JSON.stringify(results));
+  // Rewritten after every game so a long batch that is stopped early still
+  // leaves the games it finished.
+  if (args.out) {
+    mkdirSync(dirname(args.out), { recursive: true });
+    writeFileSync(args.out, JSON.stringify(results));
+  }
 }
