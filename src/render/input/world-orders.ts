@@ -173,10 +173,12 @@ export class WorldOrders {
   }
 
   /**
-   * Touch tap: an own unit is selected (a double tap takes every one of its
-   * kind on screen); with commandable units (or only army buildings)
-   * selected anything else is a context command, as a right click; with
-   * nothing to command it selects like a left click.
+   * Touch tap: an own unit or building replaces the selection (a double tap
+   * on a unit takes every one of its kind on screen), so a tap on your own
+   * town center selects it instead of walking the army there; with
+   * commandable units (or only army buildings) selected anything else is a
+   * context command, as a right click; with nothing to command it selects
+   * like a left click.
    */
   tap(wx: number, wy: number, count: 1 | 2): void {
     const eid = this.visibleEntityAt(wx, wy);
@@ -185,8 +187,8 @@ export class WorldOrders {
       const { tx, ty } = this.ctx.pickTile(wx, wy);
       if (this.issueMapOrder('attackMove', tx, ty)) return;
     }
-    if (eid !== null && this.ctx.isOwnUnit(eid)) {
-      if (count === 2) {
+    if (eid !== null && this.isOwnEntity(eid)) {
+      if (count === 2 && this.ctx.isOwnUnit(eid)) {
         const n = this.selectSameKindOnScreen(eid);
         setLastEvent(`double-tap: selected ${n} ${entityKindName(this.ctx.world, eid)} unit${n === 1 ? '' : 's'}`);
       } else {
@@ -260,6 +262,13 @@ export class WorldOrders {
     clearSelection(this.ctx.world);
     this.attackMoveArmed = false;
     setLastEvent('cleared selection');
+  }
+
+  /** A unit or a building (finished or under construction) of the perspective player. */
+  private isOwnEntity(eid: number): boolean {
+    if (this.ctx.isOwnUnit(eid)) return true;
+    return hasComponent(this.ctx.world.ecs, Building, eid) &&
+      Owner.player[eid] === this.ctx.perspectivePlayerId;
   }
 
   /** Selection is non-empty and only our own barracks / stables / foundries. */
