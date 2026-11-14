@@ -16,6 +16,7 @@ import { backButton, registerMenuScreen } from './menu-shell';
 
 const ROOM_KEY = 'kingdoms.mpRoom';
 const RELAY_KEY = 'kingdoms.mpRelay';
+const PASSWORD_KEY = 'kingdoms.mpPassword';
 
 /** Default relay URL: localhost in dev, the deployed Coolify relay otherwise.
  *  Players can override it in the lobby. */
@@ -63,6 +64,15 @@ export function bindMultiplayerLobby(): void {
     autocomplete: 'off',
     spellcheck: 'false',
     value: readStorage(ROOM_KEY) ?? 'bohemia',
+  });
+  const passwordInput = h('input', {
+    class: 'text-input',
+    id: 'mp-password',
+    type: 'password',
+    maxlength: 64,
+    autocomplete: 'off',
+    spellcheck: 'false',
+    value: readStorage(PASSWORD_KEY) ?? '',
   });
   const relayInput = h('input', {
     class: 'text-input',
@@ -112,6 +122,7 @@ export function bindMultiplayerLobby(): void {
     nameInput.disabled = false;
     roomInput.disabled = false;
     relayInput.disabled = false;
+    passwordInput.disabled = false;
     // Two open seats keep the hall the same size before and after joining.
     renderRoster([], -1);
   };
@@ -132,6 +143,7 @@ export function bindMultiplayerLobby(): void {
   const form = h('form', { class: 'lobby-form', novalidate: true },
     field('Your name', nameInput),
     field('Room code', roomInput, 'Both lords must enter the same code.'),
+    field('Hall password', passwordInput, 'Ask the host of the relay. Remembered on this device.'),
     h(
       'details',
       { class: 'advanced' },
@@ -147,6 +159,7 @@ export function bindMultiplayerLobby(): void {
     const url = relayInput.value.trim();
     const room = (roomInput.value.trim() || 'bohemia').slice(0, 24);
     const name = (nameInput.value.trim() || 'Player').slice(0, 20);
+    const password = passwordInput.value.slice(0, 64);
     if (!url) {
       setStatus('Enter a relay server address under Advanced.', 'error');
       return;
@@ -154,10 +167,12 @@ export function bindMultiplayerLobby(): void {
     writeStorage(PLAYER_NAME_KEY, name);
     writeStorage(ROOM_KEY, room);
     writeStorage(RELAY_KEY, url);
+    writeStorage(PASSWORD_KEY, password);
     connectBtn.disabled = true;
     nameInput.disabled = true;
     roomInput.disabled = true;
     relayInput.disabled = true;
+    passwordInput.disabled = true;
     leaveBtn.hidden = false;
     setStatus(STATE_COPY.connecting);
     renderRoster([], 0);
@@ -185,7 +200,7 @@ export function bindMultiplayerLobby(): void {
         transport = null;
         resetIdle();
       },
-    });
+    }, password);
   });
 
   leaveBtn.addEventListener('click', () => {

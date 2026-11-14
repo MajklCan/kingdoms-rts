@@ -151,11 +151,19 @@ export class MultiplayerSession {
     private readonly transport: Transport,
     private readonly room: string,
     private readonly name: string,
-    private readonly cb: SessionCallbacks = {}
+    private readonly cb: SessionCallbacks = {},
+    /** Relay password, if the relay asks for one. Never logged. */
+    private readonly password = ''
   ) {
     transport.onOpen(() => {
       this.recordEvent('transport-open', { room: this.room, name: this.name });
-      transport.send({ t: 'join', v: PROTOCOL_VERSION, room: this.room, name: this.name });
+      transport.send({
+        t: 'join',
+        v: PROTOCOL_VERSION,
+        room: this.room,
+        name: this.name,
+        ...(this.password ? { pass: this.password } : {}),
+      });
       this.recordEvent('join-sent', { room: this.room, protocol: PROTOCOL_VERSION });
     });
     transport.onMessage((msg) => this.handle(msg));
