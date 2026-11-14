@@ -15,6 +15,8 @@
  *   TURN_LOG_INTERVAL    checkpoint interval for empty turn frames (default 20)
  *   ROOM_SUMMARY_MS      active-room summary cadence (default 5000)
  *   STALE_ROOM_MS        warn if an active room receives no frames this long (default 10000)
+ *   ALLOWED_ORIGINS      comma-separated page origins allowed to connect (e.g.
+ *                        https://kingdoms.macaly.app); empty allows any origin (local dev)
  */
 
 import http from 'node:http';
@@ -28,6 +30,19 @@ const TURN_LOG_INTERVAL = Math.max(1, Number(process.env.TURN_LOG_INTERVAL ?? 20
 const ROOM_SUMMARY_MS = Math.max(1000, Number(process.env.ROOM_SUMMARY_MS ?? 5000));
 const STALE_ROOM_MS = Math.max(1000, Number(process.env.STALE_ROOM_MS ?? 10000));
 const RECENT_CHECKSUM_TICKS = 12;
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
+
+/** Browsers always send Origin on a WebSocket handshake, so this keeps other
+ *  sites from using the relay. It is not authentication: a script can fake it. */
+function originAllowed(origin) {
+  if (ALLOWED_ORIGINS.size === 0) return true;
+  return typeof origin === 'string' && ALLOWED_ORIGINS.has(origin.replace(/\/$/, ''));
+}
 
 let nextMatchId = 1;
 let nextConnectionId = 1;
@@ -316,7 +331,14 @@ const server = http.createServer((req, res) => {
   res.end('upgrade required\n');
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  verifyClient: ({ origin }, done) => {
+    if (originAllowed(origin)) return done(true);
+    console.log(`[relay] rejected origin ${JSON.stringify(origin ?? null)}`);
+    done(false, 403, 'origin not allowed');
+  },
+});
 
 wss.on('connection', (ws, req) => {
   ws.connectionId = nextConnectionId++;
