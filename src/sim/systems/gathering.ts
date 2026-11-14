@@ -23,7 +23,7 @@ import {
 } from '../components';
 import { BUILDING_TABLE } from '../defs';
 import type { GridPos } from '../pathfinding';
-import { DROP_OFF_EDGE_DISTANCE, RESOURCE_GATHER_DISTANCE } from '../core/constants';
+import { DROP_OFF_EDGE_DISTANCE, RESOURCE_GATHER_DISTANCE, RESOURCE_GATHER_REACH } from '../core/constants';
 import {
   clamp,
   compareDeterministicEids,
@@ -104,7 +104,8 @@ function gatheringWalkingTo(world: SimWorld, eid: number): void {
 
   const dx = Position.x[eid] - Position.x[target];
   const dy = Position.y[eid] - Position.y[target];
-  if (Math.hypot(dx, dy) <= RESOURCE_GATHER_DISTANCE) {
+  const dist = Math.hypot(dx, dy);
+  if (dist <= RESOURCE_GATHER_DISTANCE || (!world.paths.has(eid) && dist <= RESOURCE_GATHER_REACH)) {
     // Arrived at the resource node. Keep this tight so harvesting animations
     // visually connect with the trunk / rock / bush rather than swinging at air.
     Gatherer.state[eid] = GathererStateId.GATHERING;
@@ -224,7 +225,10 @@ export function routeToNearestReachableResource(
   maxRange: number,
   originX = Position.x[eid],
   originY = Position.y[eid],
-  avoidTargets: Set<number> = new Set()
+  avoidTargets: Set<number> = new Set(),
+  /** false: only a node outside avoidTargets will do, and on failure the
+   *  current path and target are left alone. */
+  fallbackToAvoided = true
 ): boolean {
   const candidates = resourceQuery(world.ecs)
     .filter((target) => Resource.kind[target] === kind && Resource.amount[target] > 0)
@@ -239,6 +243,7 @@ export function routeToNearestReachableResource(
     if (avoidTargets.has(target)) continue;
     if (startGatheringResource(world, eid, target)) return true;
   }
+  if (!fallbackToAvoided) return false;
   for (const { target } of candidates) {
     if (startGatheringResource(world, eid, target)) return true;
   }

@@ -15,6 +15,13 @@ export const LOCAL_STONE_DEPOSIT_AMOUNT = 600;
 export const TREE_EDGE_BAND_TILES = 10;
 export const TREE_REGEN_BUILDING_CLEARANCE = 4;
 export const RESOURCE_GATHER_DISTANCE = 0.55;
+/**
+ * A gatherer whose walk has ended may start work this far from the node.
+ * Contact points sit ~0.52 from a tree, so unit separation can nudge a worker
+ * that reached one just past RESOURCE_GATHER_DISTANCE; it then re-pathed out
+ * and back forever without gathering.
+ */
+export const RESOURCE_GATHER_REACH = 0.72;
 export const DROP_OFF_EDGE_DISTANCE = 0.24;
 export const FARM_WORK_EDGE_DISTANCE = 0.65;
 // Arena layout as fractions of MAP.HEIGHT (south/high = player, north/low =

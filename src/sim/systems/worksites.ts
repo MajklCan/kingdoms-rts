@@ -27,7 +27,7 @@ import { aiResourceWorksiteCanStillProduce } from '../ai/snapshot';
 import {
   DROP_OFF_EDGE_DISTANCE,
   FARM_WORK_EDGE_DISTANCE,
-  RESOURCE_GATHER_DISTANCE,
+  RESOURCE_GATHER_REACH,
 } from '../core/constants';
 import { sortedEids } from '../core/entities';
 import { isAiControlledPlayer } from '../core/players';
@@ -332,18 +332,35 @@ function assignWorksiteHarvestOrders(
         Gatherer.state[worker] === GathererStateId.WALKING_TO &&
         !world.paths.has(worker) &&
         Math.hypot(Position.x[worker] - Position.x[target], Position.y[worker] - Position.y[target]) >
-          RESOURCE_GATHER_DISTANCE;
+          RESOURCE_GATHER_REACH;
       const duplicateTarget = (claimedTargets.get(target) ?? 0) > 1;
       if (!stalled && !duplicateTarget) continue;
       if (duplicateTarget) {
         claimedTargets.set(target, (claimedTargets.get(target) ?? 1) - 1);
       }
+      if (!stalled) {
+        // Spread out to a free node when one is reachable. With none left in
+        // range, keep sharing this one: re-routing to the same node every
+        // think sent the worker out and back without ever gathering.
+        if (routeToNearestReachableResource(
+          world,
+          worker,
+          kind,
+          radius,
+          Position.x[siteEid],
+          Position.y[siteEid],
+          claimedTargetSet(claimedTargets),
+          false
+        )) {
+          const assignedTarget = Gatherer.targetEid[worker];
+          claimedTargets.set(assignedTarget, (claimedTargets.get(assignedTarget) ?? 0) + 1);
+        } else {
+          claimedTargets.set(target, (claimedTargets.get(target) ?? 0) + 1);
+        }
+        continue;
+      }
     }
 
-    const avoidedTargets = new Set<number>();
-    for (const [target, count] of claimedTargets) {
-      if (count > 0) avoidedTargets.add(target);
-    }
     if (routeToNearestReachableResource(
       world,
       worker,
@@ -351,7 +368,7 @@ function assignWorksiteHarvestOrders(
       radius,
       Position.x[siteEid],
       Position.y[siteEid],
-      avoidedTargets
+      claimedTargetSet(claimedTargets)
     )) {
       const assignedTarget = Gatherer.targetEid[worker];
       if (assignedTarget >= 0) {
@@ -359,6 +376,14 @@ function assignWorksiteHarvestOrders(
       }
     }
   }
+}
+
+function claimedTargetSet(claimedTargets: Map<number, number>): Set<number> {
+  const out = new Set<number>();
+  for (const [target, count] of claimedTargets) {
+    if (count > 0) out.add(target);
+  }
+  return out;
 }
 
 function countClaimedWorksiteResourceTargets(

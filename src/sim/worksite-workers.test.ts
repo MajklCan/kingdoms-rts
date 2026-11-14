@@ -278,6 +278,36 @@ describe('resource worksite workers', () => {
     expect(assignedTargets.size).toBeGreaterThan(1);
   });
 
+  it('workers share the only node in range instead of re-routing out and back forever', () => {
+    const world = createSimWorld(49);
+    world.paused = false;
+    world.researchedTechs[1].add(TechId.LUMBER_CREWS);
+    removeResources(world, ResourceKindId.WOOD);
+
+    const spawn = world.map.spawns[1];
+    const siteEid = spawnCompletedBuilding(world, BuildingDefId.LUMBER_CAMP, spawn.x + 5, spawn.y - 1, 1);
+    ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
+    const [tile] = findOpenResourceTiles(world, Position.x[siteEid], Position.y[siteEid], 1);
+    spawnResource(world, ResourceKindId.WOOD, tile.x, tile.y, 500);
+
+    const workers: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const worker = spawnVillager(world, Position.x[siteEid] + i * 0.05, Position.y[siteEid], 1, 0);
+      addComponent(world.ecs, WorksiteWorker, worker);
+      WorksiteWorker.siteEid[worker] = siteEid;
+      workers.push(worker);
+    }
+
+    const gathered = new Set<number>();
+    for (let i = 0; i < 600; i++) {
+      step(world);
+      for (const worker of workers) {
+        if (Gatherer.state[worker] === GathererStateId.GATHERING) gathered.add(worker);
+      }
+    }
+    expect(gathered.size).toBe(3);
+  });
+
   it('deposits carried resources when a worksite worker cannot path to a crowded drop-off', () => {
     const world = createSimWorld(50);
     world.paused = false;
