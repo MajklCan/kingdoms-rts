@@ -1,5 +1,5 @@
 /**
- * Transport — the wire between a client and the lockstep relay. Abstracted so
+ * Transport - the wire between a client and the lockstep relay. Abstracted so
  * the session doesn't care whether frames travel over a real WebSocket or an
  * in-process test double.
  */
@@ -33,6 +33,7 @@ export class WebSocketTransport implements Transport {
   private openCb: (() => void) | null = null;
   private closeCb: ((info?: TransportCloseInfo) => void) | null = null;
   private readonly sendQueue: ClientMessage[] = [];
+  private closeRequested = false;
 
   constructor(url: string) {
     this.ws = new WebSocket(url);
@@ -62,8 +63,9 @@ export class WebSocketTransport implements Transport {
         reason: ev.reason,
         wasClean: ev.wasClean,
       };
+      // A close we asked for (leaving the match) is routine, not a warning.
       // eslint-disable-next-line no-console
-      console.warn('[Kingdoms MP transport] close', info);
+      (this.closeRequested ? console.info : console.warn)('[Kingdoms MP transport] close', info);
       this.closeCb?.(info);
     });
     this.ws.addEventListener('error', () => {
@@ -99,6 +101,7 @@ export class WebSocketTransport implements Transport {
   close(): void {
     // eslint-disable-next-line no-console
     console.info('[Kingdoms MP transport] close requested');
+    this.closeRequested = true;
     this.ws.close();
   }
 }

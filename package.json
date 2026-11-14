@@ -1,15 +1,15 @@
 {
   "name": "kingdoms",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.62",
   "type": "module",
   "description": "A web-native RTS spanning medieval Bohemia to the 1918 First Czechoslovak Republic. Phaser 4 + Vite + TypeScript + bitECS.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --dir src",
+    "test:watch": "vitest --dir src",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

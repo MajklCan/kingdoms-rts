@@ -1,0 +1,162 @@
+/* Loading screen between the title and a match. Covers the canvas while
+   the world is built so the player never sees a blank or half drawn frame:
+   the crest over the darkened map, the destination in blackletter, a
+   progress rod in an iron groove that follows the real start-up steps and
+   a tip pinned on a sealed parchment note. */
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-loading);
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  background: var(--wood-950);
+  animation: fade-in var(--dur-med) var(--ease-out);
+}
+
+.loading-screen.is-leaving {
+  opacity: 0;
+  transition: opacity 260ms var(--ease-out);
+}
+
+.loading-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 55% at 50% 42%, rgba(201, 162, 39, 0.18), transparent 70%),
+    linear-gradient(180deg, rgba(15, 10, 6, 0.5), rgba(15, 10, 6, 0.92)),
+    url('/assets/ui/menu-bg.jpg') center / cover no-repeat;
+  filter: saturate(0.7) brightness(0.6);
+}
+
+.loading-card {
+  position: relative;
+  width: min(34rem, calc(100% - 2rem));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  color: var(--text);
+}
+
+.loading-crest {
+  width: 6rem;
+  height: auto;
+  filter: drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.7));
+}
+
+.loading-card .eyebrow {
+  color: var(--gold-300);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.loading-title {
+  margin: 0;
+  font-size: var(--fs-3xl);
+  line-height: 1;
+  color: var(--gold-200);
+  text-shadow: 0 calc(2 * var(--px)) 0 #000;
+}
+
+.loading-sub {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-style: italic;
+  color: var(--text-muted);
+  min-height: 1.5em;
+}
+
+/* Progress: a gold rod in an iron groove with a glint running along it. */
+.loading-bar.bar {
+  width: min(24rem, 84%);
+  height: calc(8 * var(--px));
+  margin-top: 0.5rem;
+  background: #0c0805;
+  box-shadow:
+    0 0 0 var(--px) #6b6258,
+    0 0 0 calc(2 * var(--px)) #1a1410,
+    0 var(--px) 0 calc(2 * var(--px)) rgba(255, 240, 200, 0.2);
+}
+
+.loading-bar.bar > i {
+  inset: var(--px);
+  width: calc(100% - 2 * var(--px));
+  transition: transform 260ms var(--ease-out);
+}
+
+.loading-bar.bar::after {
+  content: "";
+  position: absolute;
+  inset: var(--px);
+  background: linear-gradient(90deg, transparent 0 40%, rgba(255, 246, 210, 0.55) 50%, transparent 60% 100%) -100% 0 / 50% 100% no-repeat;
+  mix-blend-mode: screen;
+  animation: loading-glint 1.4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes loading-glint {
+  to { background-position: 200% 0; }
+}
+
+.loading-status {
+  margin: 0;
+  min-height: 1.4em;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-300);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+/* The tip: a torn parchment note with a wax seal (note slice 8). */
+.loading-note {
+  position: relative;
+  width: min(30rem, 100%);
+  margin-top: 1rem;
+  padding: 0.7rem 1.2rem 0.8rem 2.6rem;
+  text-align: left;
+  color: var(--ink-900);
+  border: var(--px) solid transparent;
+  border-image: var(--tex-note) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+  transform: rotate(-0.6deg);
+}
+
+.loading-note-seal {
+  position: absolute;
+  left: calc(-6 * var(--px));
+  top: calc(-6 * var(--px));
+  width: calc(18 * var(--px));
+  height: calc(18 * var(--px));
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+
+.loading-note-label {
+  display: block;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6c0f17;
+}
+
+.loading-tip {
+  margin: 0.15rem 0 0;
+  min-height: 2.8em;
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  color: var(--ink-900);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar.bar::after {
+    animation: none;
+    display: none;
+  }
+}

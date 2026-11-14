@@ -1,5 +1,5 @@
 /**
- * Static game definitions — buildings + units. Hard-coded TypeScript tables for now;
+ * Static game definitions - buildings + units. Hard-coded TypeScript tables for now;
  * will migrate to JSON data files in Phase 9 (DataRegistry).
  *
  * Cost units: integer resource amounts.
@@ -25,7 +25,7 @@ export interface BuildingDef {
   popProvided: number;
   /** Footprint in tiles (1×1 for Phase 6; real 3×3 etc. comes later). */
   footprint: { w: number; h: number };
-  /** Render half-width as a fraction of TILE_W/2 — visual scale. */
+  /** Render half-width as a fraction of TILE_W/2 - visual scale. */
   visualScale: number;
   /** Fill color for the building body. */
   color: number;
@@ -61,10 +61,12 @@ export interface UnitDef {
   cost: CostTuple;
   trainTimeTicks: number;
   popCost: number;
-  trainAt: string; // building id
+  /** Building id named in "select a ... to train" hints. Producers are the
+   *  buildings whose `trains` lists the unit (archers: barracks and range). */
+  trainAt: string;
 }
 
-/** Building defIds — index into BUILDING_TABLE. Keep in sync. */
+/** Building defIds - index into BUILDING_TABLE. Keep in sync. */
 export const BuildingDefId = {
   TOWN_CENTER: 0,
   HOUSE: 1,
@@ -92,13 +94,13 @@ export const BUILDING_TABLE: BuildingDef[] = [
     cost: { food: 0, wood: 275, gold: 0, stone: 100 },
     buildTimeTicks: 0, // pre-placed in Phase 6
     popProvided: 5,
-    /** 3×3 tiles — matches the rendered footprint of the voxel TC sprite. */
+    /** 3×3 tiles - matches the rendered footprint of the voxel TC sprite. */
     footprint: { w: 3, h: 3 },
     visualScale: 1.8,
     color: 0x2e86de,
     isDropOff: true,
     dropOffMask: 0b1111,
-    trains: [],
+    trains: ['VILLAGER'],
   },
   {
     id: 'HOUSE',
@@ -140,7 +142,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     cost: { food: 0, wood: 160, gold: 0, stone: 0 },
     buildTimeTicks: Math.round(SIM.TICK_HZ * 30),
     popProvided: 0,
-    /** 2×2 tiles — the barracks sprite is wide. */
+    /** 2×2 tiles - the barracks sprite is wide. */
     footprint: { w: 2, h: 2 },
     visualScale: 1.1,
     color: 0x5d4037,
@@ -160,7 +162,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x8e6d3b,
     isDropOff: false,
     dropOffMask: 0,
-    trains: [],
+    trains: ['ARCHER'],
   },
   {
     id: 'STABLE',
@@ -294,7 +296,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
   },
 ];
 
-/** Unit defIds — index into UNIT_TABLE. */
+/** Unit defIds - index into UNIT_TABLE. */
 export const UnitDefId = {
   VILLAGER: 0,
   /** Legacy id retained for old saves; no current building trains it. */
@@ -360,7 +362,7 @@ export const UNIT_TABLE: UnitDef[] = [
     id: 'GUNMAN',
     name: 'Gunman',
     hp: 45,
-    cost: { food: 45, wood: 0, gold: 75, stone: 0 },
+    cost: { food: 40, wood: 0, gold: 55, stone: 0 },
     trainTimeTicks: Math.round(SIM.TICK_HZ * 32),
     popCost: 1,
     trainAt: 'FOUNDRY',
@@ -410,7 +412,7 @@ export type AgeIdValue = (typeof AgeId)[keyof typeof AgeId];
 export interface AgeDef {
   id: AgeIdValue;
   name: string;
-  /** Cost to advance INTO this age. Dark is the starting age — cost ignored. */
+  /** Cost to advance INTO this age. Dark is the starting age - cost ignored. */
   advanceCost: CostTuple;
   /** Ticks needed to advance into this age. */
   advanceTicks: number;
@@ -427,6 +429,54 @@ export function getAgeDef(ageId: number): AgeDef | null {
   return AGE_TABLE[ageId] ?? null;
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Wall tiers. One WALL def; cost, build time and hp follow the owner's age.
+// Campaign preset walls keep the base def (400 hp) until their owner ages up.
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface WallTier {
+  /** Age the tier starts at. */
+  age: AgeIdValue;
+  name: string;
+  hp: number;
+  /** Cost per wall tile. */
+  cost: CostTuple;
+  buildTimeTicks: number;
+}
+
+/** Ascending by age; ages past the last entry (Total War) keep the last tier. */
+export const WALL_TIERS: readonly WallTier[] = [
+  {
+    age: AgeId.DARK,
+    name: 'Palisade Wall',
+    hp: 400,
+    cost: { food: 0, wood: 2, gold: 0, stone: 0 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 4),
+  },
+  {
+    age: AgeId.CASTLE,
+    name: 'Stone Wall',
+    hp: 1200,
+    cost: { food: 0, wood: 0, gold: 0, stone: 5 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 8),
+  },
+  {
+    age: AgeId.GUNPOWDER,
+    name: 'Brick Wall',
+    hp: 2000,
+    cost: { food: 0, wood: 0, gold: 0, stone: 6 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 10),
+  },
+];
+
+export function getWallTier(ageId: number): WallTier {
+  let tier = WALL_TIERS[0];
+  for (const candidate of WALL_TIERS) {
+    if (candidate.age <= ageId) tier = candidate;
+  }
+  return tier;
+}
+
 /** Look up a building def by its numeric id (the index). */
 export function getBuildingDef(defId: number): BuildingDef | null {
   return BUILDING_TABLE[defId] ?? null;
@@ -437,7 +487,7 @@ export function getUnitDef(defId: number): UnitDef | null {
   return UNIT_TABLE[defId] ?? null;
 }
 
-/** Cost check — returns true iff the player can afford. */
+/** Cost check - returns true iff the player can afford. */
 export function canAfford(
   bank: Int32Array,
   cost: CostTuple

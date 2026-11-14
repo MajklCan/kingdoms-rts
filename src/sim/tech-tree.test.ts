@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
 import { Owner, Producer, ResourceKindId, ResourceWorksite, UnitKind } from './components';
-import { AGE_TABLE, AgeId, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
+import { AGE_TABLE, AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
 import {
   buildingQuery,
   createSimWorld,
@@ -22,6 +22,7 @@ import {
   isBuildingUnlocked,
   isUnitUnlocked,
   techStatus,
+  type TechStateWorld,
 } from './tech-tree';
 
 function countPlayerBuildings(world: SimWorld, playerId: number): number {
@@ -101,7 +102,7 @@ describe('technology tree', () => {
     expect(castle.ages[2].current).toBe(AgeId.CASTLE);
     expect(Array.from(castle.resources[1])).toEqual([600, 1800, 0, 1600]);
     expect(castle.researchedTechs[1]).toEqual(createStartingTechSetForAge(AgeId.CASTLE));
-    expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(true);
     expect(isUnitUnlocked(castle, 1, UnitDefId.ARCHER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.DEFENSIVE_TOWER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.GOLD_MINE)).toBe(true);
@@ -318,7 +319,8 @@ describe('technology tree', () => {
     const world = createSimWorld(513);
     world.paused = false;
     world.ages[1].current = AgeId.GUNPOWDER;
-    world.resources[1].set([45 * 3, 1000, 75 * 3, 1000]);
+    const gunman = UNIT_TABLE[UnitDefId.GUNMAN].cost;
+    world.resources[1].set([gunman.food * 3, 1000, gunman.gold * 3, 1000]);
     world.population[1].cap = world.population[1].current + 5;
     const spot = findOpenBuildingTile(world, 2);
     const foundry = spawnCompletedBuilding(world, BuildingDefId.FOUNDRY, spot.x, spot.y, 1);
@@ -369,5 +371,37 @@ describe('technology tree', () => {
     const path = world.paths.get(spearman!);
     expect(path).toBeDefined();
     expect(path?.at(-1)).toEqual(rally);
+  });
+
+  it('can research every tech and train every unlocked unit by the Gunpowder Age', () => {
+    const state: TechStateWorld = {
+      researchedTechs: [createStartingTechSet(), createStartingTechSet()],
+      ages: [
+        { current: AgeId.DARK, progress: -1, totalTicks: 0 },
+        { current: AgeId.DARK, progress: -1, totalTicks: 0 },
+      ],
+    };
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const tech of TECH_TREE) {
+        if (techStatus(state, 1, tech.id) !== 'available') continue;
+        if (tech.id === TechId.CASTLE_AGE) state.ages[1].current = AgeId.CASTLE;
+        else if (tech.id === TechId.GUNPOWDER_AGE) state.ages[1].current = AgeId.GUNPOWDER;
+        else state.researchedTechs[1].add(tech.id);
+        changed = true;
+      }
+    }
+    for (const tech of TECH_TREE) expect(techStatus(state, 1, tech.id), tech.id).toBe('researched');
+    expect(state.ages[1].current).toBe(AgeId.GUNPOWDER);
+
+    const trainable = new Set<string>();
+    BUILDING_TABLE.forEach((building, defId) => {
+      if (isBuildingUnlocked(state, 1, defId)) for (const unit of building.trains) trainable.add(unit);
+    });
+    const untrainable = UNIT_TABLE.filter(
+      (unit, defId) => isUnitUnlocked(state, 1, defId) && !trainable.has(unit.id)
+    ).map((unit) => unit.id);
+    // The town center trains villagers; every unlocked unit has a producer.
+    expect(untrainable).toEqual([]);
   });
 });

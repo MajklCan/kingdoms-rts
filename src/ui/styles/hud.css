@@ -1,0 +1,662 @@
+/* In-match HUD: carved plank top bar, the floating dock (event log, idle
+   button, control groups, alerts) and the bottom console (minimap socket,
+   parchment selection sheet, command tray) in one riveted oak frame.
+   Every box has a fixed size so values changing never move anything else.
+   Texture slices match scripts/ui/gen_ui_skin.py; sizes that must land on
+   whole texels are written in --px. */
+
+.hud-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-hud);
+  pointer-events: none;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+/* A soft burnt edge around the playfield, under every HUD surface. */
+.hud-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 74% at 50% 46%, transparent 62%, rgba(12, 7, 3, 0.4) 100%),
+    linear-gradient(180deg, rgba(12, 7, 3, 0.28), transparent 9%, transparent 80%, rgba(12, 7, 3, 0.32));
+}
+
+/* ---- Top bar: one carved plank with an iron strap under it --------------- */
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--hud-top-h);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* One fixed row: the age plaque hangs below it without stretching it. */
+  grid-template-rows: var(--hud-top-h);
+  align-items: center;
+  gap: 1rem;
+  padding: 0 0.5rem calc(3 * var(--px));
+  pointer-events: auto;
+  background:
+    linear-gradient(180deg, rgba(255, 220, 150, 0.07), transparent 35%, rgba(0, 0, 0, 0.2)),
+    var(--tex-wood) 0 calc(-14 * var(--px)) / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
+  image-rendering: pixelated;
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(-2 * var(--px));
+  height: calc(6 * var(--px));
+  background: var(--tex-strap) 0 0 / calc(16 * var(--px)) calc(6 * var(--px)) repeat-x;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.res-strip {
+  display: flex;
+  align-items: center;
+  gap: calc(2 * var(--px));
+  min-width: 0;
+}
+
+/* Resource well: a recess cut into the plank (slice 5). */
+.res-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: calc(14 * var(--px));
+  min-width: 5.4rem;
+  padding: 0 0.6rem 0 0.45rem;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-well) 5 fill / calc(5 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.res-chip-pop {
+  min-width: 5.9rem;
+}
+
+.res-chip .icon {
+  flex: none;
+}
+
+.res-val {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #000;
+  white-space: nowrap;
+}
+
+/* Income: the number glints and lifts a texel, then settles (transform and
+   colour only, so nothing beside it moves). */
+.res-chip.is-gain .res-val {
+  animation: res-gain 520ms steps(6, end);
+}
+
+.res-chip-pop.is-capped {
+  border-image-source: var(--tex-btn-danger);
+  border-image-slice: 8 fill;
+  border-image-width: calc(8 * var(--px));
+}
+
+.res-chip-pop.is-capped .res-val {
+  color: #ffc2b8;
+}
+
+@keyframes res-gain {
+  0% { color: #fff6c9; transform: translateY(calc(-1 * var(--px))); text-shadow: 0 var(--px) 0 #000, 0 0 0.4rem rgba(246, 221, 134, 0.9); }
+  60% { color: #fff6c9; transform: none; }
+  100% { color: var(--gold-100); text-shadow: 0 var(--px) 0 #000; }
+}
+
+/* A refused command flashes the resource it was short of. */
+.res-chip.is-short {
+  animation: res-short-chip 900ms steps(9, end);
+}
+
+.res-chip.is-short .res-val {
+  animation: res-short-val 900ms steps(9, end);
+}
+
+@keyframes res-short-chip {
+  0%, 60% { border-image-source: var(--tex-btn-danger); border-image-slice: 8 fill; border-image-width: calc(8 * var(--px)); }
+  10% { transform: translateX(calc(-1 * var(--px))); }
+  20% { transform: translateX(var(--px)); }
+  30% { transform: translateX(calc(-1 * var(--px))); }
+  40% { transform: translateX(0); }
+}
+
+@keyframes res-short-val {
+  0%, 60% { color: #ffd8cf; }
+  100% { color: var(--gold-100); }
+}
+
+@keyframes res-short-chip-still {
+  0%, 60% { border-image-source: var(--tex-btn-danger); border-image-slice: 8 fill; border-image-width: calc(8 * var(--px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .res-chip.is-short {
+    animation-name: res-short-chip-still;
+  }
+
+  .res-chip.is-gain .res-val {
+    animation-duration: 1ms;
+  }
+}
+
+/* Age plaque: red lacquer in gold leaf, hanging below the plank. */
+.age-plaque {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: calc(var(--hud-top-h) + 0.6rem);
+  min-width: 13.5rem;
+  padding: 0 1.3rem calc(2 * var(--px));
+  color: var(--gold-100);
+  border: var(--px) solid transparent;
+  border-image: var(--tex-plaque) 6 fill / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.55));
+}
+
+.age-crown {
+  flex: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  color: var(--gold-300);
+  filter: drop-shadow(0 var(--px) 0 #000);
+}
+
+.age-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  line-height: 1;
+  min-width: 0;
+}
+
+.age-name {
+  font-family: var(--font-title);
+  font-size: 1.375rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--gold-200);
+  text-shadow: 0 var(--px) 0 #2a0508;
+  white-space: nowrap;
+}
+
+.age-next {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  color: rgba(251, 239, 196, 0.88);
+  white-space: nowrap;
+}
+
+.age-next:empty {
+  display: none;
+}
+
+.age-progress {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: calc(4 * var(--px));
+  height: calc(3 * var(--px));
+  opacity: 0;
+}
+
+.age-progress.is-active {
+  opacity: 1;
+}
+
+.topbar-right {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 4.8rem;
+  height: calc(14 * var(--px));
+  padding: 0 0.5rem 0 0.35rem;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-well) 5 fill / calc(5 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text-hi);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.clock-icon {
+  flex: none;
+  color: var(--gold-400);
+}
+
+.topbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--px);
+}
+
+.topbar-buttons .icon-btn.has-label {
+  width: auto;
+  min-width: 3.6rem;
+}
+
+.icon-btn.is-unavailable {
+  display: none;
+}
+
+.speed-val {
+  min-width: 1.6em;
+  text-align: left;
+}
+
+/* ---- Age-up banner ---------------------------------------------------------- */
+.age-banner {
+  position: absolute;
+  top: calc(var(--hud-top-h) + 0.6rem);
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 19rem;
+  padding: calc(10 * var(--px)) 2.4rem calc(22 * var(--px));
+  border: var(--px) solid transparent;
+  border-image: var(--tex-cloth-victory) 10 8 20 8 fill / calc(10 * var(--px)) calc(8 * var(--px)) calc(20 * var(--px)) calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  transform: translate(-50%, -140%);
+  filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+  text-align: center;
+}
+
+.age-banner[hidden] {
+  display: none;
+}
+
+.age-banner.is-dropping {
+  animation: banner-drop 620ms cubic-bezier(0.3, 1.45, 0.5, 1) forwards;
+}
+
+.age-banner.is-raising {
+  animation: banner-raise 480ms var(--ease-in-out) forwards;
+}
+
+.age-banner-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gold-200);
+  text-shadow: 0 var(--px) 0 #2a0508;
+}
+
+.age-banner-title {
+  font-family: var(--font-title);
+  font-size: 2.75rem;
+  line-height: 1;
+  color: var(--gold-100);
+  text-shadow: 0 calc(2 * var(--px)) 0 #2a0508;
+}
+
+.age-banner-rule {
+  width: 9rem;
+  height: calc(5 * var(--px));
+  background: var(--tex-rule) 0 0 / calc(8 * var(--px)) calc(5 * var(--px)) repeat-x;
+  image-rendering: pixelated;
+}
+
+@keyframes banner-drop {
+  from { transform: translate(-50%, -140%); }
+  to { transform: translate(-50%, 0); }
+}
+
+@keyframes banner-raise {
+  from { transform: translate(-50%, 0); }
+  to { transform: translate(-50%, -140%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .age-banner.is-dropping { animation: none; transform: translate(-50%, 0); }
+  .age-banner.is-raising { animation: none; opacity: 0; }
+}
+
+/* ---- Paused banner --------------------------------------------------------- */
+.paused-banner {
+  position: absolute;
+  top: calc(var(--hud-top-h) + 1.6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.45rem 1.4rem;
+  color: var(--gold-100);
+  background: var(--tex-wood-dark) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+  animation: fade-in var(--dur-med) var(--ease-out);
+}
+
+.paused-banner[hidden] {
+  display: none;
+}
+
+.paused-banner > .icon {
+  color: var(--gold-300);
+}
+
+.paused-title {
+  font-family: var(--font-title);
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--gold-200);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.paused-hint {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ---- Bottom console: one heavy riveted oak frame ------------------------------ */
+.console {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--hud-bottom-h);
+  display: grid;
+  grid-template-columns: 15.5rem minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  gap: calc(5 * var(--px));
+  padding: 0 calc(2 * var(--px));
+  pointer-events: auto;
+  background: var(--tex-wood) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
+  background-clip: padding-box;
+  border: calc(12 * var(--px)) solid transparent;
+  border-image: var(--tex-frame) 12 / calc(12 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(-2 * var(--px)) 0 rgba(0, 0, 0, 0.45));
+}
+
+.console > section {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Minimap: an iron collar with a gold bead (slice 10), compass on top. */
+.console-minimap {
+  display: grid;
+}
+
+.minimap-frame {
+  position: relative;
+  min-height: 0;
+  padding: calc(9 * var(--px));
+  border: var(--px) solid transparent;
+  border-image: var(--tex-socket) 10 / calc(10 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  background: radial-gradient(closest-side, #1b130b, #05030a);
+  background-clip: padding-box;
+}
+
+#minimap-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.minimap-compass {
+  position: absolute;
+  top: calc(-7 * var(--px));
+  right: calc(-6 * var(--px));
+  width: calc(17 * var(--px));
+  height: calc(17 * var(--px));
+  background: var(--tex-compass) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 var(--px) 0 #000);
+  pointer-events: none;
+}
+
+/* Commands: a sunken tray of riveted buttons (slot slice 6). */
+.console-commands {
+  display: grid;
+  align-items: center;
+}
+
+.cmd-inner {
+  padding: calc(3 * var(--px));
+  border: var(--px) solid transparent;
+  border-image: var(--tex-slot) 6 fill / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.cmd-grid {
+  display: grid;
+  grid-template-columns: repeat(5, var(--cmd-cell));
+  grid-template-rows: repeat(3, var(--cmd-cell));
+  gap: var(--px);
+}
+
+/* Each socket is a raised riveted button (slice 8): hover lights the rim,
+   a press sinks the face two texels and flips the highlight. */
+.cmd-cell {
+  position: relative;
+  width: var(--cmd-cell);
+  height: var(--cmd-cell);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--gold-100);
+  background: none;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.cmd-cell:hover:not(.is-empty):not(.is-disabled) {
+  border-image-source: var(--tex-btn-hover);
+  color: #fff6dc;
+}
+
+.cmd-cell:active:not(.is-empty):not(.is-disabled) {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+.cmd-cell:active:not(.is-empty):not(.is-disabled) > .cmd-icon,
+.cmd-cell:active:not(.is-empty):not(.is-disabled)::before {
+  transform: translateY(var(--px));
+}
+
+/* The picture sits in a dark recess cut into the button face: 15 x 15 texels
+   at 3 texels in, lit from the top left like the icons. */
+.cmd-cell::before {
+  content: "";
+  position: absolute;
+  inset: calc(2 * var(--px));
+  background: radial-gradient(circle at 40% 35%, #3a2a17, #1a110a 75%);
+  box-shadow:
+    inset var(--px) var(--px) 0 #0a0705,
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 #6b4c2a;
+  pointer-events: none;
+}
+
+.cmd-cell.is-empty::before {
+  display: none;
+}
+
+.cmd-icon {
+  position: relative;
+  width: 1.65rem;
+  height: 1.65rem;
+  filter: drop-shadow(0 var(--px) 0 #0a0705);
+}
+
+.cmd-icon.is-px {
+  filter: none;
+}
+
+/* Hotkey: a small dark tab with the letter, tucked into the bottom-right
+   corner over the rim so it hides only a sliver of the picture. */
+.cmd-key {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  min-width: calc(7 * var(--px));
+  height: calc(8 * var(--px));
+  padding: 0 var(--px);
+  border: 0;
+  border-image: none;
+  background: #0a0705;
+  box-shadow: inset 0 0 0 var(--px) #4a3520;
+  font-size: calc(6.5 * var(--px));
+  line-height: calc(8 * var(--px));
+  font-weight: 700;
+  color: #f2e6c4;
+}
+
+/* Queue count: a small gold tab in the top-left corner, same size as the
+   hotkey tab, so the head of the unit stays visible. */
+.cmd-queue {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: calc(7 * var(--px));
+  height: calc(8 * var(--px));
+  padding: 0 var(--px);
+  font-size: calc(6.5 * var(--px));
+  font-weight: 700;
+  line-height: calc(8 * var(--px));
+  text-align: center;
+  color: var(--text-on-gold);
+  background: var(--gold-300);
+  box-shadow: inset 0 0 0 var(--px) #0a0705;
+}
+
+/* The page counter on the "more" socket sits in the bottom-right corner
+   like a hotkey, clear of the arrows. */
+.cmd-cell.is-more .cmd-queue {
+  left: auto;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  font-size: calc(5 * var(--px));
+}
+
+.cmd-key.is-long {
+  font-size: calc(5 * var(--px));
+  letter-spacing: 0.02em;
+}
+
+.cmd-key:empty,
+.cmd-queue:empty {
+  display: none;
+}
+
+.cmd-cell.is-empty {
+  pointer-events: none;
+  border-image-source: var(--tex-slot);
+  border-image-slice: 6 fill;
+  border-image-width: calc(6 * var(--px));
+}
+
+.cmd-cell.is-empty > * {
+  display: none;
+}
+
+.cmd-cell.is-disabled {
+  border-image-source: var(--tex-btn-disabled);
+  color: #a39a8a;
+}
+
+.cmd-cell.is-disabled .cmd-icon {
+  filter: none;
+  opacity: 0.75;
+}
+
+/* Locked (age, prerequisites): the picture goes grey and dim. */
+.cmd-cell.is-disabled .cmd-icon.is-px {
+  opacity: 1;
+  filter: grayscale(1) brightness(0.55) contrast(0.9);
+}
+
+/* Unaffordable: the picture keeps its shapes but sinks into red, like a
+   cost you cannot pay. */
+.cmd-cell.is-disabled.is-short .cmd-icon.is-px {
+  filter: grayscale(1) brightness(0.62) sepia(1) saturate(5.5) hue-rotate(-28deg);
+}
+
+.cmd-cell.is-disabled .cmd-key {
+  color: #a39a8a;
+}
+
+.cmd-cell.is-active {
+  border-image-source: var(--tex-btn-active);
+  color: var(--gold-200);
+}
+
+.cmd-cell.is-active > .cmd-icon,
+.cmd-cell.is-active::before {
+  transform: translateY(var(--px));
+}
+
+.cmd-cell:hover:not(.is-empty):not(.is-disabled) > .cmd-icon.is-px {
+  filter: brightness(1.18);
+}
+
+.cmd-cell.is-denied {
+  animation: cmd-deny 320ms steps(5, end);
+}
+
+.cmd-cell.is-fired {
+  animation: cmd-fire 200ms steps(3, end);
+}
+
+@keyframes cmd-deny {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(calc(-2 * var(--px))); border-image-source: var(--tex-btn-danger); }
+  40% { transform: translateX(calc(2 * var(--px))); border-image-source: var(--tex-btn-danger); }
+  60% { transform: translateX(calc(-1 * var(--px))); }
+  80% { transform: translateX(var(--px)); }
+}
+
+@keyframes cmd-fire {
+  0% { filter: brightness(1.5); }
+  100% { filter: brightness(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-cell.is-denied {
+    animation: none;
+    border-image-source: var(--tex-btn-danger);
+  }
+}

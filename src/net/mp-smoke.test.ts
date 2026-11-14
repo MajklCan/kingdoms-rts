@@ -4,10 +4,10 @@
  * Drives TWO MultiplayerSession instances against each other through a paired
  * in-memory Transport that emulates the relay (relay/server.mjs) for a 2-slot
  * room, plays a 1v1, and asserts the lockstep invariants:
- *   1. no desync — checksums stay in parity (onDesync never fires + explicit
+ *   1. no desync - checksums stay in parity (onDesync never fires + explicit
  *      end-of-run checksum compare matches),
- *   2. liveness — both sessions stay 'playing', tick counts converge,
- *   3. effect — sampled commands mutate the world identically on both clients.
+ *   2. liveness - both sessions stay 'playing', tick counts converge,
+ *   3. effect - sampled commands mutate the world identically on both clients.
  *
  * Each command type is exercised in its OWN test (a matrix) so a failure names
  * the offending command, plus one combined run to catch interaction desyncs.
@@ -20,19 +20,27 @@ import { MAP, SIM } from '../config';
 import { checksumWorld } from '@sim/checksum';
 import {
   buildingQuery,
+  createSimWorld,
   findBuildingAt,
   findResourceAt,
+  netIdForEntity,
   resourceQuery,
+  setSelected,
+  spawnCompletedBuilding,
   townCenterQuery,
   unitQuery,
+  type SimInput,
   type SimWorld,
 } from '@sim/world';
-import { Building, Owner, Position, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
-import { BuildingDefId } from '@sim/defs';
+import { Building, Owner, Position, UnitKind, UnitKindId, UnitStance, UnitStanceId } from '@sim/components';
+import { AgeId, BuildingDefId, UnitDefId } from '@sim/defs';
+import { MapId } from '@sim/map-gen';
+import { createAllTechSet } from '@sim/tech-tree';
 import { MultiplayerSession, type SessionCallbacks } from './session';
 import type { Transport, TransportCloseInfo } from './transport';
 import {
   CHECKSUM_INTERVAL_TICKS,
+  DEFAULT_INPUT_DELAY,
   PROTOCOL_VERSION,
   type ClientMessage,
   type PlayerSlot,
@@ -440,7 +448,7 @@ const SCENARIOS: ReadonlyArray<{ name: string; issue: (ctx: MatchCtx) => void }>
   },
 ];
 
-describe('multiplayer 1v1 — per-command parity matrix', () => {
+describe('multiplayer 1v1 - per-command parity matrix', () => {
   for (const sc of SCENARIOS) {
     it(`stays in lockstep parity after ${sc.name} from both players`, () => {
       const ctx = setupMatch();
@@ -458,7 +466,7 @@ describe('multiplayer 1v1 — per-command parity matrix', () => {
     }
     pumpN(6);
     assertParity(ctx);
-    // Both clients agree on each player's mode, and the two players differ —
+    // Both clients agree on each player's mode, and the two players differ -
     // P2 picking 'compact' must not have reshaped P1's 'line' (and vice-versa).
     expect(worldA.formationModes[1]).toBe(1);
     expect(worldA.formationModes[2]).toBe(2);
@@ -502,7 +510,7 @@ describe('multiplayer 1v1 — per-command parity matrix', () => {
     expect(ownedBuildings(ctx.worldA, 2).some((eid) => Building.defId[eid] === BuildingDefId.FARM)).toBe(true);
   });
 
-  it('all commands in one match — no interaction desync + observable effects', () => {
+  it('all commands in one match - no interaction desync + observable effects', () => {
     const ctx = setupMatch();
     const { worldA, pumpN } = ctx;
 
@@ -558,6 +566,46 @@ describe('multiplayer lobby + transport', () => {
     expect(checksumWorld(capA.world!)).toBe(checksumWorld(capB.world!));
   });
 
+  it('starts from the skirmish start, symmetric for both seats, with no AI', () => {
+    const relay = new RelayShim();
+    const tA = new PairedTransport(relay);
+    const tB = new PairedTransport(relay);
+    const capA = makeCapture();
+    const capB = makeCapture();
+    const sessA = new MultiplayerSession(tA, 'room', 'A', callbacks(capA));
+    const sessB = new MultiplayerSession(tB, 'room', 'B', callbacks(capB));
+    tA.fireOpen();
+    tB.fireOpen();
+    sessA.start(777);
+    const mp = capA.world!;
+    expect(mp.tick).toBe(0);
+
+    // Same world as the default skirmish menu pick; only the seats differ.
+    const skirmish = createSimWorld(777, { startingAge: AgeId.DARK, mapId: MapId.RIVERLANDS, aiDifficulty: 'medium' });
+    skirmish.humanPlayers = new Set([1, 2]);
+    skirmish.paused = mp.paused;
+    expect(checksumWorld(mp)).toBe(checksumWorld(skirmish));
+    expect(checksumWorld(capB.world!)).toBe(checksumWorld(mp));
+
+    const kit = (pid: number) => ({
+      units: ownedUnits(mp, pid).map((e) => UnitKind.kind[e]).sort(),
+      buildings: ownedBuildings(mp, pid).map((e) => Building.defId[e]).sort(),
+      bank: [...mp.resources[pid]],
+      age: mp.ages[pid].current,
+      techs: [...mp.researchedTechs[pid]].sort(),
+      pop: { ...mp.population[pid] },
+    });
+    expect(kit(2)).toEqual(kit(1));
+
+    // Nobody issues a command: a running AI would have built for seat 2 by now.
+    for (let i = 0; i < 600; i++) {
+      sessA.update(SIM.TICK_MS);
+      sessB.update(SIM.TICK_MS);
+    }
+    expect(mp.tick).toBeGreaterThan(500);
+    expect(ownedBuildings(mp, 2)).toHaveLength(kit(1).buildings.length);
+  });
+
   it('recovers from a throttled multiplayer timer wake with a bounded catch-up batch', () => {
     const ctx = setupMatch(778);
     const startTick = ctx.worldA.tick;
@@ -600,5 +648,176 @@ describe('multiplayer lobby + transport', () => {
     tC.fireOpen();
     expect(errMsg).toBe('room full');
     expect(cState).toBe('disconnected');
+  });
+});
+
+interface ScriptedMatch {
+  sess: MultiplayerSession;
+  world: SimWorld;
+  /** One wall-clock tick: the session updates, then the peer sends its next turn. */
+  pump: (peerCmds?: unknown[]) => void;
+  /** The peer's next turn frame only (no session update). */
+  peerSendTurn: (cmds?: unknown[]) => void;
+}
+
+/** A real session (player 1) against a scripted peer (player 2) that writes
+ *  raw turn frames to the relay, the way a buggy or modified client could. */
+function setupScriptedMatch(seed = 4242): ScriptedMatch {
+  const relay = new RelayShim();
+  const tA = new PairedTransport(relay);
+  const tPeer = new PairedTransport(relay);
+  const cap = makeCapture();
+  const sess = new MultiplayerSession(tA, 'room', 'Alice', callbacks(cap));
+  tA.fireOpen();
+  tPeer.send({ t: 'join', v: PROTOCOL_VERSION, room: 'room', name: 'Mallory' });
+  sess.start(seed);
+  let peerTick = DEFAULT_INPUT_DELAY;
+  const peerSendTurn = (cmds: unknown[] = []) => {
+    tPeer.send({ t: 'turn', forTick: peerTick++, cmds: cmds as SimInput[] });
+  };
+  const pump = (peerCmds: unknown[] = []) => {
+    sess.update(SIM.TICK_MS);
+    peerSendTurn(peerCmds);
+  };
+  return { sess, world: cap.world!, pump, peerSendTurn };
+}
+
+/** Play the same scripted match twice, once with `peerCmds` injected by the
+ *  peer, and return the end-state checksum of each run. */
+function checksumWithAndWithout(
+  peerCmds: (world: SimWorld) => unknown[],
+  prepare?: (world: SimWorld) => void
+): { control: number; injected: number } {
+  const hashes: number[] = [];
+  const ticks: number[] = [];
+  for (const inject of [false, true]) {
+    const m = setupScriptedMatch();
+    prepare?.(m.world);
+    for (let i = 0; i < 10; i++) m.pump();
+    m.pump(inject ? peerCmds(m.world) : []);
+    for (let i = 0; i < CHECKSUM_INTERVAL_TICKS * 2; i++) m.pump();
+    for (let i = 0; i < 4; i++) m.sess.update(0);
+    expect(m.sess.state).toBe('playing');
+    hashes.push(checksumWorld(m.world));
+    ticks.push(m.world.tick);
+  }
+  expect(ticks[1]).toBe(ticks[0]);
+  return { control: hashes[0], injected: hashes[1] };
+}
+
+const netIds = (world: SimWorld, eids: number[]): number[] => eids.map((eid) => netIdForEntity(world, eid)!);
+
+describe('multiplayer robustness: commands from the wire', () => {
+  it('still applies the peer\'s own well-formed commands', () => {
+    const { control, injected } = checksumWithAndWithout((world) => [
+      { type: 'cmdMove', playerId: 2, eids: netIds(world, ownedUnits(world, 2).slice(0, 3)), to: { x: 20, y: 20 } },
+    ]);
+    expect(injected).not.toBe(control);
+  });
+
+  it('drops a peer command that claims another player\'s id', () => {
+    const { control, injected } = checksumWithAndWithout((world) => [
+      { type: 'cmdMove', playerId: 1, eids: netIds(world, ownedUnits(world, 1).slice(0, 3)), to: { x: 20, y: 20 } },
+    ]);
+    expect(injected).toBe(control);
+  });
+
+  it('does not let a peer queue units in our barracks by omitting playerId', () => {
+    const barracksOf = (world: SimWorld) =>
+      ownedBuildings(world, 1).find((eid) => Building.defId[eid] === BuildingDefId.BARRACKS)!;
+    const { control, injected } = checksumWithAndWithout(
+      (world) => [{ type: 'trainUnit', atEid: netIds(world, [barracksOf(world)])[0], defId: UnitDefId.SPEARMAN }],
+      (world) => {
+        world.resources[1].fill(5000);
+        world.researchedTechs[1] = createAllTechSet();
+        const tile = buildableTileNearTown(world, 1, 0)!;
+        spawnCompletedBuilding(world, BuildingDefId.BARRACKS, tile.x, tile.y, 1);
+      }
+    );
+    expect(injected).toBe(control);
+  });
+
+  it('ignores selection-relative commands, which would read the receiver\'s own selection', () => {
+    const selectOwnUnits = (world: SimWorld) => {
+      for (const eid of ownedUnits(world, 1).slice(0, 3)) setSelected(world, eid, true);
+    };
+    const { control, injected } = checksumWithAndWithout(
+      () => [{ type: 'moveSelected', to: { x: 20, y: 20 } }],
+      selectOwnUnits
+    );
+    expect(injected).toBe(control);
+  });
+
+  it('survives malformed command payloads without throwing or applying them', () => {
+    const { control, injected } = checksumWithAndWithout(() => [
+      null,
+      42,
+      { type: 'cmdMove', playerId: 2, eids: 'boom', to: null },
+      { type: 'placeBuilding', playerId: 2, defId: BuildingDefId.HOUSE },
+    ]);
+    expect(injected).toBe(control);
+  });
+
+  it('keeps local command latency bounded after the peer stalls and recovers', () => {
+    const m = setupScriptedMatch(4243);
+    for (let i = 0; i < 10; i++) m.pump();
+    // The peer's tab freezes for 10 s while we keep running.
+    for (let i = 0; i < SIM.TICK_HZ * 10; i++) m.sess.update(SIM.TICK_MS);
+    // It wakes with one bounded catch-up burst, then resumes its cadence.
+    for (let i = 0; i < 40; i++) m.peerSendTurn();
+    for (let i = 0; i < SIM.TICK_HZ * 3; i++) m.pump();
+
+    const tc = ownTownCenter(m.world, 1)!;
+    const before = JSON.stringify(m.world.armyRallyPoints[1]);
+    m.sess.sendCommand({
+      type: 'setArmyRallyPoint',
+      playerId: 1,
+      x: Math.round(Position.x[tc]) + 4,
+      y: Math.round(Position.y[tc]) + 4,
+    });
+    let waited = 0;
+    while (JSON.stringify(m.world.armyRallyPoints[1]) === before && waited < SIM.TICK_HZ * 30) {
+      m.pump();
+      waited++;
+    }
+    expect(JSON.stringify(m.world.armyRallyPoints[1])).not.toBe(before);
+    // Input delay plus at most a second of buffered turns, not the stall length.
+    expect(waited).toBeLessThanOrEqual(SIM.TICK_HZ * 2);
+  });
+});
+
+describe('multiplayer session: local commands and leaving', () => {
+  it('sends a selection-relative command as its self-describing form from the local selection', () => {
+    const m = setupMatch(777);
+    const units = ownedUnits(m.worldB, 2).slice(0, 2);
+    expect(units.length).toBeGreaterThan(0);
+    for (const eid of units) setSelected(m.worldB, eid, true);
+    // An enemy unit in the local selection must not leak into the order.
+    setSelected(m.worldB, ownedUnits(m.worldB, 1)[0]!, true);
+    const positions = (world: SimWorld) =>
+      ownedUnits(world, 2).slice(0, 2).map((eid) => [Position.x[eid], Position.y[eid]]);
+    const enemyBefore = ownedUnits(m.worldB, 1).map((eid) => [Position.x[eid], Position.y[eid]]);
+    const startA = positions(m.worldA);
+    m.sessB.sendCommand({ type: 'moveSelected', to: { x: 32, y: 32 } });
+    m.pumpN(SIM.TICK_HZ * 3);
+    m.settle();
+    expect(m.capA.desync || m.capB.desync).toBe(false);
+    // Player 2's units moved on player 1's client too.
+    expect(positions(m.worldA)).not.toEqual(startA);
+    expect(positions(m.worldA)).toEqual(positions(m.worldB));
+    expect(ownedUnits(m.worldB, 1).map((eid) => [Position.x[eid], Position.y[eid]])).toEqual(enemyBefore);
+    expect(checksumWorld(m.worldA)).toBe(checksumWorld(m.worldB));
+  });
+
+  it('leave() parks the session in a terminal state and stops stepping', () => {
+    const m = setupMatch(778);
+    const tickBefore = m.worldA.tick;
+    m.sessA.leave();
+    m.sessA.leave(); // idempotent
+    expect(m.sessA.state).toBe('left');
+    // The transport's close callback must not turn it into 'disconnected'.
+    expect(m.capA.state).toBe('left');
+    m.sessA.update(SIM.TICK_MS * 10);
+    expect(m.worldA.tick).toBe(tickBefore);
   });
 });

@@ -357,7 +357,7 @@ Used for stats screen + local leaderboard. <!-- ASSUMPTION global leaderboard ou
 | Iso terrain tiles (grass / dirt / water / forest) | Kenney Medieval RTS | PNG + Aseprite JSON atlas | ~30 |
 | Buildings (TC, house, farm, mill, barracks, etc.) | Kenney Medieval RTS | PNG | ~20 |
 | Units (villager + 9 unit types x 8 directions x action states) | TypeScript voxel models + runtime Phaser bake | Generated Phaser textures; see `docs/VOXEL_SPRITE_PIPELINE.md` | ~250 sprite frames |
-| UI icons (resources, unit portraits, tech) | PixelLab.ai API | PNG 64×64 | ~80 |
+| HUD icons (resources, commands, tech, building and unit pictures) | `scripts/ui/gen_icons.py`: procedural pixel art plus crops of the style A atlas and the unit renders | Indexed PNG sheet, 1x + 2x, see `docs/SPRITE_ATLAS.md` | 72 |
 | Cursors | Hand-drawn SVG → PNG | PNG | 4 (default / attack / garrison / no-go) |
 | Title screen art | AI-gen (PixelLab / Scenario) | PNG 1920×1080 | 1 |
 

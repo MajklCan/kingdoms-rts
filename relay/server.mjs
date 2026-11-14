@@ -15,9 +15,14 @@
  *   TURN_LOG_INTERVAL    checkpoint interval for empty turn frames (default 20)
  *   ROOM_SUMMARY_MS      active-room summary cadence (default 5000)
  *   STALE_ROOM_MS        warn if an active room receives no frames this long (default 10000)
+ *   RELAY_PASSWORD       shared password every join must carry; empty disables the check
+ *   MAX_ROOMS            open rooms at once (default 50)
+ *   ALLOWED_ORIGINS      comma-separated page origins allowed to connect (e.g.
+ *                        https://kingdoms.macaly.app); empty allows any origin (local dev)
  */
 
 import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -28,6 +33,59 @@ const TURN_LOG_INTERVAL = Math.max(1, Number(process.env.TURN_LOG_INTERVAL ?? 20
 const ROOM_SUMMARY_MS = Math.max(1000, Number(process.env.ROOM_SUMMARY_MS ?? 5000));
 const STALE_ROOM_MS = Math.max(1000, Number(process.env.STALE_ROOM_MS ?? 10000));
 const RECENT_CHECKSUM_TICKS = 12;
+const RELAY_PASSWORD = process.env.RELAY_PASSWORD ?? '';
+const MAX_ROOMS = Math.max(1, Number(process.env.MAX_ROOMS ?? 50));
+/** A socket that has not joined a room by then is dropped. */
+const JOIN_TIMEOUT_MS = 15000;
+const MAX_PAYLOAD_BYTES = 64 * 1024;
+const MAX_PASSWORD_FAILS = 5;
+const PASSWORD_FAIL_WINDOW_MS = 60000;
+/** ip -> { count, resetAt } of wrong passwords, to slow guessing. */
+const passwordFails = new Map();
+
+function passwordMatches(given) {
+  if (!RELAY_PASSWORD) return true;
+  if (typeof given !== 'string') return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(RELAY_PASSWORD);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
+  return first || req.socket.remoteAddress || 'unknown';
+}
+
+function passwordLocked(ip, now) {
+  const f = passwordFails.get(ip);
+  if (!f) return false;
+  if (now >= f.resetAt) {
+    passwordFails.delete(ip);
+    return false;
+  }
+  return f.count >= MAX_PASSWORD_FAILS;
+}
+
+function notePasswordFail(ip, now) {
+  const f = passwordFails.get(ip);
+  if (!f || now >= f.resetAt) passwordFails.set(ip, { count: 1, resetAt: now + PASSWORD_FAIL_WINDOW_MS });
+  else f.count += 1;
+}
+
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
+
+/** Browsers always send Origin on a WebSocket handshake, so this keeps other
+ *  sites from using the relay. It is not authentication: a script can fake it. */
+function originAllowed(origin) {
+  if (ALLOWED_ORIGINS.size === 0) return true;
+  return typeof origin === 'string' && ALLOWED_ORIGINS.has(origin.replace(/\/$/, ''));
+}
 
 let nextMatchId = 1;
 let nextConnectionId = 1;
@@ -316,7 +374,15 @@ const server = http.createServer((req, res) => {
   res.end('upgrade required\n');
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  maxPayload: MAX_PAYLOAD_BYTES,
+  verifyClient: ({ origin }, done) => {
+    if (originAllowed(origin)) return done(true);
+    console.log(`[relay] rejected origin ${JSON.stringify(origin ?? null)}`);
+    done(false, 403, 'origin not allowed');
+  },
+});
 
 wss.on('connection', (ws, req) => {
   ws.connectionId = nextConnectionId++;
@@ -327,6 +393,11 @@ wss.on('connection', (ws, req) => {
   ws.lastMessageAt = null;
   ws.messages = 0;
   ws.bytes = 0;
+  ws.ip = clientIp(req);
+  ws.joinTimer = setTimeout(() => {
+    if (!ws.roomName) ws.close(4408, 'join timeout');
+  }, JOIN_TIMEOUT_MS);
+  ws.on('close', () => clearTimeout(ws.joinTimer));
 
   log('connection-open', {
     connectionId: ws.connectionId,
@@ -376,6 +447,26 @@ wss.on('connection', (ws, req) => {
         if (msg.v !== PROTOCOL_VERSION) {
           log('reject', { connectionId: ws.connectionId, reason: 'protocol_mismatch', got: msg.v });
           send(ws, { t: 'error', message: `protocol mismatch (server v${PROTOCOL_VERSION})` });
+          ws.close();
+          return;
+        }
+        const now = Date.now();
+        if (passwordLocked(ws.ip, now)) {
+          log('reject', { connectionId: ws.connectionId, reason: 'password_locked' });
+          send(ws, { t: 'error', message: 'too many wrong passwords, wait a minute' });
+          ws.close();
+          return;
+        }
+        if (!passwordMatches(msg.pass)) {
+          notePasswordFail(ws.ip, now);
+          log('reject', { connectionId: ws.connectionId, reason: 'wrong_password' });
+          send(ws, { t: 'error', message: 'wrong hall password' });
+          ws.close();
+          return;
+        }
+        if (!rooms.has(String(msg.room)) && rooms.size >= MAX_ROOMS) {
+          log('reject', { connectionId: ws.connectionId, reason: 'too_many_rooms' });
+          send(ws, { t: 'error', message: 'relay is full, try again later' });
           ws.close();
           return;
         }

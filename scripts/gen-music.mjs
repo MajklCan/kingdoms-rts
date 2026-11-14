@@ -22,6 +22,16 @@ const PROMPT =
   'instrumental, seamless loop, steady tempo, no vocals';
 const LENGTH_MS = 90000;
 
+// Per-track prompt overrides (same style, different mood). In-game peace
+// songs play once with a gap after them, so they want a soft ending and no
+// war drums rather than a seamless loop.
+const PROMPTS = {
+  ingame_2:
+    'Medieval Bohemian orchestral ambient game music, calm and pastoral, warm strings, ' +
+    'soft lute and flute, gentle harp, noble and a little melancholic, ' +
+    'instrumental, steady tempo, no drums, no vocals, soft natural ending',
+};
+
 async function main() {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
@@ -36,7 +46,7 @@ async function main() {
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: PROMPT, music_length_ms: LENGTH_MS }),
+    body: JSON.stringify({ prompt: PROMPTS[id] ?? PROMPT, music_length_ms: LENGTH_MS }),
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');

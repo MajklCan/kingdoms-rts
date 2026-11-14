@@ -1,0 +1,12 @@
+{
+ "size": 96,
+ "units": {
+  "ARCHER": "archer.png",
+  "CANNON": "cannon.png",
+  "GUNMAN": "gunman.png",
+  "MILITIA": "militia.png",
+  "SCOUT_CAVALRY": "cavalry.png",
+  "SPEARMAN": "spearman.png",
+  "VILLAGER": "villager.png"
+ }
+}

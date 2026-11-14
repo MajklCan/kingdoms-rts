@@ -70,8 +70,15 @@ describe('sound-map', () => {
     expect(combatSound(-1, 5, undefined, true)?.key).toBe('bow_shot');
   });
 
+  it('villagers fighting get a softer clash', () => {
+    const villager = combatSound(UnitDefId.VILLAGER, 1, undefined, false);
+    const spear = combatSound(UnitDefId.SPEARMAN, 1, undefined, false);
+    expect(villager?.key).toBe('sword_clash');
+    expect(villager!.volume).toBeLessThan(spear!.volume);
+  });
+
   it('returns null for attackers with no mapped sound', () => {
-    expect(combatSound(UnitDefId.VILLAGER, 1, undefined, false)).toBeNull();
+    expect(combatSound(UnitDefId.VILLAGER, 3, undefined, false)).toBeNull();
     // MILITIA is legacy (loadable from old saves) and has no mapped fire sound.
     expect(combatSound(UnitDefId.MILITIA, 1, undefined, false)).toBeNull();
   });

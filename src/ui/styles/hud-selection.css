@@ -1,0 +1,633 @@
+/* In-match HUD, part 2: the parchment selection sheet in the console
+   (portrait, HP, stats, current action, production queue, multi-select
+   grid). The realm summary shown when nothing is selected is in
+   hud-idle.css. */
+
+/* Selection: a parchment sheet set into a carved recess (slice 5). */
+.console-selection {
+  color: var(--ink-text);
+  background: var(--tex-parch) 0 0 / calc(64 * var(--px)) calc(64 * var(--px)) repeat;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-inlay) 5 / calc(5 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.sel-inner {
+  height: 100%;
+  padding: calc(6 * var(--px)) calc(8 * var(--px));
+  overflow: hidden;
+}
+
+.sel-single {
+  height: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 0.85rem;
+}
+
+.sel-single[hidden],
+.sel-multi[hidden],
+.sel-empty[hidden] {
+  display: none;
+}
+
+/* Portrait: iron and gold leaf frame (slice 6) over a dark mat. */
+.portrait {
+  position: relative;
+  align-self: center;
+  width: 7rem;
+  height: 7rem;
+  display: grid;
+  place-items: center;
+  padding: calc(5 * var(--px));
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 38%, #4a3820, #120c06 78%);
+}
+
+.portrait::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: calc(6 * var(--px)) solid transparent;
+  border-image: var(--tex-portrait) 6 / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.portrait[data-team="me"] { background: radial-gradient(circle at 50% 38%, #34557a, #0e1520 80%); }
+.portrait[data-team="2"] { background: radial-gradient(circle at 50% 38%, #7a2a24, #1d0806 80%); }
+
+.portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.portrait-icon {
+  width: 3.4rem;
+  height: 3.4rem;
+  color: var(--gold-100);
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.8));
+}
+
+.portrait-icon.is-px,
+.queue-slot.is-head .queue-icon.is-px {
+  --ix: 1;
+  --icon-sheet: var(--icon-sheet-big);
+  --icon-render: var(--icon-render-big);
+  filter: none;
+}
+
+.portrait-img[hidden],
+.portrait-icon[hidden],
+.queue-icon[hidden],
+.tile-img[hidden],
+.tile-icon[hidden],
+.carry[hidden],
+.hp-row[hidden] {
+  display: none;
+}
+
+.portrait-count {
+  position: absolute;
+  right: calc(5 * var(--px));
+  bottom: calc(5 * var(--px));
+  z-index: 1;
+  padding: 0 0.3rem;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-on-gold);
+  background: var(--gold-300);
+  box-shadow: 0 0 0 var(--px) #0a0705;
+}
+
+.portrait-count:empty {
+  display: none;
+}
+
+.sel-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(3 * var(--px));
+  min-width: 0;
+}
+
+.sel-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.sel-name {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 1.75rem;
+  font-weight: 400;
+  line-height: 1;
+  color: #4a1410;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1em;
+}
+
+.sel-owner {
+  flex: none;
+  padding: 0 0.35rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  box-shadow: inset 0 0 0 var(--px) rgba(90, 69, 39, 0.5);
+}
+
+.sel-owner:empty {
+  display: none;
+}
+
+.sel-owner[data-team="me"] { color: #1d4a7a; box-shadow: inset 0 0 0 var(--px) rgba(29, 74, 122, 0.55); }
+.sel-owner[data-team="2"] { color: #8c1b1b; box-shadow: inset 0 0 0 var(--px) rgba(140, 27, 27, 0.55); }
+
+/* HP: chunky segments in an iron frame. */
+.hp-row {
+  display: grid;
+  /* The bar stops growing on ultrawide screens so twelve segments still
+     read as chunks instead of a thin ribbon. */
+  grid-template-columns: auto minmax(0, 30rem) 5.5rem;
+  justify-content: start;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hp-icon {
+  width: 1rem;
+  height: 1rem;
+  color: #6c0f17;
+}
+
+.hp-seg.bar {
+  height: calc(8 * var(--px));
+  margin: 0 calc(2 * var(--px));
+  background: #0c0805;
+  box-shadow:
+    0 0 0 var(--px) #6b6258,
+    0 0 0 calc(2 * var(--px)) #1a1410,
+    0 var(--px) 0 calc(2 * var(--px)) rgba(255, 240, 200, 0.3);
+}
+
+.hp-seg.bar > i {
+  inset: var(--px);
+  width: calc(100% - 2 * var(--px));
+}
+
+/* Gaps between segments: twelve chunks whatever the width. */
+.hp-seg.bar::after {
+  content: "";
+  position: absolute;
+  inset: var(--px);
+  background: repeating-linear-gradient(90deg, transparent 0 calc(100% / 12 - var(--px)), #0c0805 calc(100% / 12 - var(--px)) calc(100% / 12));
+  pointer-events: none;
+}
+
+.hp-text {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--ink-900);
+  white-space: nowrap;
+}
+
+.stat-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.9rem;
+  max-height: 2.6rem;
+  overflow: hidden;
+}
+
+.stat-chips:empty {
+  display: none;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-900);
+}
+
+.stat-icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  color: var(--ink-muted);
+}
+
+
+.stat-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.stat-value {
+  font-weight: 700;
+}
+
+.stat-chip.is-text .stat-value {
+  font-weight: 600;
+  font-style: italic;
+  color: var(--ink-700);
+}
+
+/* Current action: what the unit is doing, its load and its progress. */
+.sel-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 1.3rem;
+}
+
+.sel-status-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.sel-status-text {
+  font-size: var(--fs-sm);
+  font-style: italic;
+  color: var(--ink-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.carry {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.carry-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.carry-pips {
+  display: inline-flex;
+  gap: var(--px);
+  padding: var(--px);
+  background: #2a1d10;
+  box-shadow: 0 0 0 var(--px) #0a0705;
+}
+
+.carry-pips > i {
+  width: calc(3 * var(--px));
+  height: calc(5 * var(--px));
+  background: #4f351c;
+}
+
+.carry-pips > i.is-on {
+  background: var(--gold-300);
+  box-shadow: inset 0 var(--px) 0 var(--gold-100), inset 0 calc(-1 * var(--px)) 0 var(--gold-600);
+}
+
+.sel-status-bar {
+  visibility: hidden;
+}
+
+.sel-status.has-progress .sel-status-bar {
+  visibility: visible;
+}
+
+/* Stance and formation in force. */
+.sel-state {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sel-state:empty {
+  display: none;
+}
+
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.05rem 0.45rem 0.05rem 0.3rem;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--parchment-100);
+  background: #5a1712;
+  box-shadow: 0 0 0 var(--px) #0a0705, inset 0 var(--px) 0 #98202c;
+}
+
+.state-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--gold-300);
+}
+
+/* Production queue: the unit in training large, with a clockwise wipe. */
+.queue {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(2 * var(--px));
+}
+
+.queue:not(.is-visible) {
+  display: none;
+}
+
+.queue-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6c0f17;
+}
+
+.queue-slots {
+  display: grid;
+  grid-template-columns: repeat(5, 1.875rem);
+  grid-template-rows: repeat(2, 1.875rem);
+  gap: calc(2 * var(--px));
+}
+
+.queue-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: calc(2 * var(--px));
+  border: 0;
+  color: var(--gold-100);
+  background: radial-gradient(circle at 50% 38%, #3b2b18, #140d07 80%);
+  overflow: hidden;
+}
+
+.queue-slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: calc(3 * var(--px)) solid transparent;
+  border-image: var(--tex-tile) 3 / calc(3 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.queue-slot.is-head {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.queue-slot.is-active::after {
+  border-image-source: var(--tex-tile-gold);
+}
+
+.queue-slot.is-filled {
+  background: radial-gradient(circle at 50% 38%, #34557a, #0e1520 80%);
+}
+
+.queue-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  visibility: hidden;
+}
+
+.queue-slot.is-head .queue-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.queue-slot.is-filled .queue-icon {
+  visibility: visible;
+}
+
+/* Clockwise wipe: the part still to train is shaded. */
+.queue-progress {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0 calc(var(--p, 0) * 1turn), rgba(10, 7, 5, 0.62) calc(var(--p, 0) * 1turn) 1turn);
+}
+
+.queue-slot:not(.is-active) .queue-progress {
+  display: none;
+}
+
+.queue-x {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: rgba(90, 10, 14, 0.72);
+}
+
+.queue-x::before,
+.queue-x::after {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: calc(50% - var(--px));
+  height: calc(2 * var(--px));
+  background: #ffd8cf;
+  transform: rotate(45deg);
+}
+
+.queue-x::after {
+  transform: rotate(-45deg);
+}
+
+.queue-slot.is-cancel:hover .queue-x,
+.queue-slot.is-cancel:focus-visible .queue-x {
+  opacity: 1;
+}
+
+.queue-slot.is-cancel:active > .queue-icon {
+  transform: translateY(var(--px));
+}
+
+.queue-more {
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+
+/* Multi-selection: kind chips and one mini portrait per unit. */
+.sel-multi {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: calc(4 * var(--px));
+}
+
+.multi-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.multi-title {
+  flex: none;
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1;
+  color: #4a1410;
+}
+
+.multi-groups {
+  display: flex;
+  gap: calc(2 * var(--px));
+  min-width: 0;
+  overflow: hidden;
+}
+
+.group-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: calc(13 * var(--px));
+  padding: 0 0.5rem 0 0.35rem;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  color: var(--gold-100);
+  background: none;
+}
+
+.group-chip:hover {
+  border-image-source: var(--tex-btn-hover);
+}
+
+.group-chip:active {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+.group-chip:active > * {
+  transform: translateY(var(--px));
+}
+
+.group-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* Unit and building pictures squeezed into the 13 texel chip. */
+.group-icon.is-px {
+  --ix: 0.375;
+  --icon-sheet: var(--icon-sheet-2x);
+  --icon-render: auto;
+}
+
+.group-count {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+.multi-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: calc(2 * var(--px));
+  overflow: hidden;
+}
+
+.unit-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.375rem;
+  height: 2.375rem;
+  padding: calc(2 * var(--px)) calc(2 * var(--px)) calc(4 * var(--px));
+  border: 0;
+  color: var(--gold-100);
+  background: radial-gradient(circle at 50% 38%, #34557a, #0e1520 80%);
+  overflow: hidden;
+}
+
+.unit-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: calc(3 * var(--px)) solid transparent;
+  border-image: var(--tex-tile) 3 / calc(3 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.unit-tile:hover::after {
+  border-image-source: var(--tex-tile-gold);
+}
+
+.unit-tile:active > img,
+.unit-tile:active > .icon {
+  transform: translateY(var(--px));
+}
+
+.tile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.tile-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* HP tick along the bottom of each tile. */
+.tile-hp {
+  position: absolute;
+  left: calc(3 * var(--px));
+  right: calc(3 * var(--px));
+  bottom: calc(3 * var(--px));
+  z-index: 1;
+  height: calc(2 * var(--px));
+  background: #0c0805;
+}
+
+.tile-hp > i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--p, 1));
+  background: var(--hp-high);
+}
+
+.tile-hp[data-level="mid"] > i { background: var(--hp-mid); }
+.tile-hp[data-level="low"] > i { background: var(--hp-low); }
+
+.tile-more {
+  display: grid;
+  place-items: center;
+  width: 2.375rem;
+  height: 2.375rem;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--ink-muted);
+}

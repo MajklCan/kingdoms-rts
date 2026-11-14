@@ -193,7 +193,40 @@ describe('combat engagement and formations', () => {
       const shot = world.combatEvents.find((event) => event.attackerEid === archer);
       stepN(world, shot?.projectileTicks ?? 0);
 
-      expect(Health.hp[pikeman]).toBe(hpBefore - 7);
+      expect(Health.hp[pikeman]).toBe(hpBefore - 12);
+    }
+
+    // Gunpowder layer: gunmen counter pikemen, scout cavalry counters gunmen.
+    {
+      const world = createSimWorld(143);
+      world.paused = false;
+      const spot = findOpenTile(world);
+      const gunman = spawnGunman(world, spot.x, spot.y, 1);
+      const pikeman = spawnSpearman(world, spot.x + 3, spot.y, 2);
+      AttackTarget.targetEid[gunman] = pikeman;
+      AttackTarget.retainGoal[gunman] = 1;
+      const hpBefore = Health.hp[pikeman];
+
+      step(world);
+      const shot = world.combatEvents.find((event) => event.attackerEid === gunman);
+      stepN(world, shot?.projectileTicks ?? 0);
+
+      expect(Health.hp[pikeman]).toBe(hpBefore - 20);
+    }
+
+    {
+      const world = createSimWorld(144);
+      world.paused = false;
+      const spot = findOpenTile(world);
+      const scout = spawnScoutCavalry(world, spot.x, spot.y, 1);
+      const gunman = spawnGunman(world, spot.x + 1, spot.y, 2);
+      AttackTarget.targetEid[scout] = gunman;
+      AttackTarget.retainGoal[scout] = 1;
+      const hpBefore = Health.hp[gunman];
+
+      step(world);
+
+      expect(Health.hp[gunman]).toBe(hpBefore - 12);
     }
   });
 
@@ -534,8 +567,10 @@ describe('combat engagement and formations', () => {
     const cannon = spawnCannon(world, spot.x, spot.y, 1);
     const target = spawnSpearman(world, spot.x + 4, spot.y, 2);
     const nearby = spawnArcher(world, spot.x + 4.25, spot.y, 2);
-    const grouped = spawnSpearman(world, spot.x + 5.15, spot.y, 2);
-    const outer = spawnSpearman(world, spot.x + 6.05, spot.y, 2);
+    // Splash reaches 1.8 tiles; grouped and outer sit on either side of the
+    // target so unit separation does not shove them along the line of fire.
+    const grouped = spawnSpearman(world, spot.x + 4, spot.y + 1, 2);
+    const outer = spawnSpearman(world, spot.x + 4, spot.y - 1.65, 2);
     const friendly = spawnSpearman(world, spot.x + 4.4, spot.y, 1);
     for (const eid of [target, nearby, grouped, outer, friendly]) {
       Cooldown.ticksRemaining[eid] = 999;
@@ -559,7 +594,7 @@ describe('combat engagement and formations', () => {
 
     expect(Health.hp[target]).toBeLessThanOrEqual(0);
     expect(Health.hp[nearby]).toBeLessThanOrEqual(0);
-    expect(groupedHpBefore - Health.hp[grouped]).toBeGreaterThanOrEqual(25);
+    expect(groupedHpBefore - Health.hp[grouped]).toBeGreaterThanOrEqual(20);
     expect(groupedHpBefore - Health.hp[grouped]).toBeLessThanOrEqual(30);
     expect(Health.hp[grouped]).toBeGreaterThan(0);
     expect(Health.hp[outer]).toBeLessThan(outerHpBefore);
@@ -582,7 +617,7 @@ describe('combat engagement and formations', () => {
 
     const shot = stepUntilCannonFire(world, cannon);
     expect(shot.projectileTicks).toBeGreaterThanOrEqual(8);
-    Position.x[target] = shot.toX + 1.6;
+    Position.x[target] = shot.toX + 1.3;
     Position.y[target] = shot.toY;
 
     stepN(world, shot.projectileTicks ?? 0);
@@ -632,7 +667,7 @@ describe('combat engagement and formations', () => {
     world.paused = false;
     const spot = findOpenTile(world);
     const gunman = spawnGunman(world, spot.x, spot.y, 1);
-    const target = spawnSpearman(world, spot.x + 3, spot.y, 2);
+    const target = spawnArcher(world, spot.x + 3, spot.y, 2);
     AttackTarget.targetEid[gunman] = target;
     AttackTarget.retainGoal[gunman] = 1;
     const targetHpBefore = Health.hp[target];

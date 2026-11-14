@@ -1,0 +1,473 @@
+/* In-match HUD, part 3: the dock above the console (idle villagers,
+   control groups, event log, wax-sealed alerts) and the leather tooltip. */
+
+/* ---- Dock: the floating row above the console ------------------------------ */
+.console-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--hud-bottom-h) + 0.5rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 1rem;
+  padding: 0 0.6rem;
+  pointer-events: none;
+}
+
+.dock-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.dock-mid {
+  display: flex;
+  justify-content: center;
+}
+
+.dock-right {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* Idle villager button: a riveted oak button (slice 8). */
+.idle-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: calc(18 * var(--px));
+  padding: 0 0.75rem 0 0.55rem;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  background: none;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.idle-btn:hover {
+  border-image-source: var(--tex-btn-hover);
+}
+
+.idle-btn:active:not([aria-disabled="true"]) {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+.idle-btn:active:not([aria-disabled="true"]) > * {
+  transform: translateY(calc(2 * var(--px)));
+}
+
+.idle-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.idle-count {
+  min-width: 1.4em;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: center;
+}
+
+.idle-btn.has-idle {
+  color: var(--gold-100);
+  border-image-source: var(--tex-btn-active);
+}
+
+.idle-btn.has-idle .idle-icon {
+  color: var(--gold-300);
+  animation: idle-pulse 1.8s steps(2, jump-none) infinite;
+}
+
+.idle-btn[aria-disabled="true"] {
+  border-image-source: var(--tex-btn-disabled);
+}
+
+@keyframes idle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idle-btn.has-idle .idle-icon {
+    animation: none;
+  }
+}
+
+/* Control groups */
+.cg-strip {
+  display: flex;
+  gap: var(--px);
+}
+
+.cg-slot {
+  position: relative;
+  width: 2.6rem;
+  height: calc(18 * var(--px));
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--gold-100);
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  background: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cg-slot.is-set {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cg-slot:hover {
+  border-image-source: var(--tex-btn-hover);
+}
+
+.cg-slot:active {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+/* Unit and building pictures squeezed under the group number. */
+.cg-icon.is-px {
+  --ix: 0.4;
+  --icon-sheet: var(--icon-sheet-2x);
+  --icon-render: auto;
+}
+
+.cg-slot:active > .icon {
+  transform: translateY(calc(2 * var(--px)));
+}
+
+.cg-num {
+  position: absolute;
+  top: calc(2 * var(--px));
+  left: calc(3 * var(--px));
+  font-family: var(--font-num);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-300);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.cg-icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.cg-count {
+  position: absolute;
+  right: calc(3 * var(--px));
+  bottom: calc(2 * var(--px));
+  font-family: var(--font-num);
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-hi);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+/* Event log: a faint chronicle on leather strips. */
+.event-log-wrap {
+  min-height: 0;
+}
+
+.event-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--px);
+  max-width: 28rem;
+}
+
+.event-line {
+  padding: 0.12rem 0.6rem 0.12rem 0.55rem;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-hi);
+  background: rgba(20, 13, 8, 0.8);
+  box-shadow: inset calc(2 * var(--px)) 0 0 var(--gold-600), 0 var(--px) 0 rgba(0, 0, 0, 0.5);
+  text-shadow: 0 var(--px) 0 #000;
+  animation: event-in var(--dur-med) var(--ease-out);
+  transition: opacity 1.2s linear;
+}
+
+.event-line.is-fading {
+  opacity: 0;
+}
+
+.event-line.tone-good {
+  box-shadow: inset calc(2 * var(--px)) 0 0 var(--gold-300), 0 var(--px) 0 rgba(0, 0, 0, 0.5);
+}
+
+.event-line.tone-warn {
+  color: #ffd8a8;
+  box-shadow: inset calc(2 * var(--px)) 0 0 #e0a040, 0 var(--px) 0 rgba(0, 0, 0, 0.5);
+}
+
+.event-line.tone-bad {
+  color: #ffc2b8;
+  box-shadow: inset calc(2 * var(--px)) 0 0 var(--danger), 0 var(--px) 0 rgba(0, 0, 0, 0.5);
+}
+
+.event-line.is-located {
+  pointer-events: auto;
+}
+
+.event-line.is-located:hover {
+  background: rgba(46, 30, 16, 0.92);
+}
+
+@keyframes event-in {
+  from { opacity: 0; transform: translateX(-0.5rem); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Alerts: torn parchment notes with a wax seal pressed on the left. */
+.alert-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(2 * var(--px));
+  width: min(22rem, 100%);
+}
+
+.toast {
+  position: relative;
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: calc(100% - 1rem);
+  min-height: calc(22 * var(--px));
+  padding: 0.35rem 0.75rem 0.35rem 1.9rem;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-note) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  background: none;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: left;
+  color: var(--ink-900);
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.45));
+  animation: toast-in 260ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.toast.is-located:hover {
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.45)) brightness(1.06);
+}
+
+.toast.is-located:active {
+  transform: translateY(var(--px));
+}
+
+.toast.is-leaving {
+  animation: toast-out 220ms var(--ease-out) forwards;
+}
+
+.toast-seal {
+  position: absolute;
+  left: calc(-7 * var(--px));
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: calc(18 * var(--px));
+  height: calc(18 * var(--px));
+  margin-top: calc(-9 * var(--px));
+  color: #fde6cf;
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 var(--px) 0 rgba(0, 0, 0, 0.6));
+}
+
+.toast-seal.seal-gold {
+  background-image: var(--tex-seal-gold);
+  color: #3a2a06;
+}
+
+.toast-seal.seal-grey {
+  background-image: var(--tex-seal-grey);
+  color: #f2eee6;
+}
+
+.toast-seal .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.toast-text {
+  line-height: 1.25;
+}
+
+.toast-attack .toast-text,
+.toast-building-lost .toast-text {
+  color: #7c1620;
+  font-weight: 700;
+}
+
+.toast-count {
+  padding: 0 0.3rem;
+  font-family: var(--font-num);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  color: var(--parchment-50);
+  background: #6c0f17;
+  box-shadow: 0 0 0 var(--px) #0a0705;
+}
+
+.toast-count:empty {
+  display: none;
+}
+
+.toast-jump {
+  color: #6c0f17;
+}
+
+.toast-attack.is-located .toast-seal {
+  animation: seal-pulse 1.2s steps(4, end) 2;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(1rem) rotate(1.5deg); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateX(1rem); }
+}
+
+@keyframes seal-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast.is-leaving,
+  .toast-attack.is-located .toast-seal,
+  .event-line {
+    animation: none;
+  }
+}
+
+/* ---- Tooltip: stitched leather with a red ribbon header (slice 7) ------------ */
+.tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--z-tooltip);
+  width: max-content;
+  max-width: 21rem;
+  padding: 0 0.85rem 0.7rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: #e6d5ad;
+  pointer-events: none;
+  border: calc(4 * var(--px)) solid transparent;
+  border-image: var(--tex-tip) 7 fill / calc(7 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+}
+
+.tooltip[hidden] {
+  display: none;
+}
+
+.tip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 0 calc(-0.85rem - var(--px)) 0.45rem;
+  padding: calc(4 * var(--px)) calc(0.85rem + 2 * var(--px)) calc(5 * var(--px));
+  border: var(--px) solid transparent;
+  border-image: var(--tex-ribbon) 3 6 fill / calc(3 * var(--px)) calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.tip-title {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff1cf;
+  text-shadow: 0 var(--px) 0 #2a0508;
+}
+
+.tip-key {
+  flex: none;
+}
+
+.tip-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+  margin-top: 0.1rem;
+}
+
+.tip-res {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+.tip-res .icon {
+  flex: none;
+}
+
+.tip-res.is-short {
+  color: #ff8a75;
+}
+
+.tip-body {
+  margin: 0.4rem 0 0;
+  color: #e6d5ad;
+}
+
+.tip-meta {
+  margin: 0.3rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.tip-disabled {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0;
+  font-weight: 700;
+  color: #ff8a75;
+}
+
+.tip-disabled .icon {
+  margin-top: 0.1em;
+}
+
+.tip-hint {
+  margin: 0.35rem 0 0;
+  font-size: var(--fs-xs);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* ---- Short windows --------------------------------------------------------- */
+@media (max-height: 600px) {
+  .event-log {
+    display: none;
+  }
+}

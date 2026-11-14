@@ -14,7 +14,7 @@ const PROTOCOL_VERSION = 1;
 const log = (...a) => console.log(...a);
 
 function client(name) {
-  const ws = new WebSocket(URL);
+  const ws = new WebSocket(URL, process.env.ORIGIN ? { origin: process.env.ORIGIN } : {});
   const inbox = [];
   const waiters = [];
   ws.on('message', (d) => {
@@ -54,11 +54,11 @@ async function main() {
   await Promise.all([host.open, peer.open]);
 
   // join
-  host.send({ t: 'join', v: PROTOCOL_VERSION, room: ROOM, name: 'Host' });
+  host.send({ t: 'join', v: PROTOCOL_VERSION, room: ROOM, name: 'Host', ...(process.env.PASS ? { pass: process.env.PASS } : {}) });
   const hJoined = await host.waitFor((m) => m.t === 'joined', 'host joined');
   assert(hJoined.playerId === 1 && hJoined.isHost === true, 'host got slot 1 + isHost');
 
-  peer.send({ t: 'join', v: PROTOCOL_VERSION, room: ROOM, name: 'Peer' });
+  peer.send({ t: 'join', v: PROTOCOL_VERSION, room: ROOM, name: 'Peer', ...(process.env.PASS ? { pass: process.env.PASS } : {}) });
   const pJoined = await peer.waitFor((m) => m.t === 'joined', 'peer joined');
   assert(pJoined.playerId === 2 && pJoined.isHost === false, 'peer got slot 2, not host');
 

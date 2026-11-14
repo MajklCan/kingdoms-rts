@@ -1,23 +1,32 @@
 /**
- * MultiplayerSession — glue between the relay transport, the lockstep scheduler,
+ * MultiplayerSession - glue between the relay transport, the lockstep scheduler,
  * and the deterministic sim. It is the sole driver of tick advancement while a
  * networked match is in progress (the free-running render accumulator must NOT
  * step the sim in multiplayer; it only renders + interpolates).
  *
- * Lifecycle: lobby → (host) start → playing → (desync | peer-left | ended).
+ * Lifecycle: lobby -> (host) start -> playing -> (desync | peer-left |
+ * disconnected | left). There is no reconnect: every state after playing is
+ * terminal and the UI returns to the menu.
  */
 
 import { SIM } from '../config';
 import { checksumWorld } from '@sim/checksum';
 import {
+  LOCAL_PLAYER_ID,
   createSimWorld,
-  entityForNetId,
-  netIdForEntity,
   step,
+  toSelfDescribingInput,
   type SimInput,
   type SimWorld,
 } from '@sim/world';
-import { LOCAL_PLAYER_ID } from '@sim/world';
+import { ChecksumLedger, type ChecksumComparison } from './checksum-ledger';
+import {
+  decodeInputFromWire,
+  encodeInputForWire,
+  isWireCommandType,
+  sanitizeTurnCommands,
+  sanitizeWireCommand,
+} from './commands';
 import { Lockstep } from './lockstep';
 import {
   CHECKSUM_INTERVAL_TICKS,
@@ -34,7 +43,9 @@ export type SessionState =
   | 'playing'
   | 'desync'
   | 'peer-left'
-  | 'disconnected';
+  | 'disconnected'
+  /** We left on purpose (leave()). Terminal; the transport is closed. */
+  | 'left';
 
 export interface SessionCallbacks {
   onStateChange?: (state: SessionState) => void;
@@ -44,6 +55,18 @@ export interface SessionCallbacks {
   onDesync?: (tick: number, localHash: number, peerHash: number, peerId: number) => void;
   /** Fired when the relay rejects us (protocol mismatch, room full, already started). */
   onError?: (message: string) => void;
+  /** Fired after every lockstep tick the session steps (tick = the one just run). */
+  onTickStepped?: (world: SimWorld, tick: number) => void;
+}
+
+export interface SessionOptions {
+  /** Builds the match world from the agreed seed. Defaults to the skirmish
+   *  start every client uses; headless soak tests pass other maps and ages. */
+  createWorld?: (seed: number) => SimWorld;
+  /** Lockstep input delay in ticks (default DEFAULT_INPUT_DELAY). */
+  inputDelay?: number;
+  /** Relay password, if the relay asks for one. Never logged. */
+  password?: string;
 }
 
 interface TurnDebug {
@@ -56,14 +79,6 @@ interface ChecksumDebug {
   playerId: number;
   tick: number;
   hash: number;
-}
-
-interface ChecksumCompareDebug {
-  tick: number;
-  peerId: number;
-  localHash: number;
-  peerHash: number;
-  match: boolean;
 }
 
 export interface MultiplayerSessionEventDebug {
@@ -99,7 +114,7 @@ export interface MultiplayerSessionDebugSnapshot {
   lastReceivedTurn: TurnDebug | null;
   lastSentChecksum: ChecksumDebug | null;
   lastReceivedChecksum: ChecksumDebug | null;
-  lastChecksumCompare: ChecksumCompareDebug | null;
+  lastChecksumCompare: ChecksumComparison | null;
   pendingPeerChecksums: Array<{ tick: number; peerId: number; hash: number }>;
   lockstep: ReturnType<Lockstep['debugSnapshot']> | null;
   eventLog: MultiplayerSessionEventDebug[];
@@ -124,8 +139,7 @@ export class MultiplayerSession {
 
   private lockstep: Lockstep | null = null;
   private sendAccumMs = 0;
-  private readonly localChecksums = new Map<number, number>();
-  private readonly pendingPeerChecksums = new Map<number, { peerId: number; hash: number }>();
+  private readonly checksums = new ChecksumLedger();
   private updates = 0;
   private sentTurns = 0;
   private receivedTurns = 0;
@@ -139,7 +153,7 @@ export class MultiplayerSession {
   private lastReceivedTurn: TurnDebug | null = null;
   private lastSentChecksum: ChecksumDebug | null = null;
   private lastReceivedChecksum: ChecksumDebug | null = null;
-  private lastChecksumCompare: ChecksumCompareDebug | null = null;
+  private lastChecksumCompare: ChecksumComparison | null = null;
   private readonly eventLog: MultiplayerSessionEventDebug[] = [];
   private lastStalled = false;
   private stalledSinceMs = 0;
@@ -149,17 +163,24 @@ export class MultiplayerSession {
     private readonly transport: Transport,
     private readonly room: string,
     private readonly name: string,
-    private readonly cb: SessionCallbacks = {}
+    private readonly cb: SessionCallbacks = {},
+    private readonly options: SessionOptions = {}
   ) {
     transport.onOpen(() => {
       this.recordEvent('transport-open', { room: this.room, name: this.name });
-      transport.send({ t: 'join', v: PROTOCOL_VERSION, room: this.room, name: this.name });
+      transport.send({
+        t: 'join',
+        v: PROTOCOL_VERSION,
+        room: this.room,
+        name: this.name,
+        ...(this.options.password ? { pass: this.options.password } : {}),
+      });
       this.recordEvent('join-sent', { room: this.room, protocol: PROTOCOL_VERSION });
     });
     transport.onMessage((msg) => this.handle(msg));
     transport.onClose((info) => {
       this.recordEvent('transport-close', infoToDebug(info));
-      this.setState('disconnected');
+      if (this.state !== 'left') this.setState('disconnected');
     });
   }
 
@@ -170,13 +191,33 @@ export class MultiplayerSession {
     this.transport.send({ t: 'start', seed });
   }
 
-  /** Issue a local, already self-describing command. It is scheduled for a
-   *  future tick and applied identically on every client. */
+  /** Leave the room for good: closes the transport (the relay tells the peer)
+   *  and parks the session in the terminal 'left' state. Idempotent. */
+  leave(): void {
+    if (this.state === 'left') return;
+    this.recordEvent('leave');
+    this.setState('left');
+    this.lockstep = null;
+    this.transport.close();
+  }
+
+  /** Issue a local command. Selection-relative inputs are first translated
+   *  into their self-describing cmd* form from the local selection (the same
+   *  translation the render command layer uses). The command is scheduled for
+   *  a future tick and applied identically on every client. Commands peers
+   *  would reject (malformed, another player's id) are dropped here too, so
+   *  the local client never applies what its peers drop. */
   sendCommand(input: SimInput): void {
     if (!this.world) return;
-    const encoded = this.encodeInputForWire(input);
-    this.recordEvent('command-enqueued', inputDebug(encoded));
-    this.lockstep?.enqueueLocal(encoded);
+    const described = toSelfDescribingInput(this.world, this.localPlayerId, input);
+    const encoded = isWireCommandType(described.type) ? encodeInputForWire(this.world, described) : described;
+    const cmd = sanitizeWireCommand(this.localPlayerId, encoded);
+    if (!cmd) {
+      this.recordEvent('command-rejected', inputDebug(input));
+      return;
+    }
+    this.recordEvent('command-enqueued', inputDebug(cmd));
+    this.lockstep?.enqueueLocal(cmd);
   }
 
   /** Drive from the multiplayer pump with the real elapsed delta (ms). Advances the
@@ -193,6 +234,12 @@ export class MultiplayerSession {
     this.sendAccumMs += boundedDelta;
 
     while (this.sendAccumMs >= SIM.TICK_MS) {
+      if (!this.lockstep.canSend()) {
+        // Waiting on a peer with a full send window: drop the backlog instead
+        // of turning it into a burst (and lasting input lag) later.
+        this.sendAccumMs = SIM.TICK_MS;
+        break;
+      }
       this.sendAccumMs -= SIM.TICK_MS;
       const pkt = this.lockstep.nextSendPacket();
       this.sentTurns++;
@@ -210,9 +257,11 @@ export class MultiplayerSession {
 
     const readyTicks = this.lockstep.drainReadyTicks();
     for (const ready of readyTicks) {
-      for (const input of ready.inputs) this.world.inputs.push(this.decodeInputFromWire(input));
+      this.guardLockstepWorld(this.world, ready.tick);
+      for (const input of ready.inputs) this.world.inputs.push(decodeInputFromWire(this.world, input));
       step(this.world);
       this.lastStepAtMs = nowMs();
+      this.cb.onTickStepped?.(this.world, ready.tick);
       this.maybeChecksum(ready.tick + 1); // tick just completed
     }
     if (readyTicks.length > 0 && (readyTicks.some((tick) => tick.inputs.length > 0) || this.world.tick % CHECKSUM_INTERVAL_TICKS === 0)) {
@@ -268,11 +317,7 @@ export class MultiplayerSession {
       lastSentChecksum: this.lastSentChecksum ? { ...this.lastSentChecksum } : null,
       lastReceivedChecksum: this.lastReceivedChecksum ? { ...this.lastReceivedChecksum } : null,
       lastChecksumCompare: this.lastChecksumCompare ? { ...this.lastChecksumCompare } : null,
-      pendingPeerChecksums: [...this.pendingPeerChecksums.entries()].map(([tick, pending]) => ({
-        tick,
-        peerId: pending.peerId,
-        hash: pending.hash,
-      })),
+      pendingPeerChecksums: this.checksums.pendingPeerChecksums(),
       lockstep: this.lockstep?.debugSnapshot() ?? null,
       eventLog: this.eventLog.map((event) => ({
         ...event,
@@ -281,38 +326,52 @@ export class MultiplayerSession {
     };
   }
 
+  /**
+   * Only the lockstep may change what a tick does. A paused world would skip
+   * the tick (and defer its inputs) on this client alone, and an input pushed
+   * straight into world.inputs (debug API, a stray UI path) would run here
+   * only; either desyncs the match. Pause is not a multiplayer feature, so
+   * both are undone here and logged.
+   */
+  private guardLockstepWorld(world: SimWorld, tick: number): void {
+    if (world.paused) {
+      world.paused = false;
+      this.recordEvent('local-pause-ignored', { tick });
+    }
+    if (world.inputs.length > 0) {
+      this.recordEvent('local-inputs-dropped', { tick, count: world.inputs.length, types: world.inputs.map((i) => i.type) });
+      world.inputs.length = 0;
+    }
+  }
+
   private maybeChecksum(tick: number): void {
     if (tick % CHECKSUM_INTERVAL_TICKS !== 0 || !this.world) return;
     const hash = checksumWorld(this.world);
-    this.localChecksums.set(tick, hash);
     this.sentChecksums++;
     this.lastSentChecksum = { playerId: this.localPlayerId, tick, hash };
     this.recordEvent('checksum-sent', { tick, hash, sentChecksums: this.sentChecksums });
     this.transport.send({ t: 'checksum', tick, hash });
-    const pending = this.pendingPeerChecksums.get(tick);
-    if (pending) {
-      this.pendingPeerChecksums.delete(tick);
-      this.compareChecksum(tick, hash, pending.hash, pending.peerId);
-    }
+    for (const comparison of this.checksums.recordLocal(tick, hash)) this.onChecksumComparison(comparison);
   }
 
-  private compareChecksum(tick: number, local: number, peer: number, peerId: number): void {
-    this.lastChecksumCompare = { tick, localHash: local, peerHash: peer, peerId, match: local === peer };
-    this.recordEvent(local === peer ? 'checksum-match' : 'checksum-mismatch', {
-      tick,
-      peerId,
-      localHash: local,
-      peerHash: peer,
+  private onChecksumComparison(c: ChecksumComparison): void {
+    this.lastChecksumCompare = c;
+    this.recordEvent(c.match ? 'checksum-match' : 'checksum-mismatch', {
+      tick: c.tick,
+      peerId: c.peerId,
+      localHash: c.localHash,
+      peerHash: c.peerHash,
     });
-    if (local !== peer) {
+    if (!c.match) {
       // eslint-disable-next-line no-console
       console.warn('[Kingdoms MP] desync', this.debugSnapshot());
-      this.cb.onDesync?.(tick, local, peer, peerId);
+      this.cb.onDesync?.(c.tick, c.localHash, c.peerHash, c.peerId);
       this.setState('desync');
     }
   }
 
   private handle(msg: ServerMessage): void {
+    if (this.state === 'left') return;
     switch (msg.t) {
       case 'joined':
         this.localPlayerId = msg.playerId;
@@ -336,20 +395,26 @@ export class MultiplayerSession {
         this.recordEvent('start-received', { seed: msg.seed, players: msg.players.map((p) => p.playerId) });
         this.beginMatch(msg.seed, msg.players);
         return;
-      case 'turn':
+      case 'turn': {
+        // Validated against the sending slot (stamped by the relay) exactly
+        // as the sender validated them, so every client keeps the same set.
+        const cmds = sanitizeTurnCommands(msg.playerId, msg.cmds);
+        const dropped = msg.cmds.length - cmds.length;
         this.receivedTurns++;
-        this.lastReceivedTurn = { playerId: msg.playerId, forTick: msg.forTick, cmdCount: msg.cmds.length };
-        if (msg.cmds.length > 0 || msg.forTick % CHECKSUM_INTERVAL_TICKS === 0) {
-          this.recordEvent(msg.cmds.length > 0 ? 'turn-received-command' : 'turn-received-checkpoint', {
+        this.lastReceivedTurn = { playerId: msg.playerId, forTick: msg.forTick, cmdCount: cmds.length };
+        if (dropped > 0) this.recordEvent('turn-commands-rejected', { playerId: msg.playerId, forTick: msg.forTick, dropped });
+        if (cmds.length > 0 || msg.forTick % CHECKSUM_INTERVAL_TICKS === 0) {
+          this.recordEvent(cmds.length > 0 ? 'turn-received-command' : 'turn-received-checkpoint', {
             playerId: msg.playerId,
             forTick: msg.forTick,
-            cmdCount: msg.cmds.length,
-            cmdTypes: msg.cmds.map((cmd) => cmd.type),
+            cmdCount: cmds.length,
+            cmdTypes: cmds.map((cmd) => cmd.type),
             receivedTurns: this.receivedTurns,
           });
         }
-        this.lockstep?.receivePeerTurn(msg.playerId, msg.forTick, msg.cmds);
+        this.lockstep?.receivePeerTurn(msg.playerId, msg.forTick, cmds);
         return;
+      }
       case 'checksum':
         this.receivedChecksums++;
         this.lastReceivedChecksum = { playerId: msg.playerId, tick: msg.tick, hash: msg.hash };
@@ -359,7 +424,10 @@ export class MultiplayerSession {
           hash: msg.hash,
           receivedChecksums: this.receivedChecksums,
         });
-        this.handlePeerChecksum(msg.playerId, msg.tick, msg.hash);
+        {
+          const comparison = this.checksums.recordPeer(msg.playerId, msg.tick, msg.hash);
+          if (comparison) this.onChecksumComparison(comparison);
+        }
         return;
       case 'peer-left':
         this.recordEvent('peer-left', { playerId: msg.playerId });
@@ -373,29 +441,18 @@ export class MultiplayerSession {
     }
   }
 
-  private handlePeerChecksum(peerId: number, tick: number, hash: number): void {
-    const local = this.localChecksums.get(tick);
-    if (local !== undefined) {
-      this.localChecksums.delete(tick);
-      this.compareChecksum(tick, local, hash, peerId);
-    } else {
-      this.pendingPeerChecksums.set(tick, { peerId, hash });
-    }
-  }
-
   private beginMatch(seed: number, players: PlayerSlot[]): void {
     this.players = players;
-    const world = createSimWorld(seed);
+    const world = this.options.createWorld?.(seed) ?? createSimWorld(seed);
     // Every listed player is human → suppress the AI controller for all of them.
     world.humanPlayers = new Set(players.map((p) => p.playerId));
     world.paused = false;
     this.world = world;
 
     const peerIds = players.map((p) => p.playerId).filter((id) => id !== this.localPlayerId);
-    this.lockstep = new Lockstep(this.localPlayerId, peerIds, DEFAULT_INPUT_DELAY);
+    this.lockstep = new Lockstep(this.localPlayerId, peerIds, this.options.inputDelay ?? DEFAULT_INPUT_DELAY);
     this.sendAccumMs = 0;
-    this.localChecksums.clear();
-    this.pendingPeerChecksums.clear();
+    this.checksums.clear();
     this.updates = 0;
     this.sentTurns = 0;
     this.receivedTurns = 0;
@@ -417,72 +474,6 @@ export class MultiplayerSession {
     this.setState('playing');
     this.recordEvent('match-start', { seed, localPlayerId: this.localPlayerId, players: players.map((p) => p.playerId) });
     this.cb.onMatchStart?.(world, this.localPlayerId);
-  }
-
-  private encodeInputForWire(input: SimInput): SimInput {
-    if (!this.world) return input;
-    const eidsToNetIds = (eids: number[]) =>
-      eids
-        .map((eid) => netIdForEntity(this.world!, eid))
-        .filter((netId): netId is number => netId !== null);
-    const eidToNetId = (eid: number) => netIdForEntity(this.world!, eid) ?? -1;
-    switch (input.type) {
-      case 'cmdMove':
-        return { ...input, eids: eidsToNetIds(input.eids) };
-      case 'cmdGather':
-        return { ...input, eids: eidsToNetIds(input.eids), targetEid: eidToNetId(input.targetEid) };
-      case 'cmdStop':
-      case 'cmdToggleStance':
-      case 'cmdAttackMove':
-      case 'cmdRemoveBuildings':
-      case 'cmdSetStance':
-      case 'cmdSetFormationMode':
-      case 'cmdAdjustFormationMode':
-      case 'cmdRotateFormation':
-      case 'cmdReformFormation':
-        return { ...input, eids: eidsToNetIds(input.eids) };
-      case 'cmdAttack':
-        return { ...input, eids: eidsToNetIds(input.eids), targetEid: eidToNetId(input.targetEid) };
-      case 'trainUnit':
-        return { ...input, atEid: eidToNetId(input.atEid) };
-      case 'cancelProduction':
-        return { ...input, atEid: eidToNetId(input.atEid) };
-      default:
-        return input;
-    }
-  }
-
-  private decodeInputFromWire(input: SimInput): SimInput {
-    if (!this.world) return input;
-    const netIdsToEids = (netIds: number[]) =>
-      netIds
-        .map((netId) => entityForNetId(this.world!, netId))
-        .filter((eid): eid is number => eid !== null);
-    const netIdToEid = (netId: number) => entityForNetId(this.world!, netId) ?? -1;
-    switch (input.type) {
-      case 'cmdMove':
-        return { ...input, eids: netIdsToEids(input.eids) };
-      case 'cmdGather':
-        return { ...input, eids: netIdsToEids(input.eids), targetEid: netIdToEid(input.targetEid) };
-      case 'cmdStop':
-      case 'cmdToggleStance':
-      case 'cmdAttackMove':
-      case 'cmdRemoveBuildings':
-      case 'cmdSetStance':
-      case 'cmdSetFormationMode':
-      case 'cmdAdjustFormationMode':
-      case 'cmdRotateFormation':
-      case 'cmdReformFormation':
-        return { ...input, eids: netIdsToEids(input.eids) };
-      case 'cmdAttack':
-        return { ...input, eids: netIdsToEids(input.eids), targetEid: netIdToEid(input.targetEid) };
-      case 'trainUnit':
-        return { ...input, atEid: netIdToEid(input.atEid) };
-      case 'cancelProduction':
-        return { ...input, atEid: netIdToEid(input.atEid) };
-      default:
-        return input;
-    }
   }
 
   private setState(state: SessionState): void {

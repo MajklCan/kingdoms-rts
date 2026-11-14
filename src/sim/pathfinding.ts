@@ -1,5 +1,5 @@
 /**
- * Pathfinding service. Wraps EasyStar.js with a synchronous interface — we ask for
+ * Pathfinding service. Wraps EasyStar.js with a synchronous interface - we ask for
  * a path and pump EasyStar's `calculate()` until a callback fires, then return.
  * For Stage 0 this is fine; if it ever becomes a perf issue, switch to async with
  * per-tick budget.
@@ -16,7 +16,7 @@ export interface GridPos {
 
 export class Pathfinder {
   private easy: any;
-  /** Live reference to the walkability grid — mutating cells here updates
+  /** Live reference to the walkability grid - mutating cells here updates
    *  EasyStar's internal grid because we passed the same array reference. */
   public grid: number[][];
   private gridW: number;
@@ -58,7 +58,7 @@ export class Pathfinder {
 
     const raw = (result as GridPos[]).slice(1);
     if (raw.length === 0) return [];
-    // Line-of-sight smoothing — collapse runs of waypoints whose endpoints
+    // Line-of-sight smoothing - collapse runs of waypoints whose endpoints
     // see each other into a single step. Eliminates the visible NE/N/NE/N
     // zigzag and lets units take direct diagonals across open ground.
     return this.smoothPath(from, raw);
