@@ -110,6 +110,9 @@ function resourceApproachCandidates(
   const cy = Math.round(Position.y[target]);
   const out: Array<{ tile: GridPos; point: GridPos; score: number }> = [];
   const seen = new Set<string>();
+  const units = sortedEids(world, unitQuery(world.ecs));
+  const crowd = workerContactCrowd(world, eid, units);
+  const slotRivals = workerResourceContactSlotRivals(world, eid, target, units);
 
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
@@ -141,8 +144,8 @@ function resourceApproachCandidates(
         point,
         score:
           Math.hypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
-          workerContactCrowdPenalty(world, eid, point.x, point.y) +
-          workerResourceContactSlotPenalty(world, eid, target, point.x, point.y),
+          crowdPenaltyAt(world, crowd, point.x, point.y) +
+          slotPenaltyAt(world, slotRivals, point.x, point.y),
       });
     }
   }
@@ -151,17 +154,18 @@ function resourceApproachCandidates(
   return out;
 }
 
-function workerResourceContactSlotPenalty(
+/** Villagers of the same owner already working `target` (not hauling), in
+ *  deterministic order: their spots and path ends crowd a contact slot. */
+function workerResourceContactSlotRivals(
   world: SimWorld,
   eid: number,
   target: number,
-  x: number,
-  y: number
-): number {
-  if (!hasComponent(world.ecs, VillagerTag, eid)) return 0;
+  units: readonly number[]
+): number[] {
+  if (!hasComponent(world.ecs, VillagerTag, eid)) return [];
   const owner = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : -1;
-  let penalty = 0;
-  for (const other of sortedEids(world, unitQuery(world.ecs))) {
+  const out: number[] = [];
+  for (const other of units) {
     if (other === eid) continue;
     if (Health.hp[other] <= 0) continue;
     if (!hasComponent(world.ecs, VillagerTag, other)) continue;
@@ -174,7 +178,14 @@ function workerResourceContactSlotPenalty(
     ) {
       continue;
     }
+    out.push(other);
+  }
+  return out;
+}
 
+function slotPenaltyAt(world: SimWorld, rivals: readonly number[], x: number, y: number): number {
+  let penalty = 0;
+  for (const other of rivals) {
     const dist = Math.hypot(Position.x[other] - x, Position.y[other] - y);
     if (dist < WORKER_RESOURCE_CONTACT_SLOT_RADIUS) {
       penalty += WORKER_RESOURCE_CONTACT_SLOT_UNIT_PENALTY *
@@ -233,6 +244,7 @@ export function buildingApproachCandidates(
   if (!def) return [];
   const rect = buildingFootprintRect(buildingEid, def);
   const out: Array<{ tile: GridPos; point: GridPos; score: number; resourcePenalty: number }> = [];
+  const crowd = workerContactCrowd(world, eid, sortedEids(world, unitQuery(world.ecs)));
 
   for (let ty = rect.tileY0 - 1; ty <= rect.tileY1 + 1; ty++) {
     for (let tx = rect.tileX0 - 1; tx <= rect.tileX1 + 1; tx++) {
@@ -254,7 +266,7 @@ export function buildingApproachCandidates(
         y: edgeY + vy * BUILDING_CONTACT_EDGE_GAP,
       };
       const resourcePenalty = findResourceAt(world, tx, ty, 0.35) === null ? 0 : 20;
-      const crowdPenalty = workerContactCrowdPenalty(world, eid, point.x, point.y);
+      const crowdPenalty = crowdPenaltyAt(world, crowd, point.x, point.y);
       out.push({
         tile: { x: tx, y: ty },
         point,
@@ -272,15 +284,30 @@ export function buildingApproachCandidates(
 }
 
 export function workerContactCrowdPenalty(world: SimWorld, eid: number, x: number, y: number): number {
-  let penalty = 0;
+  return crowdPenaltyAt(world, workerContactCrowd(world, eid, sortedEids(world, unitQuery(world.ecs))), x, y);
+}
+
+/** Units whose spot or path end crowds a contact point for `eid`, in
+ *  deterministic order. Filtering once per candidate set (instead of once per
+ *  candidate) keeps the same units in the same order, so the penalty sums are
+ *  bit-identical. */
+export function workerContactCrowd(world: SimWorld, eid: number, units: readonly number[]): number[] {
   const owner = hasComponent(world.ecs, Owner, eid) ? Owner.player[eid] : -1;
   const requesterIsVillager = hasComponent(world.ecs, VillagerTag, eid);
-  for (const other of sortedEids(world, unitQuery(world.ecs))) {
+  const out: number[] = [];
+  for (const other of units) {
     if (other === eid) continue;
     if (Health.hp[other] <= 0) continue;
     if (owner >= 0 && Owner.player[other] !== owner) continue;
     if (requesterIsVillager && hasComponent(world.ecs, VillagerTag, other)) continue;
+    out.push(other);
+  }
+  return out;
+}
 
+export function crowdPenaltyAt(world: SimWorld, crowd: readonly number[], x: number, y: number): number {
+  let penalty = 0;
+  for (const other of crowd) {
     const dist = Math.hypot(Position.x[other] - x, Position.y[other] - y);
     if (dist < WORKER_CONTACT_CROWD_RADIUS) {
       penalty += WORKER_CONTACT_UNIT_PENALTY * (1 - dist / WORKER_CONTACT_CROWD_RADIUS);

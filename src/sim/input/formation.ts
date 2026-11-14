@@ -22,6 +22,7 @@ import {
   FORMATION_MODE_LINE,
   LOCAL_PLAYER_ID,
 } from '../core/constants';
+import { compareDeterministicEids } from '../core/entities';
 import { canUnitOccupy } from '../core/grid';
 import { findResourceAt } from '../core/lookup';
 import { pathTo } from '../core/navigation';
@@ -112,7 +113,8 @@ export function formationDestinations(
   const sorted = [...units].sort((a, b) => {
     const rank = formationRank(world, a) - formationRank(world, b);
     if (rank !== 0) return rank;
-    return a - b;
+    // NetId order: raw eids differ between clients.
+    return compareDeterministicEids(world, a, b);
   });
 
   const center = sorted.reduce(

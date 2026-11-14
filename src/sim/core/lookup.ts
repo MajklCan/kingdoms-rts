@@ -75,8 +75,14 @@ export function findResourceAt(
 ): number | null {
   let bestEid: number | null = null;
   let bestDist = radius;
+  const px = Position.x;
+  const py = Position.y;
   for (const eid of resourceQuery(world.ecs)) {
-    const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
+    const dx = px[eid] - x;
+    if (dx > bestDist || dx < -bestDist) continue;
+    const dy = py[eid] - y;
+    if (dy > bestDist || dy < -bestDist) continue;
+    const d = Math.hypot(dx, dy);
     if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;
@@ -95,10 +101,20 @@ export function findNearestResource(
 ): number | null {
   let bestEid: number | null = null;
   let bestDist = maxRange;
+  // Hot (every worksite, every tick, over every node): arrays through locals,
+  // and a node further than the best along one axis cannot be closer.
+  const kinds = Resource.kind;
+  const amounts = Resource.amount;
+  const px = Position.x;
+  const py = Position.y;
   for (const eid of resourceQuery(world.ecs)) {
-    if (Resource.kind[eid] !== kind) continue;
-    if (Resource.amount[eid] <= 0) continue;
-    const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
+    if (kinds[eid] !== kind) continue;
+    if (amounts[eid] <= 0) continue;
+    const dx = px[eid] - x;
+    if (dx > bestDist || dx < -bestDist) continue;
+    const dy = py[eid] - y;
+    if (dy > bestDist || dy < -bestDist) continue;
+    const d = Math.hypot(dx, dy);
     if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;

@@ -19,8 +19,8 @@ import { TileType } from '../map-gen';
 import type { GridPos } from '../pathfinding';
 import { compareGridPos, sortedEids } from '../core/entities';
 import { canUnitOccupyMovementTarget, canUnitSqueezeAlongDiagonalPath } from '../core/grid';
-import { workerContactCrowdPenalty } from '../core/navigation';
-import { movableQuery } from '../core/queries';
+import { crowdPenaltyAt, workerContactCrowd } from '../core/navigation';
+import { movableQuery, unitQuery } from '../core/queries';
 import type { MovementStuckState, SimWorld } from '../core/types';
 import { clearFormationSpeedCap } from '../input/unit-orders';
 import { isEconomicWorker, unitSeparationSystem } from './separation';
@@ -79,11 +79,50 @@ export function movementSystem(world: SimWorld): void {
       if (!tryMoveUnitStep(world, eid, nx, ny, stepDist, speed, waypoint)) {
         Velocity.x[eid] = 0;
         Velocity.y[eid] = 0;
+        stepBackToTileCentre(world, eid, path);
       }
       updateMovementStuckState(world, eid, path);
     }
   }
   unitSeparationSystem(world);
+}
+
+/**
+ * Paths start, and are line-of-sight smoothed, from the centre of the unit's
+ * tile. A unit standing near the tile's edge can find the straight line to
+ * the next waypoint clipping a blocked neighbour, and used to stand there
+ * (workers with a full load for minutes at a time). Walk to the tile centre
+ * first; from there the smoothed line is clear.
+ */
+function stepBackToTileCentre(world: SimWorld, eid: number, path: GridPos[]): void {
+  const cx = Math.round(Position.x[eid]);
+  const cy = Math.round(Position.y[eid]);
+  if (Math.hypot(cx - Position.x[eid], cy - Position.y[eid]) <= PATH_WAYPOINT_TOLERANCE) return;
+  if (path[0].x === cx && path[0].y === cy) return;
+  if (!canUnitOccupyMovementTarget(world, eid, cx, cy)) return;
+  // Only when the centre really has a clear run to the waypoint; otherwise
+  // the unit would shuttle between the two and the stuck re-path never fires.
+  if (!isSegmentPassable(world, eid, cx, cy, path[0])) return;
+  path.unshift({ x: cx, y: cy });
+  setPathHeadTarget(eid, path);
+}
+
+/** The movement step test, sampled every 0.1 tiles from (x, y) to `to`. */
+function isSegmentPassable(world: SimWorld, eid: number, x: number, y: number, to: GridPos): boolean {
+  const dx = to.x - x;
+  const dy = to.y - y;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.001) return true;
+  const nx = dx / len;
+  const ny = dy / len;
+  for (let s = 0.1; s < len; s += 0.1) {
+    const px = x + nx * s;
+    const py = y + ny * s;
+    if (!canUnitOccupyMovementTarget(world, eid, px, py) && !canUnitSqueezeAlongDiagonalPath(world, px, py, nx, ny, to)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function movementTerrainSpeedMultiplier(world: SimWorld, eid: number): number {
@@ -259,6 +298,9 @@ function repathAroundStuckDestination(
   const destY = Math.round(destination.y);
   const candidates: Array<{ tile: GridPos; score: number }> = [];
   const seen = new Set<string>();
+  const crowd = isEconomicWorker(world, eid)
+    ? workerContactCrowd(world, eid, sortedEids(world, unitQuery(world.ecs)))
+    : null;
 
   for (let r = 0; r <= STUCK_REPATH_RADIUS; r++) {
     for (let dy = -r; dy <= r; dy++) {
@@ -275,7 +317,7 @@ function repathAroundStuckDestination(
           score:
             Math.hypot(Position.x[eid] - x, Position.y[eid] - y) +
             Math.hypot(destination.x - x, destination.y - y) * 0.5 +
-            (isEconomicWorker(world, eid) ? workerContactCrowdPenalty(world, eid, x, y) : 0),
+            (crowd ? crowdPenaltyAt(world, crowd, x, y) : 0),
         });
       }
     }

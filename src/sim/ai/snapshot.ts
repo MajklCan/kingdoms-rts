@@ -18,7 +18,8 @@ import {
   VillagerTag,
 } from '../components';
 import { type BuildingDef, getBuildingDef } from '../defs';
-import { LOCAL_PLAYER_ID } from '../core/constants';
+import { isRivalPlayer } from '../core/players';
+import { sortedEids } from '../core/entities';
 import { findNearestResource } from '../core/lookup';
 import { buildingQuery, townCenterQuery, unitQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -37,9 +38,15 @@ export interface AiSnapshot {
   enemyMilitary: number[];
 }
 
+/**
+ * Every list is in NetId order. bitECS query order follows the history of
+ * component adds and removes, which a loaded save cannot reproduce, so a
+ * snapshot in query order made a reloaded AI pick a different barracks than
+ * the original would have.
+ */
 export function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot | null {
   let tcEid = -1;
-  for (const eid of townCenterQuery(world.ecs)) {
+  for (const eid of sortedEids(world, townCenterQuery(world.ecs))) {
     if (Owner.player[eid] === playerId && Health.hp[eid] > 0) {
       tcEid = eid;
       break;
@@ -49,10 +56,10 @@ export function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot
 
   const myBuildings: number[] = [];
   const enemyBuildings: number[] = [];
-  for (const eid of buildingQuery(world.ecs)) {
+  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
     if (Health.hp[eid] <= 0) continue;
     if (Owner.player[eid] === playerId) myBuildings.push(eid);
-    else if (Owner.player[eid] === LOCAL_PLAYER_ID) enemyBuildings.push(eid);
+    else if (isRivalPlayer(Owner.player[eid], playerId)) enemyBuildings.push(eid);
   }
 
   const myMilitary: number[] = [];
@@ -62,7 +69,7 @@ export function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot
   const myGunmen: number[] = [];
   const myCannons: number[] = [];
   const enemyMilitary: number[] = [];
-  for (const eid of unitQuery(world.ecs)) {
+  for (const eid of sortedEids(world, unitQuery(world.ecs))) {
     if (Health.hp[eid] <= 0) continue;
     if (hasComponent(world.ecs, VillagerTag, eid)) continue;
     if (Owner.player[eid] === playerId) {
@@ -72,7 +79,7 @@ export function collectAiSnapshot(world: SimWorld, playerId: number): AiSnapshot
       else if (hasComponent(world.ecs, ScoutCavalryTag, eid)) myScouts.push(eid);
       else if (hasComponent(world.ecs, GunmanTag, eid)) myGunmen.push(eid);
       else if (hasComponent(world.ecs, CannonTag, eid)) myCannons.push(eid);
-    } else if (Owner.player[eid] === LOCAL_PLAYER_ID) {
+    } else if (isRivalPlayer(Owner.player[eid], playerId)) {
       enemyMilitary.push(eid);
     }
   }

@@ -242,6 +242,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       waveUnitEids: state.waveUnitEids.slice(),
       lastAttackEventTick: Number.isFinite(state.lastAttackEventTick) ? state.lastAttackEventTick : -1,
       lastDefenseEventTick: Number.isFinite(state.lastDefenseEventTick) ? state.lastDefenseEventTick : -1,
+      ...(state.difficulty ? { difficulty: state.difficulty } : {}),
     } : null),
     visibility: world.visibility.map((vis) => vis ? {
       visible: Array.from(vis.visible),

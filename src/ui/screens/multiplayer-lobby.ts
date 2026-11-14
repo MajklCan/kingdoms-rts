@@ -200,7 +200,7 @@ export function bindMultiplayerLobby(): void {
         transport = null;
         resetIdle();
       },
-    }, password);
+    }, { password });
   });
 
   leaveBtn.addEventListener('click', () => {

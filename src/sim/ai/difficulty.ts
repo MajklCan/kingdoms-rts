@@ -5,6 +5,7 @@
 import { SIM } from '../../config';
 import { AI_PLAYER_ID, MAX_PLAYERS } from '../core/constants';
 import type { AiDifficulty, AiPlayerState, SimWorld } from '../core/types';
+import { currentAiThinkScope } from './context';
 
 interface AiDifficultySettings {
   thinkIntervalTicks: number;
@@ -181,8 +182,22 @@ export function createAiPlayers(difficulty: AiDifficulty): Array<AiPlayerState |
   return states;
 }
 
+/** Difficulty of the AI that is thinking right now (the world default outside a think). */
+export function aiDifficultyOf(world: SimWorld): AiDifficulty {
+  return currentAiThinkScope()?.difficulty ?? normalizeAiDifficulty(world.aiDifficulty);
+}
+
+/** Difficulty `playerId`'s AI plays at: its own setting, else the world's. */
+export function aiPlayerDifficulty(world: SimWorld, playerId: number): AiDifficulty {
+  return normalizeAiDifficulty(world.aiPlayers[playerId]?.difficulty ?? world.aiDifficulty);
+}
+
 export function aiSettings(world: SimWorld): AiDifficultySettings {
-  return AI_DIFFICULTY_SETTINGS[normalizeAiDifficulty(world.aiDifficulty)];
+  return AI_DIFFICULTY_SETTINGS[aiDifficultyOf(world)];
+}
+
+export function aiSettingsFor(difficulty: AiDifficulty): AiDifficultySettings {
+  return AI_DIFFICULTY_SETTINGS[normalizeAiDifficulty(difficulty)];
 }
 
 export function aiElapsedMinutes(world: SimWorld): number {

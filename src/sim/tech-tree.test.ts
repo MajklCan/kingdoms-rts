@@ -319,7 +319,8 @@ describe('technology tree', () => {
     const world = createSimWorld(513);
     world.paused = false;
     world.ages[1].current = AgeId.GUNPOWDER;
-    world.resources[1].set([45 * 3, 1000, 75 * 3, 1000]);
+    const gunman = UNIT_TABLE[UnitDefId.GUNMAN].cost;
+    world.resources[1].set([gunman.food * 3, 1000, gunman.gold * 3, 1000]);
     world.population[1].cap = world.population[1].current + 5;
     const spot = findOpenBuildingTile(world, 2);
     const foundry = spawnCompletedBuilding(world, BuildingDefId.FOUNDRY, spot.x, spot.y, 1);
