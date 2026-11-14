@@ -1,59 +1,43 @@
 /**
  * Mouse input on the battlefield: click / double-click / drag-box selection,
- * right-click context command (attack > army rally > resource hint > move),
- * A+click attack-move, and hand-off to placement modes while one is armed.
+ * right-click context command, A+click attack-move, and hand-off to
+ * placement modes while one is armed. What a click means lives in
+ * world-orders.ts, shared with touch (touch-controller.ts).
  *
  * Orders leave a ground marker and refusals are reported through the
  * command feedback, so the player always sees what a click did.
  *
  * Drag boxes are also tracked through window-level pointer events so a drag
- * released outside the canvas (or over DOM HUD) still completes.
+ * released outside the canvas (or over DOM HUD) still completes. Touch
+ * pointers never reach this class: Phaser's touch input is off and
+ * touch-controller.ts owns them.
  */
 
-import { hasComponent } from 'bitecs';
-import {
-  Building,
-  DeadTag,
-  Health,
-  Owner,
-  Position,
-  Resource,
-  ResourceKindId,
-  UnitKind,
-  WorksiteWorker,
-} from '@sim/components';
-import {
-  clearSelection,
-  findEntityNear,
-  findResourceAt,
-  isEnemyOf,
-  selectedQuery,
-  setSelected,
-  unitQuery,
-} from '@sim/world';
+import { clearSelection } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
-import { isArmyProducerDefId } from '../commands/economy';
 import type { CommandFeedback } from '../commands/feedback';
 import type { PlayerCommands } from '../commands/player-commands';
 import type { GameAudio } from '../game-audio';
-import { entityKindName, resourceKindName } from '../hud/selection-info';
+import { entityKindName } from '../hud/selection-info';
 import { BUILD_MODE_TO_DEF, type BuildPlacement } from '../placement/build-placement';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
+import { drawSelectionBox, WorldOrders, type MapOrderKind } from './world-orders';
+
+export type { MapOrderKind } from './world-orders';
 
 const DRAG_THRESHOLD_PX = 6;
 const DOUBLE_CLICK_MS = 300;
 /** Drag box draws above the world (camera space, not in a world layer). */
-const DRAG_BOX_DEPTH = 20000;
+export const DRAG_BOX_DEPTH = 20000;
 
 interface Point {
   x: number;
   y: number;
 }
 
-export type MapOrderKind = 'move' | 'attackMove';
-
 export class PointerController {
+  readonly orders: WorldOrders;
   private dragStart: Point | null = null;
   private dragCurrent: Point | null = null;
   private isDragging = false;
@@ -70,21 +54,8 @@ export class PointerController {
       /** Building whose sprite pixels cover a layer-local point (tall art). */
       pickBuilding?: (localX: number, localY: number) => number | null;
     }
-  ) {}
-
-  /**
-   * Entity under the pointer: the sim's tile pick, except that a building
-   * drawn over that point (a roof or tower top over a tile further back) wins
-   * against another building, and fills in when the tile pick finds nothing.
-   */
-  private pickEntity(pointer: Phaser.Input.Pointer, tileX: number, tileY: number): number | null {
-    const world = this.ctx.world;
-    const picked = findEntityNear(world, tileX, tileY, 0.7);
-    const root = this.ctx.layers.root;
-    const drawn = this.deps.pickBuilding?.(pointer.worldX - root.x, pointer.worldY - root.y) ?? null;
-    if (drawn === null) return picked;
-    if (picked === null || (picked !== drawn && hasComponent(world.ecs, Building, picked))) return drawn;
-    return picked;
+  ) {
+    this.orders = new WorldOrders(ctx, deps);
   }
 
   install(): void {
@@ -110,15 +81,16 @@ export class PointerController {
   /** Where order markers go (wired by the UI API). */
   setFeedback(feedback: CommandFeedback): void {
     this.feedback = feedback;
+    this.orders.setFeedback(feedback);
   }
 
   selectAllVillagers(): void {
-    const n = this.selectOwnUnits(true);
+    const n = this.orders.selectOwnUnits(true);
     setLastEvent(`F1: selected ${n} worker${n === 1 ? '' : 's'}`);
   }
 
   selectAllMilitary(): void {
-    const n = this.selectOwnUnits(false);
+    const n = this.orders.selectOwnUnits(false);
     setLastEvent(`F2: selected ${n} unit${n === 1 ? '' : 's'}`);
   }
 
@@ -127,37 +99,11 @@ export class PointerController {
    * battlefield share this). Returns false when nothing commandable is selected.
    */
   issueMapOrder(kind: MapOrderKind, tx: number, ty: number): boolean {
-    const { commands, audio } = this.deps;
-    if (!isInsideMap(tx, ty)) return false;
-    if (commands.selectedCommandableCount() === 0) return false;
-    if (kind === 'attackMove') {
-      commands.dispatch({ type: 'attackMoveSelected', to: { x: tx, y: ty } });
-      audio.barkAttack();
-      this.feedback?.orderMarker('attack-move', tx, ty);
-    } else {
-      commands.dispatch({ type: 'moveSelected', to: { x: tx, y: ty } });
-      audio.barkMove();
-      this.feedback?.orderMarker('move', tx, ty);
-    }
-    setLastEvent(`${kind} -> (${tx},${ty})`);
-    return true;
-  }
-
-  private selectOwnUnits(villagers: boolean): number {
-    const world = this.ctx.world;
-    clearSelection(world);
-    let n = 0;
-    for (const eid of unitQuery(world.ecs)) {
-      if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
-      if (this.ctx.isVillager(eid) !== villagers) continue;
-      setSelected(world, eid, true);
-      n++;
-    }
-    return n;
+    return this.orders.issueMapOrder(kind, tx, ty);
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
-    const { tx, ty, tileX, tileY } = this.ctx.pointerTile(pointer);
+    const { tx, ty } = this.ctx.pointerTile(pointer);
     const { placement, commands } = this.deps;
 
     // Refuse an invalid placement up front and keep the build mode armed, so
@@ -179,71 +125,13 @@ export class PointerController {
     }
 
     if (pointer.rightButtonDown()) {
-      this.onRightClick(pointer, tx, ty, tileX, tileY);
+      this.orders.command(pointer.worldX, pointer.worldY);
     } else if (pointer.leftButtonDown()) {
-      this.onLeftClick(pointer, tx, ty, tileX, tileY);
+      this.onLeftClick(pointer, tx, ty);
     }
   }
 
-  /** Priority: visible enemy -> attack; only army buildings selected -> rally;
-   *  explored resource -> hint; else move. */
-  private onRightClick(pointer: Phaser.Input.Pointer, tx: number, ty: number, tileX: number, tileY: number): void {
-    const world = this.ctx.world;
-    const { commands, audio } = this.deps;
-    if (!isInsideMap(tx, ty)) return;
-    const hasUnits = commands.selectedCommandableCount() > 0;
-    const targetEid = this.pickEntity(pointer, tileX, tileY);
-    if (
-      hasUnits &&
-      targetEid !== null &&
-      this.ctx.isEntityVisible(targetEid) &&
-      isEnemyOf(world, targetEid, this.ctx.perspectivePlayerId)
-    ) {
-      commands.dispatch({ type: 'attackSelected', targetEid });
-      audio.barkAttack();
-      this.feedback?.orderMarker('attack', Position.x[targetEid], Position.y[targetEid]);
-      setLastEvent(`attack eid=${targetEid}`);
-      return;
-    }
-    if (!hasUnits) {
-      if (this.selectionIsOwnArmyProducers()) {
-        commands.dispatch({ type: 'setArmyRallyPoint', playerId: this.ctx.perspectivePlayerId, x: tx, y: ty });
-        this.feedback?.orderMarker('rally', tx, ty);
-        commands.confirm('Army rally point set');
-      }
-      return;
-    }
-    const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
-    if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
-      if (commands.selectedGathererCount() > 0 && Resource.amount[resourceEid] > 0) {
-        // Free villagers (town center trained) gather by hand and carry to a drop-off.
-        commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid });
-        audio.barkMove();
-        this.feedback?.orderMarker('move', Position.x[resourceEid], Position.y[resourceEid]);
-        setLastEvent(`gather eid=${resourceEid}`);
-        return;
-      }
-      const kind = Resource.kind[resourceEid];
-      commands.fail({
-        reason: 'unavailable',
-        text:
-          kind === ResourceKindId.FOOD
-            ? 'Food comes from farms'
-            : `${capitalize(resourceKindName(kind))} is harvested by a nearby worksite`,
-      });
-      return;
-    }
-    this.issueMapOrder('move', tx, ty);
-  }
-
-  private onLeftClick(
-    pointer: Phaser.Input.Pointer,
-    tx: number,
-    ty: number,
-    tileX: number,
-    tileY: number
-  ): void {
-    const world = this.ctx.world;
+  private onLeftClick(pointer: Phaser.Input.Pointer, tx: number, ty: number): void {
     // Remember the drag origin in case this becomes a box-select; the single
     // pick below still happens immediately for snappy feedback.
     this.dragStart = { x: pointer.worldX, y: pointer.worldY };
@@ -259,57 +147,14 @@ export class PointerController {
       return;
     }
 
-    const picked = this.pickEntity(pointer, tileX, tileY);
-    const eid = picked !== null && this.ctx.isEntityVisible(picked) ? picked : null;
+    const eid = this.orders.visibleEntityAt(pointer.worldX, pointer.worldY);
     if (eid !== null && this.ctx.isOwnUnit(eid) && this.isDoubleClickOnSameUnit(eid)) {
-      const n = this.selectSameKindOnScreen(eid);
-      setLastEvent(`double-click: selected ${n} ${entityKindName(world, eid)} unit${n === 1 ? '' : 's'}`);
+      const n = this.orders.selectSameKindOnScreen(eid);
+      setLastEvent(`double-click: selected ${n} ${entityKindName(this.ctx.world, eid)} unit${n === 1 ? '' : 's'}`);
       return;
     }
-
     if (eid === null || !this.ctx.isOwnUnit(eid)) this.lastLeftUnitClick = null;
-    clearSelection(world);
-    if (eid !== null) {
-      setSelected(world, eid, true);
-      if (this.ctx.isOwnUnit(eid)) this.deps.audio.barkSelect(eid);
-      setLastEvent(`selected ${entityKindName(world, eid)} eid=${eid}`);
-    } else {
-      setLastEvent(`cleared selection`);
-    }
-  }
-
-  /** Double-click: every own unit of the clicked unit's type that is on screen. */
-  private selectSameKindOnScreen(sourceEid: number): number {
-    const world = this.ctx.world;
-    const playerId = this.ctx.perspectivePlayerId;
-    const kind = UnitKind.kind[sourceEid];
-    const view = this.ctx.scene.cameras.main.worldView;
-    clearSelection(world);
-    let n = 0;
-    for (const eid of unitQuery(world.ecs)) {
-      if (Owner.player[eid] !== playerId) continue;
-      if (UnitKind.kind[eid] !== kind) continue;
-      if (!isAliveUnit(world.ecs, eid)) continue;
-      const s = this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
-      if (eid !== sourceEid && !view.contains(s.x, s.y)) continue;
-      setSelected(world, eid, true);
-      n++;
-    }
-    this.deps.audio.barkSelect(sourceEid);
-    return n;
-  }
-
-  /** Selection is non-empty and only our own barracks / stables / foundries. */
-  private selectionIsOwnArmyProducers(): boolean {
-    const world = this.ctx.world;
-    const selected = selectedQuery(world.ecs);
-    if (selected.length === 0) return false;
-    for (const eid of selected) {
-      if (!hasComponent(world.ecs, Building, eid)) return false;
-      if (Owner.player[eid] !== this.ctx.perspectivePlayerId) return false;
-      if (!isArmyProducerDefId(Building.defId[eid])) return false;
-    }
-    return true;
+    this.orders.select(pointer.worldX, pointer.worldY);
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
@@ -328,7 +173,7 @@ export class PointerController {
   }
 
   private onWindowPointerMove = (ev: PointerEvent): void => {
-    if (!this.dragStart) return;
+    if (!this.dragStart || ev.pointerType === 'touch') return;
     const point = this.clientPointerToWorld(ev.clientX, ev.clientY);
     if ((ev.buttons & 1) === 0) {
       this.finishDragAt(point);
@@ -338,7 +183,7 @@ export class PointerController {
   };
 
   private onWindowPointerUp = (ev: PointerEvent): void => {
-    if (!this.dragStart) return;
+    if (!this.dragStart || ev.pointerType === 'touch') return;
     this.finishDragAt(this.clientPointerToWorld(ev.clientX, ev.clientY));
   };
 
@@ -376,23 +221,14 @@ export class PointerController {
       clearSelection(this.ctx.world);
     }
     if (!this.isDragging) return;
-    const x = Math.min(this.dragStart.x, point.x);
-    const y = Math.min(this.dragStart.y, point.y);
-    const w = Math.abs(dx);
-    const h = Math.abs(dy);
-    const g = this.dragGfx;
-    g.clear();
-    g.lineStyle(2, 0xfeca57, 1);
-    g.strokeRect(x, y, w, h);
-    g.fillStyle(0xfeca57, 0.12);
-    g.fillRect(x, y, w, h);
+    drawSelectionBox(this.dragGfx, this.dragStart.x, this.dragStart.y, point.x, point.y);
   }
 
   private finishDragAt(point: Point): void {
     if (!this.dragStart) return;
     this.dragCurrent = point;
     if (this.isDragging) {
-      this.selectUnitsInWorldBox(
+      this.orders.selectInWorldBox(
         Math.min(this.dragStart.x, point.x),
         Math.min(this.dragStart.y, point.y),
         Math.max(this.dragStart.x, point.x),
@@ -409,38 +245,10 @@ export class PointerController {
     this.isDragging = false;
   }
 
-  /** Select own units whose sprite anchor lies inside the camera-world box. */
-  private selectUnitsInWorldBox(x0: number, y0: number, x1: number, y1: number): void {
-    const world = this.ctx.world;
-    clearSelection(world);
-    let n = 0;
-    for (const eid of unitQuery(world.ecs)) {
-      if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
-      const s = this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
-      if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) {
-        setSelected(world, eid, true);
-        n++;
-      }
-    }
-    const rep = this.deps.audio.representativeSelectedUnit();
-    if (rep !== null) this.deps.audio.barkSelect(rep);
-    setLastEvent(`box-selected ${n} unit${n === 1 ? '' : 's'}`);
-  }
-
   private isDoubleClickOnSameUnit(eid: number): boolean {
     const now = this.ctx.scene.time.now;
     const last = this.lastLeftUnitClick;
     this.lastLeftUnitClick = { eid, atMs: now };
     return last !== null && last.eid === eid && now - last.atMs <= DOUBLE_CLICK_MS;
   }
-}
-
-function isAliveUnit(ecs: Parameters<typeof hasComponent>[0], eid: number): boolean {
-  if (hasComponent(ecs, DeadTag, eid)) return false;
-  if (hasComponent(ecs, WorksiteWorker, eid)) return false;
-  return !hasComponent(ecs, Health, eid) || Health.hp[eid] > 0;
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

@@ -53,6 +53,9 @@ const config: Phaser.Types.Core.GameConfig = {
     antialias: false,
     antialiasGL: false,
   },
+  // Fingers are handled by render/input/touch-controller.ts (Pointer Events,
+  // gestures); Phaser keeps the mouse, so a tap is never seen twice.
+  input: { touch: false },
   scene: [GameScene],
 };
 

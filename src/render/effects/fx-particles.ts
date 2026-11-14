@@ -12,6 +12,7 @@
  * screen costs nothing. All randomness here is render-local `Math.random`.
  */
 
+import { performanceMode } from './perf-mode';
 import { BLEND_ADD, BLEND_NORMAL } from './fx-constants';
 import { FX_SHEET, type FxFrame } from './fx-textures';
 
@@ -244,6 +245,7 @@ export class FxParticles {
   private readonly pools: Record<FxPoolId, Pool>;
   /** Layer-local camera view, refreshed every frame by the owner. */
   readonly view: FxView = { left: 0, top: 0, right: 0, bottom: 0 };
+  private thin = 0;
 
   constructor(scene: Phaser.Scene, layers: { groundFx: Phaser.GameObjects.Container; effects: Phaser.GameObjects.Container }) {
     this.pools = {
@@ -262,6 +264,11 @@ export class FxParticles {
   /** Spawn one particle; false when culled or the pool is full. */
   emit(pool: FxPoolId, spec: ParticleSpec): boolean {
     if (!this.onScreen(spec.x, spec.y, 96)) return false;
+    // Performance mode keeps one particle in three (a calmer, cheaper burst).
+    if (performanceMode()) {
+      this.thin = (this.thin + 1) % 3;
+      if (this.thin !== 0) return false;
+    }
     return this.pools[pool].emit(spec);
   }
 

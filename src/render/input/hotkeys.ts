@@ -6,7 +6,7 @@
 
 import { UnitStanceId } from '@sim/components';
 import { setLastEvent } from '../../debug/overlay';
-import { ZOOM_KEY_STEP, type CameraController } from '../camera/camera-controller';
+import type { CameraController } from '../camera/camera-controller';
 import type { PlayerCommands } from '../commands/player-commands';
 import type { BuildMode, BuildPlacement } from '../placement/build-placement';
 import type { PointerController } from './pointer-controller';
@@ -71,9 +71,11 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-V', () => placement.startArmyRallyMode());
   onHotkey('keydown-DELETE', () => commands.removeSelectedBuildings());
 
-  onHotkey('keydown-PLUS', () => camera.applyZoom(ZOOM_KEY_STEP));
-  onHotkey('keydown-EQUALS', () => camera.applyZoom(ZOOM_KEY_STEP));
-  onHotkey('keydown-MINUS', () => camera.applyZoom(-ZOOM_KEY_STEP));
+  onHotkey('keydown-PLUS', () => camera.zoomStep(1));
+  onHotkey('keydown-EQUALS', () => camera.zoomStep(1));
+  onHotkey('keydown-MINUS', () => camera.zoomStep(-1));
+  onHotkey('keydown-NUMPAD_ADD', () => camera.zoomStep(1));
+  onHotkey('keydown-NUMPAD_SUBTRACT', () => camera.zoomStep(-1));
   onHotkey('keydown-F1', (ev) => {
     ev.preventDefault();
     pointer.selectAllVillagers();

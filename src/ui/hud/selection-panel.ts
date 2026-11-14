@@ -153,6 +153,7 @@ function buildIdle(): Pick<Refs, 'empty' | 'idleAge' | 'idleObjective' | 'idleEv
   const idleAge = h('span', { class: 'idle-age' });
   const idleObjective = h('span', { class: 'idle-objective-text' });
   const idleEvents = h('ol', { class: 'idle-events', 'aria-label': 'Recent events' });
+  const hintKey = (key: string, label: string) => h('span', { class: 'idle-hint-item' }, h('kbd', null, key), label);
   const empty = h(
     'div',
     { class: 'sel-empty' },
@@ -165,18 +166,36 @@ function buildIdle(): Pick<Refs, 'empty' | 'idleAge' | 'idleObjective' | 'idleEv
       idleEvents,
       h(
         'p',
-        { class: 'idle-hint' },
-        'Click or drag to select. ',
-        h('kbd', null, 'F1'),
-        ' villagers ',
-        h('kbd', null, 'F2'),
-        ' army ',
-        h('kbd', null, '.'),
-        ' idle villager'
+        { class: 'idle-hint mouse-only' },
+        h('span', { class: 'idle-hint-item' }, 'Click or drag to select'),
+        hintKey('F1', 'villagers'),
+        hintKey('F2', 'army'),
+        hintKey('.', 'idle villager')
+      ),
+      h(
+        'p',
+        { class: 'idle-hint touch-only' },
+        h('span', { class: 'idle-hint-item' }, 'Tap to select'),
+        h('span', { class: 'idle-hint-item' }, 'Hold, then drag to box-select'),
+        h('span', { class: 'idle-hint-item' }, 'Pinch to zoom')
       )
     )
   );
+  // Show only the newest events that fit; the sheet height varies a lot
+  // between a phone and a 4K screen.
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitIdleEvents(idleEvents)).observe(idleEvents);
   return { empty, idleAge, idleObjective, idleEvents };
+}
+
+/** Hide the oldest event lines until the rest fit without clipping. */
+function fitIdleEvents(list: HTMLElement): void {
+  const items = Array.from(list.children) as HTMLElement[];
+  for (const li of items) li.hidden = false;
+  if (list.clientHeight === 0) return;
+  for (let i = 0; i < items.length - 1 && list.scrollHeight > list.clientHeight + 1; i++) items[i]!.hidden = true;
+  // Not even the newest line fits: show none rather than half of one.
+  const last = items[items.length - 1];
+  if (last && list.scrollHeight > list.clientHeight + 1) last.hidden = true;
 }
 
 function buildQueue(): Pick<Refs, 'queueWrap' | 'queueSlots' | 'queueMore'> {
@@ -486,6 +505,7 @@ function renderIdle(scene: GameScene): void {
       ? events.map((e) => h('li', { class: `idle-event tone-${e.tone}` }, plainDashes(e.text)))
       : [h('li', { class: 'idle-event is-quiet' }, 'The chronicle is quiet.')])
   );
+  fitIdleEvents(refs.idleEvents);
 }
 
 // --- Frame -------------------------------------------------------------------

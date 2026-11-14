@@ -1,15 +1,20 @@
 /**
  * Settings: Audio (mute + per-channel volume), Game (speed, interface
- * scale) and Controls (hotkey reference). Opens from the main menu and the
- * pause menu. Audio values live in the AudioManager (which persists them);
- * interface scale persists in localStorage.
+ * scale, input mode, performance mode, fullscreen) and Controls (touch
+ * gestures and hotkey reference). Opens from the main menu and the pause
+ * menu. Audio values live in the AudioManager (which persists them); the
+ * rest persists in localStorage.
  */
 
 import type { AudioChannel } from '../../render/audio/audio-manager';
+import type { PerfModePref } from '../../render/effects/perf-mode';
+import { isTouchUi, type InputModePref } from '../../render/input/input-mode';
 import { h, readStorage, writeStorage } from '../dom';
 import { getScene } from '../game-bridge';
 import { icon } from '../icons/icon';
 import { syncPixelScale } from '../skin/pixel-scale';
+import { buildFullscreenButton, canFullscreen } from '../touch/fullscreen';
+import { setStoredInputPref, setStoredPerfPref, storedInputPref, storedPerfPref } from '../touch/touch-mode';
 import { createModal, type Modal } from './modal';
 
 export type SettingsTab = 'audio' | 'game' | 'controls';
@@ -97,10 +102,22 @@ let muteSwitch: HTMLButtonElement | null = null;
 let audioNote: HTMLElement | null = null;
 let speedInputs: HTMLInputElement[] = [];
 
+/**
+ * Touch with no stored choice: a step up ("Large") where the automatic fit
+ * would leave command buttons under 44 CSS px (phones, small tablets).
+ */
+function touchDefaultScale(): number {
+  const base = Math.min(36, Math.max(13, Math.min(window.innerWidth * 0.0125, window.innerHeight * 0.022222)));
+  return base * 2.625 < 44 ? 1.15 : 1;
+}
+
 export function applyStoredUiScale(): void {
-  const v = Number(readStorage(UI_SCALE_KEY) ?? '1');
+  const stored = readStorage(UI_SCALE_KEY);
+  const v = stored === null ? (isTouchUi() ? touchDefaultScale() : 1) : Number(stored);
   const scale = Number.isFinite(v) && v >= 0.8 && v <= 1.5 ? v : 1;
-  document.documentElement.style.setProperty('--ui-user-scale', String(scale));
+  const root = document.documentElement;
+  if (root.style.getPropertyValue('--ui-user-scale') === String(scale)) return;
+  root.style.setProperty('--ui-user-scale', String(scale));
   syncPixelScale();
 }
 
@@ -185,11 +202,63 @@ function buildGamePanel(): HTMLElement {
     });
     scale.append(h('label', null, input, h('span', null, s.label)));
   }
+  const fullscreen = buildFullscreenButton('btn btn-ghost settings-fullscreen');
+  fullscreen.append(h('span', null, 'Fullscreen'));
   return h(
     'div',
     { class: 'settings-section' },
     h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Game speed'), speed, h('p', { class: 'field-note' }, 'Also toggled with X during a match.')),
-    h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Interface size'), scale, h('p', { class: 'field-note' }, 'Scales every menu and HUD element on top of the automatic fit to your screen.'))
+    h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Interface size'), scale, h('p', { class: 'field-note' }, 'Scales every menu and HUD element on top of the automatic fit to your screen.')),
+    segField<InputModePref>('Input', 'settings-input', INPUT_CHOICES, storedInputPref(), setStoredInputPref, 'Touch shows on-screen buttons and bigger targets. Auto follows the last thing you pressed with.'),
+    segField<PerfModePref>('Performance mode', 'settings-perf', PERF_CHOICES, storedPerfPref(), setStoredPerfPref, 'Fewer particles and no ambient life (birds, smoke, swaying trees). Auto turns it on when a touch screen runs slow.'),
+    canFullscreen() ? h('div', { class: 'field' }, fullscreen) : null
+  );
+}
+
+const INPUT_CHOICES: ReadonlyArray<{ value: InputModePref; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'touch', label: 'Touch' },
+  { value: 'mouse', label: 'Mouse' },
+];
+const PERF_CHOICES: ReadonlyArray<{ value: PerfModePref; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' },
+];
+
+function segField<T extends string>(
+  legend: string,
+  name: string,
+  choices: ReadonlyArray<{ value: T; label: string }>,
+  current: T,
+  onPick: (value: T) => void,
+  note: string
+): HTMLElement {
+  const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': legend });
+  for (const c of choices) {
+    const input = h('input', { type: 'radio', name, value: c.value, checked: c.value === current });
+    input.addEventListener('change', () => onPick(c.value));
+    seg.append(h('label', null, input, h('span', null, c.label)));
+  }
+  return h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, legend), seg, h('p', { class: 'field-note' }, note));
+}
+
+const TOUCH_GESTURES: Array<[string, string]> = [
+  ['Tap', 'Select, or order the selection there (move, gather, attack, repair)'],
+  ['Double-tap a unit', 'Select every unit of that type on screen'],
+  ['Drag', 'Pan the camera'],
+  ['Hold, then drag', 'Box-select'],
+  ['Pinch / two fingers', 'Zoom and pan'],
+  ['Hold a button', 'Show what it does'],
+  ['Placing a building', 'Drag the ghost, then tap Build (walls: drag start to end)'],
+];
+
+function buildTouchGroup(): HTMLElement {
+  return h(
+    'section',
+    { class: 'hotkey-group' },
+    h('h3', { class: 'field-label' }, 'Touch'),
+    h('dl', { class: 'hotkey-list' }, ...TOUCH_GESTURES.map(([gesture, desc]) => h('div', { class: 'hotkey-row' }, h('dt', null, h('span', { class: 'gesture' }, gesture)), h('dd', null, desc))))
   );
 }
 
@@ -197,6 +266,7 @@ function buildControlsPanel(): HTMLElement {
   return h(
     'div',
     { class: 'settings-section hotkeys' },
+    buildTouchGroup(),
     ...HOTKEYS.map((g) =>
       h(
         'section',

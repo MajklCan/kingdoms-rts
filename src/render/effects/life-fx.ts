@@ -18,6 +18,7 @@ import type { FxHost } from './fx-host';
 import { LifeRng, mapLifeSeed, UnitPresence } from './life-kit';
 import { ensureLifeSheet } from './life-sprites';
 import { reducedMotion } from './motion-prefs';
+import { performanceMode } from './perf-mode';
 import { VillageLife, VoxelSmoke } from './village-life';
 import { Wildlife, type WildClimate } from './wildlife';
 
@@ -61,7 +62,7 @@ export class LifeFx {
   }
 
   update(dtMs: number): void {
-    const still = reducedMotion();
+    const still = reducedMotion() || performanceMode();
     this.units.refresh(this.host.time);
     this.forest.update(dtMs, still);
     this.wild.update(dtMs, still);

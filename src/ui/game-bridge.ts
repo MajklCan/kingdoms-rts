@@ -16,6 +16,7 @@ import type {
   PointerHoverKind,
   ProductionSlotInfo,
   TilePoint,
+  TouchPlacementState,
   UiAlert,
   UiApi,
 } from '../render/ui-api';
@@ -32,6 +33,7 @@ export type {
   ProductionSlotInfo,
   ResourceName,
   TilePoint,
+  TouchPlacementState,
   UiAlert,
   UiAlertKind,
 } from '../render/ui-api';
@@ -142,6 +144,49 @@ export function issueMapOrder(scene: GameScene, kind: MapOrderKind, x: number, y
 /** A disabled HUD control was used: error sound + typed alert (flashes missing resources). */
 export function reportFailure(failure: CommandFailure): void {
   getUiApi()?.reportFailure(failure);
+}
+
+// --- Touch HUD ----------------------------------------------------------------
+
+export function deselectAll(): void {
+  getUiApi()?.deselect();
+}
+
+export function selectAllVillagers(): void {
+  getUiApi()?.selectAllVillagers();
+}
+
+export function selectAllMilitary(): void {
+  getUiApi()?.selectAllMilitary();
+}
+
+/** Arm or disarm touch attack-move; true when armed. */
+export function toggleAttackMove(): boolean {
+  return getUiApi()?.toggleAttackMove() ?? false;
+}
+
+export function isAttackMoveArmed(): boolean {
+  return getUiApi()?.isAttackMoveArmed() ?? false;
+}
+
+export function canCommandSelection(): boolean {
+  return getUiApi()?.canCommandSelection() ?? false;
+}
+
+export function zoomStep(steps: number): void {
+  getUiApi()?.zoomStep(steps);
+}
+
+export function placementState(): TouchPlacementState | null {
+  return getUiApi()?.placementState() ?? null;
+}
+
+export function confirmPlacement(): boolean {
+  return getUiApi()?.confirmPlacement() ?? false;
+}
+
+export function cancelPlacement(): void {
+  getUiApi()?.cancelPlacement();
 }
 
 // --- Keyboard ---------------------------------------------------------------

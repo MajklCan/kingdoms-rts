@@ -20,6 +20,7 @@ import { CampaignMissionId } from '@sim/campaign';
 import { MapFeatureKind, TileType, type MapFeature } from '@sim/map-gen';
 import { resourceQuery } from '@sim/world';
 import { reducedMotion } from '../effects/motion-prefs';
+import { performanceMode } from '../effects/perf-mode';
 import type { ScreenPos } from '../iso';
 import { FOG_DIM_TINT } from '../overlays/fog-style';
 import type { SceneContext } from '../scene-context';
@@ -156,7 +157,7 @@ export class ResourceRenderer {
 
   drawMapFeatures(): void {
     const now = this.ctx.scene.time.now;
-    const sway = !reducedMotion();
+    const sway = !reducedMotion() && !performanceMode();
     this.features.begin();
     for (const feature of this.ctx.world.map.features) {
       if (!this.isFeatureExplored(feature)) continue;
@@ -183,7 +184,7 @@ export class ResourceRenderer {
   drawResources(): void {
     const world = this.ctx.world;
     const now = this.ctx.scene.time.now;
-    const sway = !reducedMotion();
+    const sway = !reducedMotion() && !performanceMode();
     this.resources.begin();
     this.treesSeen.clear();
     this.treeByTile.clear();
