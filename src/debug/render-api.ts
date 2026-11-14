@@ -44,7 +44,14 @@ export interface WindowRenderApi {
   startCampaign(missionId: string): void;
   /** Debug: load the late-game perf test world. */
   loadLateGame(): void;
+  /** Jump to a resting zoom level (snapped to the nearest quarter step). */
   setZoom(zoom: number): void;
+  /** Live camera: zoom on screen, the level it eases to, scroll. */
+  camera(): { zoom: number; targetZoom: number; zooming: boolean; scrollX: number; scrollY: number };
+  /** Camera-world point under a page (client) pixel. */
+  worldAtClient(clientX: number, clientY: number): { x: number; y: number };
+  /** Touch gesture state (recognizer state, fingers down, inertia glide). */
+  touch(): { gesture: string; fingers: number; gliding: boolean };
   panToTile(tileX: number, tileY: number): void;
   fps(): number;
   /** The game scene, for console poking (debug only; never write sim state through it). */

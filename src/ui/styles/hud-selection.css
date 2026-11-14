@@ -1,6 +1,7 @@
 /* In-match HUD, part 2: the parchment selection sheet in the console
    (portrait, HP, stats, current action, production queue, multi-select
-   grid and the realm summary when nothing is selected). */
+   grid). The realm summary shown when nothing is selected is in
+   hud-idle.css. */
 
 /* Selection: a parchment sheet set into a carved recess (slice 5). */
 .console-selection {
@@ -629,115 +630,4 @@
   font-size: var(--fs-sm);
   font-weight: 700;
   color: var(--ink-muted);
-}
-
-/* Nothing selected: the realm at a glance. */
-.sel-empty {
-  height: 100%;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  column-gap: 0.9rem;
-}
-
-.idle-crest {
-  width: 6rem;
-  height: 7rem;
-  display: grid;
-  place-items: center;
-}
-
-.idle-crest img {
-  width: 86%;
-  height: auto;
-  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(10, 7, 5, 0.5));
-}
-
-.idle-main {
-  display: flex;
-  flex-direction: column;
-  gap: calc(3 * var(--px));
-  min-width: 0;
-}
-
-.idle-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.7rem;
-  min-width: 0;
-}
-
-.idle-title {
-  margin: 0;
-  font-family: var(--font-title);
-  font-size: 1.625rem;
-  font-weight: 400;
-  line-height: 1;
-  color: #4a1410;
-  white-space: nowrap;
-}
-
-.idle-age {
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-  white-space: nowrap;
-}
-
-.idle-objective {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  margin: 0;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--ink-900);
-  min-width: 0;
-}
-
-.idle-objective-icon {
-  flex: none;
-  width: 0.95rem;
-  height: 0.95rem;
-  color: #6c0f17;
-  transform: translateY(0.12em);
-}
-
-.idle-objective-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.idle-events {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 0.5rem;
-  border-left: calc(2 * var(--px)) solid rgba(90, 69, 39, 0.35);
-}
-
-.idle-event {
-  font-size: var(--fs-xs);
-  font-style: italic;
-  line-height: 1.4;
-  color: var(--ink-700);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.idle-event.tone-bad { color: #8c1b1b; }
-.idle-event.tone-good { color: #2f5a1c; }
-.idle-event.is-quiet { color: var(--ink-muted); }
-
-.idle-hint {
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--ink-muted);
-}
-
-.idle-hint kbd {
-  margin: 0 0.2em;
 }

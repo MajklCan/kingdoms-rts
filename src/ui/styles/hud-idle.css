@@ -1,0 +1,192 @@
+/* Nothing selected: the realm at a glance. Title and age, the current
+   objective, as many recent events as fit (the panel hides the oldest), and
+   the controls hint as a footer. Every row shares the sheet's height through
+   one grid, so nothing can spill past the parchment. */
+.sel-empty {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.9rem;
+}
+
+.idle-crest {
+  display: grid;
+  place-items: center;
+  width: 5.25rem;
+  height: min(100%, 6.25rem);
+  min-height: 0;
+}
+
+.idle-crest img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(10, 7, 5, 0.5));
+}
+
+.idle-main {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  row-gap: calc(2 * var(--px));
+  align-content: stretch;
+}
+
+.idle-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.idle-title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-title);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.05;
+  color: #4a1410;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The age as a small red-lacquer tag beside the title. */
+.idle-age {
+  flex: none;
+  padding: 0.1rem 0.45rem;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fbefc4;
+  background: #6c0f17;
+  box-shadow: inset 0 0 0 var(--px) #3a070c;
+  white-space: nowrap;
+}
+
+.idle-objective {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink-900);
+}
+
+.idle-objective-icon {
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: #6c0f17;
+  transform: translateY(0.12em);
+}
+
+.idle-objective-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Recent events: upright, one line each, tone shown by the bullet and ink. */
+.idle-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.idle-event {
+  position: relative;
+  flex: none;
+  padding-left: 0.85rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.idle-event::before {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  top: 50%;
+  width: calc(3 * var(--px));
+  height: calc(3 * var(--px));
+  margin-top: calc(-1.5 * var(--px));
+  background: var(--ink-500);
+  transform: rotate(45deg);
+}
+
+.idle-event.tone-bad { color: #8c1b1b; }
+.idle-event.tone-bad::before { background: #8c1b1b; }
+.idle-event.tone-good { color: #2f5a1c; }
+.idle-event.tone-good::before { background: #2f5a1c; }
+.idle-event.tone-warn { color: #7a4a06; }
+.idle-event.tone-warn::before { background: #a5650b; }
+.idle-event.is-quiet { color: var(--ink-muted); font-weight: 500; }
+
+/* Footer: the controls hint under a thin ink rule. Items never break inside;
+   a narrow sheet wraps them onto a second line and the events give way. */
+.idle-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
+  padding-top: calc(2 * var(--px));
+  border-top: var(--px) solid rgba(90, 69, 39, 0.35);
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  color: var(--ink-muted);
+}
+
+.idle-hint-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.idle-hint kbd {
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* Short consoles (phones, small windows): the crest and the hint give their
+   room to the objective and the newest event. */
+@media (max-height: 560px) {
+  .idle-crest {
+    display: none;
+  }
+
+  .sel-empty {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .idle-title {
+    font-size: 1.2rem;
+  }
+
+  .idle-hint {
+    display: none;
+  }
+}

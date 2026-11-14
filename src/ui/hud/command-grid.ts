@@ -7,6 +7,7 @@
  */
 
 import type { GameScene } from '../../render/game-scene';
+import { isTouchUi } from '../../render/input/input-mode';
 import { h, plainDashes, setAttr, setText } from '../dom';
 import { missingResources, parseCost, parseMeta, type ResourceKey } from '../format';
 import { actionDescription, actionIcon, actionKeyHint, eraIcon } from '../icons/catalog';
@@ -52,7 +53,7 @@ function tipFor(action: Action): TipContent {
     pop: meta.pop,
     meta: meta.extra && meta.extra !== 'Research' ? plainDashes(meta.extra) : undefined,
     disabled,
-    hint: isTrain && action.enabled ? 'Shift-click to queue five.' : undefined,
+    hint: isTrain && action.enabled ? (isTouchUi() ? 'Tap again to queue more.' : 'Shift-click to queue five.') : undefined,
   };
 }
 

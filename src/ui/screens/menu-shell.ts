@@ -5,6 +5,7 @@
  * transition. Screens register themselves; the shell owns Escape-to-back.
  */
 
+import { isTouchUi } from '../../render/input/input-mode';
 import { hasOpenLayer, rovingFocus } from '../a11y/layers';
 import { appState } from '../app-state';
 import { h, isTextEntryTarget } from '../dom';
@@ -74,6 +75,8 @@ export function showMenuScreen(id: MenuScreenId, focus = true): void {
   if (focus) {
     requestAnimationFrame(() => {
       const target = next.focusTarget?.() ?? next.el.querySelector<HTMLElement>('button, input, [tabindex="0"]');
+      // On touch, focusing a text field would throw up the on-screen keyboard.
+      if (isTouchUi() && isTextEntryTarget(target)) return;
       target?.focus({ preventScroll: true });
     });
   }

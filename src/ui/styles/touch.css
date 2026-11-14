@@ -1,0 +1,409 @@
+/* Touch mode: html[data-input="touch"] (src/ui/touch/touch-mode.ts).
+   Bigger hit targets (44 CSS px minimum), the touch bar, the placement
+   Confirm / Cancel plank, a compact console for phones in landscape and the
+   rotate-your-device card. Mouse mode is untouched by every rule here. */
+
+/* ---- Mode-only content ---------------------------------------------------- */
+html:not([data-input="touch"]) .touch-only {
+  display: none !important;
+}
+
+html[data-input="touch"] .mouse-only {
+  display: none !important;
+}
+
+/* No double-tap zoom wait on controls (the canvas has touch-action: none). */
+button,
+label,
+select,
+input,
+[role="button"],
+[role="tab"] {
+  touch-action: manipulation;
+}
+
+html[data-input="touch"] {
+  --touch-target: max(44px, 2.625rem);
+  --hud-top-h: max(2.625rem, 48px);
+  --cmd-cell: max(2.625rem, 44px);
+}
+
+/* ---- HUD hit targets ------------------------------------------------------- */
+html[data-input="touch"] .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* No keyboard: hide the hotkey letters on buttons and in tooltips. */
+html[data-input="touch"] .cmd-key,
+html[data-input="touch"] .tip-key {
+  display: none;
+}
+
+html[data-input="touch"] .icon-btn .icon {
+  width: max(1.15rem, 22px);
+  height: max(1.15rem, 22px);
+}
+
+html[data-input="touch"] .idle-btn {
+  height: var(--touch-target);
+  min-width: var(--touch-target);
+}
+
+html[data-input="touch"] .unit-tile,
+html[data-input="touch"] .tile-more {
+  width: max(2.375rem, 44px);
+  height: max(2.375rem, 44px);
+}
+
+/* Queue slots cancel on tap: the grid tracks grow so no slot overlaps. */
+html[data-input="touch"] .queue-slots {
+  grid-template-columns: repeat(5, max(1.875rem, 44px));
+  grid-template-rows: repeat(2, max(1.875rem, 44px));
+}
+
+html[data-input="touch"] .toast {
+  min-height: 44px;
+}
+
+/* ---- Dock row: idle villagers + touch bar ---------------------------------- */
+.dock-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.touch-bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--px);
+  /* The same sunken tray as the command grid (slot slice 6). */
+  padding: calc(3 * var(--px));
+  border: var(--px) solid transparent;
+  border-image: var(--tex-slot) 6 fill / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+}
+
+.touch-bar-gap {
+  width: calc(4 * var(--px));
+  align-self: stretch;
+  margin: 0 calc(2 * var(--px));
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.5) 50%, rgba(255, 220, 150, 0.12) 50%);
+}
+
+.touch-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  padding: 0;
+  color: var(--gold-100);
+  background: none;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.touch-btn:active:not([disabled]) {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+.touch-btn:active:not([disabled]) > .icon {
+  transform: translateY(calc(2 * var(--px)));
+}
+
+.touch-btn[disabled] {
+  border-image-source: var(--tex-btn-disabled);
+  color: #a39a8a;
+}
+
+.touch-btn[disabled] > .icon {
+  opacity: 0.6;
+}
+
+.touch-btn.is-armed {
+  border-image-source: var(--tex-btn-active);
+  color: #fff6dc;
+}
+
+.touch-btn-icon {
+  width: 55%;
+  height: 55%;
+  filter: drop-shadow(0 var(--px) 0 #0a0705);
+}
+
+.touch-btn-icon.is-px {
+  filter: none;
+}
+
+/* ---- Placement: Cancel / what you are placing / Build ---------------------- */
+html[data-input="touch"] .dock-mid {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.place-bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: calc(3 * var(--px));
+  border: var(--px) solid transparent;
+  border-image: var(--tex-slot) 6 fill / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.5));
+  animation: fade-in var(--dur-med) var(--ease-out);
+}
+
+.place-label {
+  min-width: 8rem;
+  max-width: 16rem;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.place-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: var(--touch-target);
+  min-width: calc(var(--touch-target) * 2.2);
+  padding: 0 0.9rem;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #000;
+  background: none;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-btn) 8 fill / calc(8 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.place-btn .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.place-confirm {
+  border-image-source: var(--tex-btn-active);
+  color: #fff6dc;
+}
+
+.place-confirm.is-invalid,
+.place-confirm[disabled] {
+  border-image-source: var(--tex-btn-disabled);
+  color: #a39a8a;
+}
+
+.place-cancel {
+  border-image-source: var(--tex-btn-danger);
+}
+
+.place-btn:active:not([disabled]) {
+  border-image-source: var(--tex-btn-pressed);
+}
+
+html.is-placing .cg-strip {
+  display: none;
+}
+
+/* ---- Menus and panels --------------------------------------------------------- */
+html[data-input="touch"] .btn,
+html[data-input="touch"] .link-btn,
+html[data-input="touch"] .pill,
+html[data-input="touch"] .tab,
+html[data-input="touch"] .switch,
+html[data-input="touch"] .seg label,
+html[data-input="touch"] select,
+html[data-input="touch"] input:not([type="radio"]):not([type="checkbox"]):not([type="range"]) {
+  min-height: 44px;
+}
+
+html[data-input="touch"] .gesture {
+  font-weight: 700;
+  color: var(--text-hi);
+}
+
+/* ---- Phones in landscape: a compact console ------------------------------------ */
+@media (max-height: 560px) {
+  html[data-input="touch"] {
+    --cmd-cell: 44px;
+    --hud-top-h: 44px;
+    /* Two rows of buttons + tray rim + thin frame. */
+    --hud-bottom-h: calc(2 * var(--cmd-cell) + 20 * var(--px));
+  }
+
+  html[data-input="touch"] .console {
+    grid-template-columns: calc(var(--hud-bottom-h) * 1.15) minmax(0, 1fr) auto;
+    border-width: calc(6 * var(--px));
+    border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
+  }
+
+  html[data-input="touch"] .cmd-inner {
+    padding: calc(2 * var(--px));
+  }
+
+  html[data-input="touch"] .cmd-grid {
+    grid-template-columns: repeat(8, var(--cmd-cell));
+    grid-template-rows: repeat(2, var(--cmd-cell));
+  }
+
+  html[data-input="touch"] .minimap-frame {
+    padding: calc(6 * var(--px));
+  }
+
+  /* Selection sheet: name, health and the current action; no portrait or
+     stat chips, and the production queue shrinks to its first two. */
+  html[data-input="touch"] .sel-inner {
+    padding: calc(3 * var(--px)) calc(5 * var(--px));
+  }
+
+  html[data-input="touch"] .sel-single {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 0.5rem;
+  }
+
+  html[data-input="touch"] .sel-single .portrait,
+  html[data-input="touch"] .sel-single .stat-chips,
+  html[data-input="touch"] .queue-label {
+    display: none;
+  }
+
+  html[data-input="touch"] .sel-name,
+  html[data-input="touch"] .multi-title {
+    font-size: 1.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  html[data-input="touch"] .queue-slots {
+    grid-template-columns: repeat(2, 44px);
+    grid-template-rows: 44px;
+  }
+
+  html[data-input="touch"] .queue-slot.is-head {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  html[data-input="touch"] .queue-slot:nth-child(n + 3) {
+    display: none;
+  }
+
+  html[data-input="touch"] .topbar {
+    gap: 0.4rem;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+
+  html[data-input="touch"] .res-chip {
+    min-width: 0;
+    height: 36px;
+    padding: 0 0.4rem 0 0.3rem;
+  }
+
+  html[data-input="touch"] .age-plaque {
+    min-width: 0;
+    padding: 0 0.7rem calc(2 * var(--px));
+  }
+
+  html[data-input="touch"] .age-name {
+    font-size: 1.05rem;
+  }
+
+  html[data-input="touch"] .clock {
+    display: none;
+  }
+
+  /* Menu sheets grow with their content and the stage scrolls, instead of
+     form fields spilling past a sheet capped at the window height. */
+  html[data-input="touch"] .scroll-panel {
+    max-height: none;
+  }
+
+  /* The plank needs the room while a building is being placed. */
+  html[data-input="touch"].is-placing .touch-bar {
+    display: none;
+  }
+
+  html[data-input="touch"] .place-label {
+    min-width: 0;
+    max-width: 10rem;
+  }
+}
+
+/* ---- Rotate your device ------------------------------------------------------------ */
+.rotate-hint {
+  display: none;
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  html[data-input="touch"] .rotate-hint {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-dev);
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    pointer-events: auto;
+    background: rgba(10, 7, 5, 0.94);
+  }
+}
+
+.rotate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.4rem 1.8rem;
+  text-align: center;
+  color: var(--gold-100);
+  background: var(--tex-wood-dark) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
+  background-clip: padding-box;
+  border: calc(6 * var(--px)) solid transparent;
+  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+}
+
+.rotate-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  color: var(--gold-300);
+  animation: rotate-nudge 2.4s var(--ease-in-out) infinite;
+}
+
+.rotate-title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 1.75rem;
+  line-height: 1.1;
+  color: var(--gold-200);
+}
+
+.rotate-body {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-muted);
+}
+
+@keyframes rotate-nudge {
+  0%, 40% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(-90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-icon {
+    animation: none;
+  }
+}

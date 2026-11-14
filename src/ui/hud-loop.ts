@@ -21,14 +21,21 @@ import { renderTechTree } from './panels/tech-tree';
 import { updateConnectionLost } from './screens/connection-lost';
 import { updateGameOver } from './screens/game-over';
 import { updateCursor } from './skin/cursors';
+import { resetPerfProbe, tickPerfProbe } from './touch/perf-probe';
+import { updateTouchBar } from './touch/touch-bar';
 
 function tick(now: number): void {
   requestAnimationFrame(tick);
   const scene = getScene();
   if (!isSceneReady(scene)) return;
   updateDevPanel(scene);
-  if (appState.phase !== 'match') return;
+  if (appState.phase !== 'match') {
+    resetPerfProbe();
+    return;
+  }
+  tickPerfProbe(now);
   updateTopBar(scene);
+  updateTouchBar(scene);
   updatePausedBanner(scene.isPaused());
   renderMinimap(scene, now);
   updateSelectionPanel(scene);
