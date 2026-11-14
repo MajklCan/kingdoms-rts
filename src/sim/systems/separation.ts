@@ -14,18 +14,25 @@ const WORKER_SEPARATION_RADIUS = 0.58;
 const UNIT_SEPARATION_MAX_NUDGE = 0.08;
 const WORKER_SEPARATION_MAX_NUDGE = 0.12;
 const UNIT_SEPARATION_PASSES = 2;
+const MAX_SEPARATION_RADIUS = Math.max(UNIT_SEPARATION_RADIUS, WORKER_SEPARATION_RADIUS);
 
 export function unitSeparationSystem(world: SimWorld): void {
   const ents = sortedEids(world, unitQuery(world.ecs)).filter((eid) => Health.hp[eid] > 0);
+  // The pair loop is quadratic; read the position arrays through locals.
+  const px = Position.x;
+  const py = Position.y;
   for (let pass = 0; pass < UNIT_SEPARATION_PASSES; pass++) {
     for (let i = 0; i < ents.length; i++) {
       const a = ents[i];
       for (let j = i + 1; j < ents.length; j++) {
         const b = ents[j];
+        let dx = px[b] - px[a];
+        let dy = py[b] - py[a];
+        // Most pairs are far apart; reject them before the component lookups.
+        if (dx >= MAX_SEPARATION_RADIUS || dx <= -MAX_SEPARATION_RADIUS) continue;
+        if (dy >= MAX_SEPARATION_RADIUS || dy <= -MAX_SEPARATION_RADIUS) continue;
         if (areVillagersMutuallyNonBlocking(world, a, b)) continue;
         const radius = unitSeparationRadius(world, a, b);
-        let dx = Position.x[b] - Position.x[a];
-        let dy = Position.y[b] - Position.y[a];
         let dist = Math.hypot(dx, dy);
         if (dist >= radius) continue;
 

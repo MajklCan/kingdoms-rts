@@ -92,7 +92,7 @@ export function worksiteUsesResourceNodes(def: BuildingDef): boolean {
 
 function runFarmWorksite(world: SimWorld, siteEid: number, def: BuildingDef): void {
   const workTicks = farmWorkCycleTicks(world, siteEid, def);
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
@@ -197,7 +197,7 @@ function runSelfProducingWorksite(
 
 function assignSelfProducingWorksiteWorkers(world: SimWorld, siteEid: number): number {
   let activeWorkers = 0;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
@@ -282,12 +282,25 @@ export function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | 
 
 export function countWorksiteWorkers(world: SimWorld, siteEid: number): number {
   let count = 0;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  // A count does not depend on order, so no sort.
+  for (const worker of worksiteWorkerQuery(world.ecs)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     count++;
   }
   return count;
+}
+
+/**
+ * This site's workers in deterministic order: the same order as filtering the
+ * sorted list of every worker, but sorting a handful instead of all of them
+ * (this runs for every site on every tick).
+ */
+function siteWorkers(world: SimWorld, siteEid: number): number[] {
+  return sortedEids(
+    world,
+    worksiteWorkerQuery(world.ecs).filter((worker) => WorksiteWorker.siteEid[worker] === siteEid)
+  );
 }
 
 export function countQueuedWorksiteWorkers(world: SimWorld, siteEid: number): number {
@@ -317,7 +330,7 @@ function assignWorksiteHarvestOrders(
   radius: number
 ): void {
   const claimedTargets = countClaimedWorksiteResourceTargets(world, siteEid, kind);
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     if (ResourceCarry.amount[worker] > 0) {
@@ -399,7 +412,7 @@ function countClaimedWorksiteResourceTargets(
   kind: ResourceKind
 ): Map<number, number> {
   const claimed = new Map<number, number>();
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     if (ResourceCarry.amount[worker] > 0) continue;
@@ -420,7 +433,7 @@ function countClaimedWorksiteResourceTargets(
 
 export function markWorksiteWorkersDead(world: SimWorld, siteEid: number): void {
   if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return;
-  for (const worker of sortedEids(world, worksiteWorkerQuery(world.ecs))) {
+  for (const worker of siteWorkers(world, siteEid)) {
     if (WorksiteWorker.siteEid[worker] !== siteEid) continue;
     addComponent(world.ecs, DeadTag, worker);
     Gatherer.targetEid[worker] = -1;
