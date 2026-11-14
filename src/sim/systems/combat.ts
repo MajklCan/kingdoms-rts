@@ -378,7 +378,7 @@ function computeAttackDamage(world: SimWorld, attacker: number, target: number):
     hasComponent(world.ecs, ArcherTag, attacker) &&
     hasComponent(world.ecs, SpearmanTag, target)
   ) {
-    bonus += 2;
+    bonus += 7;
   }
   if (
     hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
@@ -397,6 +397,18 @@ function computeAttackDamage(world: SimWorld, attacker: number, target: number):
     hasComponent(world.ecs, MortarTag, target)
   ) {
     bonus += 10;
+  }
+  if (
+    hasComponent(world.ecs, GunmanTag, attacker) &&
+    hasComponent(world.ecs, SpearmanTag, target)
+  ) {
+    bonus += 6;
+  }
+  if (
+    hasComponent(world.ecs, ScoutCavalryTag, attacker) &&
+    hasComponent(world.ecs, GunmanTag, target)
+  ) {
+    bonus += 6;
   }
   return Math.max(1, Combat.atk[attacker] + bonus - Health.armor[target]);
 }

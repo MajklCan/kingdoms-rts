@@ -10,6 +10,7 @@ import {
   Owner,
   Position,
   type ResourceKind,
+  ResourceKindId,
   ResourceWorksite,
   UnitKind,
 } from '../components';
@@ -26,10 +27,12 @@ import type { GridPos } from '../pathfinding';
 import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { distToBuildingEdge } from '../core/grid';
 import { ResourceProbe } from '../core/placement-probe';
+import { sortedEids } from '../core/entities';
 import { countQueuedPopCost } from '../core/population';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { canPlaceBuildingAt } from '../input/buildings';
+import { currentAiThinkScope } from './context';
 import { activeAiActuator } from './direct-actuator';
 import {
   countQueuedWorksiteWorkers,
@@ -61,6 +64,14 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
 
   if (!producerDef.trains.includes(unitDef.id)) return false;
   if (!isUnitUnlocked(world, playerId, defId)) return false;
+  const reserve = currentAiThinkScope()?.reserve;
+  if (
+    reserve &&
+    ((unitDef.cost.gold > 0 && bank[ResourceKindId.GOLD] - unitDef.cost.gold < reserve.gold) ||
+      (unitDef.cost.stone > 0 && bank[ResourceKindId.STONE] - unitDef.cost.stone < reserve.stone))
+  ) {
+    return false;
+  }
   if (
     defId === UnitDefId.SCOUT_CAVALRY &&
     (world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE
@@ -190,7 +201,8 @@ function aiOwnedBuildingSpacingPenalty(
 ): number {
   const desiredGap = aiDesiredBuildingGap(def);
   let penalty = 0;
-  for (const eid of buildingQuery(world.ecs)) {
+  // NetId order: a float sum in query order can differ in the last bit after a load.
+  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
     if (Owner.player[eid] !== playerId) continue;
     if (Health.hp[eid] <= 0) continue;
     const edgeDist = distToBuildingEdge(world, x, y, eid);

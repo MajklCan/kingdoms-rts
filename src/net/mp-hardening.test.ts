@@ -284,3 +284,26 @@ describe('multiplayer hardening: hostile commands', () => {
     expect(houses).toHaveLength(0);
   });
 });
+
+// Long soak, off by default: MP_SOAK=<seeds> (e.g. MP_SOAK=2) plays whole
+// games on every skirmish map and playable age. scripts/sim/mp-soak.ts runs
+// the same loop sharded over processes, with a field diff on a desync.
+const soakSeeds = Number(process.env.MP_SOAK ?? 0);
+describe.runIf(soakSeeds > 0)('multiplayer soak (MP_SOAK)', () => {
+  const maps = Object.values(MapId).filter((id) => id !== MapId.ZBOROV_LINES);
+  const ages = [AgeId.DARK, AgeId.CASTLE, AgeId.GUNPOWDER];
+  for (let seed = 1; seed <= soakSeeds; seed++) {
+    for (const mapId of maps) {
+      for (const startingAge of ages) {
+        it(`seed ${seed} ${mapId} age ${startingAge} plays to the end in lockstep`, () => {
+          const result = runMpMatch(config({ seed, mapId, startingAge, maxTicks: 30_000, hangMs: 60_000 }));
+          expect(result.desyncTick).toBeNull();
+          expect(result.sessionDesync).toBe(false);
+          expect(result.hang).toBe(false);
+          expect(result.winners[0]).toBe(result.winners[1]);
+          expect(result.finalChecksums[0]).toBe(result.finalChecksums[1]);
+        }, 0);
+      }
+    }
+  }
+});

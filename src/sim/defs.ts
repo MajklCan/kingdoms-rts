@@ -362,7 +362,7 @@ export const UNIT_TABLE: UnitDef[] = [
     id: 'GUNMAN',
     name: 'Gunman',
     hp: 45,
-    cost: { food: 45, wood: 0, gold: 75, stone: 0 },
+    cost: { food: 40, wood: 0, gold: 55, stone: 0 },
     trainTimeTicks: Math.round(SIM.TICK_HZ * 32),
     popCost: 1,
     trainAt: 'FOUNDRY',

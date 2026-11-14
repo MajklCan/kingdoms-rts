@@ -9,7 +9,7 @@ import { isAiControlledPlayer } from '../core/players';
 import { countQueuedPopCost } from '../core/population';
 import type { AiDifficulty, AiPlayerState, SimWorld } from '../core/types';
 import { aiHandleDefense, aiManageAttackPlan, findAiDefenseTarget } from './attack';
-import { type AiActuator, withAiThinkScope } from './context';
+import { type AiActuator, currentAiThinkScope, withAiThinkScope } from './context';
 import { activeAiActuator, directAiActuator } from './direct-actuator';
 import {
   aiDifficultyOf,
@@ -70,6 +70,8 @@ function aiPlayerTick(world: SimWorld, playerId: number, state: AiPlayerState): 
   aiResearchTechs(world, playerId, snapshot);
   aiMaintainMilitaryInfrastructure(world, playerId, snapshot);
   aiMaintainEconomy(world, playerId, snapshot);
+  const scope = currentAiThinkScope();
+  if (scope) scope.reserve = aiAgeUpReserve(world, playerId, state, snapshot);
   aiTrainArmy(world, playerId, snapshot);
   aiMaybeAdvanceAge(world, playerId, state, snapshot);
 
@@ -187,6 +189,27 @@ function aiMaybeAdvanceAge(
     activeAiActuator().event(world, playerId, `Frankia has started advancing to ${nextAge?.name ?? 'the next age'}`);
     state.nextAttackTick = Math.max(state.nextAttackTick, world.tick + SIM.TICK_HZ * 45);
   }
+}
+
+/**
+ * Gold and stone to save for the next age once the economy is otherwise ready
+ * for it. Without this, scouts and gunmen spent gold as fast as it came in and
+ * a Castle Age AI never banked the 1200 gold Gunpowder costs. Not while
+ * defending: an army now beats an age later.
+ */
+function aiAgeUpReserve(
+  world: SimWorld,
+  playerId: number,
+  state: AiPlayerState,
+  snapshot: AiSnapshot
+): { gold: number; stone: number } | null {
+  const age = world.ages[playerId];
+  if (!age || age.progress >= 0 || age.current >= AgeId.GUNPOWDER) return null;
+  if (state.plan === 'defending') return null;
+  if (!aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS)) return null;
+  if (!aiHasEconomyForAgeAdvance(world, snapshot, age.current + 1)) return null;
+  const cost = getAgeDef(age.current + 1)?.advanceCost;
+  return cost ? { gold: cost.gold, stone: cost.stone } : null;
 }
 
 function aiHasEconomyForAgeAdvance(

@@ -39,6 +39,9 @@ export interface AiThinkScope {
   playerId: number;
   difficulty: AiDifficulty;
   actuator: AiActuator;
+  /** Gold and stone held back for the next age-up; army training may not
+   *  spend below it. Set by the brain each think. */
+  reserve?: { gold: number; stone: number } | null;
 }
 
 let current: AiThinkScope | null = null;

@@ -25,7 +25,7 @@ import type { AiPlayerState, SimWorld } from '../core/types';
 import { isTargetInAttackRange, isValidHostileTarget } from '../systems/targeting';
 import { findAiBreachTarget } from './breach';
 import { activeAiActuator } from './direct-actuator';
-import { aiElapsedMinutes, aiSettings } from './difficulty';
+import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
 import type { AiSnapshot } from './snapshot';
 
 const AI_DEFENSE_RADIUS = 11;
@@ -104,7 +104,13 @@ export function aiManageAttackPlan(
 ): void {
   const settings = aiSettings(world);
   state.waveUnitEids = state.waveUnitEids.filter((eid) => isLiveOwnedMilitary(world, eid, playerId));
+  const ahead = aiHasArmyAdvantage(world, snapshot);
   if (state.plan === 'attacking') {
+    if (ahead && state.waveUnitEids.length >= 3) {
+      // Winning: keep the attack alive and feed it instead of turning home.
+      state.lastAttackTick = world.tick;
+      aiReinforceWave(world, playerId, state, snapshot);
+    }
     if (
       state.waveUnitEids.length < 3 ||
       world.tick - state.lastAttackTick > settings.attackCooldownTicks
@@ -119,7 +125,8 @@ export function aiManageAttackPlan(
   }
 
   const required = aiRequiredWaveSize(world, playerId);
-  if (world.tick < state.nextAttackTick || snapshot.myMilitary.length < required) {
+  const cooling = world.tick < state.nextAttackTick && !ahead;
+  if (cooling || snapshot.myMilitary.length < required) {
     if (state.plan !== 'opening') state.plan = 'massing';
     return;
   }
@@ -158,6 +165,36 @@ export function aiManageAttackPlan(
   state.nextAttackTick = world.tick + settings.attackCooldownTicks;
   activeAiActuator().event(world, playerId, `Frankish attack is moving toward your ${aiTargetLabel(target)}`);
   state.lastAttackEventTick = world.tick;
+}
+
+/**
+ * Clearly ahead on army (medium and hard). Without this an AI that won a
+ * fight still turned home after a fixed attack window and sat out a full
+ * cooldown while the loser rebuilt, so evenly matched AIs traded armies in
+ * midfield for the whole game and almost never ended it.
+ */
+function aiHasArmyAdvantage(world: SimWorld, snapshot: AiSnapshot): boolean {
+  if (aiDifficultyOf(world) === 'easy') return false;
+  return snapshot.myMilitary.length >= Math.max(6, Math.ceil(snapshot.enemyMilitary.length * 1.5) + 2);
+}
+
+/** Send idle soldiers that are not part of the wave after it. */
+function aiReinforceWave(world: SimWorld, playerId: number, state: AiPlayerState, snapshot: AiSnapshot): void {
+  const target = chooseAiAttackTarget(world, snapshot);
+  if (target === null) return;
+  const inWave = new Set(state.waveUnitEids);
+  const idle = snapshot.myMilitary
+    .filter((eid) => !inWave.has(eid) && isIdleMilitary(world, eid))
+    .sort((a, b) => compareDeterministicEids(world, a, b));
+  if (idle.length === 0) return;
+  state.waveUnitEids = [...state.waveUnitEids, ...idle];
+  aiSendWave(world, playerId, idle, target);
+}
+
+function isIdleMilitary(world: SimWorld, eid: number): boolean {
+  if (AttackTarget.targetEid[eid] >= 0) return false;
+  if ((world.paths.get(eid)?.length ?? 0) > 0) return false;
+  return !hasComponent(world.ecs, AttackMoveGoal, eid) || AttackMoveGoal.active[eid] === 0;
 }
 
 export function aiRequiredWaveSize(world: SimWorld, playerId: number): number {
@@ -220,11 +257,7 @@ function aiPushStalledWave(
 ): void {
   const target = chooseAiAttackTarget(world, snapshot);
   if (target === null) return;
-  const stalled = state.waveUnitEids.filter((eid) => {
-    if (AttackTarget.targetEid[eid] >= 0) return false;
-    if ((world.paths.get(eid)?.length ?? 0) > 0) return false;
-    return !hasComponent(world.ecs, AttackMoveGoal, eid) || AttackMoveGoal.active[eid] === 0;
-  });
+  const stalled = state.waveUnitEids.filter((eid) => isIdleMilitary(world, eid));
   if (stalled.length > 0) aiSendWave(world, playerId, stalled, target);
 }
 

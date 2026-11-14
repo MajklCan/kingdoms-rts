@@ -18,6 +18,12 @@ Stack: **Phaser 4 beta** (rendering only) + **bitECS 0.3.40** (sim) + **TypeScri
 | `npm test`        | Vitest single run - ALWAYS run before claiming done |
 | `npm run test:watch` | Vitest watch                                      |
 | `npm run preview` | Serve built `dist/`                                 |
+| `npx vite-node scripts/sim/mp-soak.ts -- --seeds 1-8 --maps all` | Lockstep soak: AI bots over a virtual hostile network, checksum every tick |
+| `npx vite-node scripts/sim/relay-smoke.ts` | Same over the real relay on a free local port |
+| `npx vite-node scripts/sim/ai-vs-ai.ts -- ...` | Headless AI vs AI batch; `scripts/sim/analyze.ts` summarises it |
+| `npx vite-node scripts/sim/matchups.ts` | Equal-cost unit fights, win and cost-efficiency matrix |
+| `node scripts/sim/batch.mjs <name> <procs> <script> ...` | Shard any of the above over processes |
+| `MP_SOAK=2 npm test` | Adds the long lockstep soak to the test run |
 
 TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUncheckedSideEffectImports`. Don't silence them.
 
@@ -34,7 +40,9 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 - World creation: the scattered berry bushes are the last rng draws in `createSimWorld`. Add new creation-time draws after them so existing maps keep their layout.
 - Tests may monkey-patch `world.rng.int` / `world.rng.next` for determinism (see `forest-regrowth.test.ts`).
 - `step(world)` is pure fn of `(world, inputs)` → same world + same inputs → same next state.
-- **Note:** RNG state is NOT persisted by `serializeSimWorld` currently. Replays from seed work; mid-game save/load won't reproduce future RNG draws.
+- RNG state is saved (`rngState`); a mid-game save loaded into a fresh world plays on identically (`lockstep-regressions.test.ts`).
+- **Order by NetId, never raw eid.** Raw bitECS eids differ between lockstep clients (recycling, earlier matches in the tab). Tie-breaks, iteration that mutates, and the checksum go through `sortedEids` / `compareDeterministicEids`.
+- Create and remove entities only via `addSimEntity` / `removeSimEntity`. bitECS keeps component data in global arrays and never clears it: creation zeroes every store for the eid, removal resets components and drops side-table entries (paths, stuck state, windups, impacts, AI waves).
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 

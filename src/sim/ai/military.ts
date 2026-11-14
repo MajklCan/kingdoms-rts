@@ -9,6 +9,7 @@ import {
   CannonTag,
   ConstructionSite,
   Position,
+  ResourceKindId,
   ScoutCavalryTag,
   SpearmanTag,
 } from '../components';
@@ -83,11 +84,13 @@ export function aiMaintainMilitaryInfrastructure(
   const macro = aiDifficultyOf(world) === 'hard'
     ? aiAnalyzeProductionMacro(world, playerId, snapshot)
     : null;
+  // One barracks trains about three soldiers a minute; when food and wood
+  // pile up anyway, a second one turns the float into an army.
+  const bank = world.resources[playerId];
+  const floating = !!bank && bank[ResourceKindId.FOOD] >= 500 && bank[ResourceKindId.WOOD] >= 600;
   const desiredBarracks = macro
     ? aiHardDesiredBarracksCount(world, playerId, snapshot, macro)
-    : age >= AgeId.CASTLE
-      ? settings.barracksCastleTarget
-      : 1;
+    : (age >= AgeId.CASTLE ? settings.barracksCastleTarget : 1) + (floating ? 1 : 0);
 
   if (!hasBarracks && hasFoodEconomy && hasWoodEconomy) {
     aiPlaceBuilding(world, BuildingDefId.BARRACKS, tcX, tcY, playerId);
@@ -306,7 +309,11 @@ function aiDesiredArmyMix(
     gunmen = Math.min(8, Math.max(4, Math.floor(targetArmy * 0.24)));
     scouts = Math.min(5, Math.max(2, Math.floor(targetArmy * 0.16)));
   }
-  const infantrySlots = Math.max(4, targetArmy - scouts - gunmen - cannons);
+  // No gold in the bank: gunmen and cannons cannot be queued, so let the
+  // barracks fill those slots instead of idling on a food and wood float.
+  const bank = world.resources[playerId];
+  const goldStarved = age >= AgeId.GUNPOWDER && !!bank && bank[ResourceKindId.GOLD] < 55;
+  const infantrySlots = Math.max(4, targetArmy - scouts - (goldStarved ? 0 : gunmen + cannons));
   let spearmen = Math.ceil(infantrySlots / 2);
   let archers = Math.floor(infantrySlots / 2);
   const enemySpears = snapshot.enemyMilitary.filter((eid) => hasComponent(world.ecs, SpearmanTag, eid)).length;
