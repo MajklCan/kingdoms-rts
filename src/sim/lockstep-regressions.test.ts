@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { entityExists, getEntityComponents } from 'bitecs';
 import { polluteEidAllocator, resetBitecsGlobals } from '../net/testing/mp-match';
 import { checksumWorld } from './checksum';
+import { Health, UnitStance } from './components';
 import { AgeId } from './defs';
 import { MapId } from './map-gen';
 import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
@@ -47,6 +48,27 @@ describe('lockstep regressions', () => {
       step(recycled);
       if (tick % 30 === 29) expect(checksumWorld(recycled), `tick ${tick}`).toBe(checksumWorld(fresh));
     }
+  });
+
+  it('a world built on reused eids ignores data the previous owners left in bitECS stores', () => {
+    // bitECS keeps component data in global arrays; a villager's UnitStance
+    // has no spawn values, so it used to inherit whatever the slot held.
+    resetBitecsGlobals();
+    const clean = createSimWorld(31);
+    clean.paused = false;
+    for (let i = 0; i < 300; i++) step(clean);
+    const cleanHash = checksumWorld(clean);
+    for (let eid = 0; eid < 4000; eid++) {
+      UnitStance.stance[eid] = 1;
+      UnitStance.anchorX[eid] = 42;
+      UnitStance.anchorY[eid] = 52;
+      Health.armor[eid] = 3;
+    }
+    resetBitecsGlobals();
+    const reused = createSimWorld(31);
+    reused.paused = false;
+    for (let i = 0; i < 300; i++) step(reused);
+    expect(checksumWorld(reused)).toBe(cleanHash);
   });
 
   it('removing an entity drops its components and every side table entry', () => {

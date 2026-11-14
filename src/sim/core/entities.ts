@@ -5,6 +5,7 @@
 import { addComponent, addEntity, getEntityComponents, hasComponent, removeComponent, removeEntity } from 'bitecs';
 import { Health, NetId, Position } from '../components';
 import type { GridPos } from '../pathfinding';
+import { clearComponentData } from './component-data';
 import type { SimWorld } from './types';
 
 export function deterministicEidKey(world: SimWorld, eid: number): number {
@@ -54,6 +55,7 @@ export function compareGridPos(a: GridPos, b: GridPos): number {
 
 export function addSimEntity(world: SimWorld): number {
   const eid = addEntity(world.ecs);
+  clearComponentData(eid);
   addComponent(world.ecs, NetId, eid);
   const netId = world.nextNetId++;
   NetId.value[eid] = netId;

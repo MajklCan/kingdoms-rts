@@ -4,7 +4,7 @@
 // the merged array lands in .context/sim/<name>.json. Shard stdout goes to
 // .context/sim/<name>-i.log; failing lines (FAIL, flags=) are echoed.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,18 +32,17 @@ const procs = Number(procsArg);
 const started = Date.now();
 const runs = Array.from({ length: procs }, (_, i) => new Promise((done) => {
   const out = join(outDir, `${name}-${i}.json`);
-  const log = [];
+  // Shard logs stream to disk so a long batch can be watched (wc -l *.log).
+  const logPath = join(outDir, `${name}-${i}.log`);
+  writeFileSync(logPath, '');
   const child = spawn(viteNode, [script, '--', ...rest, '--shard', `${i}/${procs}`, '--out', out], { cwd: repo });
   child.stdout.on('data', (chunk) => {
     const text = chunk.toString();
-    log.push(text);
+    appendFileSync(logPath, text);
     for (const line of text.split('\n')) if (/FAIL|desync=\d/.test(line)) process.stdout.write(`[${i}] ${line}\n`);
   });
-  child.stderr.on('data', (chunk) => log.push(chunk.toString()));
-  child.on('exit', (code) => {
-    writeFileSync(join(outDir, `${name}-${i}.log`), log.join(''));
-    done({ i, code, out });
-  });
+  child.stderr.on('data', (chunk) => appendFileSync(logPath, chunk.toString()));
+  child.on('exit', (code) => done({ i, code, out }));
 }));
 
 const results = await Promise.all(runs);
