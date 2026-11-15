@@ -248,6 +248,14 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
     world.productionQueues.set(eid, savedQueue.queue.slice());
   }
 
+  world.villagerRallies.clear();
+  for (const saved of snapshot.villagerRallies ?? []) {
+    const eid = eidMap.get(saved.eid);
+    if (eid === undefined) continue;
+    const targetEid = saved.targetEid >= 0 ? eidMap.get(saved.targetEid) ?? -1 : -1;
+    world.villagerRallies.set(eid, { x: saved.x, y: saved.y, targetEid, kind: saved.kind });
+  }
+
   world.armyRallyPoints.length = 0;
   for (let playerId = 0; playerId < world.resources.length; playerId++) {
     const point = snapshot.armyRallyPoints?.[playerId];

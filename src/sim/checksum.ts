@@ -336,6 +336,17 @@ export function checksumWorld(world: SimWorld): number {
     h.u32(q.length);
     for (const item of q) h.u32(item);
   }
+  const rallyEids = [...world.villagerRallies.keys()].sort(byCanon);
+  h.u32(rallyEids.length);
+  for (const eid of rallyEids) {
+    const rally = world.villagerRallies.get(eid)!;
+    h.u32(canon(eid));
+    h.f32(rally.x);
+    h.f32(rally.y);
+    h.bit(rally.targetEid >= 0);
+    if (rally.targetEid >= 0) h.u32(canon(rally.targetEid));
+    h.u32(rally.kind + 1);
+  }
   const pathEids = [...world.paths.keys()].sort(byCanon);
   for (const eid of pathEids) {
     h.u32(canon(eid));

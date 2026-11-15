@@ -13,7 +13,7 @@ import { unitQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { applyWallTierToFoundation, getPlayerWallTier, wallLineTiles } from '../core/walls';
 import { spawnFoundation } from '../factories/buildings';
-import { canPlaceBuildingAt } from './buildings';
+import { canPlaceBuildingAt, isPlacementInSight } from './buildings';
 
 /**
  * Lay wall foundations along the 4-connected line (x0, y0) -> (x1, y1), start
@@ -43,6 +43,7 @@ export function applyPlaceWallLine(
     if (!canAfford(bank, tier.cost)) break;
     if (occupied.has(y * MAP.WIDTH + x)) continue;
     if (!canPlaceBuildingAt(world, def, x, y)) continue;
+    if (!isPlacementInSight(world, playerId, def, x, y)) continue;
     spend(bank, tier.cost);
     const eid = spawnFoundation(world, BuildingDefId.WALL, x, y, playerId);
     applyWallTierToFoundation(eid, tier);

@@ -3,12 +3,13 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { DeadTag, Owner, WorksiteWorker } from '../components';
+import { DeadTag, Owner, TownCenterTag, WorksiteWorker } from '../components';
 import { LOCAL_PLAYER_ID } from '../core/constants';
 import { selectedQuery } from '../core/queries';
 import type { SimInput, SimWorld } from '../core/types';
 import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
 import { applyCancelProduction, applyTrainUnit } from '../systems/production';
+import { applySetVillagerRally } from '../systems/villager-assign';
 import { applyPlaceWallLine } from './walls';
 import {
   applyPlaceBuilding,
@@ -99,6 +100,14 @@ export function applyInput(world: SimWorld, input: SimInput): void {
     case 'setArmyRallyPoint':
       applySetArmyRallyPoint(world, input.playerId, input.x, input.y);
       return;
+    case 'setVillagerRally':
+      if (!ownsTownCenter(world, input.playerId, input.atEid)) return;
+      applySetVillagerRally(world, input.atEid, input.x, input.y, input.targetEid);
+      return;
+    case 'clearVillagerRally':
+      if (!ownsTownCenter(world, input.playerId, input.atEid)) return;
+      world.villagerRallies.delete(input.atEid);
+      return;
     case 'placeBuilding':
       applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId);
       return;
@@ -179,4 +188,11 @@ export function ownedCommandableEids(world: SimWorld, playerId: number, eids: nu
  *  target a single global eid (trainUnit, cancelProduction). */
 function ownsCommandTarget(world: SimWorld, playerId: number, eid: number): boolean {
   return hasComponent(world.ecs, Owner, eid) && Owner.player[eid] === playerId;
+}
+
+/** A finished town center of `playerId` (rallies live on town centers only). */
+function ownsTownCenter(world: SimWorld, playerId: number, eid: number): boolean {
+  return ownsCommandTarget(world, playerId, eid) &&
+    hasComponent(world.ecs, TownCenterTag, eid) &&
+    !hasComponent(world.ecs, DeadTag, eid);
 }

@@ -1,0 +1,221 @@
+import { describe, expect, it } from 'vitest';
+import { hasComponent } from 'bitecs';
+import { Gatherer, GathererStateId, Owner, Position, Resource, ResourceKindId, SpearmanTag, UnitKind } from './components';
+import { BuildingDefId, UnitDefId } from './defs';
+import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
+import { checksumWorld } from './checksum';
+import {
+  AI_PLAYER_ID,
+  buildingQuery,
+  createSimWorld,
+  findBuildingAt,
+  findResourceAt,
+  gathererQuery,
+  removeSimEntity,
+  resourceQuery,
+  step,
+  townCenterQuery,
+  unitQuery,
+  type SimWorld,
+} from './world';
+
+const P1 = 1;
+
+function townCenterOf(world: SimWorld, playerId: number): number {
+  const tc = townCenterQuery(world.ecs).find((eid) => Owner.player[eid] === playerId);
+  if (tc === undefined) throw new Error('no town center');
+  return tc;
+}
+
+function ownUnits(world: SimWorld, playerId: number): Set<number> {
+  return new Set(unitQuery(world.ecs).filter((eid) => Owner.player[eid] === playerId));
+}
+
+/** Queue one unit at the town center and step until it walks out; returns its eid. */
+function trainAtTownCenter(world: SimWorld, playerId: number, defId: number): number {
+  const tc = townCenterOf(world, playerId);
+  world.resources[playerId].set([1000, 1000, 0, 0]);
+  const before = ownUnits(world, playerId);
+  world.inputs.push({ type: 'trainUnit', atEid: tc, defId, playerId });
+  for (let i = 0; i < 2000; i++) {
+    step(world);
+    const fresh = [...ownUnits(world, playerId)].find((eid) => !before.has(eid));
+    if (fresh !== undefined) return fresh;
+  }
+  throw new Error('unit never trained');
+}
+
+function newWorld(seed: number): SimWorld {
+  const world = createSimWorld(seed);
+  world.paused = false;
+  return world;
+}
+
+function nearestResource(world: SimWorld, kind: number, x: number, y: number): number {
+  const eids = resourceQuery(world.ecs)
+    .filter((eid) => Resource.kind[eid] === kind && Resource.amount[eid] > 0)
+    .sort((a, b) =>
+      Math.hypot(Position.x[a] - x, Position.y[a] - y) - Math.hypot(Position.x[b] - x, Position.y[b] - y));
+  if (eids.length === 0) throw new Error('no resource');
+  return eids[0];
+}
+
+describe('town center villagers', () => {
+  it('a new villager goes to work on its own', () => {
+    const world = newWorld(701);
+    const villager = trainAtTownCenter(world, P1, UnitDefId.VILLAGER);
+    const target = Gatherer.targetEid[villager];
+    expect(target).toBeGreaterThanOrEqual(0);
+    expect(hasComponent(world.ecs, Resource, target)).toBe(true);
+    expect(Gatherer.state[villager]).not.toBe(GathererStateId.IDLE);
+  });
+
+  it('spreads new villagers over food and wood', () => {
+    const world = newWorld(702);
+    const kinds = new Set<number>();
+    for (let i = 0; i < 2; i++) { // start pop 3/5: room for two
+      const villager = trainAtTownCenter(world, P1, UnitDefId.VILLAGER);
+      kinds.add(Resource.kind[Gatherer.targetEid[villager]]);
+    }
+    expect(kinds.has(ResourceKindId.FOOD)).toBe(true);
+    expect(kinds.has(ResourceKindId.WOOD)).toBe(true);
+  });
+
+  it('a rally on a resource sends new villagers to gather it', () => {
+    const world = newWorld(703);
+    const tc = townCenterOf(world, P1);
+    const tree = nearestResource(world, ResourceKindId.WOOD, Position.x[tc], Position.y[tc]);
+    world.inputs.push({
+      type: 'setVillagerRally', playerId: P1, atEid: tc,
+      x: Position.x[tree], y: Position.y[tree], targetEid: tree,
+    });
+    step(world);
+    expect(world.villagerRallies.get(tc)).toMatchObject({ targetEid: tree, kind: ResourceKindId.WOOD });
+
+    const villager = trainAtTownCenter(world, P1, UnitDefId.VILLAGER);
+    expect(Gatherer.targetEid[villager]).toBe(tree);
+  });
+
+  it('a rally on the ground walks new villagers there, and clearing it restores auto work', () => {
+    const world = newWorld(704);
+    const tc = townCenterOf(world, P1);
+    let spot: { x: number; y: number } | null = null;
+    for (let r = 5; r < 9 && !spot; r++) {
+      for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r]]) {
+        const x = Math.round(Position.x[tc]) + dx;
+        const y = Math.round(Position.y[tc]) + dy;
+        if (world.map.walkability[y]?.[x] !== 0) continue;
+        if (findResourceAt(world, x, y, 0.8) !== null || findBuildingAt(world, x, y, 1.5) !== null) continue;
+        spot = { x, y };
+        break;
+      }
+    }
+    if (!spot) throw new Error('no open spot');
+    world.inputs.push({ type: 'setVillagerRally', playerId: P1, atEid: tc, x: spot.x, y: spot.y });
+    step(world);
+    const rally = world.villagerRallies.get(tc);
+    expect(rally).toMatchObject({ targetEid: -1, kind: -1 });
+
+    const walker = trainAtTownCenter(world, P1, UnitDefId.VILLAGER);
+    expect(Gatherer.state[walker]).toBe(GathererStateId.IDLE);
+    for (let i = 0; i < 400; i++) step(world);
+    expect(Math.hypot(Position.x[walker] - rally!.x, Position.y[walker] - rally!.y)).toBeLessThan(1.5);
+
+    world.inputs.push({ type: 'clearVillagerRally', playerId: P1, atEid: tc });
+    step(world);
+    expect(world.villagerRallies.has(tc)).toBe(false);
+    const worker = trainAtTownCenter(world, P1, UnitDefId.VILLAGER);
+    expect(Gatherer.targetEid[worker]).toBeGreaterThanOrEqual(0);
+  });
+
+  it('falls back to the nearest node of the same kind once the rally resource is gone', () => {
+    const world = newWorld(705);
+    const tc = townCenterOf(world, P1);
+    const tree = nearestResource(world, ResourceKindId.WOOD, Position.x[tc], Position.y[tc]);
+    world.inputs.push({
+      type: 'setVillagerRally', playerId: P1, atEid: tc,
+      x: Position.x[tree], y: Position.y[tree], targetEid: tree,
+    });
+    step(world);
+    removeSimEntity(world, tree);
+    expect(world.villagerRallies.get(tc)?.targetEid).toBe(-1);
+
+    const villager = trainAtTownCenter(world, P1, UnitDefId.VILLAGER);
+    const target = Gatherer.targetEid[villager];
+    expect(target).not.toBe(tree);
+    expect(Resource.kind[target]).toBe(ResourceKindId.WOOD);
+  });
+
+  it('only the owner can set a town center rally', () => {
+    const world = newWorld(706);
+    const tc = townCenterOf(world, P1);
+    world.inputs.push({ type: 'setVillagerRally', playerId: AI_PLAYER_ID, atEid: tc, x: 5, y: 5 });
+    step(world);
+    expect(world.villagerRallies.has(tc)).toBe(false);
+  });
+
+  it('keeps rallies through save and load, and in the lockstep checksum', () => {
+    const world = newWorld(707);
+    const tc = townCenterOf(world, P1);
+    const tree = nearestResource(world, ResourceKindId.WOOD, Position.x[tc], Position.y[tc]);
+    const before = checksumWorld(world);
+    world.inputs.push({
+      type: 'setVillagerRally', playerId: P1, atEid: tc,
+      x: Position.x[tree], y: Position.y[tree], targetEid: tree,
+    });
+    step(world);
+    const control = newWorld(707);
+    step(control);
+    expect(checksumWorld(world)).not.toBe(checksumWorld(control));
+    expect(before).toBe(checksumWorld(newWorld(707)));
+
+    const restored = createSimWorld(707);
+    loadSimWorldSnapshot(restored, serializeSimWorld(world));
+    const restoredTc = townCenterOf(restored, P1);
+    const rally = restored.villagerRallies.get(restoredTc);
+    expect(rally?.kind).toBe(ResourceKindId.WOOD);
+    expect(Position.x[rally!.targetEid]).toBe(Position.x[tree]);
+    expect(Position.y[rally!.targetEid]).toBe(Position.y[tree]);
+    expect(checksumWorld(restored)).toBe(checksumWorld(world));
+  });
+});
+
+describe('Dark Age pikemen and building sight', () => {
+  it('the town center trains pikemen from the start', () => {
+    const world = newWorld(708);
+    const pikeman = trainAtTownCenter(world, P1, UnitDefId.SPEARMAN);
+    expect(hasComponent(world.ecs, SpearmanTag, pikeman)).toBe(true);
+    expect(hasComponent(world.ecs, UnitKind, pikeman)).toBe(true);
+    expect(gathererQuery(world.ecs).includes(pikeman)).toBe(false);
+  });
+
+  it('refuses a building where the player cannot see, allows one in sight', () => {
+    const world = newWorld(709);
+    step(world); // sight around the starting units
+    world.resources[P1].set([0, 2000, 0, 0]);
+    const count = () => buildingQuery(world.ecs).filter((eid) => Owner.player[eid] === P1).length;
+    const vis = world.visibility[P1];
+    const open = (wantVisible: boolean): { x: number; y: number } => {
+      for (let y = 4; y < world.map.walkability.length - 4; y++) {
+        for (let x = 4; x < world.map.walkability[0].length - 4; x++) {
+          if (world.map.walkability[y][x] !== 0) continue;
+          if (findResourceAt(world, x, y, 0.8) !== null || findBuildingAt(world, x, y, 1.5) !== null) continue;
+          const visible = vis.visible[y * world.map.walkability[0].length + x] === 1;
+          if (visible === wantVisible) return { x, y };
+        }
+      }
+      throw new Error('no tile');
+    };
+
+    const dark = open(false);
+    const before = count();
+    world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: dark.x, y: dark.y, playerId: P1 });
+    step(world);
+    expect(count()).toBe(before);
+
+    const lit = open(true);
+    world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: lit.x, y: lit.y, playerId: P1 });
+    step(world);
+    expect(count()).toBe(before + 1);
+  });
+});

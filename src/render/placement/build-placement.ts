@@ -14,9 +14,10 @@
  */
 
 import { ISO } from '../../config';
+import { Resource } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import { getBuildingCost, remainingHouseAllowance, wallLineTiles } from '@sim/world';
+import { findResourceAt, getBuildingCost, isPlacementInSight, remainingHouseAllowance, wallLineTiles } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -81,11 +82,15 @@ export interface TouchPlacementState {
 export class BuildPlacement {
   mode: BuildMode = 'none';
   armyRallyMode = false;
+  /** Picking where the selected town centers' new villagers go. */
+  villagerRallyMode = false;
   /** B was pressed; waiting for the building key. */
   awaitingBuildKind = false;
   /** Touch confirm flow: the ghost stays put until Confirm (set by the touch UI mode). */
   confirmFlow = false;
   private readonly ghost: Phaser.GameObjects.Graphics;
+  /** Villager rally flags: above the art, so a flag on a tree reads over its crown. */
+  private readonly flags: Phaser.GameObjects.Graphics;
   private ghostSprite: Phaser.GameObjects.Sprite | null = null;
   private ghostRef: SpriteRef | null = null;
   /** WALL mode: first click of a line, waiting for the end tile. */
@@ -103,17 +108,24 @@ export class BuildPlacement {
     private readonly sprites: SpriteSource | null = null
   ) {
     this.ghost = addLayerGraphics(ctx.scene, ctx.layers.ground);
+    this.flags = addLayerGraphics(ctx.scene, ctx.layers.overlay);
   }
 
   /** True while any placement-like mode is armed. */
   get isActive(): boolean {
-    return this.mode !== 'none' || this.awaitingBuildKind || this.armyRallyMode;
+    return this.mode !== 'none' || this.awaitingBuildKind || this.anyRallyMode;
+  }
+
+  /** Either rally pick is armed (army or villager). */
+  get anyRallyMode(): boolean {
+    return this.armyRallyMode || this.villagerRallyMode;
   }
 
   /** HUD label for the current mode. */
   get label(): string {
     if (this.awaitingBuildKind) return 'waiting…';
     if (this.armyRallyMode) return 'army rally';
+    if (this.villagerRallyMode) return 'villager rally';
     return this.mode === 'none' ? '-' : this.mode.toLowerCase();
   }
 
@@ -127,6 +139,7 @@ export class BuildPlacement {
     const def = BUILDING_TABLE[defId];
     this.awaitingBuildKind = false;
     this.armyRallyMode = false;
+    this.villagerRallyMode = false;
     this.wallStart = null;
     this.touchTile = null;
     if (!isBuildingUnlocked(this.ctx.world, this.ctx.perspectivePlayerId, defId)) {
@@ -150,8 +163,22 @@ export class BuildPlacement {
     }
     this.mode = 'none';
     this.awaitingBuildKind = false;
+    this.villagerRallyMode = false;
     this.armyRallyMode = true;
     setLastEvent('army rally - click map');
+  }
+
+  /** Town center selected: the next click or tap sets where its new villagers go. */
+  startVillagerRallyMode(): void {
+    if (this.commands.selectedTownCenters().length === 0) {
+      this.commands.fail({ reason: 'unavailable', text: 'Select your town center first' });
+      return;
+    }
+    this.mode = 'none';
+    this.awaitingBuildKind = false;
+    this.armyRallyMode = false;
+    this.villagerRallyMode = true;
+    setLastEvent('villager rally - click a resource or the ground');
   }
 
   /** Drop every mode (Esc, world reload). */
@@ -161,6 +188,7 @@ export class BuildPlacement {
     this.wallDragArmed = false;
     this.touchTile = null;
     this.armyRallyMode = false;
+    this.villagerRallyMode = false;
     this.awaitingBuildKind = false;
     this.clear();
   }
@@ -178,6 +206,15 @@ export class BuildPlacement {
         return true;
       }
       if (pointer.leftButtonDown()) return this.rallyAt(tx, ty);
+    }
+    if (this.villagerRallyMode) {
+      if (pointer.rightButtonDown()) {
+        this.villagerRallyMode = false;
+        this.clear();
+        setLastEvent('villager rally cancelled');
+        return true;
+      }
+      if (pointer.leftButtonDown()) return this.villagerRallyAt(tx, ty, pointer.worldX, pointer.worldY);
     }
 
     if (this.mode !== 'none') {
@@ -208,6 +245,35 @@ export class BuildPlacement {
     this.armyRallyMode = false;
     this.clear();
     return true;
+  }
+
+  /**
+   * Villager rally pick at a tile: the explored resource under the point
+   * (camera-world wx/wy) or on the tile, else the ground. Leaves the mode.
+   */
+  villagerRallyAt(tx: number, ty: number, wx?: number, wy?: number): boolean {
+    this.villagerRallyMode = false;
+    this.clear();
+    if (!isInsideMap(tx, ty)) {
+      this.commands.fail({ reason: 'unavailable', text: 'Pick a spot on the map' });
+      return true;
+    }
+    const resource = this.villagerRallyResourceAt(tx, ty, wx, wy);
+    this.commands.setVillagerRallyAt(tx, ty, resource);
+    return true;
+  }
+
+  /** The explored resource a villager rally click lands on, or null. */
+  villagerRallyResourceAt(tx: number, ty: number, wx?: number, wy?: number): number | null {
+    const world = this.ctx.world;
+    let eid: number | null = null;
+    if (wx !== undefined && wy !== undefined) {
+      const { tileX, tileY } = this.ctx.pickTile(wx, wy);
+      eid = findResourceAt(world, tileX, tileY, 0.7);
+    }
+    eid ??= findResourceAt(world, tx, ty, 0.7);
+    if (eid === null || Resource.amount[eid] <= 0) return null;
+    return this.ctx.isResourceExplored(eid) ? eid : null;
   }
 
   private placeBuildingAt(tx: number, ty: number): void {
@@ -273,6 +339,10 @@ export class BuildPlacement {
       this.rallyAt(tx, ty);
       return;
     }
+    if (this.villagerRallyMode) {
+      this.villagerRallyAt(tx, ty);
+      return;
+    }
     if (this.mode === 'WALL') {
       this.handleWallClick(tx, ty);
       return;
@@ -323,6 +393,7 @@ export class BuildPlacement {
 
   touchState(): TouchPlacementState {
     if (this.armyRallyMode) return { kind: 'rally', canConfirm: false, valid: true, label: 'Tap the map to set the rally point' };
+    if (this.villagerRallyMode) return { kind: 'rally', canConfirm: false, valid: true, label: 'Tap a tree, bush or rock, or the ground' };
     if (this.mode === 'none') return { kind: 'none', canConfirm: false, valid: false, label: '' };
     const name = BUILDING_TABLE[BUILD_MODE_TO_DEF[this.mode]]?.name ?? this.mode.toLowerCase();
     if (this.mode === 'WALL') {
@@ -362,6 +433,23 @@ export class BuildPlacement {
     this.clear();
     const rally = world.armyRallyPoints[playerId];
     if (rally) this.drawRallyMarker(rally, 0x4ecdc4, 0.9);
+    // Selected town centers show where their villagers go (gold flag).
+    for (const tc of this.commands.selectedTownCenters()) {
+      const villagerRally = world.villagerRallies.get(tc);
+      if (villagerRally) this.drawRallyMarker(villagerRally, 0xfeca57, 0.95, this.flags);
+    }
+
+    if (this.villagerRallyMode) {
+      if (this.confirmFlow) return;
+      const pointer = this.ctx.scene.input.activePointer;
+      const { tx, ty } = this.ctx.pointerTile(pointer);
+      if (isInsideMap(tx, ty)) {
+        const onResource = this.villagerRallyResourceAt(tx, ty, pointer.worldX, pointer.worldY) !== null;
+        const walkable = world.map.walkability[ty][tx] === 0;
+        this.drawRallyMarker({ x: tx, y: ty }, onResource || walkable ? 0xfeca57 : 0xff4757, 0.95, this.flags);
+      }
+      return;
+    }
 
     if (this.armyRallyMode) {
       if (this.confirmFlow) return;
@@ -403,7 +491,8 @@ export class BuildPlacement {
       bank[2] >= cost.gold &&
       bank[3] >= cost.stone;
     const unlocked = isBuildingUnlocked(world, playerId, defId) &&
-      !(defId === BuildingDefId.HOUSE && remainingHouseAllowance(world, playerId) === 0);
+      !(defId === BuildingDefId.HOUSE && remainingHouseAllowance(world, playerId) === 0) &&
+      isPlacementInSight(world, playerId, def, tx, ty);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
     this.lastValid = valid;
 
@@ -437,7 +526,8 @@ export class BuildPlacement {
     const w = ISO.TILE_W / 2;
     const h = ISO.TILE_H / 2;
     for (const tile of wallLineTiles(from.x, from.y, to.x, to.y)) {
-      const blocked = isBuildFootprintBlocked(world, def, tile.x, tile.y);
+      const blocked = isBuildFootprintBlocked(world, def, tile.x, tile.y) ||
+        !isPlacementInSight(world, this.ctx.perspectivePlayerId, def, tile.x, tile.y);
       const valid = !blocked && budget > 0;
       if (valid) budget--;
       const c = this.ctx.tileToScreen(tile.x, tile.y);
@@ -456,6 +546,7 @@ export class BuildPlacement {
 
   clear(): void {
     this.ghost.clear();
+    this.flags.clear();
     this.ghostSprite?.setVisible(false);
   }
 
@@ -492,8 +583,7 @@ export class BuildPlacement {
     return true;
   }
 
-  private drawRallyMarker(point: Tile, color: number, alpha: number): void {
-    const g = this.ghost;
+  private drawRallyMarker(point: Tile, color: number, alpha: number, g = this.ghost): void {
     const c = this.ctx.tileToScreen(point.x, point.y);
     g.lineStyle(2, color, alpha);
     g.strokeEllipse(c.x, c.y + 3, 30, 12);

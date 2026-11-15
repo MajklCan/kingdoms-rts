@@ -258,7 +258,7 @@ export class TouchController {
 
   private placementActive(): boolean {
     const p = this.deps.placement;
-    return p.mode !== 'none' || p.armyRallyMode;
+    return p.mode !== 'none' || p.anyRallyMode;
   }
 
   /** Dragging moves the ghost only for buildings and walls in the confirm flow. */
@@ -272,6 +272,12 @@ export class TouchController {
     const { placement, commands } = this.deps;
     const tile = this.tileAt(clientX, clientY);
     if (!tile) return;
+    if (placement.villagerRallyMode) {
+      if (drag) return;
+      const w = this.toWorld(clientX, clientY);
+      placement.villagerRallyAt(tile.x, tile.y, w.x, w.y);
+      return;
+    }
     if (placement.armyRallyMode) {
       if (drag) return;
       const wasRally = placement.armyRallyMode;

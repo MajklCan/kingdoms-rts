@@ -31,6 +31,7 @@ export type {
   SimWorld,
   SoundCue,
   SoundCueKind,
+  VillagerRally,
 } from './core/types';
 export { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
 export { addSimEntity, entityForNetId, netIdForEntity, removeSimEntity } from './core/entities';
@@ -117,7 +118,7 @@ export {
 } from './systems/visibility';
 export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
 export { getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
-export { canPlaceBuildingAt } from './input/buildings';
+export { canPlaceBuildingAt, isPlacementInSight } from './input/buildings';
 export { aiPlayerDifficulty, aiSettingsFor, createAiPlayerState, normalizeAiDifficulty } from './ai/difficulty';
 export { aiThink } from './ai/brain';
 export { directAiActuator } from './ai/direct-actuator';

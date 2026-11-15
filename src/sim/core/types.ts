@@ -45,6 +45,10 @@ export type SimInput =
   | { type: 'cmdReformFormation'; playerId: number; eids: number[] }
   // ── Already self-describing (carry playerId or a global building eid).
   | { type: 'setArmyRallyPoint'; playerId: number; x: number; y: number }
+  /** Town center villager rally: a tile, or a resource (targetEid). */
+  | { type: 'setVillagerRally'; playerId: number; atEid: number; x: number; y: number; targetEid?: number }
+  /** Back to automatic work for the town center's new villagers. */
+  | { type: 'clearVillagerRally'; playerId: number; atEid: number }
   | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
   /** Wall foundations along the 4-connected line (x0, y0) -> (x1, y1), integer tiles. */
   | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number }
@@ -94,6 +98,20 @@ export interface CampaignState {
    *  fall). */
   zborovLinesTaken?: number;
   zborovForwardY?: number;
+}
+
+/**
+ * A town center's villager rally. On a resource (`targetEid` >= 0) new
+ * villagers gather it, and once it is gone the nearest node of the same
+ * `kind` around the point; on plain ground (`kind` -1) they walk there.
+ */
+export interface VillagerRally {
+  x: number;
+  y: number;
+  /** Resource eid, or -1. Cleared when that resource is removed. */
+  targetEid: number;
+  /** ResourceKindId of the target, or -1 for a ground point. */
+  kind: number;
 }
 
 export interface PopState {
@@ -312,6 +330,11 @@ export interface SimWorld {
   productionQueues: Map<number, number[]>;
   /** Per-player global rally point for units trained from army buildings. */
   armyRallyPoints: Array<GridPos | null>;
+  /**
+   * Town center eid -> where its new villagers go. Without an entry a
+   * human player's new villagers pick work on their own (villager-assign.ts).
+   */
+  villagerRallies: Map<number, VillagerRally>;
   /** Per-player age progression. ages[playerId] = AgeState. */
   ages: AgeState[];
   /** Per-player researched technologies. */

@@ -7,6 +7,7 @@ import {
   buildingQuery,
   createSimWorld,
   remainingHouseAllowance,
+  revealMapForPlayer,
   findBuildingAt,
   findResourceAt,
   getBuildingPopProvided,
@@ -138,6 +139,7 @@ describe('technology tree', () => {
   it('blocks locked buildings and unlocks barracks with pikemen research', () => {
     const world = createSimWorld(502);
     world.paused = false;
+    revealMapForPlayer(world, 1); // building needs sight; the test tile is far from base
     world.resources[1].set([0, 2000, 0, 2000]);
     const spot = findOpenBuildingTile(world, 2);
     const before = countPlayerBuildings(world, 1);
@@ -159,6 +161,7 @@ describe('technology tree', () => {
   it('allows a few houses from the start and lifts the limit with the Barracks tech', () => {
     const world = createSimWorld(512);
     world.paused = false;
+    revealMapForPlayer(world, 1);
     world.resources[1].set([0, 5000, 0, 0]);
     const countHouses = () => {
       let n = 0;

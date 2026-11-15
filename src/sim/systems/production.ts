@@ -25,6 +25,7 @@ import { producerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnMilitaryUnitByDefId, spawnVillager } from '../factories/units';
 import { isMovableEntity } from '../input/formation';
+import { assignTrainedVillager } from './villager-assign';
 import {
   countQueuedWorksiteWorkers,
   countWorksiteWorkers,
@@ -182,7 +183,8 @@ export function productionSystem(world: SimWorld): void {
       if (spawnedEid !== null) {
         pushSoundCue(world, 'unit_ready', Position.x[eid], Position.y[eid], Owner.player[eid]);
         noteUnitTrained(world, Owner.player[eid], trainingDefId, spawnedEid);
-        issueProductionRallyOrder(world, eid, spawnedEid);
+        if (trainingDefId === UnitDefId.VILLAGER) assignTrainedVillager(world, eid, spawnedEid);
+        else issueProductionRallyOrder(world, eid, spawnedEid);
         queue.shift();
         Producer.currentProgress[eid] = 0;
       } else {
@@ -211,7 +213,9 @@ function issueProductionRallyOrder(
   unitEid: number
 ): void {
   if (!hasComponent(world.ecs, Building, producerEid)) return;
-  if (!isArmyProducerDefId(Building.defId[producerEid])) return;
+  // Soldiers from a town center (Dark Age pikemen) join the army rally too.
+  const defId = Building.defId[producerEid];
+  if (!isArmyProducerDefId(defId) && defId !== BuildingDefId.TOWN_CENTER) return;
   const playerId = Owner.player[producerEid];
   const rally = world.armyRallyPoints[playerId];
   if (!rally) return;

@@ -257,7 +257,7 @@ function aiHardEconomyTargets(
   let farms = Math.max(currentFarms, supportProducers * 3);
   let lumber = Math.max(currentLumber, 3, supportProducers + 2, Math.ceil(farms / 4));
   // Units cost no stone, so the production bottleneck below never asks for a
-  // quarry; age-ups (500 and 1000 stone) and techs do. Follow the time-based
+  // quarry; age-ups (300 and 1000 stone) and techs do. Follow the time-based
   // quarry target while an age-up is still ahead.
   const stoneForAges = age < AgeId.GUNPOWDER
     ? aiDesiredStoneQuarryCount(world, playerId, snapshot)

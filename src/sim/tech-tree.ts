@@ -74,14 +74,14 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.BARRACKS_PIKEMEN,
     name: 'Barracks',
-    description: 'Unlocks barracks and pikemen as the first military line, and lifts the early limit on houses.',
+    description: 'Unlocks barracks to train pikemen and archers in numbers, and lifts the early limit on houses.',
     cost: { food: 0, wood: 250, gold: 0, stone: 0 },
     path: 'military',
     icon: 'barracks',
     x: 9.5,
     y: 18,
     requires: [TechId.LUMBER_HUTS, TechId.STONE_MINES],
-    unlocks: ['Barracks', 'Unlimited Houses', 'Pikemen', 'Palisade Walls'],
+    unlocks: ['Barracks', 'Unlimited Houses', 'Palisade Walls'],
   },
   {
     id: TechId.ARCHERS,
@@ -148,7 +148,7 @@ export const TECH_TREE: TechDef[] = [
     id: TechId.CASTLE_AGE,
     name: 'Castle Age',
     description: 'Advance into Castle Age and unlock gold mining, stables, and scout cavalry.',
-    cost: { food: 0, wood: 750, gold: 0, stone: 500 },
+    cost: { food: 0, wood: 450, gold: 0, stone: 300 },
     path: 'age',
     icon: 'castle',
     x: 49.5,
@@ -335,7 +335,8 @@ export function isUnitUnlocked(
     case UnitDefId.VILLAGER:
       return true;
     case UnitDefId.SPEARMAN:
-      return hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);
+      // Trained at the town center from the start; the Barracks tech adds barracks.
+      return true;
     case UnitDefId.ARCHER:
       return hasTech(world, playerId, TechId.ARCHERS);
     case UnitDefId.SCOUT_CAVALRY:

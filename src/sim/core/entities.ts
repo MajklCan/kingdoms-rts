@@ -90,6 +90,11 @@ function forgetEntity(world: SimWorld, eid: number): void {
   world.cannonWindups.delete(eid);
   world.productionQueues.delete(eid);
   world.killingBlows.delete(eid);
+  world.villagerRallies.delete(eid);
+  for (const [tcEid, rally] of world.villagerRallies) {
+    // The rally keeps its point and kind; new villagers take the nearest node.
+    if (rally.targetEid === eid) world.villagerRallies.set(tcEid, { ...rally, targetEid: -1 });
+  }
   for (const [attacker, windup] of world.cannonWindups) {
     if (windup.targetEid === eid) world.cannonWindups.delete(attacker);
   }

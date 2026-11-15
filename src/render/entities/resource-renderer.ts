@@ -55,10 +55,16 @@ export interface TreeFall {
 const SWAY_BROADLEAF = 0.016;
 const SWAY_CONIFER = 0.009;
 const SWAY_PERIOD_MS = 4200;
-/** Chop shake: rad amplitude, length, wobble frequency. */
-const SHAKE_RAD = 0.05;
-const SHAKE_MS = 420;
-const SHAKE_HZ = 11;
+/**
+ * Chop shake: one soft nod per hit, not a wobble. Pixel-art trees swap whole
+ * bent pose frames, so a fast multi-swing shake reads as flicker (a villager
+ * hits every 0.2 s). The nod peaks at SHAKE_SCALE times the tree's own sway
+ * amplitude, lasts SHAKE_MS, and a tree nods again only after
+ * SHAKE_COOLDOWN_MS however many villagers chop it.
+ */
+const SHAKE_SCALE = 1.25;
+const SHAKE_MS = 320;
+const SHAKE_COOLDOWN_MS = 900;
 
 const SNOW_TILES: ReadonlySet<number> = new Set([
   TileType.SNOW,
@@ -263,15 +269,16 @@ export class ResourceRenderer {
 
   /** Sway (stable per-tile phase, slow gusts) plus the decaying chop shake. */
   private treeLean(eid: number, x: number, y: number, conifer: boolean, now: number, sway: boolean): number {
-    let lean = sway ? this.swayLean(x, y, now, conifer ? SWAY_CONIFER : SWAY_BROADLEAF) : 0;
+    const amplitude = conifer ? SWAY_CONIFER : SWAY_BROADLEAF;
+    let lean = sway ? this.swayLean(x, y, now, amplitude) : 0;
     const at = this.shakeAt.get(eid);
     if (at !== undefined) {
       const age = now - at;
-      if (age >= SHAKE_MS) {
+      if (age >= SHAKE_COOLDOWN_MS) {
         this.shakeAt.delete(eid);
-      } else {
-        const k = 1 - age / SHAKE_MS;
-        lean += Math.sin((age / 1000) * SHAKE_HZ * Math.PI * 2) * SHAKE_RAD * k * k;
+      } else if (age < SHAKE_MS) {
+        // Half a sine: lean away from the axe and settle back, once.
+        lean += Math.sin((age / SHAKE_MS) * Math.PI) * amplitude * SHAKE_SCALE;
       }
     }
     return lean;
@@ -286,7 +293,8 @@ export class ResourceRenderer {
   }
 
   private hit(eid: number, kind: number, x: number, y: number, screen: ScreenPos, top: number, now: number): void {
-    if (kind === ResourceKindId.WOOD) this.shakeAt.set(eid, now);
+    // A tree still nodding or resting from its last nod ignores further hits.
+    if (kind === ResourceKindId.WOOD && !this.shakeAt.has(eid)) this.shakeAt.set(eid, now);
     if (this.hitListeners.length === 0) return;
     const hit: ResourceHit = { eid, kind, x, y, screen, top };
     for (const listener of this.hitListeners) listener(hit);

@@ -8,6 +8,7 @@ import { Building, DeadTag, Health, Owner, type ResourceKind } from '../componen
 import { type BuildingDef, BuildingDefId, canAfford, getBuildingDef, spend } from '../defs';
 import { isBuildingUnlocked } from '../tech-tree';
 import { houseLimitReached } from '../core/population';
+import { isTileVisibleTo } from '../systems/visibility';
 import { sortedEids } from '../core/entities';
 import { findBuildingAt, findNearestResource, findResourceAt } from '../core/lookup';
 import type { ResourceProbe } from '../core/placement-probe';
@@ -65,11 +66,35 @@ export function applyPlaceBuilding(
   if (!bank || !canAfford(bank, def.cost)) return;
   if (!isBuildingUnlocked(world, playerId, defId)) return;
   if (houseLimitReached(world, playerId, defId)) return;
+  if (!isPlacementInSight(world, playerId, def, x, y)) return;
 
   if (!canPlaceBuildingAt(world, def, x, y)) return;
 
   spend(bank, def.cost);
   spawnFoundation(world, defId, x, y, playerId);
+}
+
+/**
+ * A human player builds only where they can see right now: every footprint
+ * tile in current sight, not just explored. The computer player places by
+ * its own rules and is not held to it.
+ */
+export function isPlacementInSight(
+  world: SimWorld,
+  playerId: number,
+  def: BuildingDef,
+  x: number,
+  y: number
+): boolean {
+  if (!world.humanPlayers.has(playerId)) return true;
+  const x0 = x - Math.floor(def.footprint.w / 2);
+  const y0 = y - Math.floor(def.footprint.h / 2);
+  for (let dy = 0; dy < def.footprint.h; dy++) {
+    for (let dx = 0; dx < def.footprint.w; dx++) {
+      if (!isTileVisibleTo(world, playerId, x0 + dx, y0 + dy)) return false;
+    }
+  }
+  return true;
 }
 
 /**

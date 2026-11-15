@@ -209,6 +209,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       queue: queue.slice(),
     })),
     armyRallyPoints: world.armyRallyPoints.map((point) => point ? { ...point } : null),
+    villagerRallies: Array.from(world.villagerRallies.entries()).map(([eid, rally]) => ({ eid, ...rally })),
     paths: Array.from(world.paths.entries()).map(([eid, waypoints]) => ({
       eid,
       waypoints: waypoints.map((p) => ({ ...p })),

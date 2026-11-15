@@ -183,6 +183,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     population,
     productionQueues: new Map(),
     armyRallyPoints: Array.from({ length: MAX_PLAYERS }, () => null),
+    villagerRallies: new Map(),
     ages,
     researchedTechs,
     visibility: createVisibilityStates(),

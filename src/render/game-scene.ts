@@ -270,7 +270,7 @@ export class GameScene extends Phaser.Scene {
     this.worldFx.update(delta);
     this.placement.draw();
     const pointer = this.input.activePointer;
-    if (this.placement.mode === 'none' && !this.placement.armyRallyMode && !pointer.rightButtonDown() && !isTouchUi()) {
+    if (this.placement.mode === 'none' && !this.placement.anyRallyMode && !pointer.rightButtonDown() && !isTouchUi()) {
       this.status.drawAttackHover(ctx.pointerTile(pointer));
     }
     this.fog.draw();

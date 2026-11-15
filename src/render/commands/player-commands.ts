@@ -9,10 +9,13 @@
 import { hasComponent } from 'bitecs';
 import {
   Building,
+  DeadTag,
   Gatherer,
   Owner,
   Producer,
+  Resource,
   ResourceWorksite,
+  TownCenterTag,
   UnitKind,
   UnitStance,
   UnitStanceId,
@@ -23,18 +26,21 @@ import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdVal
 import {
   canPlaceBuildingAt,
   EARLY_HOUSE_ALLOWANCE,
+  isPlacementInSight,
   getWorksiteWorkerSlots,
   remainingHouseAllowance,
   selectedCommandableEids,
   selectedQuery,
   worksiteUsesResourceNodes,
   type SimInput,
+  type VillagerRally,
 } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR } from '../audio/sound-map';
 import type { GameAudio } from '../game-audio';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
+import { resourceKindName } from '../hud/selection-info';
 import { dispatchCommand } from './command-dispatch';
 import {
   RESOURCE_NAMES,
@@ -86,6 +92,54 @@ export class PlayerCommands {
     return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
       hasComponent(ecs, Gatherer, eid)
     ).length;
+  }
+
+  // ── Town center villager rally ────────────────────────────────────────────
+
+  /** Own selected town centers, in selection order. */
+  selectedTownCenters(): number[] {
+    const world = this.ctx.world;
+    return selectedQuery(world.ecs).filter((eid) =>
+      hasComponent(world.ecs, TownCenterTag, eid) &&
+      !hasComponent(world.ecs, DeadTag, eid) &&
+      Owner.player[eid] === this.ctx.perspectivePlayerId
+    );
+  }
+
+  /** The first selected town center's villager rally, or null (automatic work). */
+  selectedTownCenterRally(): VillagerRally | null {
+    const tc = this.selectedTownCenters()[0];
+    return tc === undefined ? null : this.ctx.world.villagerRallies.get(tc) ?? null;
+  }
+
+  /**
+   * Point the selected town centers' new villagers at a tile, or at the
+   * explored resource on it. False when no town center is selected.
+   */
+  setVillagerRallyAt(tx: number, ty: number, resourceEid: number | null): boolean {
+    const tcs = this.selectedTownCenters();
+    if (tcs.length === 0) return false;
+    const playerId = this.ctx.perspectivePlayerId;
+    for (const atEid of tcs) {
+      this.dispatch(resourceEid !== null
+        ? { type: 'setVillagerRally', playerId, atEid, x: tx, y: ty, targetEid: resourceEid }
+        : { type: 'setVillagerRally', playerId, atEid, x: tx, y: ty });
+    }
+    if (resourceEid !== null) {
+      this.confirm(`New villagers will gather ${resourceKindName(Resource.kind[resourceEid])}`);
+    } else {
+      this.confirm('Villager rally point set');
+    }
+    return true;
+  }
+
+  /** Back to automatic work for the selected town centers. */
+  clearVillagerRally(): void {
+    const tcs = this.selectedTownCenters();
+    if (tcs.length === 0) return;
+    const playerId = this.ctx.perspectivePlayerId;
+    for (const atEid of tcs) this.dispatch({ type: 'clearVillagerRally', playerId, atEid });
+    this.confirm('New villagers will find work on their own');
   }
 
   /** Report a refused command: error sound + typed notice for the HUD. */
@@ -143,6 +197,9 @@ export class PlayerCommands {
     }
     const missing = this.missingResources(def.cost);
     if (missing.length > 0) return { reason: 'resources', subject: def.name, missing };
+    if (!isPlacementInSight(world, playerId, def, tx, ty)) {
+      return { reason: 'unavailable', text: 'You can only build where your people can see. Scout the spot first' };
+    }
     if (!canPlaceBuildingAt(world, def, tx, ty)) {
       const footprintFree = canPlaceBuildingAt(world, { ...def, harvestKind: undefined }, tx, ty);
       const needsResource = worksiteUsesResourceNodes(def) && footprintFree;
@@ -173,6 +230,8 @@ export class PlayerCommands {
         if (!quiet) this.fail({ reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` });
         return false;
       }
+      // E with the town center selected stays "advance age"; its pikemen have T.
+      if (slot > 0 && Building.defId[eid] === BuildingDefId.TOWN_CENTER) return false;
       const idStr = trainIds[slot];
       if (!idStr) {
         if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
@@ -191,6 +250,15 @@ export class PlayerCommands {
     }
     if (!quiet) this.fail({ reason: 'unavailable', text: 'Select a building that trains units first' });
     return false;
+  }
+
+  /** T: a pikeman from the selected town center. */
+  trainSpearmanAtTownCenter(): void {
+    if (this.selectedTownCenters().length === 0) {
+      this.fail({ reason: 'unavailable', text: 'Select your town center to train pikemen' });
+      return;
+    }
+    this.trainAtSelectedProducer(UnitDefId.SPEARMAN);
   }
 
   /** E: second train slot if the selection has one, else advance age. */

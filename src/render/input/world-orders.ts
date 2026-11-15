@@ -127,6 +127,15 @@ export class WorldOrders {
       return;
     }
     if (!hasUnits) {
+      // Right click with the town center selected: where its new villagers go.
+      if (commands.selectedTownCenters().length > 0) {
+        const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
+        const explored = resourceEid !== null && Resource.amount[resourceEid] > 0 && this.ctx.isResourceExplored(resourceEid);
+        if (commands.setVillagerRallyAt(tx, ty, explored ? resourceEid : null)) {
+          this.feedback?.orderMarker('rally', tx, ty);
+          return;
+        }
+      }
       if (this.selectionIsOwnArmyProducers()) {
         commands.dispatch({ type: 'setArmyRallyPoint', playerId: this.ctx.perspectivePlayerId, x: tx, y: ty });
         this.feedback?.orderMarker('rally', tx, ty);

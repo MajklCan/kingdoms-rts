@@ -120,6 +120,8 @@ export class ActionGrid {
     }
     switch (actionId) {
       case 'set-army-rally': this.placement.startArmyRallyMode(); return;
+      case 'set-villager-rally': this.placement.startVillagerRallyMode(); return;
+      case 'clear-villager-rally': this.commands.clearVillagerRally(); return;
       case 'remove-building': this.commands.removeSelectedBuildings(); return;
       case 'stance-hold-position': this.commands.setStance(UnitStanceId.HOLD_POSITION); return;
       case 'stance-auto-defend': this.commands.setStance(UnitStanceId.AUTO_DEFEND); return;
@@ -267,6 +269,32 @@ export class ActionGrid {
       });
     };
 
+    /** Town center: where its new villagers go, and back to automatic work. */
+    const addVillagerRallyActions = () => {
+      const rally = this.commands.selectedTownCenterRally();
+      actions.push({
+        id: 'set-villager-rally',
+        label: 'Villager Rally Point',
+        key: 'G',
+        glyph: '⚐',
+        enabled: true,
+        kind: 'command',
+        meta: rally === null ? 'Auto: nearest work' : rally.kind >= 0 ? 'Gather here' : 'Walk here',
+        active: this.placement.villagerRallyMode,
+      });
+      if (rally !== null) {
+        actions.push({
+          id: 'clear-villager-rally',
+          label: 'Auto-assign Villagers',
+          key: '',
+          glyph: '↺',
+          enabled: true,
+          kind: 'command',
+          meta: 'New villagers find work',
+        });
+      }
+    };
+
     if (sel.length === 0 || hasVillager) addBuildActions();
 
     if (hasTc) {
@@ -294,7 +322,12 @@ export class ActionGrid {
     }
 
     if (selectedWorksiteEids.length > 0) addWorksiteWorkerAction();
-    else if (hasTc) addTrainAction(UnitDefId.VILLAGER, 'Q', '🧑');
+    else if (hasTc) {
+      addTrainAction(UnitDefId.VILLAGER, 'Q', '🧑');
+      // Dark Age pikemen; with a barracks also selected its own button covers them.
+      if (!selectedProducerDefs.has(BuildingDefId.BARRACKS)) addTrainAction(UnitDefId.SPEARMAN, 'T', '♜');
+    }
+    if (hasTc && selectedWorksiteEids.length === 0) addVillagerRallyActions();
     if (selectedProducerDefs.has(BuildingDefId.BARRACKS)) {
       addTrainAction(UnitDefId.SPEARMAN, 'Q', '♜');
       addTrainAction(UnitDefId.ARCHER, 'E', '🏹');

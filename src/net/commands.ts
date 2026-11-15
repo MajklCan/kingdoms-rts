@@ -51,6 +51,8 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   cmdRotateFormation: { eids: 'eids', delta: 'num' },
   cmdReformFormation: { eids: 'eids' },
   setArmyRallyPoint: { x: 'num', y: 'num' },
+  setVillagerRally: { atEid: 'int', x: 'int', y: 'int', targetEid: 'optInt' },
+  clearVillagerRally: { atEid: 'int' },
   placeBuilding: { defId: 'int', x: 'int', y: 'int' },
   placeWallLine: { x0: 'int', y0: 'int', x1: 'int', y1: 'int' },
   trainUnit: { atEid: 'int', defId: 'int', count: 'optInt' },
@@ -127,7 +129,7 @@ function mapEntityRefs(input: SimInput, mapEid: (eid: number) => number | null):
   if (!isWireCommandType(input.type)) return input;
   const out: Record<string, unknown> = { ...input };
   if ('eids' in input) out.eids = input.eids.map(mapEid).filter((eid): eid is number => eid !== null);
-  if ('targetEid' in input) out.targetEid = mapEid(input.targetEid) ?? -1;
+  if ('targetEid' in input && input.targetEid !== undefined) out.targetEid = mapEid(input.targetEid) ?? -1;
   if ('atEid' in input) out.atEid = mapEid(input.atEid) ?? -1;
   return out as unknown as SimInput;
 }

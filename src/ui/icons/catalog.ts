@@ -31,6 +31,8 @@ export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-wall': { icon: 'b-wall', description: 'Wall line: drag from the start tile to the end tile, or click both. Cost is per tile. Palisade now, stone in the Castle Age, brick with gunpowder.', keyHint: BUILD_HINT('W') },
   'advance-age': { icon: 'c-advance-age', description: 'Advance your realm to the next age, unlocking new buildings, units and research.' },
   'set-army-rally': { icon: 'c-rally', description: 'Pick a gathering point for newly trained soldiers.' },
+  'set-villager-rally': { icon: 'c-rally', description: 'Pick where new villagers from this town center go: tap a tree, bush or rock to gather it, or the ground to walk there. Right click also sets it.' },
+  'clear-villager-rally': { icon: 'u-villager', description: 'Drop the rally point. New villagers pick work near the town center on their own.' },
   'remove-building': { icon: 'c-demolish', description: 'Tear down the selected buildings. Nothing is refunded.' },
   'stance-hold-position': { icon: 'c-hold', description: 'Units stand their ground and only fight what comes into range.' },
   'stance-auto-defend': { icon: 'c-auto-defend', description: 'Units chase and engage enemies that come near.' },
