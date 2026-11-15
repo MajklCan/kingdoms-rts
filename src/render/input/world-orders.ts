@@ -50,6 +50,10 @@ export interface WorldOrdersDeps {
   audio: GameAudio;
   /** Building whose sprite pixels cover a layer-local point (tall art). */
   pickBuilding?: (localX: number, localY: number) => number | null;
+  /** Unit whose drawn figure covers a layer-local point (head to feet). */
+  pickUnit?: (localX: number, localY: number) => number | null;
+  /** A drawn unit's click box in layer-local px (null when not drawn). */
+  unitBody?: (eid: number) => { x0: number; y0: number; x1: number; y1: number } | null;
 }
 
 export class WorldOrders {
@@ -67,14 +71,19 @@ export class WorldOrders {
   }
 
   /**
-   * Entity under a point: the sim's tile pick, except that a building drawn
+   * Entity under a point: a unit whose drawn figure covers it first, then
+   * the sim's tile pick, except that a building drawn
    * over that point (a roof or tower top over a tile further back) wins
    * against another building, and fills in when the tile pick finds nothing.
    */
   pickEntity(wx: number, wy: number, tileX: number, tileY: number): number | null {
     const world = this.ctx.world;
-    const picked = findEntityNear(world, tileX, tileY, 0.7);
     const root = this.ctx.layers.root;
+    // A unit's whole figure is clickable, not just the tile under its feet,
+    // and a figure standing in front of a building wins over the building.
+    const unit = this.deps.pickUnit?.(wx - root.x, wy - root.y) ?? null;
+    if (unit !== null) return unit;
+    const picked = findEntityNear(world, tileX, tileY, 0.7);
     const drawn = this.deps.pickBuilding?.(wx - root.x, wy - root.y) ?? null;
     if (drawn === null) return picked;
     if (picked === null || (picked !== drawn && hasComponent(world.ecs, Building, picked))) return drawn;
@@ -234,15 +243,23 @@ export class WorldOrders {
     return n;
   }
 
-  /** Select own units whose sprite anchor lies inside the camera-world box. */
+  /**
+   * Select own units the camera-world box touches: any part of a drawn
+   * figure counts (the same body box a click uses), else the feet anchor.
+   */
   selectInWorldBox(x0: number, y0: number, x1: number, y1: number): number {
     const world = this.ctx.world;
+    const root = this.ctx.layers.root;
     clearSelection(world);
     let n = 0;
     for (const eid of unitQuery(world.ecs)) {
       if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
+      const body = this.deps.unitBody?.(eid) ?? null;
       const s = this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
-      if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) {
+      const touched = body
+        ? body.x1 + root.x >= x0 && body.x0 + root.x <= x1 && body.y1 + root.y >= y0 && body.y0 + root.y <= y1
+        : s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1;
+      if (touched) {
         setSelected(world, eid, true);
         n++;
       }

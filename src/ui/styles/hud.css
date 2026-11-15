@@ -101,6 +101,20 @@
   animation: res-gain 520ms steps(6, end);
 }
 
+.res-pop-queued {
+  margin-left: 0.2rem;
+  font-size: var(--fs-sm, 0.75rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-300, #d9b25f);
+  text-shadow: 0 var(--px) 0 #000;
+  white-space: nowrap;
+}
+
+.res-pop-queued[hidden] {
+  display: none;
+}
+
 .res-chip-pop.is-capped {
   border-image-source: var(--tex-btn-danger);
   border-image-slice: 8 fill;

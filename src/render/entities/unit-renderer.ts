@@ -40,6 +40,20 @@ export interface UnitDeath {
   deathFrames?: { refs: SpriteRef[]; frameMs: number };
 }
 
+interface UnitBody {
+  x: number;
+  feet: number;
+  top: number;
+  halfW: number;
+}
+
+/** Click box around a drawn unit: half width (px) at least, and as a share of its height. */
+const UNIT_PICK_MIN_HALF_W = 9;
+const UNIT_PICK_WIDTH_RATIO = 0.3;
+/** Slack above the head and below the feet (px). */
+const UNIT_PICK_PAD = 3;
+const UNIT_PICK_FEET_PAD = 6;
+
 export class UnitRenderer {
   readonly animator: UnitAnimator;
   private readonly units: SpriteSync<number>;
@@ -53,6 +67,8 @@ export class UnitRenderer {
   private readonly masks = new AlphaMasks();
   /** unitDefId -> ring / bar sizes of pre-rendered art (null = voxel defaults). */
   private readonly sizes = new Map<number, UnitStatusSize | null>();
+  /** eid -> clickable body box this frame (layer-local px): the whole figure, not just the feet. */
+  private readonly bodies = new Map<number, UnitBody>();
 
   constructor(
     private readonly ctx: SceneContext,
@@ -94,6 +110,7 @@ export class UnitRenderer {
     const alpha = Math.min(1, this.ctx.accumulatorMs / SIM.TICK_MS);
     this.occlusion?.begin();
     this.units.begin();
+    this.bodies.clear();
     for (const eid of unitQuery(ecs)) {
       if (!this.ctx.isEntityVisible(eid)) continue;
       const hasPrev = hasComponent(ecs, PrevPosition, eid);
@@ -125,9 +142,40 @@ export class UnitRenderer {
       const size = this.statusSize(kind);
       const lift = size ? ref.top : this.barLift(kind, view, ref.top);
       overlay.drawUnit(eid, screen, screen.y - lift, size ?? undefined);
+      this.bodies.set(eid, {
+        x: screen.x,
+        feet: screen.y,
+        top: screen.y - lift,
+        halfW: Math.max(UNIT_PICK_MIN_HALF_W, lift * UNIT_PICK_WIDTH_RATIO),
+      });
     }
     this.units.end();
     this.occlusion?.end();
+  }
+
+  /**
+   * Unit whose drawn figure covers a layer-local point: a box from just
+   * below the feet up to the top of the art, a little wider than the body.
+   * The front-most unit (lowest on screen) wins where figures overlap.
+   */
+  pickAt(x: number, y: number): number | null {
+    let best: number | null = null;
+    let bestFeet = -Infinity;
+    for (const [eid, body] of this.bodies) {
+      if (Math.abs(x - body.x) > body.halfW) continue;
+      if (y < body.top - UNIT_PICK_PAD || y > body.feet + UNIT_PICK_FEET_PAD) continue;
+      if (body.feet <= bestFeet) continue;
+      best = eid;
+      bestFeet = body.feet;
+    }
+    return best;
+  }
+
+  /** A drawn unit's click box (layer-local px), or null when it is not on screen. */
+  bodyOf(eid: number): { x0: number; y0: number; x1: number; y1: number } | null {
+    const body = this.bodies.get(eid);
+    if (!body) return null;
+    return { x0: body.x - body.halfW, y0: body.top - UNIT_PICK_PAD, x1: body.x + body.halfW, y1: body.feet + UNIT_PICK_FEET_PAD };
   }
 
   /** Current (interpolated) on-screen anchor of a unit (effects attach here). */
@@ -142,6 +190,7 @@ export class UnitRenderer {
 
   clear(): void {
     this.units.clear();
+    this.bodies.clear();
     this.animator.clear();
     this.flash.clear();
     this.meta.clear();

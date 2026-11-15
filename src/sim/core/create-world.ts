@@ -285,8 +285,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   const p1x = p1.x;
   const p1y = p1.y;
   spawnTownCenter(world, p1x, p1y, 1);
-  safeSpawnCombatUnit('ARCHER', p1x + 1, p1y + 3, 1);
-  safeSpawnCombatUnit('SPEARMAN', p1x - 1, p1y + 3, 1);
+  // Each side starts with the town center and one scout rider, nothing more.
   safeSpawnCombatUnit('SCOUT_CAVALRY', p1x + 2, p1y + 2, 1);
 
   // Player 1's local resource patches - denser around the TC so each AI/human
@@ -354,8 +353,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   const p2x = p2.x;
   const p2y = p2.y;
   spawnTownCenter(world, p2x, p2y, 2);
-  safeSpawnCombatUnit('ARCHER', p2x + 1, p2y + 3, 2);
-  safeSpawnCombatUnit('SPEARMAN', p2x - 1, p2y + 3, 2);
+  // Each side starts with the town center and one scout rider, nothing more.
   safeSpawnCombatUnit('SCOUT_CAVALRY', p2x + 2, p2y + 2, 2);
 
   // Player 2's local patches mirror player 1.

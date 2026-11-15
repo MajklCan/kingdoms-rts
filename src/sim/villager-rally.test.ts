@@ -181,6 +181,16 @@ describe('town center villagers', () => {
 });
 
 describe('Dark Age pikemen and building sight', () => {
+  it('each side starts with the town center and a single scout rider', () => {
+    const world = createSimWorld(710);
+    for (const playerId of [P1, AI_PLAYER_ID]) {
+      const units = [...ownUnits(world, playerId)];
+      expect(units.length).toBe(1);
+      expect(UnitKind.kind[units[0]]).toBe(UnitDefId.SCOUT_CAVALRY);
+      expect(world.population[playerId]).toEqual({ current: 1, cap: 5 });
+    }
+  });
+
   it('the town center trains pikemen from the start', () => {
     const world = newWorld(708);
     const pikeman = trainAtTownCenter(world, P1, UnitDefId.SPEARMAN);

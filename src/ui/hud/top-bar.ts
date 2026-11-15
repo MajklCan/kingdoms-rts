@@ -34,6 +34,7 @@ interface Refs {
   resChip: Record<ResourceKey, HTMLElement>;
   pop: HTMLElement;
   popChip: HTMLElement;
+  popQueued: HTMLElement;
   ageName: HTMLElement;
   ageBar: HTMLElement;
   ageWrap: HTMLElement;
@@ -73,8 +74,12 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     strip.append(chip);
   }
   const pop = h('span', { class: 'res-val num', id: 'res-pop' }, '0/0');
-  const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('r-pop', 'res-icon'), pop);
-  attachTip(popChip, () => ({ title: 'Population', body: 'Units alive out of your housing cap. Build houses to raise the cap.' }));
+  const popQueued = h('span', { class: 'res-pop-queued num', id: 'res-pop-queued', hidden: '' }, '');
+  const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('r-pop', 'res-icon'), pop, popQueued);
+  attachTip(popChip, () => ({
+    title: 'Population',
+    body: 'Units alive out of your housing cap; +N are units in training, which already hold their place. Workers at farms, lumber huts, quarries and mines do not count. Build houses to raise the cap.',
+  }));
   strip.append(popChip);
 
   const ageName = h('span', { class: 'age-name', id: 'res-age' }, 'Dark Age');
@@ -118,7 +123,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     h('div', { class: 'topbar-buttons' }, objectives, tech, speed, pause, menu)
   );
 
-  refs = { res, resChip, pop, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech };
+  refs = { res, resChip, pop, popQueued, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech };
   return h('header', { class: 'topbar', id: 'resource-bar' }, strip, plaque, right);
 }
 
@@ -146,8 +151,15 @@ export function updateTopBar(scene: GameScene): void {
   }
   const pop = scene.getPop(me);
   setText(refs.pop, `${pop.current}/${pop.cap}`);
-  refs.popChip.classList.toggle('is-capped', pop.current >= pop.cap);
-  setAttr(refs.popChip, 'aria-label', `Population ${pop.current} of ${pop.cap}`);
+  setText(refs.popQueued, pop.queued > 0 ? `+${pop.queued}` : '');
+  refs.popQueued.hidden = pop.queued <= 0;
+  // Capped = no room to start another unit (the same test training uses).
+  refs.popChip.classList.toggle('is-capped', pop.current + pop.queued >= pop.cap);
+  setAttr(
+    refs.popChip,
+    'aria-label',
+    `Population ${pop.current} of ${pop.cap}${pop.queued > 0 ? `, ${pop.queued} in training` : ''}`
+  );
 
   const age = scene.getAge(me);
   if (lastAge >= 0 && age.current > lastAge) showAgeBanner(age.name);

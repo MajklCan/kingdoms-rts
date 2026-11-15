@@ -207,6 +207,8 @@ export class GameScene extends Phaser.Scene {
       placement: this.placement,
       audio: this.audio,
       pickBuilding: (x, y) => this.buildings.pickAt(x, y),
+      pickUnit: (x, y) => this.units.pickAt(x, y),
+      unitBody: (eid) => this.units.bodyOf(eid),
     });
     this.pointer.install();
     this.touch = new TouchController(this.ctx, {
@@ -488,7 +490,7 @@ export class GameScene extends Phaser.Scene {
     return getResources(this.world, playerId);
   }
 
-  getPop(playerId: number): { current: number; cap: number } {
+  getPop(playerId: number): { current: number; cap: number; queued: number } {
     return getPop(this.world, playerId);
   }
 

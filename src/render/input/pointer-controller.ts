@@ -53,6 +53,10 @@ export class PointerController {
       audio: GameAudio;
       /** Building whose sprite pixels cover a layer-local point (tall art). */
       pickBuilding?: (localX: number, localY: number) => number | null;
+      /** Unit whose drawn figure covers a layer-local point (head to feet). */
+      pickUnit?: (localX: number, localY: number) => number | null;
+      /** A drawn unit's click box in layer-local px (null when not drawn). */
+      unitBody?: (eid: number) => { x0: number; y0: number; x1: number; y1: number } | null;
     }
   ) {
     this.orders = new WorldOrders(ctx, deps);
