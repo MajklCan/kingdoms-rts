@@ -28,7 +28,7 @@ import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { distToBuildingEdge } from '../core/grid';
 import { ResourceProbe } from '../core/placement-probe';
 import { sortedEids } from '../core/entities';
-import { countQueuedPopCost, houseLimitReached } from '../core/population';
+import { countQueuedPopCost, hasPopulationRoom, houseLimitReached } from '../core/population';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { canPlaceBuildingAt } from '../input/buildings';
@@ -58,6 +58,7 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
     const slots = getWorksiteWorkerSlots(world, atEid);
     const occupied = countWorksiteWorkers(world, atEid) + countQueuedWorksiteWorkers(world, atEid);
     if (occupied >= slots) return false;
+    if (!hasPopulationRoom(world, playerId, unitDef.popCost)) return false;
     activeAiActuator().commitQueueUnit(world, atEid, defId);
     return true;
   }

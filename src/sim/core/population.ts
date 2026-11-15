@@ -3,7 +3,7 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { Building, ConstructionSite, Owner, ResourceWorksite } from '../components';
+import { Building, ConstructionSite, Owner } from '../components';
 import { BUILDING_TABLE, BuildingDefId, UnitDefId, getUnitDef } from '../defs';
 import { TechId, hasTech } from '../tech-tree';
 import { POP_CAP_HARD_LIMIT } from './constants';
@@ -38,20 +38,28 @@ export function recalculatePlayerPopCap(world: SimWorld, playerId: number): void
   pop.cap = Math.min(POP_CAP_HARD_LIMIT, cap);
 }
 
+/** Population places held by every queued unit, worksite crews included. */
 export function countQueuedPopCost(world: SimWorld, playerId: number): number {
   let total = 0;
   for (const [producerEid, queue] of world.productionQueues) {
     if (!hasComponent(world.ecs, Owner, producerEid)) continue;
     if (Owner.player[producerEid] !== playerId) continue;
     for (const defId of queue) {
-      if (defId === UnitDefId.VILLAGER && hasComponent(world.ecs, ResourceWorksite, producerEid)) {
-        continue;
-      }
       const def = getUnitDef(defId);
       total += def?.popCost ?? 0;
     }
   }
   return total;
+}
+
+/** A villager's population cost (worksite crews included). */
+export const VILLAGER_POP_COST = getUnitDef(UnitDefId.VILLAGER)?.popCost ?? 1;
+
+/** Room under the cap for `cost` more, counting units already in training. */
+export function hasPopulationRoom(world: SimWorld, playerId: number, cost: number): boolean {
+  const pop = world.population[playerId];
+  if (!pop) return false;
+  return pop.current + countQueuedPopCost(world, playerId) + cost <= pop.cap;
 }
 
 /**

@@ -78,7 +78,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('r-pop', 'res-icon'), pop, popQueued);
   attachTip(popChip, () => ({
     title: 'Population',
-    body: 'Units alive out of your housing cap; +N are units in training, which already hold their place. Workers at farms, lumber huts, quarries and mines do not count. Build houses to raise the cap.',
+    body: 'Units alive out of your housing cap, workers at farms, lumber huts, quarries and mines included; +N are units in training, which already hold their place. Build houses to raise the cap.',
   }));
   strip.append(popChip);
 

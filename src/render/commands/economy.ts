@@ -5,8 +5,8 @@
 
 import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
-import { Building, Owner, ResourceKindId, ResourceWorksite } from '@sim/components';
-import { AgeId, BuildingDefId, UNIT_TABLE, UnitDefId, getUnitDef, type CostTuple } from '@sim/defs';
+import { Building, Owner, ResourceKindId } from '@sim/components';
+import { AgeId, BuildingDefId, UNIT_TABLE, getUnitDef, type CostTuple } from '@sim/defs';
 import { TechId, type TechIdValue } from '@sim/tech-tree';
 import { buildingQuery, type SimWorld } from '@sim/world';
 
@@ -63,9 +63,7 @@ export function countQueuedPopCost(world: SimWorld, playerId: number): number {
     if (!hasComponent(world.ecs, Owner, producerEid)) continue;
     if (Owner.player[producerEid] !== playerId) continue;
     for (const defId of queue) {
-      if (defId === UnitDefId.VILLAGER && hasComponent(world.ecs, ResourceWorksite, producerEid)) {
-        continue;
-      }
+      // Worksite crews count too: they take a population place.
       total += getUnitDef(defId)?.popCost ?? 0;
     }
   }

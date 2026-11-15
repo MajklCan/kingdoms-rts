@@ -253,19 +253,22 @@ export class ActionGrid {
       const unit = UNIT_TABLE[UnitDefId.VILLAGER];
       const affordable = canAfford(unit.cost);
       const hasSlot = selectedWorksiteEids.some(hasOpenWorksiteWorkerSlot);
+      const hasPopRoom = hasPopulationRoomForUnit(world, playerId, UnitDefId.VILLAGER);
       actions.push({
         id: `train-unit-${UnitDefId.VILLAGER}`,
         label: 'Train Worker',
         key: 'Q',
         glyph: '🧑',
         cost: formatCost(unit.cost),
-        enabled: affordable && hasSlot,
+        enabled: affordable && hasSlot && hasPopRoom,
         kind: 'train',
         meta: `${formatTrainTime(unit.trainTimeTicks)} / Worksite`,
         queue: queuedAtSelectedProducers(UnitDefId.VILLAGER),
-        disabledReason: affordable
-          ? (hasSlot ? undefined : 'Worker slots full')
-          : `Needs ${formatCost(unit.cost)}`,
+        disabledReason: !affordable
+          ? `Needs ${formatCost(unit.cost)}`
+          : !hasSlot
+            ? 'Worker slots full'
+            : hasPopRoom ? undefined : 'Population limit reached. Build a house',
       });
     };
 

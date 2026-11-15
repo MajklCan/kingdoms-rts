@@ -20,7 +20,7 @@ import { pushGameEvent, pushSoundCue } from '../core/events';
 import { recordUnitTrained } from '../core/match-stats';
 import { findSpawnSpot } from '../core/grid';
 import { pathTo } from '../core/navigation';
-import { countQueuedPopCost } from '../core/population';
+import { countQueuedPopCost, hasPopulationRoom } from '../core/population';
 import { producerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnMilitaryUnitByDefId, spawnVillager } from '../factories/units';
@@ -67,6 +67,8 @@ function applyTrainUnitOnce(world: SimWorld, atEid: number, defId: number): bool
     if (occupied >= slots) return false;
     if (queue.length >= 2) return false;
     if (!canAfford(bank, unitDef.cost)) return false;
+    // Worksite crews take a population place like any other villager.
+    if (!hasPopulationRoom(world, playerId, unitDef.popCost)) return false;
     spend(bank, unitDef.cost);
     queue.push(defId);
     world.productionQueues.set(atEid, queue);

@@ -32,6 +32,7 @@ import {
 } from '../core/constants';
 import { sortedEids } from '../core/entities';
 import { isAiControlledPlayer } from '../core/players';
+import { hasPopulationRoom, VILLAGER_POP_COST } from '../core/population';
 import { distToBuildingEdge, findSpawnSpot } from '../core/grid';
 import { findNearestResource } from '../core/lookup';
 import { recordGathered } from '../core/match-stats';
@@ -242,6 +243,7 @@ export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number):
     // worker met a fresh one every tick (one AI lost 4500 villagers to that
     // after training 115), so raiding an AI economy did nothing.
     if (enemySoldierNear(world, siteEid, WORKSITE_RECREW_SAFE_RADIUS)) return;
+    if (!hasPopulationRoom(world, Owner.player[siteEid], VILLAGER_POP_COST)) return;
     spawnWorksiteWorker(world, siteEid);
     return;
   }
@@ -250,6 +252,8 @@ export function trySpawnInitialWorksiteWorker(world: SimWorld, siteEid: number):
     ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
     return;
   }
+  // The free first worker waits for a free population place (a house).
+  if (!hasPopulationRoom(world, Owner.player[siteEid], VILLAGER_POP_COST)) return;
   if (spawnWorksiteWorker(world, siteEid) !== null) {
     ResourceWorksite.freeWorkersSpawned[siteEid] = 1;
   }
@@ -293,7 +297,8 @@ export function spawnWorksiteWorker(world: SimWorld, siteEid: number): number | 
     );
     current++;
     if (!spot) continue;
-    const worker = spawnVillager(world, spot.x, spot.y, Owner.player[siteEid], 0);
+    // Worksite crews take a population place like any other villager.
+    const worker = spawnVillager(world, spot.x, spot.y, Owner.player[siteEid]);
     addComponent(world.ecs, WorksiteWorker, worker);
     WorksiteWorker.siteEid[worker] = siteEid;
     return worker;

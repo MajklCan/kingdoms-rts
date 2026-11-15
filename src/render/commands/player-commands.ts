@@ -299,7 +299,12 @@ export class PlayerCommands {
           this.fail({ reason: 'resources', subject: 'a worker', missing: this.missingResources(unitDef.cost) });
           return;
         }
-        const trainCount = Math.min(targetCount, slotRoom, queueRoom, affordable);
+        const popRoom = populationRoomForUnitCount(world, playerId, unitDefId, targetCount);
+        if (popRoom <= 0) {
+          this.fail({ reason: 'population', subject: 'a worker' });
+          return;
+        }
+        const trainCount = Math.min(targetCount, slotRoom, queueRoom, affordable, popRoom);
         this.dispatch({
           type: 'trainUnit',
           atEid: eid,

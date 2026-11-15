@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hasComponent } from 'bitecs';
-import { Gatherer, GathererStateId, Owner, Position, Resource, ResourceKindId, SpearmanTag, UnitKind } from './components';
+import { Building, Gatherer, GathererStateId, Owner, Position, Resource, ResourceKindId, SpearmanTag, UnitKind, WorksiteWorker } from './components';
 import { BuildingDefId, UnitDefId } from './defs';
 import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
 import { checksumWorld } from './checksum';
@@ -13,6 +13,7 @@ import {
   gathererQuery,
   removeSimEntity,
   resourceQuery,
+  revealMapForPlayer,
   step,
   townCenterQuery,
   unitQuery,
@@ -177,6 +178,51 @@ describe('town center villagers', () => {
     expect(Position.x[rally!.targetEid]).toBe(Position.x[tree]);
     expect(Position.y[rally!.targetEid]).toBe(Position.y[tree]);
     expect(checksumWorld(restored)).toBe(checksumWorld(world));
+  });
+});
+
+describe('worksite crews and population', () => {
+  function lumberHutWithFreeWorker(world: SimWorld): number {
+    revealMapForPlayer(world, P1);
+    world.resources[P1].set([0, 2000, 0, 0]);
+    const tc = townCenterOf(world, P1);
+    const tree = nearestResource(world, ResourceKindId.WOOD, Position.x[tc], Position.y[tc]);
+    for (let r = 1; r < 6; r++) {
+      for (const [dx, dy] of [[r, 0], [0, r], [-r, 0], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) {
+        const x = Math.round(Position.x[tree]) + dx;
+        const y = Math.round(Position.y[tree]) + dy;
+        world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.LUMBER_CAMP, x, y, playerId: P1 });
+        step(world);
+        const hut = findBuildingAt(world, x, y, 0.5);
+        if (hut !== null && Building.defId[hut] === BuildingDefId.LUMBER_CAMP) return hut;
+      }
+    }
+    throw new Error('no lumber hut spot');
+  }
+
+  it('a worksite worker takes a population place', () => {
+    const world = newWorld(711);
+    lumberHutWithFreeWorker(world);
+    for (let i = 0; i < 20 * 30; i++) step(world);
+    const workers = unitQuery(world.ecs).filter((e) => Owner.player[e] === P1 && hasComponent(world.ecs, WorksiteWorker, e));
+    expect(workers.length).toBe(1);
+    expect(world.population[P1].current).toBe(2); // the rider + the worker
+  });
+
+  it('a full population holds back worksite workers until there is room', () => {
+    const world = newWorld(712);
+    world.population[P1].cap = 1; // the rider fills it
+    const hut = lumberHutWithFreeWorker(world);
+    for (let i = 0; i < 20 * 30; i++) step(world);
+    const crew = () => unitQuery(world.ecs).filter((e) => Owner.player[e] === P1 && hasComponent(world.ecs, WorksiteWorker, e)).length;
+    expect(crew()).toBe(0);
+    world.inputs.push({ type: 'trainUnit', atEid: hut, defId: UnitDefId.VILLAGER, playerId: P1 });
+    step(world);
+    expect(world.productionQueues.get(hut) ?? []).toEqual([]);
+
+    world.population[P1].cap = 5; // a house went up
+    step(world);
+    expect(crew()).toBe(1);
   });
 });
 
