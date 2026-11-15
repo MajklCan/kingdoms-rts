@@ -35,6 +35,7 @@ interface Refs {
   pop: HTMLElement;
   popChip: HTMLElement;
   popQueued: HTMLElement;
+  popRising: HTMLElement;
   ageName: HTMLElement;
   ageBar: HTMLElement;
   ageWrap: HTMLElement;
@@ -74,11 +75,20 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     strip.append(chip);
   }
   const pop = h('span', { class: 'res-val num', id: 'res-pop' }, '0/0');
+  // "1/5→8 +2": 1 alive of 5, houses being built raise the cap to 8, 2 in training.
+  const popRising = h('span', { class: 'res-pop-rising num', id: 'res-pop-rising', hidden: '' }, '');
   const popQueued = h('span', { class: 'res-pop-queued num', id: 'res-pop-queued', hidden: '' }, '');
-  const popChip = h('div', { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' }, icon('r-pop', 'res-icon'), pop, popQueued);
+  const popChip = h(
+    'div',
+    { class: 'res-chip res-chip-pop', tabindex: '0', 'aria-label': 'Population' },
+    icon('r-pop', 'res-icon'),
+    pop,
+    popRising,
+    popQueued
+  );
   attachTip(popChip, () => ({
     title: 'Population',
-    body: 'Units alive out of your housing cap, workers at farms, lumber huts, quarries and mines included; +N are units in training, which already hold their place. Build houses to raise the cap.',
+    body: 'Units alive out of your housing cap, workers at farms, lumber huts, quarries and mines included. →N: the cap once the houses being built are finished (usable only then). +N: units in training, which already hold their place. Build houses to raise the cap, up to 75.',
   }));
   strip.append(popChip);
 
@@ -123,7 +133,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     h('div', { class: 'topbar-buttons' }, objectives, tech, speed, pause, menu)
   );
 
-  refs = { res, resChip, pop, popQueued, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech };
+  refs = { res, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech };
   return h('header', { class: 'topbar', id: 'resource-bar' }, strip, plaque, right);
 }
 
@@ -151,6 +161,8 @@ export function updateTopBar(scene: GameScene): void {
   }
   const pop = scene.getPop(me);
   setText(refs.pop, `${pop.current}/${pop.cap}`);
+  setText(refs.popRising, pop.rising > 0 ? `→${pop.cap + pop.rising}` : '');
+  refs.popRising.hidden = pop.rising <= 0;
   setText(refs.popQueued, pop.queued > 0 ? `+${pop.queued}` : '');
   refs.popQueued.hidden = pop.queued <= 0;
   // Capped = no room to start another unit (the same test training uses).
@@ -158,7 +170,9 @@ export function updateTopBar(scene: GameScene): void {
   setAttr(
     refs.popChip,
     'aria-label',
-    `Population ${pop.current} of ${pop.cap}${pop.queued > 0 ? `, ${pop.queued} in training` : ''}`
+    `Population ${pop.current} of ${pop.cap}` +
+      (pop.rising > 0 ? `, rising to ${pop.cap + pop.rising} when the houses are built` : '') +
+      (pop.queued > 0 ? `, ${pop.queued} in training` : '')
   );
 
   const age = scene.getAge(me);

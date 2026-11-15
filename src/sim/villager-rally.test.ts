@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hasComponent } from 'bitecs';
 import { Building, Gatherer, GathererStateId, Owner, Position, Resource, ResourceKindId, SpearmanTag, UnitKind, WorksiteWorker } from './components';
 import { BuildingDefId, UnitDefId } from './defs';
+import { TechId } from './tech-tree';
 import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
 import { checksumWorld } from './checksum';
 import {
@@ -11,6 +12,9 @@ import {
   findBuildingAt,
   findResourceAt,
   gathererQuery,
+  housingAtMaximum,
+  pendingPopCapGain,
+  POP_CAP_HARD_LIMIT,
   removeSimEntity,
   resourceQuery,
   revealMapForPlayer,
@@ -223,6 +227,56 @@ describe('worksite crews and population', () => {
     world.population[P1].cap = 5; // a house went up
     step(world);
     expect(crew()).toBe(1);
+  });
+});
+
+describe('houses under construction and the population maximum', () => {
+  function openTiles(world: SimWorld, count: number): Array<{ x: number; y: number }> {
+    const out: Array<{ x: number; y: number }> = [];
+    const taken = new Set<string>();
+    for (let y = 4; y < world.map.walkability.length - 4 && out.length < count; y += 2) {
+      for (let x = 4; x < world.map.walkability[0].length - 4 && out.length < count; x += 2) {
+        if (world.map.walkability[y][x] !== 0) continue;
+        if (findResourceAt(world, x, y, 0.8) !== null || findBuildingAt(world, x, y, 1.5) !== null) continue;
+        if (taken.has(`${x},${y}`)) continue;
+        taken.add(`${x},${y}`);
+        out.push({ x, y });
+      }
+    }
+    return out;
+  }
+
+  it('rising houses only add cap once finished, and the HUD gain says how much', () => {
+    const world = newWorld(713);
+    revealMapForPlayer(world, P1);
+    world.resources[P1].set([0, 2000, 0, 0]);
+    const [spot] = openTiles(world, 1);
+    world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: spot.x, y: spot.y, playerId: P1 });
+    step(world);
+    expect(world.population[P1].cap).toBe(5);
+    expect(pendingPopCapGain(world, P1)).toBe(3);
+    for (let i = 0; i < 20 * 16; i++) step(world);
+    expect(world.population[P1].cap).toBe(8);
+    expect(pendingPopCapGain(world, P1)).toBe(0);
+  });
+
+  it('refuses a house once finished plus rising houses reach the maximum', () => {
+    const world = newWorld(714);
+    revealMapForPlayer(world, P1);
+    world.researchedTechs[P1].add(TechId.BARRACKS_PIKEMEN); // no early allowance
+    world.resources[P1].set([0, 50000, 0, 0]);
+    world.population[P1].cap = POP_CAP_HARD_LIMIT - 4;
+    const spots = openTiles(world, 3);
+    const houses = () => buildingQuery(world.ecs)
+      .filter((e) => Owner.player[e] === P1 && Building.defId[e] === BuildingDefId.HOUSE).length;
+    for (const spot of spots) {
+      world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: spot.x, y: spot.y, playerId: P1 });
+      step(world);
+    }
+    // 71 + 3 = 74 < 75 lets the second in; 71 + 6 >= 75 stops the third.
+    expect(houses()).toBe(2);
+    expect(housingAtMaximum(world, P1)).toBe(true);
+    expect(pendingPopCapGain(world, P1)).toBe(4);
   });
 });
 

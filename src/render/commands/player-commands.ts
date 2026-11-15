@@ -26,7 +26,9 @@ import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdVal
 import {
   canPlaceBuildingAt,
   EARLY_HOUSE_ALLOWANCE,
+  housingAtMaximum,
   isPlacementInSight,
+  POP_CAP_HARD_LIMIT,
   getWorksiteWorkerSlots,
   remainingHouseAllowance,
   selectedCommandableEids,
@@ -181,6 +183,22 @@ export class PlayerCommands {
 
   // ── Placement ─────────────────────────────────────────────────────────────
 
+  /** Why no new house may be started right now (early allowance, population maximum), or null. */
+  houseStartFailure(): CommandFailure | null {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    if (housingAtMaximum(world, playerId)) {
+      return { reason: 'unavailable', text: `Your houses already reach the ${POP_CAP_HARD_LIMIT} population maximum` };
+    }
+    if (remainingHouseAllowance(world, playerId) === 0) {
+      return {
+        reason: 'unavailable',
+        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before the Barracks tech. Research Barracks to build more`,
+      };
+    }
+    return null;
+  }
+
   /** Why `defId` cannot be placed at tile (tx, ty) right now, or null if it can. */
   placementFailure(defId: number, tx: number, ty: number): CommandFailure | null {
     const world = this.ctx.world;
@@ -189,11 +207,9 @@ export class PlayerCommands {
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
     if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
     if (!isBuildingUnlocked(world, playerId, defId)) return { reason: 'locked', subject: def.name };
-    if (defId === BuildingDefId.HOUSE && remainingHouseAllowance(world, playerId) === 0) {
-      return {
-        reason: 'unavailable',
-        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before the Barracks tech. Research Barracks to build more`,
-      };
+    if (defId === BuildingDefId.HOUSE) {
+      const houseFailure = this.houseStartFailure();
+      if (houseFailure) return houseFailure;
     }
     const missing = this.missingResources(def.cost);
     if (missing.length > 0) return { reason: 'resources', subject: def.name, missing };

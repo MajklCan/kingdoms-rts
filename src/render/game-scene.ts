@@ -490,7 +490,7 @@ export class GameScene extends Phaser.Scene {
     return getResources(this.world, playerId);
   }
 
-  getPop(playerId: number): { current: number; cap: number; queued: number } {
+  getPop(playerId: number): { current: number; cap: number; queued: number; rising: number } {
     return getPop(this.world, playerId);
   }
 

@@ -53,7 +53,13 @@ export {
   unitQuery,
   worksiteWorkerQuery,
 } from './core/queries';
-export { EARLY_HOUSE_ALLOWANCE, getBuildingPopProvided, remainingHouseAllowance } from './core/population';
+export {
+  EARLY_HOUSE_ALLOWANCE,
+  getBuildingPopProvided,
+  housingAtMaximum,
+  pendingPopCapGain,
+  remainingHouseAllowance,
+} from './core/population';
 export {
   findBuildingAt,
   findEntityNear,

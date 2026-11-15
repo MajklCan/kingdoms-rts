@@ -4,7 +4,7 @@ import { ResourceKindId } from '@sim/components';
 import { getAgeDef } from '@sim/defs';
 import type { CampaignMissionIdValue } from '@sim/campaign';
 import { TECH_TREE, techStatus, type TechIdValue } from '@sim/tech-tree';
-import type { SimWorld } from '@sim/world';
+import { pendingPopCapGain, type SimWorld } from '@sim/world';
 import { canAffordCost, countQueuedPopCost, formatCost, nextAgeTechId } from '../commands/economy';
 
 export interface TechTreeNode {
@@ -48,14 +48,23 @@ export function getResources(
 }
 
 /**
- * Population for the HUD: units alive, the housing cap, and the places units
- * in training already hold (training is refused once alive + queued would
- * pass the cap, so the HUD must show them too).
+ * Population for the HUD: units alive, the housing cap, the places units in
+ * training already hold (training is refused once alive + queued would pass
+ * the cap, so the HUD must show them too), and the cap houses still under
+ * construction will add once finished (not usable before that).
  */
-export function getPop(world: SimWorld, playerId: number): { current: number; cap: number; queued: number } {
+export function getPop(
+  world: SimWorld,
+  playerId: number
+): { current: number; cap: number; queued: number; rising: number } {
   const p = world.population[playerId];
-  if (!p) return { current: 0, cap: 0, queued: 0 };
-  return { current: p.current, cap: p.cap, queued: countQueuedPopCost(world, playerId) };
+  if (!p) return { current: 0, cap: 0, queued: 0, rising: 0 };
+  return {
+    current: p.current,
+    cap: p.cap,
+    queued: countQueuedPopCost(world, playerId),
+    rising: pendingPopCapGain(world, playerId),
+  };
 }
 
 export function getAge(world: SimWorld, playerId: number): {

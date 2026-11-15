@@ -85,9 +85,28 @@ export function remainingHouseAllowance(world: SimWorld, playerId: number): numb
 }
 
 /** True when `defId` is a house and the early allowance is used up. */
+/**
+ * True when `defId` is a house that may not be started: the early allowance
+ * is used up, or finished plus rising houses already reach the population
+ * maximum (another house would only waste its wood).
+ */
 export function houseLimitReached(world: SimWorld, playerId: number, defId: number): boolean {
   if (defId !== BuildingDefId.HOUSE) return false;
-  return remainingHouseAllowance(world, playerId) === 0;
+  return remainingHouseAllowance(world, playerId) === 0 || housingAtMaximum(world, playerId);
+}
+
+/** Cap plus the cap of buildings under construction reaches POP_CAP_HARD_LIMIT. */
+export function housingAtMaximum(world: SimWorld, playerId: number): boolean {
+  const pop = world.population[playerId];
+  if (!pop) return false;
+  return pop.cap + countPendingPopCap(world, playerId) >= POP_CAP_HARD_LIMIT;
+}
+
+/** Cap the buildings under construction will add, clipped to the maximum. */
+export function pendingPopCapGain(world: SimWorld, playerId: number): number {
+  const pop = world.population[playerId];
+  if (!pop) return 0;
+  return Math.max(0, Math.min(countPendingPopCap(world, playerId), POP_CAP_HARD_LIMIT - pop.cap));
 }
 
 export function countPendingPopCap(world: SimWorld, playerId: number): number {

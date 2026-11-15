@@ -17,7 +17,7 @@ import { ISO } from '../../config';
 import { Resource } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import { findResourceAt, getBuildingCost, isPlacementInSight, remainingHouseAllowance, wallLineTiles } from '@sim/world';
+import { findResourceAt, getBuildingCost, isPlacementInSight, wallLineTiles } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -147,10 +147,13 @@ export class BuildPlacement {
       setLastEvent(`${def?.name ?? mode} is locked`);
       return;
     }
-    if (defId === BuildingDefId.HOUSE && remainingHouseAllowance(this.ctx.world, this.ctx.perspectivePlayerId) === 0) {
-      this.mode = 'none';
-      this.commands.fail({ reason: 'unavailable', text: 'House limit reached. Research Barracks to build more' });
-      return;
+    if (defId === BuildingDefId.HOUSE) {
+      const failure = this.commands.houseStartFailure();
+      if (failure) {
+        this.mode = 'none';
+        this.commands.fail(failure);
+        return;
+      }
     }
     this.mode = mode;
     setLastEvent(message);
@@ -491,7 +494,7 @@ export class BuildPlacement {
       bank[2] >= cost.gold &&
       bank[3] >= cost.stone;
     const unlocked = isBuildingUnlocked(world, playerId, defId) &&
-      !(defId === BuildingDefId.HOUSE && remainingHouseAllowance(world, playerId) === 0) &&
+      !(defId === BuildingDefId.HOUSE && this.commands.houseStartFailure() !== null) &&
       isPlacementInSight(world, playerId, def, tx, ty);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
     this.lastValid = valid;

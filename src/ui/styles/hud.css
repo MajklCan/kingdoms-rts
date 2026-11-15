@@ -111,7 +111,17 @@
   white-space: nowrap;
 }
 
-.res-pop-queued[hidden] {
+.res-pop-rising {
+  font-size: var(--fs-sm, 0.75rem);
+  font-weight: 700;
+  line-height: 1;
+  color: #a9d98b;
+  text-shadow: 0 var(--px) 0 #000;
+  white-space: nowrap;
+}
+
+.res-pop-queued[hidden],
+.res-pop-rising[hidden] {
   display: none;
 }
 

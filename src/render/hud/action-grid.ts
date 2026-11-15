@@ -30,6 +30,8 @@ import {
   getBuildingCost,
   getBuildingDisplayName,
   getWorksiteWorkerSlots,
+  housingAtMaximum,
+  POP_CAP_HARD_LIMIT,
   remainingHouseAllowance,
   selectedQuery,
 } from '@sim/world';
@@ -201,7 +203,8 @@ export class ActionGrid {
         const affordable = canAfford(cost);
         // Houses before the Barracks tech: a few, with the count left shown.
         const housesLeft = defId === BuildingDefId.HOUSE ? remainingHouseAllowance(world, playerId) : null;
-        const capped = housesLeft === 0;
+        const atMaximum = defId === BuildingDefId.HOUSE && housingAtMaximum(world, playerId);
+        const capped = housesLeft === 0 || atMaximum;
         const buildTime = `${Math.ceil(getBuildingBuildTicks(world, playerId, defId) / SIM.TICK_HZ)}s`;
         actions.push({
           id,
@@ -213,9 +216,11 @@ export class ActionGrid {
           enabled: affordable && !capped,
           kind: 'build',
           meta: housesLeft === null ? buildTime : `${buildTime} / ${housesLeft} left`,
-          disabledReason: capped
-            ? 'House limit reached. Research Barracks to build more'
-            : affordable ? undefined : `Needs ${formatCost(cost)}`,
+          disabledReason: atMaximum
+            ? `Housing already reaches the ${POP_CAP_HARD_LIMIT} population maximum`
+            : capped
+              ? 'House limit reached. Research Barracks to build more'
+              : affordable ? undefined : `Needs ${formatCost(cost)}`,
         });
       }
     };

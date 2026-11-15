@@ -14,7 +14,7 @@
 
 import { BUILDING_TABLE, UNIT_TABLE, getAgeDef } from '@sim/defs';
 import { techDef } from '@sim/tech-tree';
-import { POP_CAP_HARD_LIMIT, type GameEvent } from '@sim/world';
+import { POP_CAP_HARD_LIMIT, pendingPopCapGain, type GameEvent } from '@sim/world';
 import { SIM } from '../../config';
 import type { CommandFeedback, CommandNotice, ResourceName } from '../commands/feedback';
 import type { SceneContext } from '../scene-context';
@@ -239,7 +239,10 @@ export class UiAlertFeed {
     const capped = pop.cap > 0 && pop.current >= pop.cap && pop.cap < POP_CAP_HARD_LIMIT;
     if (capped && !this.popWasCapped && world.tick - this.lastPopAlertTick >= POP_CAP_COOLDOWN_TICKS) {
       this.lastPopAlertTick = world.tick;
-      const text = 'Population limit reached. Build more houses';
+      // Houses already rising: say so instead of asking for more.
+      const text = pendingPopCapGain(world, this.ctx.perspectivePlayerId) > 0
+        ? 'Population limit reached. Your houses are still being built'
+        : 'Population limit reached. Build more houses';
       this.alert('population', text, world.tick);
       this.message(text, 'warn', world.tick);
     }
