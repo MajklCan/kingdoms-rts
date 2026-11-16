@@ -20,6 +20,7 @@ import { updateObjectives } from './panels/objectives';
 import { renderTechTree } from './panels/tech-tree';
 import { updateConnectionLost } from './screens/connection-lost';
 import { updateGameOver } from './screens/game-over';
+import { updateAutosave } from './saves/autosave';
 import { updateCursor } from './skin/cursors';
 import { resetPerfProbe, tickPerfProbe } from './touch/perf-probe';
 import { updateTouchBar } from './touch/touch-bar';
@@ -48,6 +49,7 @@ function tick(now: number): void {
   renderTechTree(scene);
   updateObjectives(scene);
   updateGameOver(scene);
+  updateAutosave(scene, now);
   updateConnectionLost();
   updateCursor(scene, now);
 }

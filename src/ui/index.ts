@@ -39,6 +39,7 @@ import { bindMainMenu } from './screens/main-menu';
 import { bindMenuShell, enterMenu, getMenuRoot } from './screens/menu-shell';
 import { bindMultiplayerLobby } from './screens/multiplayer-lobby';
 import { bindSkirmishSetup } from './screens/skirmish-setup';
+import { bindAutosave } from './saves/autosave';
 import { bindCursor } from './skin/cursors';
 import { bindPixelScale } from './skin/pixel-scale';
 import { bindUiSounds } from './ui-sounds';
@@ -114,6 +115,7 @@ export function mountUi(game: Phaser.Game): void {
   bindDevPanel();
   bindUiSounds();
   bindCursor();
+  bindAutosave();
 
   installMultiplayerDebugApi();
   bindMultiplayerClientDiagnostics();

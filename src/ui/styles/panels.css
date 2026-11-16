@@ -146,8 +146,12 @@
   color: #9c9384;
 }
 
-.pause-item#pause-quit {
+/* The two ways out sit apart from the rest of the list. */
+.pause-item#pause-save-quit {
   margin-top: 0.4rem;
+}
+
+.pause-item#pause-quit {
   border-image-source: var(--tex-banner-primary);
 }
 

@@ -1,10 +1,16 @@
-/** Main menu: crest, title, the three mode charters and secondary actions. */
+/**
+ * Main menu: crest, title, the three mode charters and secondary actions.
+ * A "Continue" charter leads the list while the autosave slot holds a match.
+ */
 
-import { h, readStorage } from '../dom';
+import { h, readStorage, setText } from '../dom';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
+import { continueAutosave } from '../match/match-flow';
 import { openSaveLoad } from '../panels/save-load';
 import { openSettings } from '../panels/settings';
+import { autosaveSummary, getKnownAutosave, loadAutosave, onAutosaveChange, refreshAutosave } from '../saves/autosave';
+import type { AutosaveMeta } from '../saves/autosave-meta';
 import { buildFullscreenButton } from '../touch/fullscreen';
 import { previousMenuScreen, registerMenuScreen, rovingFocus, showMenuScreen, type MenuScreenId } from './menu-shell';
 
@@ -39,10 +45,47 @@ export function buildTagText(): string {
   return `Prototype · v${__APP_VERSION__}${commit}`;
 }
 
+/** "Continue" charter: hidden until the autosave slot holds a resumable match. */
+function continueCharter(): { el: HTMLButtonElement; sync: (meta: AutosaveMeta | null) => void } {
+  const sub = h('span', { class: 'charter-sub', id: 'menu-continue-summary' });
+  let loading = false;
+  const el = h(
+    'button',
+    {
+      type: 'button',
+      class: 'charter',
+      id: 'menu-continue',
+      hidden: true,
+      onclick: () => {
+        if (loading) return;
+        loading = true;
+        // A save that no longer loads is dropped; the slot change hides this charter.
+        void loadAutosave().then((record) => {
+          loading = false;
+          if (record) continueAutosave(record);
+        });
+      },
+    },
+    h('span', { class: 'medallion', 'aria-hidden': 'true' }, h('span', { class: 'medallion-disc' }), icon('play', 'medallion-icon')),
+    h('span', { class: 'charter-body' }, h('span', { class: 'charter-label' }, 'Continue'), sub),
+    icon('chevron-right', 'charter-arrow')
+  );
+  const sync = (meta: AutosaveMeta | null): void => {
+    const hadFocus = document.activeElement === el;
+    el.hidden = meta === null;
+    if (meta) setText(sub, autosaveSummary(meta));
+    else if (hadFocus) el.parentElement?.querySelector<HTMLElement>('.charter:not([hidden])')?.focus();
+  };
+  return { el, sync };
+}
+
 export function bindMainMenu(): void {
+  const resume = continueCharter();
+  onAutosaveChange(resume.sync);
   const nav = h(
     'nav',
     { class: 'charter-list', 'aria-label': 'Game modes' },
+    resume.el,
     charter('campaign', 'mode-campaign', 'Campaign', 'Authored chronicle of the crown'),
     charter('skirmish', 'mode-skirmish', 'Skirmish', 'Free-build economy versus the AI'),
     charter('multiplayer', 'mode-multiplayer', 'Multiplayer', 'Wage war against a rival lord')
@@ -88,9 +131,12 @@ export function bindMainMenu(): void {
     id: 'root',
     el,
     // Coming back from a sub-screen lands on the charter that opened it.
-    focusTarget: () => nav.querySelector<HTMLElement>(`.charter[data-mode="${previousMenuScreen()}"]`) ?? nav.querySelector<HTMLElement>('.charter'),
+    focusTarget: () => nav.querySelector<HTMLElement>(`.charter[data-mode="${previousMenuScreen()}"]`) ?? nav.querySelector<HTMLElement>('.charter:not([hidden])'),
     onShow: () => {
       nameEl.textContent = storedPlayerName();
+      // Last known slot first (no pop-in), then the truth from storage.
+      resume.sync(getKnownAutosave());
+      void refreshAutosave();
     },
   });
 }
