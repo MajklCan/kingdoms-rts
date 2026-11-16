@@ -451,6 +451,14 @@ def main() -> None:
     total = sum(os.path.getsize(os.path.join(OUT, a["image"])) for fam in atlases.values() for a in fam)
     print(f"[pack] {len(manifest['assets'])} assets, world PNG payload {total / 1e6:.2f} MB"
           f"{' (256 colour)' if quantize else ''}")
+    # The farm's construction stages are composed from the packed farm frames
+    # (no Blender job renders them), so every pack puts them back.
+    try:
+        import farm_construction_frames
+    except ImportError as err:  # Blender's python has no Pillow
+        print(f"[pack] farm construction frames skipped ({err}); run scripts/farm_construction_frames.py")
+    else:
+        farm_construction_frames.main()
 
 
 if __name__ == "__main__":

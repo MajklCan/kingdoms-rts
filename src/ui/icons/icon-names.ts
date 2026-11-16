@@ -48,6 +48,7 @@ export const ICON_NAMES = [
   'pop',
   'quit',
   'research',
+  'restart',
   'rotate-device',
   'save',
   'scroll',

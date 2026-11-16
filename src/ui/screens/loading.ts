@@ -17,6 +17,7 @@ const TIPS = [
   'Space jumps the camera to the latest alert.',
   'Mills boost farm deliveries. Place them beside your fields.',
   'Pikemen hold the line against cavalry. Archers shoot from behind them.',
+  'Your town center shoots at raiders that come close, from further out than a tower.',
   'Worksites spawn their own workers. Villagers are free for building and farming.',
   'Complete two paths of a tech ring and the next ring opens, with a new age for your town.',
   'Press Esc for the pause menu, where you can save, load and change settings.',

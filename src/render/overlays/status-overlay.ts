@@ -254,9 +254,12 @@ export class StatusOverlay {
     return false;
   }
 
+  /** A unit that takes attack orders. Armed buildings (tower, town center)
+   *  pick their own targets, so they promise nothing on hover. */
   private canAttack(eid: number): boolean {
     const ecs = this.ctx.world.ecs;
-    return hasComponent(ecs, Combat, eid) &&
+    return hasComponent(ecs, UnitKind, eid) &&
+      hasComponent(ecs, Combat, eid) &&
       hasComponent(ecs, AttackTarget, eid) &&
       hasComponent(ecs, Health, eid) &&
       Health.hp[eid] > 0 &&

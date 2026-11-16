@@ -51,7 +51,7 @@ export const NIGHT_SIGHT: Readonly<SightTable> = {
   machineGun: 6,
   mortar: 7,
   building: 5,
-  townCenter: 7,
+  townCenter: 8,
   tower: 8,
 };
 

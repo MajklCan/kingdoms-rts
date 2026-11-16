@@ -117,7 +117,7 @@ index.html             27-line shell; CSS lives in src/ui/styles
 ## Key constants / IDs
 
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
-- `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks.
+- `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks (one unit per 5 ticks); stone alone is slower, `STONE_GATHER_COOLDOWN=9` (one per 10 ticks, `gatherCooldownForKind`).
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.
 - Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN.
 - Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen, archery range archers (unlocked by the Archers tech).
@@ -130,6 +130,7 @@ index.html             27-line shell; CSS lives in src/ui/styles
 Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) what to draw. Order per query: pre-rendered unit atlases (`units-manifest.json`), then Blender atlas art (`manifest.json`), then in-engine voxel bakes. A missing manifest, atlas or frame falls back per query, never blanks an entity.
 
 - **Blender atlases (primary art, "style A"):** rendered by `scripts/blender/`, packed by `scripts/pack_sprites.py` into `public/assets/sprites/*-0.{png,json}` + manifests. Re-running, conventions and variant keys: `docs/BLENDER_SPRITE_PIPELINE.md`, `docs/UNIT_SPRITES.md`; engine side (loading, zoom, layers, team colour, terrain bake, ambient life): `docs/SPRITE_ATLAS.md`.
+- **Farm construction look:** a farm foundation is a plot being laid out, not the timber scaffold: atlas asset `construction.farm` (six stages, written by `scripts/farm_construction_frames.py` from the packed farm frames, re-run by the packer), voxel fallback `buildDarkFarmSiteVoxels` (drawn solid; other voxel foundations ghost their finished model).
 - **Voxel fallback:** model fns in `src/render/voxel/models/<thing>.ts` return `Voxel[]`; `src/render/sprites/voxel-bake.ts` bakes every pose at boot (`bakeIfMissing`, fixed `bounds` so frames don't slide). Keys e.g. `voxel-villager-p1-SE-move-0`. Details: `docs/VOXEL_SPRITE_PIPELINE.md`. QA sheet: `?inspect=<unit>` (e.g. `?inspect=scout-cavalry`).
 - `scripts/gen-*-tc*.mjs` / `gen-minimal.mjs` export `.vox` files for external rendering, legacy, not on the runtime path.
 
@@ -145,6 +146,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 
 - Projectile damage is applied at **impact tick**, not fire tick. Tests must `stepN(world, shot.projectileTicks)` after observing a `combatEvents` entry (see `age-tower.test.ts`).
 - Cannons have a windup (`CANNON_WINDUP_TICKS`); splash with falloff exponent.
+- The town center shoots like a defensive tower (`def.combat`: the tower's damage and reload, range +`TOWN_CENTER_RANGE_BONUS` = 9, measured from its centre). Armed buildings get `Combat` in `attachBuildingCombat` when finished; foundations never shoot. Cannons and mortars still out-range it.
 - Stances: `AUTO_DEFEND` vs `HOLD_POSITION` (with melee leash distance).
 - `world.grid` IS the pathfinder grid IS `mapData.walkability`. Mutate in place when placing buildings / removing trees so EasyStar sees changes. **Never reassign.**
 - Unit separation runs 2 passes inside the movement system. Villagers are mutually non-blocking; ordered/working villagers still push others.
@@ -154,6 +156,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 ## Save / load
 
 - `SAVE_VERSION=4`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes, v1-v3 saves move to the tech rings (`save/migrate-tech-rings.ts`: a saved age becomes its preset, an age advance in progress is refunded) (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
+- Finished armed buildings saved without combat data (town centers from before they could shoot) get their def's attack on load (`save/migrate-building-combat.ts`), no version bump.
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 

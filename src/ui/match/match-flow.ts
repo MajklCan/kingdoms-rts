@@ -12,7 +12,7 @@ import type { AiDifficulty, SimWorld } from '../../sim/world';
 import { appState, setPhase, type MatchKind } from '../app-state';
 import { endMatch, getScene } from '../game-bridge';
 import { enterMenu, leaveMenu, type MenuScreenId } from '../screens/menu-shell';
-import { runLoading } from '../screens/loading';
+import { isLoading, runLoading } from '../screens/loading';
 
 type MatchListener = (kind: MatchKind) => void;
 const startListeners = new Set<MatchListener>();
@@ -33,7 +33,17 @@ function beginMatch(kind: MatchKind): void {
   for (const fn of startListeners) fn(kind);
 }
 
+/**
+ * Repeats the launch of the running match with everything it was started
+ * with (null: nothing to repeat). Every start function below goes through
+ * launch(), whose `task` closure holds that function's arguments, so a new
+ * argument is repeated too without touching this.
+ */
+let relaunch: (() => void) | null = null;
+
 async function launch(kind: MatchKind, title: string, subtitle: string, task: () => void, minMs?: number): Promise<void> {
+  // A multiplayer match cannot be repeated alone: the rival plays on.
+  relaunch = kind === 'multiplayer' ? null : () => void launch(kind, title, subtitle, task, minMs);
   leaveMenu();
   const ok = await runLoading({
     title,
@@ -45,6 +55,7 @@ async function launch(kind: MatchKind, title: string, subtitle: string, task: ()
     },
   });
   if (!ok) {
+    relaunch = null;
     appState.matchKind = null;
     setPhase('menu');
     enterMenu('root');
@@ -94,11 +105,31 @@ export function startMultiplayerMatch(world: SimWorld, localPlayerId: number): v
   );
 }
 
+/** True when the running match can be started again (not in multiplayer). */
+export function canRestartMatch(): boolean {
+  return relaunch !== null;
+}
+
+/**
+ * Start the running match again from its beginning: a skirmish on the same
+ * map, starting age and AI (new seed), a campaign mission from its briefing,
+ * a loaded save from that save. False when there is nothing to repeat.
+ */
+export function restartMatch(): boolean {
+  const again = relaunch;
+  if (!again || isLoading()) return false;
+  // A new match starts at normal speed, like one started from the menu.
+  getScene()?.setGameSpeed(1);
+  again();
+  return true;
+}
+
 /** Leave the running match and return to the title screens, in every mode
  *  and without a reload: the scene tears the match down (a multiplayer
  *  session is left properly, so the relay tells the rival) and idles. */
 export function quitToMenu(screen: MenuScreenId = 'root'): void {
   for (const fn of endListeners) fn();
+  relaunch = null;
   endMatch();
   appState.mpSession = null;
   appState.matchKind = null;
