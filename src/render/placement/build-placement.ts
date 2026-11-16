@@ -20,7 +20,7 @@ import { isBuildingUnlocked } from '@sim/tech-tree';
 import { findResourceAt, getBuildingCost, isPlacementInSight, wallLineTiles } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
-import type { PlayerCommands } from '../commands/player-commands';
+import { NO_BUILDER_FAILURE, type PlayerCommands } from '../commands/player-commands';
 import { countOwnedArmyProducers } from '../commands/economy';
 import type { GameAudio } from '../game-audio';
 import type { SceneContext } from '../scene-context';
@@ -142,6 +142,12 @@ export class BuildPlacement {
     this.villagerRallyMode = false;
     this.wallStart = null;
     this.touchTile = null;
+    const noBuilder = this.commands.builderFailure();
+    if (noBuilder) {
+      this.mode = 'none';
+      this.commands.fail(noBuilder);
+      return;
+    }
     if (!isBuildingUnlocked(this.ctx.world, this.ctx.perspectivePlayerId, defId)) {
       this.mode = 'none';
       setLastEvent(`${def?.name ?? mode} is locked`);
@@ -289,7 +295,13 @@ export class BuildPlacement {
       this.reset();
       return;
     }
-    this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId });
+    const eids = this.commands.selectedBuilderEids();
+    if (eids.length === 0) {
+      this.commands.fail(NO_BUILDER_FAILURE);
+      this.reset();
+      return;
+    }
+    this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId, eids });
     this.audio.playUi(PLACE_BUILDING);
     setLastEvent(`place ${this.mode} → (${tx},${ty})`);
     this.reset();
@@ -330,7 +342,13 @@ export class BuildPlacement {
 
   private placeWallLine(from: Tile, to: Tile): void {
     const playerId = this.ctx.perspectivePlayerId;
-    this.commands.dispatch({ type: 'placeWallLine', playerId, x0: from.x, y0: from.y, x1: to.x, y1: to.y });
+    const eids = this.commands.selectedBuilderEids();
+    if (eids.length === 0) {
+      this.commands.fail(NO_BUILDER_FAILURE);
+      this.reset();
+      return;
+    }
+    this.commands.dispatch({ type: 'placeWallLine', playerId, x0: from.x, y0: from.y, x1: to.x, y1: to.y, eids });
     this.audio.playUi(PLACE_BUILDING);
     setLastEvent(`wall (${from.x},${from.y}) to (${to.x},${to.y})`);
     this.reset();

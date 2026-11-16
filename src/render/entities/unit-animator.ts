@@ -251,6 +251,7 @@ export class UnitAnimator {
     const ecs = this.ctx.world.ecs;
     const carryAmt = hasComponent(ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;
     const carry = carryAmt > 0 ? CARRY_ANIM[ResourceCarry.kind[eid]] ?? 'carry' : 'carry';
+    if (this.atBuildSite(eid, moving)) return 'build';
     if (hasComponent(ecs, Gatherer, eid)) {
       const state = Gatherer.state[eid];
       if (state === GathererStateId.GATHERING) {
@@ -339,6 +340,7 @@ export class UnitAnimator {
   private villagerAnim(eid: number, moving: boolean): string {
     const ecs = this.ctx.world.ecs;
     const carryAmt = hasComponent(ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;
+    if (this.atBuildSite(eid, moving)) return 'build';
     if (hasComponent(ecs, Gatherer, eid)) {
       const state = Gatherer.state[eid];
       if (state === GathererStateId.GATHERING) return 'harvest';
@@ -347,6 +349,12 @@ export class UnitAnimator {
       if (state === GathererStateId.DEPOSITING && carryAmt > 0) return 'carry';
     }
     return moving ? 'move' : 'idle';
+  }
+
+  /** A builder standing still with a build order: working on its foundation. */
+  private atBuildSite(eid: number, moving: boolean): boolean {
+    if (moving || !hasComponent(this.ctx.world.ecs, BuildOrder, eid)) return false;
+    return BuildOrder.targetEid[eid] >= 0;
   }
 
   private villagerFacing(eid: number, moving: boolean): Facing {

@@ -45,6 +45,11 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   };
 
   onHotkey('keydown-B', () => {
+    const noBuilder = commands.builderFailure();
+    if (noBuilder) {
+      commands.fail(noBuilder);
+      return;
+    }
     placement.awaitBuildKind();
     setLastEvent('build: M farm · I mill · L wood · C stone · other buildings unlock through research');
   });

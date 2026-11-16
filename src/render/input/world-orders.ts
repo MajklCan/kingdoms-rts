@@ -5,7 +5,8 @@
  *
  *   select      pick the entity under a point (left click, long press)
  *   command     context order (right click, tap with a selection):
- *               visible enemy -> attack; only army buildings -> rally;
+ *               visible enemy -> attack; own foundation + villagers ->
+ *               build; only army buildings -> rally;
  *               explored resource -> gather / hint; else move
  *   box         own units inside a camera-world rectangle
  *   same kind   every own unit of a type on screen (double click / tap)
@@ -17,6 +18,7 @@ import { hasComponent } from 'bitecs';
 import {
   Building,
   DeadTag,
+  FoundationTag,
   Health,
   Owner,
   Position,
@@ -135,6 +137,7 @@ export class WorldOrders {
       setLastEvent(`attack eid=${targetEid}`);
       return;
     }
+    if (hasUnits && targetEid !== null && this.tryBuildOrder(targetEid)) return;
     if (!hasUnits) {
       // Right click with the town center selected: where its new villagers go.
       if (commands.selectedTownCenters().length > 0) {
@@ -175,6 +178,20 @@ export class WorldOrders {
     this.issueMapOrder('move', tx, ty);
   }
 
+  /**
+   * Own unfinished foundation with free villagers selected: send them to
+   * build it. False (nothing sent) for anything else.
+   */
+  private tryBuildOrder(targetEid: number): boolean {
+    if (!this.isOwnFoundation(targetEid)) return false;
+    if (this.deps.commands.selectedBuilderEids().length === 0) return false;
+    this.deps.commands.dispatch({ type: 'buildSelected', targetEid });
+    this.deps.audio.barkMove();
+    this.feedback?.orderMarker('move', Position.x[targetEid], Position.y[targetEid]);
+    setLastEvent(`build eid=${targetEid}`);
+    return true;
+  }
+
   /** Left-click semantics: select what is under the point (or clear). Returns the eid. */
   select(wx: number, wy: number): number | null {
     const world = this.ctx.world;
@@ -205,6 +222,9 @@ export class WorldOrders {
       const { tx, ty } = this.ctx.pickTile(wx, wy);
       if (this.issueMapOrder('attackMove', tx, ty)) return;
     }
+    // A tap on an own foundation with villagers selected builds it rather
+    // than selecting it, like a right click.
+    if (eid !== null && this.tryBuildOrder(eid)) return;
     if (eid !== null && this.isOwnEntity(eid)) {
       if (count === 2 && this.ctx.isOwnUnit(eid)) {
         const n = this.selectSameKindOnScreen(eid);
@@ -294,6 +314,14 @@ export class WorldOrders {
   private isOwnEntity(eid: number): boolean {
     if (this.ctx.isOwnUnit(eid)) return true;
     return hasComponent(this.ctx.world.ecs, Building, eid) &&
+      Owner.player[eid] === this.ctx.perspectivePlayerId;
+  }
+
+  /** A living foundation of the perspective player. */
+  private isOwnFoundation(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    return hasComponent(ecs, FoundationTag, eid) &&
+      !hasComponent(ecs, DeadTag, eid) &&
       Owner.player[eid] === this.ctx.perspectivePlayerId;
   }
 

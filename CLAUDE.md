@@ -46,7 +46,7 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 
-Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
+Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction (builders walk to / work at their foundation first, `systems/builders.ts`) → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
 `world.paused = true` after `createSimWorld()`. Tests must set it to `false`.
 
@@ -140,6 +140,8 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 - Render reads via queries (`buildingQuery`, `unitQuery`, etc.) + `hasComponent` gates. `PrevPosition` enables 60 fps interpolation between 20 Hz sim ticks (`accumulator/TICK_MS`).
 
 ## Combat / movement gotchas
+
+- **Buildings need builders.** A foundation gains progress only while a free villager with `BuildOrder.targetEid` on it stands at its edge ((n+2)/3 speed for n builders); builders then chain to the nearest open foundation. `placeBuilding` / `placeWallLine` take the builders as `eids`, `cmdBuild` sends more. Skirmish players start with 1 scout rider + 2 villagers (3/5 pop); campaign worlds pass `starterVillagers: false`. Tests that need finished buildings call `staffFoundations` (`src/sim/testing/`), which spawns pop-free builders.
 
 - Projectile damage is applied at **impact tick**, not fire tick. Tests must `stepN(world, shot.projectileTicks)` after observing a `combatEvents` entry (see `age-tower.test.ts`).
 - Cannons have a windup (`CANNON_WINDUP_TICKS`); splash with falloff exponent.

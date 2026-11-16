@@ -17,6 +17,7 @@ import {
   ResourceWorksite,
   TownCenterTag,
   UnitKind,
+  VillagerTag,
   UnitStance,
   UnitStanceId,
   type UnitStanceValue,
@@ -62,6 +63,9 @@ import {
 /** Shift-click on a train button queues up to this many. */
 export const TRAIN_BATCH_COUNT = 5;
 
+/** Refusal for a build order without a free villager selected. */
+export const NO_BUILDER_FAILURE: CommandFailure = { reason: 'unavailable', text: 'Select a villager to build' };
+
 const FORMATION_FACING_LABELS = ['S', 'SW', 'W', 'NW', 'N', 'NE', 'E', 'SE'];
 
 export class PlayerCommands {
@@ -95,6 +99,19 @@ export class PlayerCommands {
     return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
       hasComponent(ecs, Gatherer, eid)
     ).length;
+  }
+
+  /** Own selected free villagers (worksite crews excluded) a build order would send. */
+  selectedBuilderEids(): number[] {
+    const ecs = this.ctx.world.ecs;
+    return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
+      hasComponent(ecs, VillagerTag, eid)
+    );
+  }
+
+  /** Building needs a villager: the refusal when none is selected, else null. */
+  builderFailure(): CommandFailure | null {
+    return this.selectedBuilderEids().length > 0 ? null : NO_BUILDER_FAILURE;
   }
 
   // ── Town center villager rally ────────────────────────────────────────────
@@ -206,6 +223,8 @@ export class PlayerCommands {
     const playerId = this.ctx.perspectivePlayerId;
     const def = getBuildingDef(defId);
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
+    const noBuilder = this.builderFailure();
+    if (noBuilder) return noBuilder;
     if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
     if (!isBuildingUnlocked(world, playerId, defId)) return { reason: 'locked', subject: def.name };
     if (defId === BuildingDefId.HOUSE) {

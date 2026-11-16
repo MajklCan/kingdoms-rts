@@ -309,7 +309,8 @@ export class ActionGrid {
       }
     };
 
-    if (sel.length === 0 || hasVillager) addBuildActions();
+    // Buildings need a builder: the build menu belongs to a free villager.
+    if (hasVillager) addBuildActions();
 
     if (hasTc) {
       const ageTechId = nextAgeTechId(world, playerId);
