@@ -4,7 +4,12 @@ import { TechId, TECH_TREE, openRing, techIdsInRing, techsThroughRing } from '..
 import { createSimWorld } from '../world';
 import { checksumWorld } from '../checksum';
 import { loadSimWorldSnapshot, migrateSavedGame, parseSavedGame, serializeSimWorld } from '../save-load';
-import type { SavedGameV3 } from './schema';
+import { addComponent, hasComponent } from 'bitecs';
+import { GameSpeciesId, NetId, Owner, VillagerJobId, VillagerTag, VillagerWork } from '../components';
+import { commanderQuery, gameAnimalQuery, gathererQuery } from '../core/queries';
+import { spawnGameAnimal } from '../factories/game-animals';
+import { spawnCommander } from '../factories/units';
+import { SAVE_VERSION, type SavedGameV3, type SavedGameV4, type SavedGameV4Roles } from './schema';
 
 /** A v3 save of a fresh world, with the given per-player ages and research. */
 function v3Save(
@@ -43,7 +48,7 @@ describe('save v3 -> v4 (tech rings)', () => {
       [OLD_START, OLD_CASTLE, [...OLD_CASTLE, 'farms', 'housing_ii']]
     );
     const migrated = migrateSavedGame(save)!;
-    expect(migrated.version).toBe(4);
+    expect(migrated.version).toBe(SAVE_VERSION);
     expect(migrated.researchedTechs[0]).toEqual([]);
     expect([...migrated.researchedTechs[1]].sort()).toEqual([...techIdsInRing(1)].sort());
     expect([...migrated.researchedTechs[2]].sort()).toEqual([...techsThroughRing(2)].sort());
@@ -59,8 +64,8 @@ describe('save v3 -> v4 (tech rings)', () => {
   it('keeps research that still exists and hands moved unlocks to their new research', () => {
     const save = v3Save(902, [IDLE(0), IDLE(AgeId.DARK), IDLE(AgeId.DARK)], [[], [...OLD_START, 'barracks_pikemen'], [...OLD_START, 'lumber_crews', 'mills']]);
     const migrated = migrateSavedGame(save)!;
-    // The old Barracks research also brought palisade walls.
-    expect([...migrated.researchedTechs[1]].sort()).toEqual([TechId.BARRACKS_PIKEMEN, TechId.PALISADES].sort());
+    // The old Barracks research also brought palisade walls and the Commander.
+    expect([...migrated.researchedTechs[1]].sort()).toEqual([TechId.BARRACKS_PIKEMEN, TechId.PALISADES, TechId.COMMANDER].sort());
     expect([...migrated.researchedTechs[2]].sort()).toEqual([TechId.LUMBER_CREWS, TechId.MILLS].sort());
     expect(migrated.ages[1]).toEqual({ current: AgeId.DARK });
 
@@ -89,24 +94,99 @@ describe('save v3 -> v4 (tech rings)', () => {
     expect(migrated.campaign?.lockedTechs).toEqual(techIdsInRing(3));
   });
 
-  it('round-trips a v4 save: research, era and checksum', () => {
+  it('round-trips a current save: research, era and checksum', () => {
     const world = createSimWorld(906, { startingAge: AgeId.CASTLE });
     world.researchedTechs[1].add(TechId.GOLD_MINES);
-    const text = JSON.stringify(serializeSimWorld(world, 'v4'));
+    const text = JSON.stringify(serializeSimWorld(world, 'v5'));
     const parsed = parseSavedGame(text)!;
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(SAVE_VERSION);
     const restored = createSimWorld(1);
     loadSimWorldSnapshot(restored, parsed);
     expect([...restored.researchedTechs[1]].sort()).toEqual([...world.researchedTechs[1]].sort());
     expect(restored.ages).toEqual(world.ages);
     expect(checksumWorld(restored)).toBe(checksumWorld(world));
-    expect(TECH_TREE.length).toBe(17);
+    expect(TECH_TREE.length).toBe(18);
   });
 
   it('parses a v3 file from text', () => {
     const save = v3Save(907, [IDLE(0), IDLE(AgeId.CASTLE), IDLE(AgeId.CASTLE)], [[], OLD_CASTLE, OLD_CASTLE]);
     const parsed = parseSavedGame(JSON.stringify(save));
-    expect(parsed?.version).toBe(4);
-    expect(parsed?.researchedTechs[1]).toHaveLength(8);
+    expect(parsed?.version).toBe(SAVE_VERSION);
+    expect(parsed?.researchedTechs[1]).toHaveLength(techIdsInRing(1).length);
+  });
+});
+
+describe('save v4 -> v5 (both v4 formats)', () => {
+  /** A roles-branch v4: the v3 shape (ages with an advance, old research ids) plus the new entity fields. */
+  function rolesV4(seed: number): { save: SavedGameV4Roles; villagerNetId: number } {
+    const world = createSimWorld(seed);
+    spawnCommander(world, 30, 30, 1);
+    spawnGameAnimal(world, GameSpeciesId.DEER, 34, 34);
+    const villager = [...gathererQuery(world.ecs)].find((eid) => Owner.player[eid] === 1 && hasComponent(world.ecs, VillagerTag, eid))!;
+    addComponent(world.ecs, VillagerWork, villager);
+    VillagerWork.job[villager] = VillagerJobId.GATHER;
+    VillagerWork.kind[villager] = 1;
+    VillagerWork.x[villager] = 12;
+    VillagerWork.y[villager] = 13;
+    const current = JSON.parse(JSON.stringify(serializeSimWorld(world, 'roles v4'))) as ReturnType<typeof serializeSimWorld>;
+    const save = {
+      ...current,
+      version: 4,
+      ages: [IDLE(0), { current: AgeId.DARK, progress: 120, totalTicks: 800 }, IDLE(AgeId.DARK)],
+      researchedTechs: [[], [...OLD_START, 'barracks_pikemen', 'archers'], OLD_START],
+      campaign: null,
+    } as unknown as SavedGameV4Roles;
+    return { save, villagerNetId: NetId.value[villager] };
+  }
+
+  it('reads a roles v4 save as age research: refunds the advance, maps research, keeps the new entities', () => {
+    const { save, villagerNetId } = rolesV4(911);
+    const before = save.resources[1].slice();
+    const parsed = parseSavedGame(JSON.stringify(save))!;
+    expect(parsed.version).toBe(SAVE_VERSION);
+    expect(parsed.ages[1]).toEqual({ current: AgeId.CASTLE });
+    expect(parsed.resources[1]).toEqual([before[0], before[1] + 750, before[2], before[3] + 500]);
+    expect([...parsed.researchedTechs[1]].sort()).toEqual(
+      [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.COMMANDER, TechId.PALISADES, TechId.WATCHTOWERS].sort()
+    );
+    expect(parsed.entities.some((e) => e.commander)).toBe(true);
+    expect(parsed.entities.some((e) => e.gameAnimal)).toBe(true);
+
+    const world = createSimWorld(1);
+    loadSimWorldSnapshot(world, parsed);
+    expect(openRing(world, 1)).toBe(2);
+    expect([...commanderQuery(world.ecs)]).toHaveLength(1);
+    expect([...gameAnimalQuery(world.ecs)].length).toBeGreaterThan(0);
+    const villager = world.netIdToEid.get(villagerNetId)!;
+    expect(hasComponent(world.ecs, VillagerWork, villager)).toBe(true);
+    expect([VillagerWork.job[villager], VillagerWork.x[villager], VillagerWork.y[villager]]).toEqual([VillagerJobId.GATHER, 12, 13]);
+  });
+
+  it('reads a rings v4 save as is and grants the Commander research with Barracks, so ring II stays open', () => {
+    const world = createSimWorld(912);
+    for (const id of [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.LUMBER_CREWS, TechId.HOUSING_I]) world.researchedTechs[1].add(id);
+    world.researchedTechs[2].add(TechId.MILLS);
+    world.ages[1].current = AgeId.CASTLE;
+    const current = JSON.parse(JSON.stringify(serializeSimWorld(world, 'rings v4'))) as ReturnType<typeof serializeSimWorld>;
+    const ringsV4: SavedGameV4 = {
+      ...current,
+      version: 4,
+      researchedTechs: current.researchedTechs.map((ids) => ids.filter((id) => id !== TechId.COMMANDER)),
+    };
+    const parsed = parseSavedGame(JSON.stringify(ringsV4))!;
+    expect(parsed.version).toBe(SAVE_VERSION);
+    expect(parsed.ages[1]).toEqual({ current: AgeId.CASTLE });
+    expect(parsed.researchedTechs[1]).toContain(TechId.COMMANDER);
+    expect(parsed.researchedTechs[2]).toEqual([TechId.MILLS]);
+    expect(parsed.resources).toEqual(current.resources);
+    const restored = createSimWorld(1);
+    loadSimWorldSnapshot(restored, parsed);
+    expect(openRing(restored, 1)).toBe(2);
+  });
+
+  it('refuses a save from a newer version', () => {
+    const world = createSimWorld(913);
+    const text = JSON.stringify({ ...serializeSimWorld(world, 'future'), version: SAVE_VERSION + 1 });
+    expect(parseSavedGame(text)).toBeNull();
   });
 });

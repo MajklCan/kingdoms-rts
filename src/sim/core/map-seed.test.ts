@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hashBytes } from '../../render/tile-hash';
 import { checksumWorld } from '../checksum';
 import {
+  SAVE_VERSION,
   loadSimWorldSnapshot,
   migrateSavedGame,
   parseSavedGame,
@@ -30,7 +31,7 @@ describe('map seed', () => {
     const world = createSimWorld(4242);
     const text = JSON.stringify(serializeSimWorld(world, 'seed'));
     const parsed = parseSavedGame(text);
-    expect(parsed?.version).toBe(4);
+    expect(parsed?.version).toBe(SAVE_VERSION);
     expect(parsed?.mapSeed).toBe(4242);
     const restored = createSimWorld(1);
     loadSimWorldSnapshot(restored, parsed!);

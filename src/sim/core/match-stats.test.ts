@@ -4,7 +4,7 @@ import { Building, ConstructionSite, Health, Owner, Position, Producer, TownCent
 import { hasComponent } from 'bitecs';
 import { checksumWorld } from '../checksum';
 import { BUILDING_TABLE, BuildingDefId, UnitDefId, getBuildingDef, getUnitDef } from '../defs';
-import { loadSimWorldSnapshot, migrateSavedGame, serializeSimWorld, type SavedGameV1 } from '../save-load';
+import { SAVE_VERSION, loadSimWorldSnapshot, migrateSavedGame, serializeSimWorld, type SavedGameV1 } from '../save-load';
 import { TECH_TREE, isBuildingUnlocked, techStatus } from '../tech-tree';
 import {
   buildingQuery,
@@ -315,7 +315,7 @@ describe('match statistics', () => {
     world.matchStats[P1]!.gathered = [10, 20, 30, 40];
     world.matchStats[P2]!.buildingsRazed = 2;
     const save = JSON.parse(JSON.stringify(serializeSimWorld(world, 'stats'))) as ReturnType<typeof serializeSimWorld>;
-    expect(save.version).toBe(4);
+    expect(save.version).toBe(SAVE_VERSION);
 
     const restored = createSimWorld(1);
     loadSimWorldSnapshot(restored, save);
@@ -330,7 +330,7 @@ describe('match statistics', () => {
       campaign: null,
     };
     const migrated = migrateSavedGame(v1);
-    expect(migrated?.version).toBe(4);
+    expect(migrated?.version).toBe(SAVE_VERSION);
     const fromV1 = createSimWorld(1);
     loadSimWorldSnapshot(fromV1, v1);
     expect(fromV1.matchStats[P1]!.unitsTrained).toBe(0);

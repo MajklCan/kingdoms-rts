@@ -6,7 +6,7 @@ import { UNIT_TABLE, BUILDING_TABLE, BuildingDefId, UnitDefId } from './defs';
 import { aiMaybeTrainCommander } from './ai/commander';
 import { collectAiSnapshot } from './ai/snapshot';
 import { countAliveCommanders, unitLimitReached, unitLimitReason } from './core/unit-limits';
-import { TechId, isUnitUnlocked } from './tech-tree';
+import { TechId, isUnitUnlocked, techDef, techStatus } from './tech-tree';
 import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
 import { spawnCommander } from './factories/units';
 import {
@@ -40,6 +40,7 @@ function barracksWorld(playerId: number): { world: SimWorld; barracks: number } 
   world.paused = false;
   world.aiPlayers[AI_PLAYER_ID] = null;
   world.researchedTechs[playerId].add(TechId.BARRACKS_PIKEMEN);
+  world.researchedTechs[playerId].add(TechId.COMMANDER);
   world.resources[playerId].set([5000, 5000, 5000, 5000]);
   world.population[playerId].cap = 75;
   const spot = openTile(world);
@@ -79,12 +80,15 @@ describe('commander stats', () => {
     expect(PopulationCost.value[eid]).toBe(1);
   });
 
-  it('unlocks with the barracks research, like the pikeman', () => {
+  it('unlocks with his own ring I research, which needs Barracks', () => {
     const world = createSimWorld(6);
-    expect(isUnitUnlocked(world, LOCAL_PLAYER_ID, UnitDefId.COMMANDER)).toBe(
-      isUnitUnlocked(world, LOCAL_PLAYER_ID, UnitDefId.SPEARMAN)
-    );
+    expect(isUnitUnlocked(world, LOCAL_PLAYER_ID, UnitDefId.COMMANDER)).toBe(false);
+    expect(techDef(TechId.COMMANDER)).toMatchObject({ path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN] });
+    expect(techStatus(world, LOCAL_PLAYER_ID, TechId.COMMANDER)).toBe('locked');
     world.researchedTechs[LOCAL_PLAYER_ID].add(TechId.BARRACKS_PIKEMEN);
+    expect(isUnitUnlocked(world, LOCAL_PLAYER_ID, UnitDefId.COMMANDER)).toBe(false);
+    expect(techStatus(world, LOCAL_PLAYER_ID, TechId.COMMANDER)).toBe('available');
+    world.researchedTechs[LOCAL_PLAYER_ID].add(TechId.COMMANDER);
     expect(isUnitUnlocked(world, LOCAL_PLAYER_ID, UnitDefId.COMMANDER)).toBe(true);
   });
 });
@@ -157,6 +161,7 @@ describe('AI commander', () => {
     world.resources[AI_PLAYER_ID].set([5000, 5000, 5000, 5000]);
     world.population[AI_PLAYER_ID].cap = 75;
     world.researchedTechs[AI_PLAYER_ID].add(TechId.BARRACKS_PIKEMEN);
+    world.researchedTechs[AI_PLAYER_ID].add(TechId.COMMANDER);
     const spot = openTile(world, 10);
     const barracks = spawnCompletedBuilding(world, BuildingDefId.BARRACKS, spot.x, spot.y, AI_PLAYER_ID);
     for (let i = 0; i < 8; i++) spawnSpearman(world, spot.x + i * 0.5, spot.y + 3, AI_PLAYER_ID);

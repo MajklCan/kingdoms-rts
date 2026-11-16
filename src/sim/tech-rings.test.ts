@@ -17,7 +17,7 @@ function stateWith(...techs: TechIdValue[]): TechStateWorld {
   return { researchedTechs: [new Set(), new Set(techs)], ages: [{ current: 0 }, { current: AgeId.DARK }] };
 }
 
-const ARMS_I = [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS];
+const ARMS_I = [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.COMMANDER];
 const TIMBER_I = [TechId.LUMBER_CREWS, TechId.HOUSING_I];
 const WALLS_I = [TechId.PALISADES, TechId.WATCHTOWERS];
 const RING_I = techIdsInRing(1);
@@ -97,7 +97,7 @@ describe('tech rings', () => {
 
     research(world, ...ARMS_I);
     expect(techStatus(world, 1, TechId.ARCHERS)).toBe('researched');
-    expect(world.resources[1][1]).toBe(5000 - 250 - 300);
+    expect(world.resources[1][1]).toBe(5000 - 250 - 300 - 200);
     expect(world.ages[1].current).toBe(AgeId.DARK);
 
     research(world, TechId.LUMBER_CREWS, TechId.HOUSING_I);

@@ -17,13 +17,16 @@ import {
   TownCenterTag,
   WorksiteHelper,
 } from '../components';
-import { UnitDefId } from '../defs';
+import { BuildingDefId, UnitDefId } from '../defs';
+import { POP_CAP_HARD_LIMIT } from '../core/constants';
+import { countQueuedPopCost } from '../core/population';
 import { sortedEids } from '../core/entities';
 import { distToBuildingEdge } from '../core/grid';
 import { isIdleVillager } from '../core/idle-villagers';
 import { foundationQuery, unitQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { canBuild, isOpenFoundation } from '../systems/builders';
+import { aiSettings } from './difficulty';
 import { activeAiActuator } from './direct-actuator';
 import { aiPutIdleBuildersToWork } from './idle-builders';
 import { aiQueueUnit } from './placement';
@@ -46,8 +49,10 @@ function freeVillagers(world: SimWorld, playerId: number): number[] {
  */
 export function aiManageBuilders(world: SimWorld, playerId: number): void {
   const villagers = freeVillagers(world, playerId);
-  const sites = sortedEids(world, foundationQuery(world.ecs)).filter((eid) =>
-    isOpenFoundation(world, eid, playerId)
+  const sites = housesFirstAtCap(
+    world,
+    playerId,
+    sortedEids(world, foundationQuery(world.ecs)).filter((eid) => isOpenFoundation(world, eid, playerId))
   );
   if (sites.length === 0) {
     aiPutIdleBuildersToWork(world, playerId, villagers);
@@ -92,6 +97,21 @@ export function aiTrainBuilders(world: SimWorld, playerId: number, snapshot: AiS
   ).length;
   if (villagerCount + queued >= AI_BUILDER_TARGET) return;
   aiQueueUnit(world, townCenter, UnitDefId.VILLAGER);
+}
+
+/**
+ * At (or close to) the population cap the town waits on its houses, so their
+ * foundations get builders first; otherwise NetId order. Before Housing I
+ * the AI places its few houses after the first worksites, and without this
+ * the builders finished those first while the cap held everything else.
+ */
+function housesFirstAtCap(world: SimWorld, playerId: number, sites: number[]): number[] {
+  const pop = world.population[playerId];
+  if (!pop || pop.cap >= POP_CAP_HARD_LIMIT) return sites;
+  const room = pop.cap - (pop.current + countQueuedPopCost(world, playerId));
+  if (room > aiSettings(world).houseHeadroom) return sites;
+  const isHouse = (eid: number) => Building.defId[eid] === BuildingDefId.HOUSE;
+  return [...sites.filter(isHouse), ...sites.filter((eid) => !isHouse(eid))];
 }
 
 /** A free villager working (helping a worksite or gathering), not fighting or building. */

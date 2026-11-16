@@ -101,11 +101,12 @@ describe('technology tree', () => {
     expect(isUnitUnlocked(world, 1, UnitDefId.SPEARMAN)).toBe(false);
   });
 
-  it('has the 17 researches of the design with their rings, paths, parents and prices', () => {
+  it('has the 18 researches of the design with their rings, paths, parents and prices', () => {
     const rows = TECH_TREE.map((t) => [t.id, t.path, t.ring, t.parents.join('+'), t.cost.wood, t.cost.stone, t.cost.gold]);
     expect(rows).toEqual([
       ['barracks_pikemen', 'arms', 1, '', 250, 0, 0],
       ['archers', 'arms', 1, 'barracks_pikemen', 300, 200, 0],
+      ['commander', 'arms', 1, 'barracks_pikemen', 200, 150, 0],
       ['knights', 'arms', 2, 'archers+gold_mines', 400, 300, 0],
       ['lumber_crews', 'timber', 1, '', 250, 0, 0],
       ['housing_i', 'timber', 1, 'lumber_crews', 250, 150, 0],
@@ -139,6 +140,7 @@ describe('technology tree', () => {
     const expectedUnits: Record<number, TechIdValue> = {
       [UnitDefId.SPEARMAN]: TechId.BARRACKS_PIKEMEN,
       [UnitDefId.ARCHER]: TechId.ARCHERS,
+      [UnitDefId.COMMANDER]: TechId.COMMANDER,
       [UnitDefId.SCOUT_CAVALRY]: TechId.KNIGHTS,
       [UnitDefId.GUNMAN]: TechId.FOUNDRY,
       [UnitDefId.CANNON]: TechId.HOUFNICE,
@@ -172,7 +174,7 @@ describe('technology tree', () => {
     expect(castle.ages[2].current).toBe(AgeId.CASTLE);
     expect(Array.from(castle.resources[1])).toEqual([600, 1800, 0, 1600]);
     expect(castle.researchedTechs[1]).toEqual(createStartingTechSetForAge(AgeId.CASTLE));
-    expect(castle.researchedTechs[1].size).toBe(8);
+    expect(castle.researchedTechs[1].size).toBe(9);
     expect([...castle.researchedTechs[1]].every((id) => ringOf(id) === 1)).toBe(true);
     expect(castle.researchedTechs[0].size).toBe(0);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(true);
@@ -190,7 +192,7 @@ describe('technology tree', () => {
     expect(gunpowder.ages[2].current).toBe(AgeId.GUNPOWDER);
     expect(gunpowder.resources[1][ResourceKindId.WOOD]).toBeGreaterThan(castle.resources[1][ResourceKindId.WOOD]);
     expect(gunpowder.resources[1][ResourceKindId.GOLD]).toBeGreaterThan(castle.resources[1][ResourceKindId.GOLD]);
-    expect(gunpowder.researchedTechs[1].size).toBe(13);
+    expect(gunpowder.researchedTechs[1].size).toBe(14);
     expect([...gunpowder.researchedTechs[1]].every((id) => (ringOf(id) ?? 9) <= 2)).toBe(true);
     expect(isBuildingUnlocked(gunpowder, 1, BuildingDefId.STABLE)).toBe(true);
     expect(isBuildingUnlocked(gunpowder, 1, BuildingDefId.GOLD_MINE)).toBe(true);
