@@ -145,6 +145,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 
 - Projectile damage is applied at **impact tick**, not fire tick. Tests must `stepN(world, shot.projectileTicks)` after observing a `combatEvents` entry (see `age-tower.test.ts`).
 - Cannons have a windup (`CANNON_WINDUP_TICKS`); splash with falloff exponent.
+- The town center shoots like a defensive tower (`def.combat`: the tower's damage and reload, range +`TOWN_CENTER_RANGE_BONUS` = 9, measured from its centre). Armed buildings get `Combat` in `attachBuildingCombat` when finished; foundations never shoot. Cannons and mortars still out-range it.
 - Stances: `AUTO_DEFEND` vs `HOLD_POSITION` (with melee leash distance).
 - `world.grid` IS the pathfinder grid IS `mapData.walkability`. Mutate in place when placing buildings / removing trees so EasyStar sees changes. **Never reassign.**
 - Unit separation runs 2 passes inside the movement system. Villagers are mutually non-blocking; ordered/working villagers still push others.
@@ -154,6 +155,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 ## Save / load
 
 - `SAVE_VERSION=4`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes, v1-v3 saves move to the tech rings (`save/migrate-tech-rings.ts`: a saved age becomes its preset, an age advance in progress is refunded) (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
+- Finished armed buildings saved without combat data (town centers from before they could shoot) get their def's attack on load (`save/migrate-building-combat.ts`), no version bump.
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 
