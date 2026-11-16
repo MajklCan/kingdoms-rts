@@ -24,7 +24,9 @@ import {
   TownCenterTag,
   UnitKind,
   Velocity,
+  WorksiteHelper,
   WorksiteWorker,
+  GameAnimal,
 } from '../components';
 
 export const positionQuery = defineQuery([Position]);
@@ -35,6 +37,8 @@ export const resourceQuery = defineQuery([Position, Resource]);
 export const dropOffQuery = defineQuery([Position, DropOff, Owner]);
 export const resourceWorksiteQuery = defineQuery([Position, ResourceWorksite, Owner, Building]);
 export const worksiteWorkerQuery = defineQuery([Position, WorksiteWorker, Gatherer, Owner]);
+export const worksiteHelperQuery = defineQuery([Position, WorksiteHelper, Gatherer, Owner]);
+export const gameAnimalQuery = defineQuery([Position, GameAnimal, Resource]);
 export const townCenterQuery = defineQuery([Position, TownCenterTag, Owner]);
 export const buildingQuery = defineQuery([Position, Building, Owner]);
 export const foundationQuery = defineQuery([

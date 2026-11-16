@@ -98,6 +98,38 @@ const SPRITES: Readonly<Record<string, readonly string[]>> = {
     '...ll.ll....',
     '....k..k....',
   ],
+  // Huntable game (src/render/entities/game-renderer.ts): a boar and the
+  // carcasses left once a hunter has killed an animal.
+  boar_stand: [
+    '..k.k.......',
+    '.KKKKKKKK...',
+    'KKkKKKKKKKk.',
+    'KKKKKKKKKKKw',
+    '.KKKKKKKKKK.',
+    '..l.l..l.l..',
+    '..k.k..k.k..',
+  ],
+  boar_walk: [
+    '..k.k.......',
+    '.KKKKKKKK...',
+    'KKkKKKKKKKk.',
+    'KKKKKKKKKKKw',
+    '.KKKKKKKKKK.',
+    '.l..l..l..l.',
+    '.k..k..k..k.',
+  ],
+  deer_carcass: [
+    '...........a',
+    '..bbbbbbbhha',
+    '.bBBBBBBbbhk',
+    'lbbbbbbbbbl.',
+    '.lklkkllkl..',
+  ],
+  boar_carcass: [
+    '.KKKKKKKKK..',
+    'KKKKKKKKKKKw',
+    '.lklkkllkl..',
+  ],
   rabbit_sit: ['.g...', '.gg..', 'gGgg.', 'gggGw'],
   rabbit_hop0: ['..g...', '..gg..', 'wgGgg.', '.g..g.'],
   rabbit_hop1: ['...g..', 'wgGgg.', '.gggg.', '......'],

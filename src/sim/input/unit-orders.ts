@@ -29,7 +29,9 @@ import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { SimWorld } from '../core/types';
 import { routeToNearestDropOff } from '../systems/dropoff';
 import { canBuild, isOpenFoundation } from '../systems/builders';
-import { startGatheringResource } from '../systems/gathering';
+import { noteHandWork, startGatheringResource } from '../systems/gathering';
+import { forgetWork } from '../systems/villager-work';
+import { leaveWorksite } from '../systems/worksite-helpers';
 import { isTargetInAttackRange } from '../systems/targeting';
 import { isEntityVisibleTo } from '../systems/visibility';
 import { commandableSelection, ownedCommandableEids } from './apply-input';
@@ -69,6 +71,7 @@ export function clearWorkOrders(world: SimWorld, eid: number): void {
   if (hasComponent(world.ecs, BuildOrder, eid)) {
     BuildOrder.targetEid[eid] = -1;
   }
+  leaveWorksite(world, eid);
 }
 
 export function clearFormationSpeedCap(world: SimWorld, eid: number): void {
@@ -133,6 +136,7 @@ export function applyAttackCommand(
     world.cannonWindups.delete(eid);
     clearFormationSpeedCap(world, eid);
     clearWorkOrders(world, eid);
+    forgetWork(world, eid);
     if (inRange) world.paths.delete(eid);
   }
 }
@@ -171,6 +175,7 @@ export function applyAttackMoveCommand(
     }
     setUnitHoldAnchor(world, eid, dest.x, dest.y);
     clearWorkOrders(world, eid);
+    forgetWork(world, eid);
     ordered.push(eid);
   }
   if (formationModeUsesSlots(mode)) {
@@ -202,6 +207,7 @@ export function applyMoveCommand(
     // Move overrides any combat, gather, or build state.
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
+    forgetWork(world, eid);
     setUnitHoldAnchor(world, eid, dest.x, dest.y);
     ordered.push(eid);
   }
@@ -240,6 +246,7 @@ export function applyGatherCommand(
     if (!hasComponent(world.ecs, Gatherer, eid)) continue;
     clearCombatOrders(world, eid);
     if (hasComponent(world.ecs, BuildOrder, eid)) BuildOrder.targetEid[eid] = -1;
+    leaveWorksite(world, eid);
     if (
       ResourceCarry.amount[eid] > 0 &&
       ResourceCarry.kind[eid] !== kind
@@ -249,6 +256,7 @@ export function applyGatherCommand(
       Gatherer.state[eid] = GathererStateId.RETURNING;
       Gatherer.cooldown[eid] = 0;
       routeToNearestDropOff(world, eid);
+      noteHandWork(world, eid, targetEid);
       continue;
     }
     startGatheringResource(world, eid, targetEid);
@@ -290,6 +298,7 @@ export function applyStopCommand(world: SimWorld, playerId: number, eids: number
     clearFormationSpeedCap(world, eid);
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
+    forgetWork(world, eid);
     setUnitHoldAnchor(world, eid);
   }
 }

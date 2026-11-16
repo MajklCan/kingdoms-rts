@@ -13,6 +13,7 @@ import {
   Health,
   Owner,
   VillagerTag,
+  WorksiteHelper,
   WorksiteWorker,
 } from '../components';
 import { sortedEids } from './entities';
@@ -26,6 +27,7 @@ export function isIdleVillager(world: SimWorld, eid: number, playerId: number): 
   if (!hasComponent(ecs, VillagerTag, eid)) return false;
   if (!hasComponent(ecs, Owner, eid) || Owner.player[eid] !== playerId) return false;
   if (hasComponent(ecs, WorksiteWorker, eid) || hasComponent(ecs, DeadTag, eid)) return false;
+  if (hasComponent(ecs, WorksiteHelper, eid)) return false;
   if (hasComponent(ecs, Health, eid) && Health.hp[eid] <= 0) return false;
   if (hasComponent(ecs, Gatherer, eid) && Gatherer.state[eid] !== GathererStateId.IDLE) return false;
   if (hasComponent(ecs, BuildOrder, eid) && BuildOrder.targetEid[eid] >= 0) return false;

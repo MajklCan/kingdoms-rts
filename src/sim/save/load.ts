@@ -44,6 +44,9 @@ import {
   Velocity,
   VillagerTag,
   WorksiteWorker,
+  WorksiteHelper,
+  VillagerWork,
+  GameAnimal,
 } from '../components';
 import { AgeId } from '../defs';
 import {
@@ -60,14 +63,24 @@ import {
 } from '../world';
 import { Pathfinder } from '../pathfinding';
 import { TECH_TREE, type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
-import { type SavedEntityV1, type SavedGame, type SavedGameV1, type SavedGameV2, migrateSavedGame } from './schema';
+import {
+  type SavedEntityV1,
+  type SavedGame,
+  type SavedGameV1,
+  type SavedGameV2,
+  type SavedGameV3,
+  migrateSavedGame,
+} from './schema';
 
 /** Ticks are never negative; a negative (or missing) saved tick means never. */
 function fromSavedTick(tick: number | null | undefined): number {
   return typeof tick === 'number' && Number.isFinite(tick) && tick >= 0 ? tick : -Infinity;
 }
 
-export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV2 | SavedGameV1): void {
+export function loadSimWorldSnapshot(
+  world: SimWorld,
+  saved: SavedGame | SavedGameV3 | SavedGameV2 | SavedGameV1
+): void {
   const snapshot = migrateSavedGame(saved);
   if (!snapshot) {
     throw new Error(`Unsupported save version ${String((saved as { version?: unknown }).version)}`);
@@ -455,6 +468,28 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
   if (saved.worksiteWorker) {
     addComponent(ecs, WorksiteWorker, eid);
   }
+  if (saved.worksiteHelper) {
+    addComponent(ecs, WorksiteHelper, eid);
+    WorksiteHelper.extra[eid] = saved.worksiteHelper.extra;
+  }
+  if (saved.villagerWork) {
+    addComponent(ecs, VillagerWork, eid);
+    VillagerWork.job[eid] = saved.villagerWork.job;
+    VillagerWork.kind[eid] = saved.villagerWork.kind;
+    VillagerWork.siteNetId[eid] = saved.villagerWork.siteNetId;
+    VillagerWork.x[eid] = saved.villagerWork.x;
+    VillagerWork.y[eid] = saved.villagerWork.y;
+  }
+  if (saved.gameAnimal) {
+    addComponent(ecs, GameAnimal, eid);
+    GameAnimal.species[eid] = saved.gameAnimal.species;
+    GameAnimal.state[eid] = saved.gameAnimal.state;
+    GameAnimal.homeX[eid] = saved.gameAnimal.homeX;
+    GameAnimal.homeY[eid] = saved.gameAnimal.homeY;
+    GameAnimal.targetX[eid] = saved.gameAnimal.targetX;
+    GameAnimal.targetY[eid] = saved.gameAnimal.targetY;
+    GameAnimal.wait[eid] = saved.gameAnimal.wait;
+  }
   if (saved.health) {
     addComponent(ecs, Health, eid);
     Health.hp[eid] = saved.health.hp;
@@ -503,6 +538,9 @@ function restoreEntityReferences(
   }
   if (saved.worksiteWorker) {
     WorksiteWorker.siteEid[eid] = remapEid(saved.worksiteWorker.siteEid, eidMap);
+  }
+  if (saved.worksiteHelper) {
+    WorksiteHelper.siteEid[eid] = remapEid(saved.worksiteHelper.siteEid, eidMap);
   }
   if (saved.attackTarget) {
     AttackTarget.targetEid[eid] = remapEid(saved.attackTarget.targetEid, eidMap);

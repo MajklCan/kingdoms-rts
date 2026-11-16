@@ -13,6 +13,7 @@ import { cleanupSystem, deathSystem } from './systems/death';
 import { dropoffSystem } from './systems/dropoff';
 import { forestRegrowthSystem } from './systems/forest-regrowth';
 import { gatheringSystem } from './systems/gathering';
+import { gameAnimalSystem } from './systems/hunting';
 import { movementSystem } from './systems/movement';
 import { productionSystem } from './systems/production';
 import { cannonImpactSystem, projectileImpactSystem } from './systems/projectiles';
@@ -93,6 +94,9 @@ export function step(world: SimWorld): void {
 
   // 72 - slow forest regrowth on empty grass near existing trees.
   forestRegrowthSystem(world);
+
+  // 72b - huntable game wanders inside its leash (rng draws in NetId order).
+  gameAnimalSystem(world);
 
   // 31 - movement.
   movementSystem(world);

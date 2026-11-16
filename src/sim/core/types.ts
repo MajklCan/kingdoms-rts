@@ -21,6 +21,8 @@ export type SimInput =
   | { type: 'gatherSelected'; targetEid: number }
   /** Send the selected villagers to build (or help build) own foundation `targetEid`. */
   | { type: 'buildSelected'; targetEid: number }
+  /** Send the selected free villagers to help at own completed worksite `targetEid`. */
+  | { type: 'assignWorksiteSelected'; targetEid: number }
   | { type: 'stopSelected' }
   | { type: 'toggleSelectedUnitStance' }
   | { type: 'setSelectedUnitStance'; stance: UnitStanceValue }
@@ -36,6 +38,7 @@ export type SimInput =
   | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
   | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdBuild'; playerId: number; eids: number[]; targetEid: number }
+  | { type: 'cmdAssignWorksite'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdStop'; playerId: number; eids: number[] }
   | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
   | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }

@@ -6,7 +6,17 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { BuildOrder, Building, Owner, Position, TownCenterTag } from '../components';
+import {
+  AttackTarget,
+  BuildOrder,
+  Building,
+  Gatherer,
+  GathererStateId,
+  Owner,
+  Position,
+  TownCenterTag,
+  WorksiteHelper,
+} from '../components';
 import { UnitDefId } from '../defs';
 import { sortedEids } from '../core/entities';
 import { distToBuildingEdge } from '../core/grid';
@@ -15,6 +25,7 @@ import { foundationQuery, unitQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { canBuild, isOpenFoundation } from '../systems/builders';
 import { activeAiActuator } from './direct-actuator';
+import { aiPutIdleBuildersToWork } from './idle-builders';
 import { aiQueueUnit } from './placement';
 import { type AiSnapshot, aiIsCompletedBuilding } from './snapshot';
 
@@ -29,13 +40,19 @@ function freeVillagers(world: SimWorld, playerId: number): number[] {
   );
 }
 
-/** Send idle free villagers to the player's open foundations. */
+/**
+ * Send free villagers to the player's open foundations; with none to build,
+ * idle builders help at worksites or hunt and gather instead.
+ */
 export function aiManageBuilders(world: SimWorld, playerId: number): void {
   const villagers = freeVillagers(world, playerId);
   const sites = sortedEids(world, foundationQuery(world.ecs)).filter((eid) =>
     isOpenFoundation(world, eid, playerId)
   );
-  if (sites.length === 0) return;
+  if (sites.length === 0) {
+    aiPutIdleBuildersToWork(world, playerId, villagers);
+    return;
+  }
 
   const assigned = new Map<number, number>();
   for (const eid of villagers) {
@@ -43,12 +60,16 @@ export function aiManageBuilders(world: SimWorld, playerId: number): void {
     if (site >= 0) assigned.set(site, (assigned.get(site) ?? 0) + 1);
   }
   const idle = villagers.filter((eid) => isIdleVillager(world, eid, playerId));
+  // Builders helping at a worksite or gathering by hand come back for a new
+  // foundation (their work memory sends them back once it is up), but only
+  // after the idle ones are used.
+  const busy = villagers.filter((eid) => !idle.includes(eid) && isPullableWorker(world, eid));
   // First one builder on every site, then a second where villagers are left.
-  for (let wanted = 1; wanted <= AI_BUILDERS_PER_SITE && idle.length > 0; wanted++) {
+  for (let wanted = 1; wanted <= AI_BUILDERS_PER_SITE && idle.length + busy.length > 0; wanted++) {
     for (const site of sites) {
-      if (idle.length === 0) break;
+      if (idle.length + busy.length === 0) break;
       if ((assigned.get(site) ?? 0) >= wanted) continue;
-      const builder = takeNearest(world, idle, site);
+      const builder = takeNearest(world, idle.length > 0 ? idle : busy, site);
       activeAiActuator().build(world, playerId, [builder], site);
       assigned.set(site, (assigned.get(site) ?? 0) + 1);
     }
@@ -71,6 +92,13 @@ export function aiTrainBuilders(world: SimWorld, playerId: number, snapshot: AiS
   ).length;
   if (villagerCount + queued >= AI_BUILDER_TARGET) return;
   aiQueueUnit(world, townCenter, UnitDefId.VILLAGER);
+}
+
+/** A free villager working (helping a worksite or gathering), not fighting or building. */
+function isPullableWorker(world: SimWorld, eid: number): boolean {
+  if (BuildOrder.targetEid[eid] >= 0) return false;
+  if (hasComponent(world.ecs, AttackTarget, eid) && AttackTarget.targetEid[eid] >= 0) return false;
+  return hasComponent(world.ecs, WorksiteHelper, eid) || Gatherer.state[eid] !== GathererStateId.IDLE;
 }
 
 /** Remove and return the villager in `idle` closest to `site` (first in NetId order on a tie). */

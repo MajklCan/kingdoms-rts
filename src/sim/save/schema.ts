@@ -5,6 +5,8 @@
  *   v1  original format
  *   v2  + matchStats (per-player match statistics)
  *   v3  + mapSeed (uint32 seed the map was generated from)
+ *   v4  + entity worksiteHelper, villagerWork and gameAnimal (all optional:
+ *         older saves simply have no helpers, work memory or game)
  */
 
 import type { MapFeature } from '../map-gen';
@@ -20,7 +22,7 @@ import type {
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const LATE_GAME_TEST_SAVE_ID = 'late-game-test';
 
 export interface SavedMapV1 {
@@ -72,6 +74,17 @@ export interface SavedEntityV1 {
     progress: number;
   };
   worksiteWorker?: { siteEid: number };
+  worksiteHelper?: { siteEid: number; extra: number };
+  villagerWork?: { job: number; kind: number; siteNetId: number; x: number; y: number };
+  gameAnimal?: {
+    species: number;
+    state: number;
+    homeX: number;
+    homeY: number;
+    targetX: number;
+    targetY: number;
+    wait: number;
+  };
   health?: { hp: number; hpMax: number; armor: number };
   combat?: { atk: number; range: number; attackSpeedTicks: number; aggroRadius: number };
   attackTarget?: { targetEid: number; retainGoal: number };
@@ -135,8 +148,12 @@ export interface SavedGameV3 extends Omit<SavedGameV2, 'version'> {
   mapSeed: number;
 }
 
+export interface SavedGameV4 extends Omit<SavedGameV3, 'version'> {
+  version: 4;
+}
+
 /** The current save format. */
-export type SavedGame = SavedGameV3;
+export type SavedGame = SavedGameV4;
 
 export interface SavedAiPlayerStateV1 {
   plan: AiPlayerState['plan'];
@@ -223,11 +240,15 @@ export function sanitizeSavedMatchStats(raw: unknown, players: number): PlayerMa
  * seed; it is derived from the map bytes instead (stable for that save).
  * Returns null for unknown versions.
  */
-export function migrateSavedGame(save: SavedGameV1 | SavedGameV2 | SavedGameV3): SavedGame | null {
+export function migrateSavedGame(
+  save: SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4
+): SavedGame | null {
   const players = Array.isArray(save.resources) ? save.resources.length : 0;
-  if (save.version === 3) {
+  if (save.version === 4 || save.version === 3) {
+    // v3 -> v4 only added optional entity fields.
     return {
       ...save,
+      version: 4,
       matchStats: sanitizeSavedMatchStats(save.matchStats, players),
       mapSeed: typeof save.mapSeed === 'number' ? normalizeMapSeed(save.mapSeed) : seedFromMap(save),
     };
@@ -235,7 +256,7 @@ export function migrateSavedGame(save: SavedGameV1 | SavedGameV2 | SavedGameV3):
   if (save.version === 2) {
     return {
       ...save,
-      version: 3,
+      version: 4,
       matchStats: sanitizeSavedMatchStats(save.matchStats, players),
       mapSeed: seedFromMap(save),
     };
@@ -245,7 +266,7 @@ export function migrateSavedGame(save: SavedGameV1 | SavedGameV2 | SavedGameV3):
       ...stats,
       peakPopulation: count(save.population?.[playerId]?.current),
     }));
-    return { ...save, version: 3, matchStats, mapSeed: seedFromMap(save) };
+    return { ...save, version: 4, matchStats, mapSeed: seedFromMap(save) };
   }
   return null;
 }
@@ -256,10 +277,12 @@ function seedFromMap(save: { map?: Partial<SavedMapV1> }): number {
 
 export function parseSavedGame(text: string): SavedGame | null {
   try {
-    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2 | SavedGameV3>;
-    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== SAVE_VERSION) return null;
+    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4>;
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== SAVE_VERSION) {
+      return null;
+    }
     if (!Array.isArray(parsed.entities) || !parsed.map) return null;
-    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2 | SavedGameV3);
+    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4);
   } catch {
     return null;
   }

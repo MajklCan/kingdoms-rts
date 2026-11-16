@@ -22,6 +22,7 @@ type WireCommandType = Exclude<
   | 'moveSelected'
   | 'gatherSelected'
   | 'buildSelected'
+  | 'assignWorksiteSelected'
   | 'stopSelected'
   | 'toggleSelectedUnitStance'
   | 'setSelectedUnitStance'
@@ -42,6 +43,7 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   cmdMove: { eids: 'eids', to: 'point' },
   cmdGather: { eids: 'eids', targetEid: 'int' },
   cmdBuild: { eids: 'eids', targetEid: 'int' },
+  cmdAssignWorksite: { eids: 'eids', targetEid: 'int' },
   cmdStop: { eids: 'eids' },
   cmdToggleStance: { eids: 'eids' },
   cmdAttack: { eids: 'eids', targetEid: 'int' },

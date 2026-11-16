@@ -12,6 +12,7 @@ import { Rng } from '../rng';
 import { type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
 import { createAiPlayers, normalizeAiDifficulty } from '../ai/difficulty';
 import { spawnResource, spawnTownCenter } from '../factories/buildings';
+import { placeGameHerds } from '../factories/game-animals';
 import { spawnArcher, spawnScoutCavalry, spawnSpearman, spawnVillager } from '../factories/units';
 import { createCampaignWorld } from '../missions/campaign-world';
 import { edgeProximity01, trySpawnTreeAt } from '../systems/forest-regrowth';
@@ -489,6 +490,10 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
       spawnResource(world, ResourceKindId.FOOD, spot.x, spot.y, BERRY_BUSH_AMOUNT);
     }
   }
+
+  // Huntable herds, mirrored for both sides. Their rng draws come after the
+  // berry bushes so every earlier spawn keeps its place.
+  placeGameHerds(world, [p1, p2], canPlaceResourceAt);
 
   // Starter villagers: buildings need a villager to raise them. Spawned last
   // (no rng draws) so everything above keeps its creation order.

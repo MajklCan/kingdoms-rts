@@ -288,3 +288,65 @@ export const MachineGunDeployment = defineComponent({
 
 /** Tag - entity is a Total War Age mortar team (indirect-fire siege). */
 export const MortarTag = defineComponent();
+
+// ────────────────────────────────────────────────────────────────────────────
+// Villager jobs: worksite helpers, work memory, huntable game
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Free villager helping at a completed worksite (src/sim/systems/worksite-helpers.ts).
+ * He stays a free villager: any other order removes this component.
+ * `extra` = 1 when he works beyond the crew slots (reduced rate), refreshed
+ * by the worksite system every tick.
+ */
+export const WorksiteHelper = defineComponent({
+  siteEid: Types.i32,
+  extra: Types.ui8,
+});
+
+/** VillagerWork.job values. */
+export const VillagerJobId = {
+  NONE: 0,
+  GATHER: 1,
+  HUNT: 2,
+  HELP: 3,
+} as const;
+
+/**
+ * What a free villager last worked at, so he can go back to it after a build
+ * order. The site is stored by NetId (never recycled), the spot as a position.
+ */
+export const VillagerWork = defineComponent({
+  job: Types.ui8,
+  kind: Types.ui8,
+  siteNetId: Types.ui32,
+  x: Types.f32,
+  y: Types.f32,
+});
+
+/** Huntable animal species (GameAnimal.species). */
+export const GameSpeciesId = {
+  DEER: 0,
+  BOAR: 1,
+} as const;
+
+/** GameAnimal.state values. */
+export const GameAnimalStateId = {
+  ALIVE: 0,
+  CARCASS: 1,
+} as const;
+
+/**
+ * Huntable game: a FOOD Resource node that wanders inside a leash around
+ * `homeX/homeY` until a hunter reaches it, then lies still as a carcass.
+ */
+export const GameAnimal = defineComponent({
+  species: Types.ui8,
+  state: Types.ui8,
+  homeX: Types.f32,
+  homeY: Types.f32,
+  targetX: Types.f32,
+  targetY: Types.f32,
+  /** Ticks to stand before picking the next wander point. */
+  wait: Types.ui16,
+});

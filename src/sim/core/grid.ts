@@ -4,7 +4,8 @@
 
 import { hasComponent } from 'bitecs';
 import { MAP } from '../../config';
-import { Building, Gatherer, Position, WorksiteWorker } from '../components';
+import { Building, Gatherer, Position } from '../components';
+import { worksiteOf } from './worksite-membership';
 import { BUILDING_TABLE, type BuildingDef, BuildingDefId } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { isTileInMap } from '../systems/visibility';
@@ -119,9 +120,8 @@ export function canUnitSqueezeAlongDiagonalPath(
 
 export function canUnitOccupyMovementTarget(world: SimWorld, eid: number, x: number, y: number): boolean {
   if (canUnitOccupy(world, x, y)) return true;
-  if (!hasComponent(world.ecs, WorksiteWorker, eid)) return false;
-  const siteEid = WorksiteWorker.siteEid[eid];
-  if (!hasComponent(world.ecs, Building, siteEid)) return false;
+  const siteEid = worksiteOf(world, eid);
+  if (siteEid < 0 || !hasComponent(world.ecs, Building, siteEid)) return false;
   if (Building.defId[siteEid] !== BuildingDefId.FARM) return false;
   if (Gatherer.targetEid[eid] !== siteEid) return false;
   return distToBuildingEdge(world, x, y, siteEid) <= FARM_WORK_EDGE_DISTANCE;

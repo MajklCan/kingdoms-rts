@@ -58,6 +58,7 @@ import { registerProjectileEffects } from './effects/projectile-effects';
 import { WorldFx } from './effects/world-fx';
 import { BuildingRenderer } from './entities/building-renderer';
 import { Occupancy } from './entities/occupancy';
+import { GameRenderer } from './entities/game-renderer';
 import { ResourceRenderer } from './entities/resource-renderer';
 import { UnitRenderer } from './entities/unit-renderer';
 import { GameAudio } from './game-audio';
@@ -103,6 +104,7 @@ export class GameScene extends Phaser.Scene {
   private buildings!: BuildingRenderer;
   private units!: UnitRenderer;
   private resources!: ResourceRenderer;
+  private huntableGame!: GameRenderer;
   private status!: StatusOverlay;
   private fog!: FogRenderer;
   private effects!: EffectsLayer;
@@ -174,6 +176,7 @@ export class GameScene extends Phaser.Scene {
     this.placement = new BuildPlacement(this.ctx, this.commands, this.audio, this.sprites);
     this.units = new UnitRenderer(this.ctx, this.sprites);
     this.resources = new ResourceRenderer(this.ctx, this.sprites, this.occupancy);
+    this.huntableGame = new GameRenderer(this.ctx);
     this.fog = new FogRenderer(this.ctx, () => this.terrain.bounds);
     this.effects = new EffectsLayer(this.ctx);
     this.effects.setAnchorResolver((eid) => this.units.anchorOf(eid) ?? this.buildings.anchorOf(eid));
@@ -260,6 +263,7 @@ export class GameScene extends Phaser.Scene {
     this.resources.drawMapFeatures();
     this.buildings.draw();
     this.resources.drawResources();
+    this.huntableGame.draw();
     this.status.begin();
     this.buildings.drawStatus(this.status);
     this.units.draw(this.status);
@@ -655,6 +659,7 @@ export class GameScene extends Phaser.Scene {
     this.buildings.clear();
     this.units.clear();
     this.resources.clear();
+    this.huntableGame.clear();
     this.refreshTerrain();
     this.installDebugWindowApi();
     this.camera.panToLocalTownCenter();

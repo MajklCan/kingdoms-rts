@@ -20,6 +20,7 @@ import { distToBuildingEdge } from '../core/grid';
 import { pathToBuildingContact } from '../core/navigation';
 import { foundationQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
+import { resumeWork } from './villager-work';
 
 /** Edge distance at which a villager counts as working on the foundation. */
 export const BUILD_CONTACT_DISTANCE = 0.8;
@@ -75,7 +76,11 @@ export function builderSystem(world: SimWorld): Map<number, number> {
       site = findNearestOpenFoundation(world, eid, playerId, BUILDER_CHAIN_RADIUS);
       BuildOrder.targetEid[eid] = site;
       world.paths.delete(eid);
-      if (site < 0) continue;
+      if (site < 0) {
+        // Nothing left to build nearby: back to his earlier work, if any.
+        resumeWork(world, eid, playerId);
+        continue;
+      }
     }
     const dist = distToBuildingEdge(world, Position.x[eid], Position.y[eid], site);
     if (dist <= BUILD_CONTACT_DISTANCE) {

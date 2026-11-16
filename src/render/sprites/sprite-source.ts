@@ -96,6 +96,11 @@ export interface UnitSpriteQuery {
   facing: Facing;
   anim: string;
   frame: number;
+  /**
+   * Optional look of the unit (villager role, e.g. "lumberjack"). Art without
+   * that look, or a look without this anim, draws the unit's default art.
+   */
+  look?: string;
 }
 
 export interface ResourceSpriteQuery {

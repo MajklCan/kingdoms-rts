@@ -6,8 +6,9 @@
  *   select      pick the entity under a point (left click, long press)
  *   command     context order (right click, tap with a selection):
  *               visible enemy -> attack; own foundation + villagers ->
- *               build; only army buildings -> rally;
- *               explored resource -> gather / hint; else move
+ *               build; own worksite + villagers -> help there; only army
+ *               buildings -> rally; explored resource or game -> gather /
+ *               hunt / hint; else move
  *   box         own units inside a camera-world rectangle
  *   same kind   every own unit of a type on screen (double click / tap)
  *
@@ -27,11 +28,15 @@ import {
   UnitKind,
   WorksiteWorker,
 } from '@sim/components';
+import { BUILDING_TABLE } from '@sim/defs';
 import {
   clearSelection,
+  countWorksiteHelpers,
   findEntityNear,
   findResourceAt,
+  helpRefusal,
   isEnemyOf,
+  isGameAnimal,
   selectedQuery,
   setSelected,
   unitQuery,
@@ -138,6 +143,7 @@ export class WorldOrders {
       return;
     }
     if (hasUnits && targetEid !== null && this.tryBuildOrder(targetEid)) return;
+    if (hasUnits && targetEid !== null && this.tryWorksiteOrder(targetEid)) return;
     if (!hasUnits) {
       // Right click with the town center selected: where its new villagers go.
       if (commands.selectedTownCenters().length > 0) {
@@ -157,12 +163,19 @@ export class WorldOrders {
     }
     const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
     if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
+      const game = isGameAnimal(world, resourceEid);
       if (commands.selectedGathererCount() > 0 && Resource.amount[resourceEid] > 0) {
-        // Free villagers (town center trained) gather by hand and carry to a drop-off.
+        // Free villagers (town center trained) gather by hand and carry to a
+        // drop-off; on game they hunt it first.
         commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid });
-        audio.barkMove();
-        this.feedback?.orderMarker('move', Position.x[resourceEid], Position.y[resourceEid]);
-        setLastEvent(`gather eid=${resourceEid}`);
+        if (game) audio.barkAttack();
+        else audio.barkMove();
+        this.feedback?.orderMarker(game ? 'attack' : 'move', Position.x[resourceEid], Position.y[resourceEid]);
+        setLastEvent(`${game ? 'hunt' : 'gather'} eid=${resourceEid}`);
+        return;
+      }
+      if (game) {
+        commands.fail({ reason: 'unavailable', text: 'Only villagers can hunt. Select a villager' });
         return;
       }
       const kind = Resource.kind[resourceEid];
@@ -189,6 +202,33 @@ export class WorldOrders {
     this.deps.audio.barkMove();
     this.feedback?.orderMarker('move', Position.x[targetEid], Position.y[targetEid]);
     setLastEvent(`build eid=${targetEid}`);
+    return true;
+  }
+
+  /**
+   * Own worksite (farm, lumber hut, quarry, gold mine) with free villagers
+   * selected: send them to help there. A full or unfinished one says why.
+   * False (nothing sent, nothing said) for anything else.
+   */
+  private tryWorksiteOrder(targetEid: number): boolean {
+    const world = this.ctx.world;
+    if (!hasComponent(world.ecs, Building, targetEid)) return false;
+    if (this.deps.commands.selectedBuilderEids().length === 0) return false;
+    const refusal = helpRefusal(world, targetEid, this.ctx.perspectivePlayerId);
+    if (refusal === 'not-worksite' || refusal === 'foreign' || refusal === 'unfinished') return false;
+    const name = BUILDING_TABLE[Building.defId[targetEid]]?.name ?? 'This worksite';
+    if (refusal === 'full') {
+      this.deps.commands.fail({
+        reason: 'unavailable',
+        text: `${name} has no room for more helpers (${countWorksiteHelpers(world, targetEid)} already help)`,
+      });
+      return true;
+    }
+    this.deps.commands.dispatch({ type: 'assignWorksiteSelected', targetEid });
+    this.deps.audio.barkMove();
+    this.feedback?.orderMarker('move', Position.x[targetEid], Position.y[targetEid]);
+    this.deps.commands.confirm(`Villagers help at the ${name}`);
+    setLastEvent(`help worksite eid=${targetEid}`);
     return true;
   }
 
@@ -225,6 +265,8 @@ export class WorldOrders {
     // A tap on an own foundation with villagers selected builds it rather
     // than selecting it, like a right click.
     if (eid !== null && this.tryBuildOrder(eid)) return;
+    // Likewise a tap on an own worksite sends them to help there.
+    if (eid !== null && this.tryWorksiteOrder(eid)) return;
     if (eid !== null && this.isOwnEntity(eid)) {
       if (count === 2 && this.ctx.isOwnUnit(eid)) {
         const n = this.selectSameKindOnScreen(eid);

@@ -11,8 +11,10 @@ import { pushAiEvent } from '../core/events';
 import { pathTo, pathToAttackTarget } from '../core/navigation';
 import { spawnFoundation } from '../factories/buildings';
 import { isMovableEntity } from '../input/formation';
+import { applyAssignWorksiteCommand } from '../input/worksite-orders';
 import {
   applyBuildCommand,
+  applyGatherCommand,
   clearCombatOrders,
   clearFormationSpeedCap,
   clearWorkOrders,
@@ -82,6 +84,12 @@ export const directAiActuator: AiActuator = {
   },
   build(world, playerId, eids, siteEid) {
     applyBuildCommand(world, playerId, eids, siteEid);
+  },
+  assignWorksite(world, playerId, eids, siteEid) {
+    applyAssignWorksiteCommand(world, playerId, eids, siteEid);
+  },
+  gather(world, playerId, eids, targetEid) {
+    applyGatherCommand(world, playerId, eids, targetEid);
   },
   event(world, playerId, message) {
     pushAiEvent(world, playerId, message);

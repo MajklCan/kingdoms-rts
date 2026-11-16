@@ -32,12 +32,14 @@ import {
 } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId, getUnitDef } from '@sim/defs';
 import {
+  countWorksiteHelpers,
   getBuildingPopProvided,
   getWorksiteWorkerSlots,
   selectedQuery,
   type SimWorld,
 } from '@sim/world';
 import type { SceneContext } from '../scene-context';
+import { villagerStatusText } from './villager-status';
 
 export type SelectionKind =
   | 'villager'
@@ -235,7 +237,10 @@ function selectionStats(world: SimWorld, kind: SelectionKind, e0: number): strin
     if (hasComponent(ecs, ResourceWorksite, e0)) {
       const workers = ResourceWorksite.assignedWorkers[e0];
       const slots = getWorksiteWorkerSlots(world, e0);
-      stats += `  Workers ${workers}/${slots}  ${resourceKindName(ResourceWorksite.kind[e0])}`;
+      const helpers = countWorksiteHelpers(world, e0);
+      stats += `  Workers ${workers}/${slots}`;
+      if (helpers > 0) stats += `  Helpers ${helpers}`;
+      stats += `  ${resourceKindName(ResourceWorksite.kind[e0])}`;
     } else if (defId === BuildingDefId.MILL) {
       stats += '  Food drop-off +50%';
     } else if (def.trains.length > 0) {
@@ -264,6 +269,8 @@ export function getStatusInfo(ctx: SceneContext): { text: string; progressFrac: 
   }
   const world = ctx.world;
   for (const eid of selectedQuery(world.ecs)) {
+    const villagerText = villagerStatusText(world, eid);
+    if (villagerText !== null) return { text: villagerText, progressFrac: null };
     if (hasComponent(world.ecs, Gatherer, eid)) {
       const st = Gatherer.state[eid];
       const carry = hasComponent(world.ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;

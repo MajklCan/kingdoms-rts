@@ -14,8 +14,10 @@ import {
   ResourceCarry,
   type ResourceKind,
   ResourceKindId,
+  Resource,
   ResourceWorksite,
-  WorksiteWorker,
+  VillagerJobId,
+  VillagerWork,
 } from '../components';
 import { BuildingDefId, getBuildingDef } from '../defs';
 import { compareDeterministicEids, sortedEids } from '../core/entities';
@@ -24,7 +26,14 @@ import { recordGathered } from '../core/match-stats';
 import { pathTo, pathToBuildingContact } from '../core/navigation';
 import { dropOffQuery, gathererQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { routeFarmWorkerToNextPatch, routeToNearestReachableResource } from './gathering';
+import { worksiteOf } from '../core/worksite-membership';
+import {
+  routeFarmWorkerToNextPatch,
+  routeToNearestReachableResource,
+  startGatheringResource,
+} from './gathering';
+import { HERD_RETARGET_RADIUS, isGameAnimal, routeToNearestGame } from './hunting';
+import { rememberedJob } from './villager-work';
 import { worksiteUsesResourceNodes } from './worksites';
 
 const MILL_FOOD_DEPOSIT_BONUS_MULTIPLIER = 0.5;
@@ -52,6 +61,7 @@ export function dropoffSystem(world: SimWorld): void {
     ResourceCarry.amount[eid] = 0;
 
     if (routeWorksiteWorkerAfterDropoff(world, eid, carryKind)) continue;
+    if (routeBackToHandWork(world, eid, carryKind)) continue;
 
     // Decide next state: stick with the same resource kind, but only if a
     // node exists within a reasonable radius of the drop-off - not across
@@ -83,10 +93,16 @@ function routeWorksiteWorkerAfterDropoff(
   worker: number,
   kind: ResourceKind
 ): boolean {
-  if (!hasComponent(world.ecs, WorksiteWorker, worker)) return false;
-  const siteEid = WorksiteWorker.siteEid[worker];
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
+  const siteEid = worksiteOf(world, worker);
+  if (siteEid < 0 || !hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
   if (Health.hp[siteEid] <= 0) return false;
+  if (ResourceWorksite.kind[siteEid] !== kind) {
+    // A helper who delivered what he carried before joining: his site
+    // routes him next tick.
+    Gatherer.state[worker] = GathererStateId.IDLE;
+    Gatherer.targetEid[worker] = -1;
+    return true;
+  }
   if (Building.defId[siteEid] === BuildingDefId.FARM) {
     return kind === ResourceKindId.FOOD && routeFarmWorkerToNextPatch(world, worker, siteEid);
   }
@@ -98,9 +114,8 @@ export function routeWorksiteWorkerToResource(
   worker: number,
   kind: ResourceKind
 ): boolean {
-  if (!hasComponent(world.ecs, WorksiteWorker, worker)) return false;
-  const siteEid = WorksiteWorker.siteEid[worker];
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
+  const siteEid = worksiteOf(world, worker);
+  if (siteEid < 0 || !hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
   if (Health.hp[siteEid] <= 0) return false;
   if (ResourceWorksite.kind[siteEid] !== kind) return false;
   const def = getBuildingDef(Building.defId[siteEid]);
@@ -113,6 +128,23 @@ export function routeWorksiteWorkerToResource(
     Position.x[siteEid],
     Position.y[siteEid]
   );
+}
+
+/**
+ * A free villager back from a drop-off returns to the node he was sent to
+ * when it is game he hunts, or a different kind than he delivered (ordered
+ * to gather while carrying something else). A hunter whose carcass is gone
+ * looks for the next animal of the herd.
+ */
+function routeBackToHandWork(world: SimWorld, eid: number, carryKind: ResourceKind): boolean {
+  const target = Gatherer.targetEid[eid];
+  if (target >= 0 && hasComponent(world.ecs, Resource, target) && Resource.amount[target] > 0) {
+    if (Resource.kind[target] !== carryKind || isGameAnimal(world, target)) {
+      if (startGatheringResource(world, eid, target)) return true;
+    }
+  }
+  if (rememberedJob(world, eid) !== VillagerJobId.HUNT) return false;
+  return routeToNearestGame(world, eid, VillagerWork.x[eid], VillagerWork.y[eid], HERD_RETARGET_RADIUS);
 }
 
 export function findNearestDropOffEid(world: SimWorld, eid: number): number | null {
