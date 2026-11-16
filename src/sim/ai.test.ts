@@ -129,6 +129,9 @@ describe('enemy AI', () => {
     const world = createSimWorld(201);
     world.paused = false;
     world.resources[AI_PLAYER_ID][0] = 200;
+    // The AI first tops up its free builders (one villager at the town center),
+    // which takes the last place under the starting cap.
+    world.population[AI_PLAYER_ID].cap += 5;
     const spot = findOpenTile(world);
     const lumber = spawnCompletedBuilding(
       world,

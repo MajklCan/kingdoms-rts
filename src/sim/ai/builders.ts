@@ -23,12 +23,15 @@ export const AI_BUILDER_TARGET = 3;
 /** Builders the AI puts on one foundation. */
 export const AI_BUILDERS_PER_SITE = 2;
 
-export function aiManageBuilders(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  const villagers = sortedEids(world, unitQuery(world.ecs)).filter(
+function freeVillagers(world: SimWorld, playerId: number): number[] {
+  return sortedEids(world, unitQuery(world.ecs)).filter(
     (eid) => Owner.player[eid] === playerId && canBuild(world, eid)
   );
-  aiTrainBuilders(world, snapshot, villagers.length);
+}
 
+/** Send idle free villagers to the player's open foundations. */
+export function aiManageBuilders(world: SimWorld, playerId: number): void {
+  const villagers = freeVillagers(world, playerId);
   const sites = sortedEids(world, foundationQuery(world.ecs)).filter((eid) =>
     isOpenFoundation(world, eid, playerId)
   );
@@ -52,7 +55,13 @@ export function aiManageBuilders(world: SimWorld, playerId: number, snapshot: Ai
   }
 }
 
-function aiTrainBuilders(world: SimWorld, snapshot: AiSnapshot, villagerCount: number): void {
+/**
+ * Keep AI_BUILDER_TARGET free villagers. Runs before the economy and the army
+ * queue anything: worksite crews and soldiers take population places too, and
+ * an AI at its cap without a builder could never raise the house it needs.
+ */
+export function aiTrainBuilders(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
+  const villagerCount = freeVillagers(world, playerId).length;
   const townCenter = snapshot.myBuildings.find(
     (eid) => hasComponent(world.ecs, TownCenterTag, eid) && aiIsCompletedBuilding(world, eid)
   );
