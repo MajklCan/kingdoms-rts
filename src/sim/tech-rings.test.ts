@@ -48,14 +48,14 @@ describe('tech rings', () => {
     expect(maxedPaths(two, 1, 1)).toEqual(['arms', 'timber']);
     expect(openRing(two, 1)).toBe(2);
     expect(techStatus(two, 1, TechId.HOUSING_II)).toBe('available');
-    expect(techStatus(two, 1, TechId.STONE_WALLS)).toBe('locked'); // Watchtowers first
+    expect(techStatus(two, 1, TechId.STONE_WALLS)).toBe('locked'); // Towers first
 
     // The two cheap one-seal roots open it too.
     expect(openRing(stateWith(TechId.MINING_CREWS, TechId.MILLS), 1)).toBe(2);
   });
 
   it('never opens a ring with a single path, however far it goes', () => {
-    // A half-done path does not count: Levy alone plus Palisades alone is nothing.
+    // A half-done path does not count: Barracks alone plus Palisades alone is nothing.
     expect(openRing(stateWith(TechId.BARRACKS_PIKEMEN, TechId.PALISADES, TechId.LUMBER_CREWS), 1)).toBe(1);
     for (const path of [ARMS_I, TIMBER_I, WALLS_I, [TechId.MINING_CREWS], [TechId.MILLS]]) {
       expect(openRing(stateWith(...path), 1), path.join('+')).toBe(1);
@@ -76,13 +76,13 @@ describe('tech rings', () => {
     expect(techStatus(state, 1, TechId.BRICK_WALLS)).toBe('locked');
   });
 
-  it('makes Riders need Gold Mining as well as Bowyers, and counts it for arms', () => {
+  it('makes Cavalry need Gold Mine as well as Archers, and counts it for arms', () => {
     const state = stateWith(...RING_I);
     expect(techStatus(state, 1, TechId.KNIGHTS)).toBe('locked');
-    expect(techLockedReason(state, 1, TechId.KNIGHTS)).toBe('Needs Gold Mining');
+    expect(techLockedReason(state, 1, TechId.KNIGHTS)).toBe('Needs Gold Mine');
 
     const noBow = stateWith(TechId.BARRACKS_PIKEMEN, ...TIMBER_I, ...WALLS_I, TechId.MINING_CREWS, TechId.GOLD_MINES);
-    expect(techLockedReason(noBow, 1, TechId.KNIGHTS)).toBe('Needs Bowyers');
+    expect(techLockedReason(noBow, 1, TechId.KNIGHTS)).toBe('Needs Archers');
 
     state.researchedTechs[1].add(TechId.GOLD_MINES);
     expect(techStatus(state, 1, TechId.KNIGHTS)).toBe('available');

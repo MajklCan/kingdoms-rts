@@ -1,11 +1,11 @@
 /**
  * AI research: one fixed order per difficulty along the rings.
  *
- * Every AI opens ring II with Timber (Lumber Crews, Carpentry: wood workers
- * and the house limit) and Arms (Levy, Bowyers: its army), then takes
- * Mines to Gold Mining and Riders to open ring III, and the Mines path on to
- * the Foundry and Houfnice. Land (Mills, Heavy Plough, Three Fields) comes in
- * for food; medium and hard take Palisades and Watchtowers last, for their
+ * Every AI opens ring II with Timber (Lumber Crews, Housing I: wood workers
+ * and the house limit) and Arms (Barracks, Archers: its army), then takes
+ * Mines to Gold Mine and Cavalry to open ring III, and the Mines path on to
+ * the Foundry and Cannons. Land (Mills, Farming I, Farming II) comes in
+ * for food; medium and hard take Palisades and Towers last, for their
  * tower.
  * Each step waits for the economy it needs (a lumber hut before Lumber Crews,
  * a quarry before stone research, enough farms before mills), like the age
@@ -56,7 +56,7 @@ const AI_RESEARCH_ORDER: Record<AiDifficulty, readonly AiResearchStep[]> = {
     step(TechId.FARMS_II, { farms: 6 }),
   ],
   medium: [
-    // Lumber Crews before Levy: wood is the early bottleneck, and Carpentry
+    // Lumber Crews before Barracks: wood is the early bottleneck, and Housing I
     // (the house limit) needs it.
     step(TechId.LUMBER_CREWS, { lumber: 2 }),
     step(TechId.BARRACKS_PIKEMEN, { farms: 1, lumber: 1 }),

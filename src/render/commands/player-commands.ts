@@ -194,7 +194,7 @@ export class PlayerCommands {
     if (remainingHouseAllowance(world, playerId) === 0) {
       return {
         reason: 'unavailable',
-        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before Carpentry. Research Carpentry in Technology (K) to build more`,
+        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before Housing I. Research Housing I in Technology (K) to build more`,
       };
     }
     return null;

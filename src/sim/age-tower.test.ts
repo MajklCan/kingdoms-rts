@@ -43,7 +43,7 @@ describe('defensive towers', () => {
     expect(BUILDING_TABLE[BuildingDefId.DEFENSIVE_TOWER].hp).toBe(750);
   });
 
-  it('builds towers only after the Watchtowers research', () => {
+  it('builds towers only after the Towers research', () => {
     const world = createSimWorld(321);
     world.paused = false;
     const spot = findTowerTestTile(world);

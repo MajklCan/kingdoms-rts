@@ -35,6 +35,7 @@ const RES_TIP: Record<ResourceKey, string> = {
 
 interface Refs {
   res: Record<ResourceKey, HTMLElement>;
+  workers: Record<ResourceKey, HTMLElement>;
   resChip: Record<ResourceKey, HTMLElement>;
   pop: HTMLElement;
   popChip: HTMLElement;
@@ -68,18 +69,28 @@ function barButton(id: string, iconName: IconName, label: string, onclick: () =>
 
 export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const res = {} as Record<ResourceKey, HTMLElement>;
+  const workers = {} as Record<ResourceKey, HTMLElement>;
   const resChip = {} as Record<ResourceKey, HTMLElement>;
   const strip = h('div', { class: 'res-strip', role: 'group', 'aria-label': 'Resources' });
   for (const key of RESOURCE_KEYS) {
     const val = h('span', { class: 'res-val num', id: `res-${key}` }, '0');
+    // Villagers on this resource: a small worker figure and a count.
+    const workerVal = h('span', { class: 'res-workers-val num' }, '0');
+    const workerTag = h('span', { class: 'res-workers', 'aria-hidden': 'true' }, icon('r-pop-s', 'res-workers-icon'), workerVal);
     const chip = h(
       'div',
       { class: 'res-chip', 'data-res': key, tabindex: '0', 'aria-label': `${RES_LABEL[key]}` },
       icon(RESOURCE_ICON[key], 'res-icon'),
-      val
+      val,
+      workerTag
     );
-    attachTip(chip, () => ({ title: RES_LABEL[key], body: RES_TIP[key] }));
+    attachTip(chip, () => ({
+      title: RES_LABEL[key],
+      body: RES_TIP[key],
+      meta: `${workerVal.textContent} villager${workerVal.textContent === '1' ? '' : 's'} working it`,
+    }));
     res[key] = val;
+    workers[key] = workerVal;
     resChip[key] = chip;
     strip.append(chip);
   }
@@ -157,7 +168,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     h('div', { class: 'topbar-buttons' }, objectives, tech, speed, pause, menu)
   );
 
-  refs = { res, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech, techBadge };
+  refs = { res, workers, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech, techBadge };
   return h('header', { class: 'topbar', id: 'resource-bar' }, strip, plaque, right);
 }
 
@@ -175,7 +186,7 @@ export function updateTopBar(scene: GameScene): void {
       const prev = lastRes[key];
       lastRes[key] = v;
       setText(refs.res[key], formatAmount(v));
-      refs.resChip[key].setAttribute('aria-label', `${RES_LABEL[key]} ${v}`);
+      refs.resChip[key].setAttribute('aria-label', `${RES_LABEL[key]} ${v}, ${refs.workers[key].textContent} working`);
       if (prev !== undefined && v > prev) {
         refs.resChip[key].classList.remove('is-gain');
         void refs.resChip[key].offsetWidth;
@@ -183,6 +194,16 @@ export function updateTopBar(scene: GameScene): void {
       }
     }
   }
+  const working = scene.getWorkerCounts(me);
+  for (const key of RESOURCE_KEYS) {
+    const n = working[key];
+    if (refs.workers[key].textContent !== String(n)) {
+      setText(refs.workers[key], String(n));
+      refs.workers[key].parentElement?.classList.toggle('is-none', n === 0);
+      refs.resChip[key].setAttribute('aria-label', `${RES_LABEL[key]} ${lastRes[key] ?? 0}, ${n} working`);
+    }
+  }
+
   const pop = scene.getPop(me);
   setText(refs.pop, `${pop.current}/${pop.cap}`);
   setText(refs.popRising, pop.rising > 0 ? `→${pop.cap + pop.rising}` : '');

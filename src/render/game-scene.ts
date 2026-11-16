@@ -67,6 +67,7 @@ import {
   getAge,
   getCampaignMission,
   getPop,
+  getWorkerCounts,
   getResources,
   getTechRings,
   getTechTree,
@@ -226,6 +227,7 @@ export class GameScene extends Phaser.Scene {
       camera: this.camera,
       pointer: this.pointer,
       toggleGameSpeed: () => this.toggleGameSpeed(),
+      buildHotkey: (key) => this.actions.buildHotkey(key),
     });
     this.uiApi = new UiApi(this.ctx, {
       camera: this.camera, commands: this.commands, pointer: this.pointer, touch: this.touch, placement: this.placement,
@@ -490,6 +492,11 @@ export class GameScene extends Phaser.Scene {
 
   getResources(playerId: number): { food: number; wood: number; gold: number; stone: number } {
     return getResources(this.world, playerId);
+  }
+
+  /** Villagers working each resource (resource bar). */
+  getWorkerCounts(playerId: number): ReturnType<typeof getWorkerCounts> {
+    return getWorkerCounts(this.world, playerId);
   }
 
   getPop(playerId: number): { current: number; cap: number; queued: number; rising: number } {

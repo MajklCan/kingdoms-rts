@@ -33,7 +33,7 @@ export function configureSiegeOfBrno(
   world.ages[AI_PLAYER_ID] = createAgeState(AgeId.CASTLE);
   world.researchedTechs[LOCAL_PLAYER_ID] = createStartingTechSetForAge(AgeId.DARK);
   // The city: ring I plus most of ring II (stone walls, gold, riders, farms),
-  // and Three Fields as a scripted grant from the locked ring III.
+  // and Farming II as a scripted grant from the locked ring III.
   world.researchedTechs[AI_PLAYER_ID] = createStartingTechSetForAge(AgeId.CASTLE);
   world.researchedTechs[AI_PLAYER_ID].add(TechId.GOLD_MINES);
   world.researchedTechs[AI_PLAYER_ID].add(TechId.KNIGHTS);

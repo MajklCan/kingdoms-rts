@@ -82,6 +82,29 @@
   min-width: 5.9rem;
 }
 
+/* Villagers working this resource: a small figure and count after the stock. */
+.res-workers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-left: 0.15rem;
+  padding-left: 0.35rem;
+  border-left: var(--px) solid rgba(251, 239, 196, 0.22);
+  font-size: var(--fs-sm, 0.75rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.res-workers.is-none {
+  color: var(--text-muted);
+}
+
+.res-workers-icon {
+  flex: none;
+}
+
 .res-chip .icon {
   flex: none;
 }

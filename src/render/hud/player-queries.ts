@@ -1,6 +1,7 @@
 /** Read-only per-player HUD queries: bank, population, era, tech tree and rings, mission. */
 
-import { ResourceKindId } from '@sim/components';
+import { hasComponent } from 'bitecs';
+import { Gatherer, GathererStateId, Owner, Resource, ResourceCarry, ResourceKindId, ResourceWorksite, WorksiteWorker } from '@sim/components';
 import { getAgeDef } from '@sim/defs';
 import type { CampaignMissionIdValue } from '@sim/campaign';
 import {
@@ -18,7 +19,7 @@ import {
   techLockedReason,
   techStatus,
 } from '@sim/tech-tree';
-import { pendingPopCapGain, type SimWorld } from '@sim/world';
+import { gathererQuery, pendingPopCapGain, type SimWorld } from '@sim/world';
 import { canAffordCost, countQueuedPopCost, formatCost } from '../commands/economy';
 
 export interface TechTreeNode {
@@ -41,7 +42,7 @@ export interface TechTreeNode {
   requiresAge: number;
   /** 'researched' | 'available' | 'locked' ('locked' also covers a closed ring). */
   status: string;
-  /** Why it is locked, e.g. "Needs Gold Mining"; absent unless locked. */
+  /** Why it is locked, e.g. "Needs Gold Mine"; absent unless locked. */
   lockedReason?: string;
   affordable: boolean;
   /** Always 0: research is instant. */
@@ -186,4 +187,43 @@ export function getCampaignMission(world: SimWorld): CampaignMissionInfo | null 
     lockedTechs: campaign.lockedTechs.slice(),
     objectives: campaign.objectives.map((objective) => ({ ...objective })),
   };
+}
+
+export type WorkerCounts = { food: number; wood: number; gold: number; stone: number };
+
+const KIND_KEY: Record<number, keyof WorkerCounts> = {
+  [ResourceKindId.FOOD]: 'food',
+  [ResourceKindId.WOOD]: 'wood',
+  [ResourceKindId.GOLD]: 'gold',
+  [ResourceKindId.STONE]: 'stone',
+};
+
+/**
+ * Villagers working each resource, for the resource bar: crews at farms,
+ * lumber huts, quarries and mines count for their site's resource; free
+ * gatherers count for the node they work, or for the load they carry home.
+ * Idle and building villagers count for nothing.
+ */
+export function getWorkerCounts(world: SimWorld, playerId: number): WorkerCounts {
+  const counts: WorkerCounts = { food: 0, wood: 0, gold: 0, stone: 0 };
+  for (const eid of gathererQuery(world.ecs)) {
+    if (Owner.player[eid] !== playerId) continue;
+    let kind = -1;
+    if (hasComponent(world.ecs, WorksiteWorker, eid)) {
+      const site = WorksiteWorker.siteEid[eid];
+      if (site >= 0 && hasComponent(world.ecs, ResourceWorksite, site)) kind = ResourceWorksite.kind[site];
+    } else {
+      const state = Gatherer.state[eid];
+      const target = Gatherer.targetEid[eid];
+      if (state === GathererStateId.WALKING_TO || state === GathererStateId.GATHERING) {
+        if (target >= 0 && hasComponent(world.ecs, Resource, target)) kind = Resource.kind[target];
+      } else if (state === GathererStateId.RETURNING || state === GathererStateId.DEPOSITING) {
+        if (ResourceCarry.amount[eid] > 0) kind = ResourceCarry.kind[eid];
+        else if (target >= 0 && hasComponent(world.ecs, Resource, target)) kind = Resource.kind[target];
+      }
+    }
+    const key = KIND_KEY[kind];
+    if (key) counts[key]++;
+  }
+  return counts;
 }

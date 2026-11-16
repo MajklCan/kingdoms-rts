@@ -116,7 +116,7 @@ export function countOwnedArmyProducers(world: SimWorld, playerId: number): numb
 
 /**
  * Why `techId` cannot be researched yet, as text ("Ring II opens when 2 paths
- * are complete in ring I (1 of 2). Needs Bowyers"), or null when it can.
+ * are complete in ring I (1 of 2). Needs Archers"), or null when it can.
  */
 export function missingResearchText(world: SimWorld, playerId: number, techId: TechIdValue): string | null {
   return techLockedReason(world, playerId, techId) ?? null;

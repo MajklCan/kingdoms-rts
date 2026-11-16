@@ -1,6 +1,8 @@
 /**
- * Keyboard shortcuts. B arms building selection, then a letter picks the
- * building; outside that the same letters are commands (H = hold position).
+ * Keyboard shortcuts. While the build buttons show (nothing or a villager
+ * selected) a building's letter starts placing it, as its button does; B
+ * then a letter works with any selection. Otherwise the same letters are
+ * commands (H = hold position, G = villager rally).
  * Shortcuts are ignored while a DOM text field has focus.
  */
 
@@ -18,6 +20,8 @@ export interface HotkeyDeps {
   camera: CameraController;
   pointer: PointerController;
   toggleGameSpeed(): void;
+  /** Start the build button with this hotkey if one is showing; false if none. */
+  buildHotkey(key: string): boolean;
 }
 
 /** B + key: [key, mode, prompt]. */
@@ -51,18 +55,20 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-H', () => {
     if (placement.awaitingBuildKind) {
       placement.startBuildMode('HOUSE', 'build HOUSE - left-click to place, right-click to cancel');
-    } else {
+    } else if (!deps.buildHotkey('H')) {
       commands.setStance(UnitStanceId.HOLD_POSITION);
     }
   });
-  // Before the build letters, which clear awaitingBuildKind: after B, G is a
-  // gold mine; on its own it is the town center's villager rally.
+  // Before the build letters, which clear awaitingBuildKind: after B, or
+  // with the build buttons showing, G is a gold mine; otherwise it is the
+  // town center's villager rally.
   onHotkey('keydown-G', () => {
-    if (!placement.awaitingBuildKind) placement.startVillagerRallyMode();
+    if (!placement.awaitingBuildKind && !deps.buildHotkey('G')) placement.startVillagerRallyMode();
   });
   for (const [key, mode, message] of BUILD_KEYS) {
     onHotkey(`keydown-${key}`, () => {
       if (placement.awaitingBuildKind) placement.startBuildMode(mode, message);
+      else if (key !== 'G') deps.buildHotkey(key);
     });
   }
   onHotkey('keydown-ESC', () => {

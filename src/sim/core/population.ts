@@ -63,10 +63,10 @@ export function hasPopulationRoom(world: SimWorld, playerId: number, cost: numbe
 }
 
 /**
- * Houses a player may raise before Carpentry: enough to grow the early
- * economy past the town center's cap. Carpentry (housing_i) lifts it.
+ * Houses a player may raise before Housing I: enough to grow the early
+ * economy past the town center's cap. Housing I (housing_i) lifts it.
  */
-export const EARLY_HOUSE_ALLOWANCE = 4;
+export const EARLY_HOUSE_ALLOWANCE = 6;
 
 /** Own houses, finished or under construction. */
 export function countOwnHouses(world: SimWorld, playerId: number): number {

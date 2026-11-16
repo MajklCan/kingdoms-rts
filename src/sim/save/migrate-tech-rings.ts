@@ -7,7 +7,7 @@
  *   (lumber_huts, stone_mines) and the age researches are dropped.
  * - Unlocks that moved go with the research that used to bring them: the old
  *   Barracks research brought palisades (now Palisades), the old Archers
- *   research the defensive tower (now Watchtowers).
+ *   research the defensive tower (now Towers).
  * - An age advance in progress is dropped and its fee refunded.
  * - The era is raised to the highest ring the migrated researches open.
  * - A campaign that locked the Gunpowder (Castle) Age locks ring III (II).

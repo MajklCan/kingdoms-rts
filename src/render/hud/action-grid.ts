@@ -130,6 +130,20 @@ export class ActionGrid {
     private readonly placement: BuildPlacement
   ) {}
 
+  /**
+   * A build letter pressed while the build buttons are showing (nothing or a
+   * villager selected): the same as clicking the button with that hotkey.
+   * False when no build button carries the key, so the letter keeps its
+   * other meaning (H = hold position, G = villager rally).
+   */
+  buildHotkey(key: string): boolean {
+    const action = this.available().find((a) => a.kind === 'build' && a.key === key);
+    if (!action) return false;
+    if (action.enabled) this.trigger(action.id);
+    else this.commands.fail({ reason: 'unavailable', text: action.disabledReason || `${action.label} is not available` });
+    return true;
+  }
+
   /** Trigger an action by id (action grid click). */
   trigger(actionId: string, trainCount = 1): void {
     if (actionId.startsWith('train-unit-')) {
@@ -244,7 +258,7 @@ export class ActionGrid {
           disabledReason: atMaximum
             ? `Housing already reaches the ${POP_CAP_HARD_LIMIT} population maximum`
             : capped
-              ? 'House limit reached. Needs the Carpentry research. Click to open it in Technology.'
+              ? 'House limit reached. Needs the Housing I research. Click to open it in Technology.'
               : affordable ? undefined : `Needs ${formatCost(cost)}`,
           researchGoal: capped && !atMaximum ? TechId.HOUSING_I : undefined,
         });

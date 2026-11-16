@@ -47,7 +47,7 @@ describe('ring chart markup', () => {
   it('shows ready, short, locked and researched seals with their reasons', () => {
     const html = render(['barracks_pikemen'], START);
     expect(seal(html, 'barracks_pikemen')).toContain('is-researched');
-    expect(seal(html, 'barracks_pikemen')).toContain('aria-label="Levy. Arms path, ring I. Researched."');
+    expect(seal(html, 'barracks_pikemen')).toContain('aria-label="Barracks. Arms path, ring I. Researched."');
     expect(seal(html, 'lumber_crews')).toContain('is-available is-ready');
     expect(seal(html, 'lumber_crews')).toContain('aria-disabled="false"');
     expect(seal(html, 'lumber_crews')).toContain('Ready to research for 250 wood.');
@@ -73,7 +73,7 @@ describe('ring chart markup', () => {
     expect(counterText(fixtureTree(['mining_crews', 'mills', 'gold_mines', 'farms']).rings)).toBe('All rings open');
   });
 
-  it('draws the Riders to Gold Mining cross link and lights it once Gold Mining is done', () => {
+  it('draws the Cavalry to Gold Mine cross link and lights it once Gold Mine is done', () => {
     expect(render([], RICH)).toContain('class="tech-link mines is-cross"');
     expect(render(['mining_crews', 'mills', 'gold_mines'], RICH)).toContain('class="tech-link mines is-cross is-done"');
   });
@@ -100,6 +100,6 @@ describe('ring chart markup', () => {
     const { nodes } = fixtureTree();
     const width = (id: string): number => labelWidth(nodes.find((n) => n.id === id)!);
     expect(width('foundry')).toBeGreaterThan(width('barracks_pikemen'));
-    expect(width('housing_ii')).toBeGreaterThan(width('mills'));
+    expect(width('lumber_crews')).toBeGreaterThan(width('palisades'));
   });
 });

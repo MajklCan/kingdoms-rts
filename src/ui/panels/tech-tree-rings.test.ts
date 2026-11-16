@@ -34,13 +34,13 @@ describe('goal marks', () => {
     const marks = techGoalMarks('knights', nodes, rings);
     expect(marks.goalId).toBe('knights');
     expect([...marks.pathIds].sort()).toEqual(['archers', 'gold_mines', 'mining_crews']);
-    expect(marks.note).toBe('Riders needs Bowyers, Mining Crews and Gold Mining, and ring II to open (0 of 2 paths complete in ring I).');
+    expect(marks.note).toBe('Cavalry needs Archers, Mining Crews and Gold Mine, and ring II to open (0 of 2 paths complete in ring I).');
   });
 
   it('says so when the goal is ready or done', () => {
     const { nodes, rings } = fixtureTree(['barracks_pikemen']);
-    expect(techGoalMarks('archers', nodes, rings)).toMatchObject({ note: 'Bowyers is ready to research.' });
-    expect(techGoalMarks('barracks_pikemen', nodes, rings)).toMatchObject({ note: 'Levy is researched.' });
+    expect(techGoalMarks('archers', nodes, rings)).toMatchObject({ note: 'Archers is ready to research.' });
+    expect(techGoalMarks('barracks_pikemen', nodes, rings)).toMatchObject({ note: 'Barracks is researched.' });
     expect(techGoalMarks('nope', nodes, rings).goalId).toBeNull();
   });
 
@@ -51,13 +51,13 @@ describe('goal marks', () => {
     // Mines (550) and walls (200 + 400) beat timber (250 + 400), arms (250 + 500) and land (750).
     expect([...marks.pathIds].sort()).toEqual(['mining_crews', 'palisades', 'watchtowers']);
     expect(marks.note).toContain('Ring II (Castle Age) opens when 2 paths are complete in ring I: 0 of 2 so far.');
-    expect(marks.note).toContain('Cheapest way: Mining Crews, Palisades and Watchtowers (Mines and Walls).');
+    expect(marks.note).toContain('Cheapest way: Mining Crews, Palisades and Towers (Mines and Walls).');
   });
 
   it('counts what is already done and only asks for the paths still missing', () => {
     const { nodes, rings } = fixtureTree(['mills', 'barracks_pikemen']);
     const marks = ringGoalMarks(nodes, rings);
-    // One path is complete; finishing arms (Bowyers, 500) is the cheapest second.
+    // One path is complete; finishing arms (Archers, 500) is the cheapest second.
     expect([...marks.pathIds]).toEqual(['archers']);
     expect(marks.note).toContain('1 of 2 so far');
   });
@@ -67,7 +67,7 @@ describe('goal marks', () => {
     expect(rings.openRing).toBe(2);
     const marks = ringGoalMarks(nodes, rings);
     expect(marks.goalRing).toBe(3);
-    // Land needs Mills first (750 + 450); mines (700) plus arms (Riders 700, Gold Mining shared) is cheaper.
+    // Land needs Mills first (750 + 450); mines (700) plus arms (Cavalry 700, Gold Mine shared) is cheaper.
     expect([...marks.pathIds].sort()).toEqual(['gold_mines', 'knights']);
   });
 
@@ -80,13 +80,13 @@ describe('goal marks', () => {
 describe('lock reason', () => {
   it('prefers the words the sim gives', () => {
     const { nodes, rings } = fixtureTree();
-    const node = { ...nodes.find((n) => n.id === 'knights')!, lockedReason: 'Needs Gold Mining' };
-    expect(lockReason(node, nodes, rings)).toBe('Needs Gold Mining');
+    const node = { ...nodes.find((n) => n.id === 'knights')!, lockedReason: 'Needs Gold Mine' };
+    expect(lockReason(node, nodes, rings)).toBe('Needs Gold Mine');
   });
 
   it('names missing parents first, then the closed ring', () => {
     const { nodes, rings } = fixtureTree(['mining_crews']);
-    expect(lockReason(nodes.find((n) => n.id === 'archers')!, nodes, rings)).toBe('Needs Levy');
+    expect(lockReason(nodes.find((n) => n.id === 'archers')!, nodes, rings)).toBe('Needs Barracks');
     expect(lockReason(nodes.find((n) => n.id === 'gold_mines')!, nodes, rings)).toBe('Needs ring II to open (1 of 2 paths complete in ring I)');
   });
 });

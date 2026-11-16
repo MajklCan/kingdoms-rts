@@ -114,5 +114,8 @@ export function bindPauseMenuKeys(): void {
       ev.preventDefault();
       openPauseMenu();
     }
-  });
+    // Capture phase: runs before the scene's own Escape handler (also on
+    // window) clears the placement, so cancelling a placement never also
+    // opens the pause menu.
+  }, { capture: true });
 }

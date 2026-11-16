@@ -292,9 +292,9 @@ function aiHardEconomyTargets(
 }
 
 /**
- * Most farms the AI keeps. Before Carpentry the four early houses cap the
+ * Most farms the AI keeps. Before Housing I the six early houses cap the
  * town, so it holds at a few farms: the wood and the population go to Lumber
- * Crews, Carpentry and the first soldiers instead.
+ * Crews, Housing I and the first soldiers instead.
  */
 function aiFarmCap(world: SimWorld, playerId: number): number {
   const settings = aiSettings(world);
@@ -405,7 +405,7 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
     { defId: BuildingDefId.FARM, target: 1, enabled: true },
     { defId: BuildingDefId.LUMBER_CAMP, target: 1, enabled: true },
     { defId: BuildingDefId.LUMBER_CAMP, target: 2, enabled: houseLimited },
-    // Stone for Carpentry: the four early houses cap the town until it.
+    // Stone for Housing I: the six early houses cap the town until it.
     { defId: BuildingDefId.STONE_QUARRY, target: 1, enabled: houseLimited },
     { defId: BuildingDefId.LUMBER_CAMP, target: Math.min(desiredLumber, 2), enabled: hasBarracks },
     { defId: BuildingDefId.STONE_QUARRY, target: Math.min(desiredStone, 1), enabled: hasBarracks },
@@ -458,7 +458,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
   const adaptiveEconomyPlan = [
     { defId: BuildingDefId.FARM, target: 1, enabled: true },
     { defId: BuildingDefId.LUMBER_CAMP, target: Math.min(targets.lumber, 3), enabled: true },
-    // Stone for Carpentry first: the four early houses cap the town until it.
+    // Stone for Housing I first: the six early houses cap the town until it.
     { defId: BuildingDefId.STONE_QUARRY, target: 1, enabled: houseLimited },
     {
       defId: bottleneckDefId ?? BuildingDefId.FARM,
@@ -492,7 +492,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
   const workforceFull = aiWorkforceFull(world, playerId, snapshot);
   let placementsRemaining = aiSettings(world).economyPlacementsPerThink;
   const houseHeadroom = macro.popBlockedProducers > 0 ? 4 : 0;
-  // While the early house limit holds (before Carpentry) the few houses wait
+  // While the early house limit holds (before Housing I) the few houses wait
   // for the economy plan (first farm and lumber huts); afterwards housing
   // comes first.
   if (!houseLimited && aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom)) {
@@ -570,8 +570,8 @@ function aiWorkforceFull(world: SimWorld, playerId: number, snapshot: AiSnapshot
 }
 
 function aiTrainWorksiteWorkers(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  // Before Carpentry the population is capped by the four early houses:
-  // staff the quarries first, or the stone for Carpentry never comes.
+  // Before Housing I the population is capped by the six early houses:
+  // staff the quarries first, or the stone for Housing I never comes.
   const firstQuarry = remainingHouseAllowance(world, playerId) !== null
     ? snapshot.myBuildings.find((eid) => Building.defId[eid] === BuildingDefId.STONE_QUARRY && aiIsCompletedBuilding(world, eid))
     : undefined;

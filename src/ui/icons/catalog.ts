@@ -14,7 +14,7 @@ export interface ActionCopy {
   keyHint?: string;
 }
 
-const BUILD_HINT = (key: string) => `B then ${key}`;
+const BUILD_HINT = (key: string) => key;
 
 export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-house': { icon: 'b-house', description: 'Raises the population cap so you can train more units.', keyHint: BUILD_HINT('H') },

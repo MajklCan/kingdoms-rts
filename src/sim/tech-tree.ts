@@ -69,18 +69,18 @@ const cost = (wood: number, stone = 0, gold = 0): CostTuple => ({ food: 0, wood,
 export const TECH_TREE: readonly TechDef[] = [
   // Arms.
   {
-    id: TechId.BARRACKS_PIKEMEN, name: 'Levy', path: 'arms', ring: 1, parents: [], cost: cost(250),
+    id: TechId.BARRACKS_PIKEMEN, name: 'Barracks', path: 'arms', ring: 1, parents: [], cost: cost(250),
     description: 'Raise the land levy: barracks and pikemen, the first line of any army.',
     unlocks: ['Barracks', 'Pikeman'],
   },
   {
-    id: TechId.ARCHERS, name: 'Bowyers', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(300, 200),
+    id: TechId.ARCHERS, name: 'Archers', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(300, 200),
     description: 'Bowmakers for ranged infantry, trained at the barracks and the archery range.',
     unlocks: ['Archer', 'Archery Range'],
   },
   {
-    id: TechId.KNIGHTS, name: 'Riders', path: 'arms', ring: 2, parents: [TechId.ARCHERS, TechId.GOLD_MINES], cost: cost(400, 300),
-    description: 'Stables and scout cavalry. Riders are paid in gold, so they also need Gold Mining.',
+    id: TechId.KNIGHTS, name: 'Cavalry', path: 'arms', ring: 2, parents: [TechId.ARCHERS, TechId.GOLD_MINES], cost: cost(400, 300),
+    description: 'Stables and scout cavalry. Cavalry are paid in gold, so they also need Gold Mine.',
     unlocks: ['Stable', 'Scout Cavalry'],
   },
   // Timber.
@@ -90,12 +90,12 @@ export const TECH_TREE: readonly TechDef[] = [
     unlocks: ['3 wood workers per hut'],
   },
   {
-    id: TechId.HOUSING_I, name: 'Carpentry', path: 'timber', ring: 1, parents: [TechId.LUMBER_CREWS], cost: cost(250, 150),
-    description: 'Houses hold five people instead of three, and the early limit of four houses is lifted.',
+    id: TechId.HOUSING_I, name: 'Housing I', path: 'timber', ring: 1, parents: [TechId.LUMBER_CREWS], cost: cost(250, 150),
+    description: 'Houses hold five people instead of three, and the early limit of six houses is lifted.',
     unlocks: ['Houses +5 pop', 'Unlimited Houses'],
   },
   {
-    id: TechId.HOUSING_II, name: 'Burgher Houses', path: 'timber', ring: 2, parents: [TechId.HOUSING_I], cost: cost(600, 400),
+    id: TechId.HOUSING_II, name: 'Housing II', path: 'timber', ring: 2, parents: [TechId.HOUSING_I], cost: cost(600, 400),
     description: 'Town houses of the burghers: each house holds eight people.',
     unlocks: ['Houses +8 pop'],
   },
@@ -106,7 +106,7 @@ export const TECH_TREE: readonly TechDef[] = [
     unlocks: ['3 mine workers per site'],
   },
   {
-    id: TechId.GOLD_MINES, name: 'Gold Mining', path: 'mines', ring: 2, parents: [TechId.MINING_CREWS], cost: cost(400, 300),
+    id: TechId.GOLD_MINES, name: 'Gold Mine', path: 'mines', ring: 2, parents: [TechId.MINING_CREWS], cost: cost(400, 300),
     description: 'Gold mines on the gold veins. Gold pays for riders, gunmen and cannon.',
     unlocks: ['Gold Mine'],
   },
@@ -116,7 +116,7 @@ export const TECH_TREE: readonly TechDef[] = [
     unlocks: ['Foundry', 'Gunman'],
   },
   {
-    id: TechId.HOUFNICE, name: 'Houfnice', path: 'mines', ring: 3, parents: [TechId.FOUNDRY], cost: cost(500, 400, 600),
+    id: TechId.HOUFNICE, name: 'Cannons', path: 'mines', ring: 3, parents: [TechId.FOUNDRY], cost: cost(500, 400, 600),
     description: 'The field gun of the Hussite wagon forts, cast at the foundry.',
     unlocks: ['Field Cannon'],
   },
@@ -127,7 +127,7 @@ export const TECH_TREE: readonly TechDef[] = [
     unlocks: ['Palisade Wall'],
   },
   {
-    id: TechId.WATCHTOWERS, name: 'Watchtowers', path: 'walls', ring: 1, parents: [TechId.PALISADES], cost: cost(200, 200),
+    id: TechId.WATCHTOWERS, name: 'Towers', path: 'walls', ring: 1, parents: [TechId.PALISADES], cost: cost(200, 200),
     description: 'Defensive towers that shoot at enemies in range.',
     unlocks: ['Defensive Tower'],
   },
@@ -148,12 +148,12 @@ export const TECH_TREE: readonly TechDef[] = [
     unlocks: ['Mill', 'Food drop-off bonus'],
   },
   {
-    id: TechId.FARMS, name: 'Heavy Plough', path: 'land', ring: 2, parents: [TechId.MILLS], cost: cost(300, 150),
+    id: TechId.FARMS, name: 'Farming I', path: 'land', ring: 2, parents: [TechId.MILLS], cost: cost(300, 150),
     description: 'Farms give three food per work cycle instead of two.',
     unlocks: ['Farms +3 food'],
   },
   {
-    id: TechId.FARMS_II, name: 'Three Fields', path: 'land', ring: 3, parents: [TechId.FARMS], cost: cost(600, 350),
+    id: TechId.FARMS_II, name: 'Farming II', path: 'land', ring: 3, parents: [TechId.FARMS], cost: cost(600, 350),
     description: 'Three-field rotation: farms give four food per work cycle.',
     unlocks: ['Farms +4 food'],
   },

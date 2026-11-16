@@ -206,7 +206,7 @@ describe('technology tree', () => {
     expect(isUnitUnlocked(totalWar, 1, UnitDefId.MACHINE_GUN)).toBe(false);
   });
 
-  it('blocks locked buildings and unlocks barracks with the Levy research', () => {
+  it('blocks locked buildings and unlocks barracks with the Barracks research', () => {
     const world = createSimWorld(502);
     world.paused = false;
     revealMapForPlayer(world, 1); // building needs sight; the test tile is far from base
@@ -229,7 +229,7 @@ describe('technology tree', () => {
     expect(countPlayerBuildings(world, 1)).toBe(before + 1);
   });
 
-  it('allows a few houses from the start and lifts the limit with Carpentry, not Levy', () => {
+  it('allows a few houses from the start and lifts the limit with Housing I, not Barracks', () => {
     const world = createSimWorld(512);
     world.paused = false;
     revealMapForPlayer(world, 1);
@@ -283,7 +283,7 @@ describe('technology tree', () => {
     expect(getWorksiteWorkerSlots(world, stone)).toBe(3);
   });
 
-  it('upgrades houses along the timber path: Carpentry, then Burgher Houses in ring II', () => {
+  it('upgrades houses along the timber path: Housing I, then Housing II in ring II', () => {
     const world = createSimWorld(511);
     world.paused = false;
     const spot = findOpenBuildingTile(world);
@@ -341,7 +341,7 @@ describe('technology tree', () => {
     expect(techStatus(world, 1, TechId.FARMS_II)).toBe('researched');
   });
 
-  it('trains gunmen after Foundry and field cannons only after Houfnice', () => {
+  it('trains gunmen after Foundry and field cannons only after Cannons', () => {
     const world = createSimWorld(507);
     world.paused = false;
     world.researchedTechs[1] = createStartingTechSetForAge(AgeId.GUNPOWDER);
