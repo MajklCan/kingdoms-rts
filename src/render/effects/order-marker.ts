@@ -10,7 +10,8 @@ export const ORDER_MARKER_EFFECT = 'order-marker';
 
 export type OrderMarkerKind = 'move' | 'attack' | 'attack-move' | 'rally';
 
-const COLORS: Record<OrderMarkerKind, number> = {
+/** Order colours, shared with the queued-waypoint display (order-queue-fx.ts). */
+export const ORDER_MARKER_COLORS: Record<OrderMarkerKind, number> = {
   move: 0x9be36b,
   attack: 0xff4d3d,
   'attack-move': 0xffa13d,
@@ -28,7 +29,7 @@ function isMarkerKind(value: unknown): value is OrderMarkerKind {
 
 export const orderMarkerEffect: EffectFactory = (ctx, spawn) => {
   const kind = isMarkerKind(spawn.params.kind) ? spawn.params.kind : 'move';
-  const color = COLORS[kind];
+  const color = ORDER_MARKER_COLORS[kind];
   const duration = spawn.durationMs ?? DURATION_MS;
   let elapsed = 0;
   return {

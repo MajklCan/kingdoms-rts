@@ -33,17 +33,18 @@ type WireCommandType = Exclude<
   | 'removeSelectedBuildings'
 >;
 
-type FieldKind = 'int' | 'optInt' | 'num' | 'string' | 'eids' | 'point';
+type FieldKind = 'int' | 'optInt' | 'optBool' | 'num' | 'string' | 'eids' | 'point';
 
 /** Field schema per wire-safe command (playerId is checked separately). A new
  *  SimInput command type must be added here before it can be sent. */
 const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
-  cmdMove: { eids: 'eids', to: 'point' },
-  cmdGather: { eids: 'eids', targetEid: 'int' },
+  // `queue` (Shift + order) is optional: packets without it are plain orders.
+  cmdMove: { eids: 'eids', to: 'point', queue: 'optBool' },
+  cmdGather: { eids: 'eids', targetEid: 'int', queue: 'optBool' },
   cmdStop: { eids: 'eids' },
   cmdToggleStance: { eids: 'eids' },
-  cmdAttack: { eids: 'eids', targetEid: 'int' },
-  cmdAttackMove: { eids: 'eids', to: 'point' },
+  cmdAttack: { eids: 'eids', targetEid: 'int', queue: 'optBool' },
+  cmdAttackMove: { eids: 'eids', to: 'point', queue: 'optBool' },
   cmdRemoveBuildings: { eids: 'eids' },
   cmdSetStance: { eids: 'eids', stance: 'int' },
   cmdSetFormationMode: { eids: 'eids', mode: 'int' },
@@ -78,6 +79,8 @@ function fieldOk(kind: FieldKind, value: unknown): boolean {
       return Number.isInteger(value);
     case 'optInt':
       return value === undefined || Number.isInteger(value);
+    case 'optBool':
+      return value === undefined || typeof value === 'boolean';
     case 'num':
       return typeof value === 'number' && Number.isFinite(value);
     case 'string':

@@ -48,6 +48,8 @@ import {
 import {
   AI_PLAYER_ID,
   LOCAL_PLAYER_ID,
+  ORDER_QUEUE_MAX,
+  type QueuedOrder,
   type SimWorld,
   addSimEntity,
   createAiPlayerState,
@@ -286,6 +288,14 @@ export function loadSimWorldSnapshot(
     });
   }
 
+  world.orderQueues.clear();
+  for (const saved of snapshot.orderQueues ?? []) {
+    const eid = eidMap.get(saved.eid);
+    if (eid === undefined) continue;
+    const orders = restoreQueuedOrders(saved.orders, eidMap);
+    if (orders.length > 0) world.orderQueues.set(eid, orders);
+  }
+
   world.formationSpeedCaps.clear();
   for (const saved of snapshot.formationSpeedCaps ?? []) {
     const eid = eidMap.get(saved.eid);
@@ -501,6 +511,32 @@ function restoreEntityReferences(
   if (saved.attackTarget) {
     AttackTarget.targetEid[eid] = remapEid(saved.attackTarget.targetEid, eidMap);
   }
+}
+
+/**
+ * Queued orders of one unit with their targets remapped to this world's
+ * eids. Entries a (possibly hand-edited) file got wrong, or whose target is
+ * not in the save, are dropped.
+ */
+function restoreQueuedOrders(saved: unknown, eidMap: Map<number, number>): QueuedOrder[] {
+  const out: QueuedOrder[] = [];
+  if (!Array.isArray(saved)) return out;
+  for (const raw of saved as Array<Partial<Record<string, unknown>>>) {
+    if (out.length >= ORDER_QUEUE_MAX) break;
+    if (typeof raw !== 'object' || raw === null) continue;
+    if (raw.kind === 'move' || raw.kind === 'attackMove') {
+      if (!isFiniteNumber(raw.x) || !isFiniteNumber(raw.y)) continue;
+      out.push({ kind: raw.kind, x: raw.x, y: raw.y, speedCap: isFiniteNumber(raw.speedCap) ? raw.speedCap : 0 });
+    } else if (raw.kind === 'attack' || raw.kind === 'gather') {
+      const targetEid = typeof raw.targetEid === 'number' ? eidMap.get(raw.targetEid) : undefined;
+      if (targetEid !== undefined) out.push({ kind: raw.kind, targetEid });
+    }
+  }
+  return out;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function remapEid(savedEid: number, eidMap: Map<number, number>): number {

@@ -215,6 +215,10 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
       eid,
       waypoints: waypoints.map((p) => ({ ...p })),
     })),
+    orderQueues: Array.from(world.orderQueues.entries()).map(([eid, orders]) => ({
+      eid,
+      orders: orders.map((order) => ({ ...order })),
+    })),
     movementStuck: Array.from(world.movementStuck.entries()).map(([eid, state]) => ({
       eid,
       lastDist: state.lastDist,
