@@ -51,9 +51,9 @@
 /* The one place the blackletter is allowed to be huge. */
 .menu-title {
   margin: 0;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 4.5rem;
+  font-family: "Jacquard 24", var(--font-title);
+  font-weight: 400;
+  font-size: 5.5rem;
   line-height: 0.9;
   letter-spacing: 0.01em;
   /* The gradient only paints inside the box: give descenders (g) room. */
