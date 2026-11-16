@@ -106,6 +106,8 @@ export interface SavedGameV1 {
   /** v1-v3 hold the age-era research ids (castle_age, lumber_huts, ...). */
   researchedTechs?: string[][];
   revealedMapPlayers?: boolean[];
+  /** Night match (absent in older saves: day). */
+  night?: boolean;
   humanPlayers?: number[];
   formationModes?: number[];
   formationFacings?: number[];

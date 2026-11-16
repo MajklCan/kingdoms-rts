@@ -197,6 +197,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     ages: world.ages.map((age) => ({ ...age })),
     researchedTechs: world.researchedTechs.map((set) => Array.from(set)),
     revealedMapPlayers: world.revealedMapPlayers.slice(),
+    night: world.night,
     humanPlayers: [...world.humanPlayers],
     formationModes: world.formationModes.slice(),
     formationFacings: world.formationFacings.slice(),

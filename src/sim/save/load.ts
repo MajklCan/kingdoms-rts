@@ -109,6 +109,7 @@ export function loadSimWorldSnapshot(
       .filter((playerId) => Number.isInteger(playerId) && playerId > 0)
   );
   world.aiDifficulty = normalizeAiDifficulty(snapshot.aiDifficulty);
+  world.night = snapshot.night === true;
   world.outcome = { ...snapshot.outcome };
   world.campaign = null;
   world.map = {

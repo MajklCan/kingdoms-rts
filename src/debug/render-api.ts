@@ -38,8 +38,8 @@ export interface WindowRenderApi {
   shake(intensity?: number, durationMs?: number): void;
   /** Page (client) pixel of a tile's surface, for scripted clicks in tests. */
   tileToClient(tileX: number, tileY: number): { x: number; y: number };
-  /** Debug: start a skirmish on a map id (optional starting age id). */
-  startSkirmish(mapId: string, age?: number): void;
+  /** Debug: start a skirmish on a map id (optional starting age id; night = undefined follows the map). */
+  startSkirmish(mapId: string, age?: number, night?: boolean): void;
   /** Debug: start a campaign mission by id. */
   startCampaign(missionId: string): void;
   /** Debug: load the late-game perf test world. */

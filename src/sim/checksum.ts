@@ -186,6 +186,7 @@ export function checksumWorld(world: SimWorld): number {
   h.u32(humanPlayers.length);
   for (const playerId of humanPlayers) h.u32(playerId);
   h.str(world.aiDifficulty);
+  h.bit(world.night);
   h.str(world.outcome.state);
   if (world.outcome.state === 'victory') {
     h.u32(world.outcome.winnerPlayerId);

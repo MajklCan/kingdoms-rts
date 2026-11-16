@@ -12,6 +12,8 @@ import { TILE_RGB } from '../hud/minimap';
 
 const PREVIEW_SEED = 1;
 const BLANK: [number, number, number] = [16, 11, 7];
+/** Multiply wash over a night map's preview. */
+const NIGHT_WASH = '#56679e';
 const SPAWN_RGB: Record<number, string> = { 1: '#4aa0ff', 2: '#ff5a5a' };
 
 const topDowns = new Map<string, { canvas: HTMLCanvasElement; spawns: Array<{ x: number; y: number }>; n: number }>();
@@ -44,8 +46,9 @@ function topDown(mapId: MapIdValue) {
 /**
  * Paint `mapId` into `canvas`, sized to the canvas's CSS box. Campaign
  * missions place their own armies, so they leave the skirmish spawns out.
+ * `night` washes the terrain in moonlight blue.
  */
-export function paintMapPreview(canvas: HTMLCanvasElement, mapId: MapIdValue, markSpawns = true): void {
+export function paintMapPreview(canvas: HTMLCanvasElement, mapId: MapIdValue, markSpawns = true, night = false): void {
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   const cw = Math.max(1, Math.round(canvas.clientWidth * dpr));
   const ch = Math.max(1, Math.round(canvas.clientHeight * dpr));
@@ -63,6 +66,12 @@ export function paintMapPreview(canvas: HTMLCanvasElement, mapId: MapIdValue, ma
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(kx, ky / 2, -kx, ky / 2, x0, y0);
   ctx.drawImage(src, 0, 0);
+  if (night) {
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = NIGHT_WASH;
+    ctx.fillRect(0, 0, n, n);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const at = (tx: number, ty: number): [number, number] => [x0 + (tx - ty) * kx, y0 + ((tx + ty) * ky) / 2];
   ctx.strokeStyle = 'rgba(201, 162, 39, 0.85)';
