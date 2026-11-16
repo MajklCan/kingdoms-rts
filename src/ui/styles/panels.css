@@ -437,7 +437,7 @@ body[data-app-state="menu"] .modal-root {
   margin-top: 0.6rem;
 }
 
-/* Goal line (opened from the age button or plaque): what the goal still needs. */
+/* Goal line (opened from a locked button or the age plaque): what the goal still needs. */
 .tech-goal {
   flex: 1 0 100%;
   margin: 0;
@@ -451,66 +451,265 @@ body[data-app-state="menu"] .modal-root {
 }
 
 
-/* Radial chart: the emblem in the middle, seals spreading outward. Sized in
-   rem by tech-tree-layout.ts and scaled as a whole to fit the dialog. */
+/* Ring chart: a window onto a chart larger than the dialog. The chart is a
+   calm dark field; on it lie the ring bands as tinted discs, the settlement's
+   medallion, and gold seals along five path rays. Sized in rem by
+   tech-tree-layout.ts; tech-tree.ts pans and zooms it, it is never squeezed
+   to fit. */
+.tech-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .tech-fit {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  border: 0.125rem solid var(--gold-700);
+  outline: 0.0625rem solid var(--wood-950);
+  outline-offset: -0.25rem;
+  background: radial-gradient(120% 120% at 50% 45%, #2a1c10 0%, var(--wood-900) 55%, var(--wood-950) 100%);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .tech-board {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
   transform-origin: 0 0;
+  will-change: transform;
 }
 
-.tech-board .military,
-.legend-item.military { --branch-c: #a3241b; }
-.tech-board .economy,
-.legend-item.economy { --branch-c: #8a6a1c; }
-.tech-board .food,
-.legend-item.food { --branch-c: #4d7a2a; }
-.tech-board .housing,
-.legend-item.housing { --branch-c: #2f5f8a; }
-.tech-board .age,
-.legend-item.age { --branch-c: #6b3d8a; }
+.tech-board.is-gliding {
+  transition: transform var(--dur-med) var(--ease-out);
+}
 
-/* Links and the faint guide circles around the emblem. */
-.tech-links {
+/* Path colours: the deep tone for seal faces and banners, the bright one for
+   lines and outlines on the dark field. */
+.tech-board .arms { --path-c: #a3241b; --path-hi: #e2665a; }
+.tech-board .timber { --path-c: #2f5f8a; --path-hi: #6ea6d6; }
+.tech-board .mines { --path-c: #8a6a1c; --path-hi: #dcb44a; }
+.tech-board .walls { --path-c: #5b5560; --path-hi: #b2abb9; }
+.tech-board .land { --path-c: #4d7a2a; --path-hi: #8fc45e; }
+
+.tech-chart {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden;
   pointer-events: none;
 }
 
-.tech-orbit {
+/* Ring bands. An open ring is a warm gilded disc with a gold edge (dark gold
+   with a bright line let into it). A closed ring is a faint cool disc behind
+   a dashed edge. */
+.tech-band-fill {
+  fill: rgba(231, 196, 90, 0.11);
+}
+
+.tech-band.is-closed .tech-band-fill {
+  fill: rgba(248, 239, 216, 0.035);
+}
+
+.tech-band-rim {
   fill: none;
-  stroke: rgba(94, 74, 44, 0.2);
-  stroke-width: 0.07;
-  stroke-dasharray: 0.3 0.5;
+  stroke: var(--gold-600);
+  stroke-width: 0.3;
+}
+
+.tech-band-line {
+  fill: none;
+  stroke: var(--gold-200);
+  stroke-width: 0.08;
+}
+
+.tech-band.is-closed .tech-band-rim {
+  stroke: rgba(216, 194, 147, 0.5);
+  stroke-width: 0.12;
+  stroke-dasharray: 0.6 0.5;
+}
+
+.tech-band.is-closed .tech-band-line {
+  stroke: none;
+}
+
+/* The ring the panel was opened for: its edge is drawn in red. */
+.tech-band.is-goal .tech-band-rim {
+  stroke: var(--red-300);
+  stroke-width: 0.22;
+  stroke-dasharray: 0.9 0.5;
+}
+
+.tech-well {
+  fill: rgba(15, 10, 6, 0.55);
+  stroke: var(--gold-600);
+  stroke-width: 0.14;
+}
+
+/* The path itself: a faint ray from the settlement to the path's banner. */
+.tech-spoke {
+  fill: none;
+  stroke: var(--path-hi);
+  stroke-width: 0.12;
+  opacity: 0.28;
 }
 
 .tech-link {
   fill: none;
-  stroke: rgba(94, 74, 44, 0.5);
-  stroke-width: 0.2;
+  stroke: rgba(216, 194, 147, 0.55);
+  stroke-width: 0.24;
   stroke-dasharray: 0.55 0.5;
   stroke-linecap: round;
 }
 
 .tech-link.is-done {
-  stroke: var(--branch-c, var(--gold-600));
-  stroke-width: 0.32;
+  stroke: var(--path-hi);
+  stroke-width: 0.36;
   stroke-dasharray: none;
 }
 
 .tech-link.is-walked {
-  stroke-width: 0.46;
+  stroke-width: 0.56;
 }
 
-/* The realm in the middle: a wooden boss in a gold rim, showing the age. */
+/* A prerequisite on another path: a dotted curve along the ring, with an arrow. */
+.tech-link.is-cross,
+.tech-link.is-cross.is-done {
+  stroke-width: 0.22;
+  stroke-dasharray: 0.02 0.55;
+}
+
+.tech-link.is-cross.is-done {
+  stroke-width: 0.28;
+}
+
+.tech-link-head {
+  fill: rgba(216, 194, 147, 0.75);
+}
+
+.tech-link-head.is-done {
+  fill: var(--path-hi);
+}
+
+/* Gate: one per path on a ring's outer edge, filled once the path is
+   complete in that ring. */
+.tech-gate {
+  fill: var(--wood-900);
+  stroke: var(--path-hi);
+  stroke-width: 0.26;
+}
+
+.tech-gate.is-full {
+  fill: var(--path-hi);
+  stroke: var(--gold-100);
+  stroke-width: 0.16;
+}
+
+/* Ring name plates, all alike: numeral, age, state. They sit on the band,
+   just inside its outer edge. */
+.tech-ring-label {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  min-width: var(--w);
+  height: var(--h);
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.8rem 0 0.25rem;
+  border: 0.0625rem solid var(--gold-600);
+  border-radius: 1.2rem;
+  white-space: nowrap;
+  color: var(--gold-100);
+  background: var(--wood-800);
+  pointer-events: none;
+}
+
+.tech-ring-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--ink-900);
+  background: var(--surface-gold);
+}
+
+.tech-ring-era {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tech-ring-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  padding-left: 0.55rem;
+  border-left: 0.0625rem solid rgba(231, 196, 90, 0.4);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #a5d67c;
+}
+
+.tech-ring-state .icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.tech-ring-label.is-closed {
+  border-color: rgba(216, 194, 147, 0.55);
+  border-style: dashed;
+  color: var(--parchment-300);
+}
+
+.tech-ring-label.is-closed .tech-ring-num {
+  color: var(--parchment-100);
+  background: var(--wood-600);
+}
+
+.tech-ring-label.is-closed .tech-ring-state {
+  color: var(--gold-200);
+}
+
+/* Path banner at the outer end of each path, in the path colour. */
+.tech-banner {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--w);
+  height: var(--h);
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  border: 0.0625rem solid var(--gold-300);
+  outline: 0.0625rem solid var(--wood-950);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  text-indent: 0.2em;
+  text-transform: uppercase;
+  color: var(--parchment-50);
+  background: var(--path-c);
+  pointer-events: none;
+}
+
+/* The settlement in the middle: a parchment medallion in a gilded rim, with
+   its crest, the age of the open ring and the count toward the next. */
 .tech-emblem {
   position: absolute;
   left: var(--x);
@@ -526,71 +725,119 @@ body[data-app-state="menu"] .modal-root {
 }
 
 .tech-emblem-face {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
   width: calc(100% - 0.7rem);
   height: calc(100% - 0.7rem);
   border-radius: 50%;
   border: 0.0625rem solid var(--wood-950);
-  color: var(--gold-200);
-  background: radial-gradient(circle at 50% 35%, var(--wood-600), var(--wood-800) 62%, var(--wood-900));
+  color: var(--ink-900);
+  background: radial-gradient(circle at 50% 35%, var(--parchment-50), var(--parchment-200) 70%, var(--parchment-300));
+}
+
+/* An engraved line inside the face. */
+.tech-emblem-face::before {
+  content: "";
+  position: absolute;
+  inset: 0.28rem;
+  border-radius: 50%;
+  border: 0.0625rem solid rgba(138, 106, 28, 0.6);
+  pointer-events: none;
 }
 
 .tech-emblem-icon,
 .tech-emblem-icon.is-px {
-  width: 3rem;
-  height: 3rem;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 .tech-emblem-name {
-  max-width: 6.4rem;
   font-family: var(--font-display);
-  font-size: var(--fs-xs);
+  font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   line-height: 1.1;
-  text-align: center;
   text-transform: uppercase;
-  color: var(--gold-100);
+  white-space: nowrap;
+  color: var(--red-600);
 }
 
-/* A research seal: round medallion with its name and cost beside it, on
-   the side away from the emblem so links never run through the text. */
-.tech-node {
-  position: absolute;
-  left: var(--x);
-  top: calc(var(--y) - var(--r));
-  transform: translateX(-50%);
+.tech-count {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.55rem;
-  min-width: calc(2 * var(--r));
-  padding: 0;
-  border: 0;
-  color: var(--ink-900);
-  background: none;
-  --rim: linear-gradient(180deg, var(--gold-500), var(--gold-700));
+  gap: 0.1rem;
+  margin-top: 0.15rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--ink-700);
 }
 
-.tech-node.label-above {
-  top: calc(var(--y) + var(--r));
-  transform: translate(-50%, -100%);
-  flex-direction: column-reverse;
+.tech-count-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tech-count-pips {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.tech-count b {
+  font-family: var(--font-num);
+  font-size: 1.125rem;
+  color: var(--ink-900);
+}
+
+.tech-count-text {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.tech-count-pip {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  transform: rotate(45deg);
+  border: 0.09rem solid var(--gold-700);
+}
+
+.tech-count-pip.is-full {
+  background: var(--gold-500);
+}
+
+/* A research seal: a round medallion. Its name and cost sit beside it,
+   where tech-tree-layout.ts found room. */
+.tech-node {
+  position: absolute;
+  left: calc(var(--x) - var(--r));
+  top: calc(var(--y) - var(--r));
+  width: calc(2 * var(--r));
+  height: calc(2 * var(--r));
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--parchment-50);
+  background: none;
+  --rim: linear-gradient(180deg, var(--gold-400), var(--gold-700));
 }
 
 .tech-seal {
-  position: relative;
-  flex: none;
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  width: calc(2 * var(--r));
-  height: calc(2 * var(--r));
   border-radius: 50%;
-  border: 0.125rem solid var(--gold-700);
+  border: 0.125rem solid var(--wood-950);
   background: var(--rim);
   transition: transform var(--dur-fast) var(--ease-out);
 }
@@ -601,26 +848,24 @@ body[data-app-state="menu"] .modal-root {
   width: calc(100% - 0.6rem);
   height: calc(100% - 0.6rem);
   border-radius: 50%;
-  border: 0.0625rem solid rgba(20, 12, 4, 0.6);
+  border: 0.0625rem solid rgba(20, 12, 4, 0.7);
   background: radial-gradient(
     circle at 38% 30%,
-    color-mix(in srgb, var(--branch-c, var(--gold-600)) 68%, #fff),
-    var(--branch-c, var(--gold-600)) 58%,
-    color-mix(in srgb, var(--branch-c, var(--gold-600)) 62%, #000)
+    color-mix(in srgb, var(--path-c, var(--gold-600)) 70%, #fff),
+    var(--path-c, var(--gold-600)) 58%,
+    color-mix(in srgb, var(--path-c, var(--gold-600)) 62%, #000)
   );
 }
 
 .tech-icon,
 .tech-icon.is-px {
-  width: 58%;
-  height: 58%;
-  color: #fff7df;
-  filter: drop-shadow(0 0.0625rem 0 rgba(0, 0, 0, 0.55));
+  width: 60%;
+  height: 60%;
 }
 
-/* Ready to research: bright gold rim and a ring in the branch colour. */
+/* Ready to research: bright gold rim and a ring in the path colour. */
 .tech-node.is-ready {
-  --rim: linear-gradient(180deg, var(--gold-100), var(--gold-300) 50%, var(--gold-400));
+  --rim: linear-gradient(180deg, var(--gold-100), var(--gold-200) 45%, var(--gold-400));
 }
 
 .tech-node.is-ready .tech-seal::before {
@@ -628,7 +873,7 @@ body[data-app-state="menu"] .modal-root {
   position: absolute;
   inset: -0.5rem;
   border-radius: 50%;
-  border: 0.16rem solid var(--branch-c);
+  border: 0.16rem solid var(--path-hi);
 }
 
 .tech-node.is-ready:hover .tech-seal,
@@ -637,39 +882,34 @@ body[data-app-state="menu"] .modal-root {
 }
 
 .tech-node.is-ready:active .tech-seal {
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
-/* Open but too dear: the seal keeps its colour, the rim stays dull. */
+/* Open but too dear: the seal keeps its colour, the rim stays plain gold. */
 .tech-node.is-short,
 .tech-node.is-locked {
   cursor: var(--cur-forbidden);
 }
 
 .tech-node.is-short .tech-face {
-  filter: saturate(0.7);
+  filter: saturate(0.75);
 }
 
 .tech-node.is-locked {
-  --rim: linear-gradient(180deg, var(--parchment-300), var(--parchment-600));
-}
-
-.tech-node.is-locked .tech-seal {
-  border-color: var(--parchment-600);
+  --rim: linear-gradient(180deg, #7a6a52, #4a3d2c);
 }
 
 .tech-node.is-locked .tech-face {
-  filter: grayscale(0.6);
-  opacity: 0.7;
+  filter: grayscale(0.7) brightness(0.8);
 }
 
-.tech-node.is-locked .tech-label {
+.tech-node.is-locked .tech-icon {
   opacity: 0.75;
 }
 
-/* Researched: gold leaf, ringed in the branch colour. */
+/* Researched: gold leaf, ringed in the path colour. */
 .tech-node.is-researched {
-  --rim: var(--branch-c);
+  --rim: var(--path-hi);
 }
 
 .tech-node.is-researched .tech-face {
@@ -677,36 +917,18 @@ body[data-app-state="menu"] .modal-root {
   border-color: var(--gold-700);
 }
 
-.tech-node.is-researching {
-  --rim: linear-gradient(180deg, var(--gold-100), var(--gold-300) 50%, var(--gold-400));
-}
-
-/* Progress ring around a seal that is being researched. */
-.tech-ring {
-  position: absolute;
-  inset: -0.62rem;
-  border-radius: 50%;
-  background: conic-gradient(var(--red-500) calc(var(--p, 0) * 1turn), rgba(94, 74, 44, 0.28) 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 0.36rem), #000 calc(100% - 0.36rem + 1px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 0.36rem), #000 calc(100% - 0.36rem + 1px));
-}
-
-/* Corner marks: done / locked at the bottom right, the age it needs top left. */
-.tech-pip,
-.tech-age {
+/* Corner mark: done or locked. */
+.tech-pip {
   position: absolute;
   z-index: 1;
+  right: -0.3rem;
+  bottom: -0.3rem;
   display: grid;
   place-items: center;
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;
-  border: 0.125rem solid var(--parchment-50);
-}
-
-.tech-pip {
-  right: -0.25rem;
-  bottom: -0.25rem;
+  border: 0.125rem solid var(--wood-950);
   color: var(--parchment-50);
 }
 
@@ -723,57 +945,58 @@ body[data-app-state="menu"] .modal-root {
   background: var(--wood-600);
 }
 
-.tech-age {
-  left: -0.25rem;
-  top: -0.25rem;
-  font-family: var(--font-num);
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  line-height: 1;
-  color: var(--parchment-50);
-  background: #5b5560;
-}
-
-.tech-age.is-met {
-  color: var(--gold-100);
-  background: #6b3d8a;
-}
-
 .tech-label {
+  position: absolute;
+  left: var(--lx);
+  top: var(--ly);
+  width: var(--lw);
+  height: var(--lh);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
+  justify-content: center;
+  gap: 0.2rem;
   white-space: nowrap;
+}
+
+.tech-node.side-right .tech-label {
+  align-items: flex-start;
+}
+
+.tech-node.side-left .tech-label {
+  align-items: flex-end;
+}
+
+.tech-node.side-below .tech-label {
+  justify-content: flex-start;
+}
+
+.tech-node.side-above .tech-label {
+  justify-content: flex-end;
 }
 
 .tech-name {
   font-family: var(--font-display);
-  font-size: var(--fs-md);
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.15;
-  color: var(--ink-900);
-}
-
-.tech-node.is-milestone .tech-name {
-  font-size: var(--fs-lg);
-  letter-spacing: 0.02em;
+  color: var(--parchment-50);
 }
 
 .tech-cost {
   display: flex;
   gap: 0.5rem;
-  font-size: var(--fs-sm);
+  font-size: 0.875rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-  color: var(--ink-700);
+  color: var(--parchment-200);
 }
 
 .tech-res {
   display: inline-flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.2rem;
 }
 
 .tech-res .icon {
@@ -781,53 +1004,52 @@ body[data-app-state="menu"] .modal-root {
 }
 
 .tech-res.is-short {
-  color: #a3241b;
+  color: #ff8a7a;
 }
 
 .tech-cost-free {
   font-style: italic;
-  color: var(--ink-muted);
+  color: var(--parchment-300);
 }
 
 .tech-done {
-  color: #3b6d1f;
+  color: #a5d67c;
 }
 
-.tech-busy {
-  color: var(--red-600);
+.tech-node.is-locked .tech-name {
+  color: var(--parchment-300);
 }
 
-/* Keyboard focus: a ring around the seal and the name underlined. */
+.tech-node.is-locked .tech-cost {
+  color: var(--parchment-400);
+}
+
+/* Keyboard focus: a bright ring around the seal and the name underlined. */
 .tech-board .tech-node:focus-visible {
   outline: none;
   box-shadow: none;
 }
 
 .tech-board .tech-node:focus-visible .tech-seal {
-  outline: 0.2rem solid var(--ink-900);
-  outline-offset: 0.2rem;
+  outline: 0.2rem solid var(--parchment-50);
+  outline-offset: 0.3rem;
 }
 
 .tech-board .tech-node:focus-visible .tech-name {
   text-decoration: underline;
   text-decoration-thickness: 0.12rem;
-  text-underline-offset: 0.15rem;
+  text-underline-offset: 0.18rem;
 }
 
-/* The goal and the research on its paths: a red ring outside the seal
-   (in place of the ready ring; a seal being researched shows progress there). */
-.tech-node.is-goal,
-.tech-node.is-path {
-  gap: 0.8rem;
-}
-
-.tech-node.is-goal:not(.is-researching) .tech-seal::after,
+/* The goal and the research on the way to it: a red ring outside the seal
+   (in place of the ready ring), solid for the goal, dashed for the way. */
+.tech-node.is-goal .tech-seal::after,
 .tech-node.is-path .tech-seal::after {
   content: "";
   position: absolute;
-  inset: -0.6rem;
+  inset: -0.55rem;
   border-radius: 50%;
-  border: 0.24rem solid var(--red-600);
+  border: 0.22rem solid var(--red-300);
 }
 
 .tech-node.is-path .tech-seal::after {
@@ -841,65 +1063,64 @@ body[data-app-state="menu"] .modal-root {
 
 .tech-node.is-goal .tech-name,
 .tech-node.is-path .tech-name {
-  color: var(--red-600);
+  color: #ffb0a4;
 }
 
 .tech-node.is-locked.is-goal .tech-face,
 .tech-node.is-locked.is-path .tech-face {
   filter: grayscale(0.35);
-  opacity: 0.9;
 }
 
-/* "Either path": where two research paths lead to the same seal. */
-.tech-junction {
+/* Zoom and centre buttons, in the window's corner. */
+.tech-tools {
   position: absolute;
-  left: var(--x);
-  top: var(--y);
-  transform: translate(-50%, -50%);
+  right: 0.7rem;
+  bottom: 0.7rem;
   display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: 0.35rem;
-  text-align: center;
-  color: var(--ink-muted);
-  pointer-events: none;
 }
 
-.tech-or {
+.tech-tool {
   display: grid;
   place-items: center;
-  width: 2.3rem;
-  height: 2.3rem;
-  border-radius: 50%;
-  border: 0.125rem solid var(--red-600);
+  min-width: 2.4rem;
+  height: 2.4rem;
+  padding: 0 0.6rem;
+  border: 0.0625rem solid var(--gold-600);
   font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  font-style: italic;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--red-600);
-  background: var(--parchment-50);
-}
-
-.tech-or-note {
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  line-height: 1.3;
   text-transform: uppercase;
+  color: var(--gold-100);
+  background: var(--wood-800);
 }
 
-.tech-junction.is-open .tech-or {
-  border-color: #3b6d1f;
-  color: #3b6d1f;
+.tech-tool:hover {
+  border-color: var(--gold-300);
+  background: var(--wood-700);
+}
+
+.tech-tool:active {
+  background: var(--wood-900);
+}
+
+.tech-tool .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.modal-tech .tech-tool:focus-visible {
+  outline: 0.14rem solid var(--parchment-50);
+  outline-offset: 0.1rem;
+  box-shadow: none;
 }
 
 .tech-legend {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.4rem 1.2rem;
+  gap: 0.4rem 1.6rem;
   font-family: var(--font-display);
   font-size: var(--fs-2xs);
   font-weight: 700;
@@ -911,56 +1132,24 @@ body[data-app-state="menu"] .modal-root {
 .legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
-.legend-item i {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 50%;
-  background: var(--branch-c);
-}
-
-.legend-age b {
-  display: grid;
-  place-items: center;
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 50%;
-  font-family: var(--font-num);
-  letter-spacing: 0;
-  color: var(--parchment-50);
-  background: #5b5560;
-}
-
-/* Compact chart (phone landscape): larger type, the emblem shows its icon only. */
-.tech-board.is-compact .tech-name {
-  font-size: var(--fs-lg);
-}
-
-.tech-board.is-compact .tech-node.is-milestone .tech-name {
-  font-size: 1.3rem;
-}
-
-.tech-board.is-compact .tech-cost {
-  font-size: var(--fs-md);
-}
-
-.tech-board.is-compact .tech-emblem-name {
-  display: none;
-}
-
-.tech-board.is-compact .tech-or-note {
-  font-size: var(--fs-sm);
+.legend-gate i {
+  width: 0.55rem;
+  height: 0.55rem;
+  transform: rotate(45deg);
+  background: var(--ink-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tech-seal {
+  .tech-seal,
+  .tech-board.is-gliding {
     transition: none;
   }
 }
 
-/* Short screens (phone landscape): the chart gets the footer's room. */
+/* Short screens (phone landscape): the chart gets the legend's room. */
 @media (max-height: 560px) {
   .modal-tech {
     padding: 0.7rem 1rem 0.6rem;
@@ -972,12 +1161,22 @@ body[data-app-state="menu"] .modal-root {
   }
 
   .modal-tech .modal-head {
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.3rem;
     padding-bottom: 0.3rem;
   }
 
   .modal-tech .modal-foot {
     margin-top: 0.2rem;
+  }
+
+  .tech-goal {
+    font-size: var(--fs-sm);
+    line-height: 1.25;
+  }
+
+  .tech-tools {
+    right: 0.4rem;
+    bottom: 0.4rem;
   }
 }
 

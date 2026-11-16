@@ -61,7 +61,6 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   placeWallLine: { x0: 'int', y0: 'int', x1: 'int', y1: 'int', eids: 'optEids' },
   trainUnit: { atEid: 'int', defId: 'int', count: 'optInt' },
   cancelProduction: { atEid: 'int', slot: 'optInt' },
-  advanceAge: {},
   researchTech: { techId: 'string' },
 };
 

@@ -6,7 +6,7 @@ import { aiSystem } from './ai/brain';
 import type { SimWorld } from './core/types';
 import { applyInput } from './input/apply-input';
 import { campaignSystem } from './missions/campaign-world';
-import { ageProgressionSystem } from './systems/age-tech';
+import { techRingSystem } from './systems/tech-rings';
 import { combatSystem } from './systems/combat';
 import { constructionSystem } from './systems/construction';
 import { cleanupSystem, deathSystem } from './systems/death';
@@ -52,8 +52,8 @@ export function step(world: SimWorld): void {
   // 10 - AI brain tick (player 2 only for now). Throttled inside.
   aiSystem(world);
 
-  // 20 - age progression (one tick of any in-flight advances).
-  ageProgressionSystem(world);
+  // 20 - tech rings: a ring opened by research (or a scripted grant) moves the era.
+  techRingSystem(world);
 
   // 21 - production tick (TC / Barracks queues).
   productionSystem(world);

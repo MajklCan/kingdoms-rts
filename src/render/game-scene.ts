@@ -68,9 +68,12 @@ import {
   getAge,
   getCampaignMission,
   getPop,
+  getWorkerCounts,
   getResources,
+  getTechRings,
   getTechTree,
   type CampaignMissionInfo,
+  type TechRingsView,
   type TechTreeNode,
 } from './hud/player-queries';
 import { getSelectionInfo, getStatusInfo, type SelectionInfo } from './hud/selection-info';
@@ -228,6 +231,7 @@ export class GameScene extends Phaser.Scene {
       camera: this.camera,
       pointer: this.pointer,
       toggleGameSpeed: () => this.toggleGameSpeed(),
+      buildHotkey: (key) => this.actions.buildHotkey(key),
     });
     this.uiApi = new UiApi(this.ctx, {
       camera: this.camera, commands: this.commands, pointer: this.pointer, touch: this.touch, placement: this.placement,
@@ -499,6 +503,11 @@ export class GameScene extends Phaser.Scene {
     return getResources(this.world, playerId);
   }
 
+  /** Villagers working each resource (resource bar). */
+  getWorkerCounts(playerId: number): ReturnType<typeof getWorkerCounts> {
+    return getWorkerCounts(this.world, playerId);
+  }
+
   getPop(playerId: number): { current: number; cap: number; queued: number; rising: number } {
     return getPop(this.world, playerId);
   }
@@ -509,6 +518,11 @@ export class GameScene extends Phaser.Scene {
 
   getTechTree(playerId = this.ctx.perspectivePlayerId): TechTreeNode[] {
     return getTechTree(this.world, playerId);
+  }
+
+  /** The tech rings: which is open and the paths maxed in each. */
+  getTechRings(playerId = this.ctx.perspectivePlayerId): TechRingsView {
+    return getTechRings(this.world, playerId);
   }
 
   researchTech(techId: TechIdValue, playerId = this.ctx.perspectivePlayerId): void {

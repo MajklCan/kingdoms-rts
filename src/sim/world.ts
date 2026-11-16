@@ -124,7 +124,8 @@ export {
   tileVisibilityIndex,
   updatePlayerVisibility,
 } from './systems/visibility';
-export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
+export { applyResearchTech, syncPlayerEra } from './systems/tech-rings';
+export { buildingEraFor } from './core/era';
 export { countWorksiteWorkers, getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
 export {
   WORKSITE_EXTRA_HELPERS,

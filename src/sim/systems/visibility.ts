@@ -15,7 +15,8 @@ import {
   ScoutCavalryTag,
   UnitKind,
 } from '../components';
-import { AgeId, BUILDING_TABLE, BuildingDefId } from '../defs';
+import { BUILDING_TABLE, BuildingDefId } from '../defs';
+import { buildingEraFor } from '../core/era';
 import { LOCAL_PLAYER_ID, MAX_PLAYERS } from '../core/constants';
 import { findBuildingAt } from '../core/lookup';
 import { buildingQuery, positionQuery } from '../core/queries';
@@ -293,7 +294,7 @@ function snapshotBuilding(world: SimWorld, eid: number): LastSeenBuilding {
     eid,
     owner: Owner.player[eid],
     defId: Building.defId[eid],
-    age: world.ages[Owner.player[eid]]?.current ?? AgeId.DARK,
+    age: buildingEraFor(world, Owner.player[eid], Building.defId[eid]),
     x: Position.x[eid],
     y: Position.y[eid],
     hp: hasComponent(world.ecs, Health, eid) ? Health.hp[eid] : 0,

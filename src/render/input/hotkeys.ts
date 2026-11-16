@@ -1,6 +1,8 @@
 /**
- * Keyboard shortcuts. B arms building selection, then a letter picks the
- * building; outside that the same letters are commands (H = hold position).
+ * Keyboard shortcuts. While the build buttons show (a villager selected:
+ * buildings need a builder) a building's letter starts placing it, as its
+ * button does; B then a letter does the same. Otherwise the same letters are
+ * commands (H = hold position, G = villager rally, R = train the Commander).
  * Shortcuts are ignored while a DOM text field has focus.
  */
 
@@ -18,6 +20,8 @@ export interface HotkeyDeps {
   camera: CameraController;
   pointer: PointerController;
   toggleGameSpeed(): void;
+  /** Start the build button with this hotkey if one is showing; false if none. */
+  buildHotkey(key: string): boolean;
 }
 
 /** B + key: [key, mode, prompt]. */
@@ -56,22 +60,24 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-H', () => {
     if (placement.awaitingBuildKind) {
       placement.startBuildMode('HOUSE', 'build HOUSE - left-click to place, right-click to cancel');
-    } else {
+    } else if (!deps.buildHotkey('H')) {
       commands.setStance(UnitStanceId.HOLD_POSITION);
     }
   });
-  // Before the build letters, which clear awaitingBuildKind: after B, G is a
-  // gold mine; on its own it is the town center's villager rally.
+  // Before the build letters, which clear awaitingBuildKind: after B, or
+  // with the build buttons showing, G is a gold mine; otherwise it is the
+  // town center's villager rally.
   onHotkey('keydown-G', () => {
-    if (!placement.awaitingBuildKind) placement.startVillagerRallyMode();
+    if (!placement.awaitingBuildKind && !deps.buildHotkey('G')) placement.startVillagerRallyMode();
   });
-  // Same reason: R trains the Commander only when no build menu is open.
+  // Same reason: R is the barracks while building, else it trains the Commander.
   onHotkey('keydown-R', () => {
-    if (!placement.awaitingBuildKind) commands.trainHotkey(2, true);
+    if (!placement.awaitingBuildKind && !deps.buildHotkey('R')) commands.trainHotkey(2, true);
   });
   for (const [key, mode, message] of BUILD_KEYS) {
     onHotkey(`keydown-${key}`, () => {
       if (placement.awaitingBuildKind) placement.startBuildMode(mode, message);
+      else if (key !== 'G' && key !== 'R') deps.buildHotkey(key);
     });
   }
   onHotkey('keydown-ESC', () => {

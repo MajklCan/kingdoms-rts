@@ -14,6 +14,7 @@ export {
   sanitizeSavedMatchStats,
 } from './save/schema';
 export type {
+  AnySavedGame,
   SavedAiPlayerStateV1,
   SavedCampaignV1,
   SavedEntityV1,
@@ -21,6 +22,9 @@ export type {
   SavedGameV1,
   SavedGameV2,
   SavedGameV3,
+  SavedGameV4,
+  SavedGameV4Roles,
+  SavedGameV5,
   SavedMapV1,
   SavedVisibilityV1,
 } from './save/schema';

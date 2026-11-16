@@ -416,14 +416,8 @@ function researchAndConfirm(d: Driver, pid: number, techId: string): boolean {
   return d.world.researchedTechs[pid].has(techId as never);
 }
 
-/** Advance BOTH players to `expected` age at once, then wait once for the timed
- *  progress - far fewer ticks than advancing them sequentially. */
-function advanceBothAges(d: Driver, expected: number, maxTicks = 1400): boolean {
-  for (const pid of PLAYERS) d.push({ type: 'advanceAge', playerId: pid });
-  for (let i = 0; i < maxTicks; i += 10) {
-    d.step(10);
-    if (PLAYERS.every((pid) => d.world.ages[pid].current >= expected)) return true;
-  }
+/** Both players' era reached `expected`: a ring opens the tick its research lands. */
+function bothAgesReached(d: Driver, expected: number): boolean {
   return PLAYERS.every((pid) => d.world.ages[pid].current >= expected);
 }
 
@@ -490,7 +484,11 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('tech:mining_crews', researchAndConfirm(d, pid, TechId.MINING_CREWS));
       mark('tech:housing_i', researchAndConfirm(d, pid, TechId.HOUSING_I));
       mark('tech:mills', researchAndConfirm(d, pid, TechId.MILLS));
+      mark('tech:palisades', researchAndConfirm(d, pid, TechId.PALISADES));
+      mark('tech:watchtowers', researchAndConfirm(d, pid, TechId.WATCHTOWERS));
     }
+    // Every ring I path is maxed: ring II (the Castle Age) is open.
+    mark('age:castle', bothAgesReached(d, AgeId.CASTLE));
 
     for (const pid of PLAYERS) {
       mark('build:house', placeAndConfirm(d, pid, BuildingDefId.HOUSE, 1) !== null);
@@ -547,9 +545,13 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('control:rally', true); // no per-unit observable; replay parity proves apply
     }
 
-    // ── Phase 5: Castle age → stable, gold mine, cavalry, castle tech ───────────
+    // ── Phase 5: ring II → gold mine, stable, cavalry, ring II research ──────────
     d.refill();
-    mark('age:castle', advanceBothAges(d, AgeId.CASTLE));
+    for (const pid of PLAYERS) {
+      mark('tech:gold_mines', researchAndConfirm(d, pid, TechId.GOLD_MINES));
+      mark('tech:knights', researchAndConfirm(d, pid, TechId.KNIGHTS));
+      mark('tech:stone_walls', researchAndConfirm(d, pid, TechId.STONE_WALLS));
+    }
     d.refill();
     for (const pid of PLAYERS) {
       mark('build:stable', placeAndConfirm(d, pid, BuildingDefId.STABLE, 2) !== null);
@@ -564,9 +566,14 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('train:scout_cavalry', trainAndConfirm(d, pid, BuildingDefId.STABLE, UnitKindId.SCOUT_CAVALRY));
     }
 
-    // ── Phase 6: Gunpowder age → foundry, gunman, cannon, final tech ────────────
+    // ── Phase 6: ring III → foundry, gunman, cannon, final research ─────────────
+    mark('age:gunpowder', bothAgesReached(d, AgeId.GUNPOWDER));
     d.refill();
-    mark('age:gunpowder', advanceBothAges(d, AgeId.GUNPOWDER));
+    for (const pid of PLAYERS) {
+      mark('tech:foundry', researchAndConfirm(d, pid, TechId.FOUNDRY));
+      mark('tech:houfnice', researchAndConfirm(d, pid, TechId.HOUFNICE));
+      mark('tech:brick_walls', researchAndConfirm(d, pid, TechId.BRICK_WALLS));
+    }
     d.refill();
     for (const pid of PLAYERS) {
       mark('build:foundry', placeAndConfirm(d, pid, BuildingDefId.FOUNDRY, 2) !== null);

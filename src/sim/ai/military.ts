@@ -14,7 +14,7 @@ import {
   SpearmanTag,
 } from '../components';
 import { AgeId, BuildingDefId, UnitDefId } from '../defs';
-import { TechId, hasTech } from '../tech-tree';
+import { TechId, hasTech, isUnitUnlocked } from '../tech-tree';
 import type { SimWorld } from '../core/types';
 import { aiRequiredWaveSize } from './attack';
 import { aiDifficultyOf, aiSettings } from './difficulty';
@@ -98,24 +98,15 @@ export function aiMaintainMilitaryInfrastructure(
   if (hasBarracks && countAiBuildings(snapshot, BuildingDefId.BARRACKS) < desiredBarracks) {
     aiPlaceBuilding(world, BuildingDefId.BARRACKS, tcX, tcY, playerId);
   }
-  if (
-    hasBarracks &&
-    !hasStable &&
-    age >= AgeId.CASTLE
-  ) {
+  // Stable, tower and foundry go up once their research is in
+  // (aiPlaceBuilding refuses a locked building).
+  if (hasBarracks && !hasStable) {
     aiPlaceBuilding(world, BuildingDefId.STABLE, tcX, tcY, playerId);
   }
-  if (
-    age >= AgeId.CASTLE &&
-    !aiHasAnyBuilding(snapshot, BuildingDefId.DEFENSIVE_TOWER)
-  ) {
+  if (age >= AgeId.CASTLE && !aiHasAnyBuilding(snapshot, BuildingDefId.DEFENSIVE_TOWER)) {
     aiPlaceBuilding(world, BuildingDefId.DEFENSIVE_TOWER, tcX, tcY, playerId);
   }
-  if (
-    age >= AgeId.GUNPOWDER &&
-    hasStable &&
-    !hasFoundry
-  ) {
+  if (hasBarracks && !hasFoundry) {
     aiPlaceBuilding(world, BuildingDefId.FOUNDRY, tcX, tcY, playerId);
   }
 }
@@ -288,7 +279,6 @@ function aiDesiredArmyMix(
   playerId: number,
   snapshot: AiSnapshot
 ): { spearmen: number; archers: number; scouts: number; gunmen: number; cannons: number } {
-  const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const settings = aiSettings(world);
   const baseTargetArmy = Math.min(
     settings.maxArmyUnits,
@@ -301,18 +291,18 @@ function aiDesiredArmyMix(
     )
     : 0;
   const targetArmy = Math.max(baseTargetArmy, playerPressureTarget);
-  let scouts = age >= AgeId.CASTLE ? Math.min(5, Math.max(2, Math.floor(targetArmy * 0.2))) : 0;
-  let gunmen = 0;
-  let cannons = 0;
-  if (age >= AgeId.GUNPOWDER) {
-    cannons = Math.min(4, Math.max(2, Math.floor(targetArmy * 0.12)));
-    gunmen = Math.min(8, Math.max(4, Math.floor(targetArmy * 0.24)));
-    scouts = Math.min(5, Math.max(2, Math.floor(targetArmy * 0.16)));
-  }
+  // Each unit type joins the mix once its research is in.
+  const canScout = isUnitUnlocked(world, playerId, UnitDefId.SCOUT_CAVALRY);
+  const canGun = isUnitUnlocked(world, playerId, UnitDefId.GUNMAN);
+  const canCannon = isUnitUnlocked(world, playerId, UnitDefId.CANNON);
+  let scouts = canScout ? Math.min(5, Math.max(2, Math.floor(targetArmy * 0.2))) : 0;
+  const gunmen = canGun ? Math.min(8, Math.max(4, Math.floor(targetArmy * 0.24))) : 0;
+  const cannons = canCannon ? Math.min(4, Math.max(2, Math.floor(targetArmy * 0.12))) : 0;
+  if (canScout && (canGun || canCannon)) scouts = Math.min(5, Math.max(2, Math.floor(targetArmy * 0.16)));
   // No gold in the bank: gunmen and cannons cannot be queued, so let the
   // barracks fill those slots instead of idling on a food and wood float.
   const bank = world.resources[playerId];
-  const goldStarved = age >= AgeId.GUNPOWDER && !!bank && bank[ResourceKindId.GOLD] < 55;
+  const goldStarved = (canGun || canCannon) && !!bank && bank[ResourceKindId.GOLD] < 55;
   const infantrySlots = Math.max(4, targetArmy - scouts - (goldStarved ? 0 : gunmen + cannons));
   let spearmen = Math.ceil(infantrySlots / 2);
   let archers = Math.floor(infantrySlots / 2);

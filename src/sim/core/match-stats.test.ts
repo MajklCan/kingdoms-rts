@@ -323,7 +323,12 @@ describe('match statistics', () => {
     expect(restored.matchStats[P2]!.buildingsRazed).toBe(2);
 
     const { matchStats: _dropped, ...rest } = save;
-    const v1: SavedGameV1 = { ...rest, version: 1 };
+    const v1: SavedGameV1 = {
+      ...rest,
+      version: 1,
+      ages: save.ages.map((age) => ({ current: age.current, progress: -1, totalTicks: 0 })),
+      campaign: null,
+    };
     const migrated = migrateSavedGame(v1);
     expect(migrated?.version).toBe(4);
     const fromV1 = createSimWorld(1);

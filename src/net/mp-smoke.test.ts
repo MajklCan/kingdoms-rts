@@ -425,9 +425,9 @@ const SCENARIOS: ReadonlyArray<{ name: string; issue: (ctx: MatchCtx) => void }>
     },
   },
   {
-    name: 'advanceAge',
+    name: 'researchTech',
     issue: ({ sides }) => {
-      for (const [sess, , pid] of sides) sess.sendCommand({ type: 'advanceAge', playerId: pid });
+      for (const [sess, , pid] of sides) sess.sendCommand({ type: 'researchTech', playerId: pid, techId: 'palisades' });
     },
   },
   {

@@ -7,7 +7,7 @@ import { DeadTag, Owner, TownCenterTag, WorksiteWorker } from '../components';
 import { LOCAL_PLAYER_ID } from '../core/constants';
 import { selectedQuery } from '../core/queries';
 import type { SimInput, SimWorld } from '../core/types';
-import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
+import { applyResearchTech } from '../systems/tech-rings';
 import { applyCancelProduction, applyTrainUnit } from '../systems/production';
 import { applySetVillagerRally } from '../systems/villager-assign';
 import { applyPlaceWallLine } from './walls';
@@ -157,9 +157,6 @@ export function applyInput(world: SimWorld, input: SimInput): void {
     case 'cancelProduction':
       if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
       applyCancelProduction(world, input.atEid, input.slot);
-      return;
-    case 'advanceAge':
-      applyAdvanceAge(world, input.playerId);
       return;
     case 'researchTech':
       applyResearchTech(world, input.playerId, input.techId);

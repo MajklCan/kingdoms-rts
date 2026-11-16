@@ -422,17 +422,18 @@ export type AgeIdValue = (typeof AgeId)[keyof typeof AgeId];
 export interface AgeDef {
   id: AgeIdValue;
   name: string;
-  /** Cost to advance INTO this age. Dark is the starting age - cost ignored. */
-  advanceCost: CostTuple;
-  /** Ticks needed to advance into this age. */
-  advanceTicks: number;
 }
 
+/**
+ * Eras. No research advances them any more: the era is the highest tech ring
+ * a player has opened (tech-tree.ts ringEra), and it drives building looks.
+ * Total War is scaffolded but unreachable.
+ */
 export const AGE_TABLE: AgeDef[] = [
-  { id: AgeId.DARK, name: 'Dark Age', advanceCost: { food: 0, wood: 0, gold: 0, stone: 0 }, advanceTicks: 0 },
-  { id: AgeId.CASTLE, name: 'Castle Age', advanceCost: { food: 0, wood: 750, gold: 0, stone: 500 }, advanceTicks: Math.round(SIM.TICK_HZ * 40) },
-  { id: AgeId.GUNPOWDER, name: 'Gunpowder Age', advanceCost: { food: 0, wood: 1400, gold: 1200, stone: 1000 }, advanceTicks: Math.round(SIM.TICK_HZ * 50) },
-  { id: AgeId.TOTAL_WAR, name: 'Total War Age', advanceCost: { food: 1600, wood: 1800, gold: 1800, stone: 1400 }, advanceTicks: Math.round(SIM.TICK_HZ * 65) },
+  { id: AgeId.DARK, name: 'Dark Age' },
+  { id: AgeId.CASTLE, name: 'Castle Age' },
+  { id: AgeId.GUNPOWDER, name: 'Gunpowder Age' },
+  { id: AgeId.TOTAL_WAR, name: 'Total War Age' },
 ];
 
 export function getAgeDef(ageId: number): AgeDef | null {
@@ -440,13 +441,12 @@ export function getAgeDef(ageId: number): AgeDef | null {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Wall tiers. One WALL def; cost, build time and hp follow the owner's age.
-// Campaign preset walls keep the base def (400 hp) until their owner ages up.
+// Wall tiers. One WALL def; cost, build time and hp follow the owner's wall
+// research (palisade, then Stone Walls, then Brick Walls). Campaign preset
+// walls keep the base def (400 hp) until their owner researches a new tier.
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface WallTier {
-  /** Age the tier starts at. */
-  age: AgeIdValue;
   name: string;
   hp: number;
   /** Cost per wall tile. */
@@ -454,24 +454,21 @@ export interface WallTier {
   buildTimeTicks: number;
 }
 
-/** Ascending by age; ages past the last entry (Total War) keep the last tier. */
+/** Ascending: palisade, stone, brick (tech-tree.ts wallTierIndex picks one). */
 export const WALL_TIERS: readonly WallTier[] = [
   {
-    age: AgeId.DARK,
     name: 'Palisade Wall',
     hp: 400,
     cost: { food: 0, wood: 2, gold: 0, stone: 0 },
     buildTimeTicks: Math.round(SIM.TICK_HZ * 4),
   },
   {
-    age: AgeId.CASTLE,
     name: 'Stone Wall',
     hp: 1200,
     cost: { food: 0, wood: 0, gold: 0, stone: 5 },
     buildTimeTicks: Math.round(SIM.TICK_HZ * 8),
   },
   {
-    age: AgeId.GUNPOWDER,
     name: 'Brick Wall',
     hp: 2000,
     cost: { food: 0, wood: 0, gold: 0, stone: 6 },
@@ -479,12 +476,8 @@ export const WALL_TIERS: readonly WallTier[] = [
   },
 ];
 
-export function getWallTier(ageId: number): WallTier {
-  let tier = WALL_TIERS[0];
-  for (const candidate of WALL_TIERS) {
-    if (candidate.age <= ageId) tier = candidate;
-  }
-  return tier;
+export function getWallTier(tierIndex: number): WallTier {
+  return WALL_TIERS[Math.max(0, Math.min(WALL_TIERS.length - 1, tierIndex))];
 }
 
 /** Look up a building def by its numeric id (the index). */

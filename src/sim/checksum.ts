@@ -170,8 +170,6 @@ export function checksumWorld(world: SimWorld): number {
   }
   for (const age of world.ages) {
     h.u32(age.current);
-    h.int(age.progress);
-    h.u32(age.totalTicks);
   }
   for (const set of world.researchedTechs) {
     const sorted = [...set].sort();

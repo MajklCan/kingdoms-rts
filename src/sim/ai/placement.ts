@@ -15,7 +15,6 @@ import {
   UnitKind,
 } from '../components';
 import {
-  AgeId,
   type BuildingDef,
   BuildingDefId,
   UnitDefId,
@@ -75,12 +74,6 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
   ) {
     return false;
   }
-  if (
-    defId === UnitDefId.SCOUT_CAVALRY &&
-    (world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE
-  ) {
-    return false;
-  }
   const pop = world.population[playerId];
   if (!pop) return false;
   if (pop.current + countQueuedPopCost(world, playerId) + unitDef.popCost > pop.cap) return false;
@@ -101,12 +94,6 @@ export function aiPlaceBuilding(
   if (!bank || !canAfford(bank, def.cost)) return false;
   if (!isBuildingUnlocked(world, playerId, defId)) return false;
   if (houseLimitReached(world, playerId, defId)) return false;
-  if (
-    defId === BuildingDefId.STABLE &&
-    (world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE
-  ) {
-    return false;
-  }
   const spot = aiFindBuildingSpot(world, defId, def, nearX, nearY, playerId);
   if (!spot) return false;
   activeAiActuator().commitPlaceBuilding(world, defId, spot.x, spot.y, playerId);

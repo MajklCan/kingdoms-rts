@@ -8,7 +8,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { AgeId, BUILDING_TABLE, UNIT_TABLE } from '@sim/defs';
-import { STARTING_TECHS, TECH_TREE, TechId } from '@sim/tech-tree';
+import { TECH_TREE } from '@sim/tech-tree';
 import type { AiMatchResult } from './lib/ai-match';
 import { parseArgs } from './lib/args';
 
@@ -93,8 +93,8 @@ if (diffWins.size > 0) {
   out.push(table(['matchup', 'won', 'played', 'share'], [...diffWins].map(([k, v]) => [k, v.won, v.played, pct(v.won, v.played)])));
 }
 
-// Age-up timings per starting age.
-out.push('\n### Age-ups (per player, by starting age)');
+// Ring openings (the era moves with the highest open ring) per starting age.
+out.push('\n### Ring openings: era reached (per player, by starting age)');
 const ageRows: Array<Array<string | number>> = [];
 for (const [start, list] of groupBy(games, (g) => String(g.config.startingAge))) {
   const startAge = Number(start);
@@ -176,9 +176,7 @@ const scaffolded = new Set(['MILITIA', 'MACHINE_GUN', 'MORTAR']);
 out.push('\n### Never used');
 out.push(`Units: ${unitIds.filter((id) => !trainedAny.has(id) && !scaffolded.has(id)).join(', ') || 'none'}`);
 out.push(`Buildings: ${BUILDING_TABLE.map((b) => b.id).filter((id) => !builtAny.has(id) && id !== 'TOWN_CENTER').join(', ') || 'none'}`);
-// Starting techs are granted; age techs are reported as age-ups above.
-const notResearchable = new Set<string>([...STARTING_TECHS, TechId.CASTLE_AGE, TechId.GUNPOWDER_AGE]);
-out.push(`Techs: ${TECH_TREE.map((t) => t.id as string).filter((id) => !techAny.has(id) && !notResearchable.has(id)).join(', ') || 'none'}`);
+out.push(`Techs: ${TECH_TREE.map((t) => t.id as string).filter((id) => !techAny.has(id)).join(', ') || 'none'}`);
 out.push('\n### Buildings built per player (mean)');
 out.push(table(['building', 'per player'], Object.entries(buildCounts).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, (v / games.length / 2).toFixed(1)])));
 out.push('\n### Techs researched (share of players)');

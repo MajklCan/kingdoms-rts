@@ -117,7 +117,7 @@ function normalizeStartingAge(ageId: number | undefined): AgeIdValue {
 }
 
 export function createAgeState(current: AgeIdValue): AgeState {
-  return { current, progress: -1, totalTicks: 0 };
+  return { current };
 }
 
 /**
@@ -159,9 +159,11 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   );
   ages[LOCAL_PLAYER_ID] = createAgeState(startingAge);
   ages[AI_PLAYER_ID] = createAgeState(startingAge);
+  // Starting-age preset: Castle = ring I researched, Gunpowder = rings I and II.
+  // Gaia researches nothing.
   const researchedTechs: Array<Set<TechIdValue>> = Array.from(
     { length: MAX_PLAYERS },
-    () => createStartingTechSetForAge(startingAge)
+    (_, playerId) => (playerId === 0 ? new Set<TechIdValue>() : createStartingTechSetForAge(startingAge))
   );
 
   // Player 2 (enemy) starts with the same resources.

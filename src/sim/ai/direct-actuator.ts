@@ -19,7 +19,7 @@ import {
   clearFormationSpeedCap,
   clearWorkOrders,
 } from '../input/unit-orders';
-import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
+import { applyResearchTech } from '../systems/tech-rings';
 import { type AiActuator, currentAiThinkScope } from './context';
 
 export const directAiActuator: AiActuator = {
@@ -45,13 +45,6 @@ export const directAiActuator: AiActuator = {
   researchTech(world, playerId, techId) {
     applyResearchTech(world, playerId, techId);
     return hasTech(world, playerId, techId);
-  },
-  advanceAge(world, playerId) {
-    const age = world.ages[playerId];
-    if (!age) return false;
-    const before = age.progress;
-    applyAdvanceAge(world, playerId);
-    return before < 0 && age.progress >= 0;
   },
   move(world, eid, to) {
     if (!isMovableEntity(world, eid)) return;

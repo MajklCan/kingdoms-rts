@@ -1,146 +1,220 @@
 /**
- * Markup of the radial technology chart: the realm's emblem in the middle,
- * round seals for research, branch-coloured links between them. Strings
- * only; tech-tree.ts owns the modal, events and state, tech-tree-layout.ts
- * the geometry.
+ * Markup of the ring chart: ring bands as tinted discs on a dark field, the
+ * settlement's medallion in the middle, path-coloured links, a round seal
+ * per research, a gate per path on each ring edge, a name plate per ring
+ * and a banner at the end of each path. Strings only; tech-tree.ts owns the
+ * modal, events and state, tech-tree-layout.ts the geometry,
+ * tech-tree-rings.ts the rules.
  */
 
-import type { GameScene } from '../../render/game-scene';
-import { AGE_TABLE, AgeId } from '../../sim/defs';
-import { TechId } from '../../sim/tech-tree';
-import { parseCost, RESOURCE_KEYS, type ResourceKey } from '../format';
+import { escapeHtml } from '../dom';
+import { missingResources, parseCost, RESOURCE_KEYS, type ResourceKey } from '../format';
 import { RESOURCE_ICON_SMALL, TECH_ICON } from '../icons/catalog';
 import { iconHtml } from '../icons/icon';
-import type { IconName } from '../icons/icon-names';
-import { CENTRE_ID, type PlacedNode, type TechLayout } from './tech-tree-layout';
+import { BANNER, CENTRE_ID, RING_LABEL, type LayoutInput, type PlacedLink, type PlacedNode, type Point, type TechLayout } from './tech-tree-layout';
+import {
+  lockReason,
+  nextRingProgress,
+  pathName,
+  ringEra,
+  ringNumeral,
+  ringState,
+  type GoalMarks,
+  type TechNode,
+  type TechRings,
+} from './tech-tree-rings';
 
-export type TechNode = ReturnType<GameScene['getTechTree']>[number];
 export type Bank = Record<ResourceKey, number>;
 
-/** How the chart marks research when the panel was opened for a goal. */
-export interface GoalMarks {
-  goal: TechNode | undefined;
-  pathIds: ReadonlySet<string>;
+function costKeys(node: TechNode): ResourceKey[] {
+  const cost = parseCost(node.cost);
+  return RESOURCE_KEYS.filter((k) => (cost[k] ?? 0) > 0);
 }
 
-const AGE_NUMERAL = ['I', 'II', 'III', 'IV'];
-const AGE_EMBLEM: IconName[] = ['shield', 'tech-castle', 'tech-gunpowder', 'crown'];
-/** The age a milestone seal stands for. */
-const MILESTONE_AGE: Record<string, number> = {
-  [TechId.CASTLE_AGE]: AgeId.CASTLE,
-  [TechId.GUNPOWDER_AGE]: AgeId.GUNPOWDER,
-};
-
-export function ageName(age: number): string {
-  return AGE_TABLE.find((a) => a.id === age)?.name ?? 'Dark Age';
+/** Room the name and cost of a seal need, in rem (an estimate the layout places labels with). */
+export function labelWidth(node: TechNode): number {
+  return Math.max(node.name.length * 0.54 + 0.6, costKeys(node).length * 3.05, 5.6);
 }
 
-export function statusLabel(node: TechNode): string {
-  if (node.status === 'researched') return 'Researched';
-  if (node.status === 'researching') return `${Math.floor(node.progressFrac * 100)}%`;
-  if (node.status === 'available') return node.affordable ? 'Ready' : 'Need resources';
-  return 'Locked';
+export function layoutInput(nodes: readonly TechNode[]): LayoutInput[] {
+  return nodes.map((n) => ({ id: n.id, path: n.path, ring: n.ring, parents: n.parents, labelW: labelWidth(n) }));
 }
 
-function costHtml(cost: string, bank: Bank): string {
-  const parsed = parseCost(cost);
-  const keys = RESOURCE_KEYS.filter((k) => (parsed[k] ?? 0) > 0);
+function costHtml(node: TechNode, bank: Bank): string {
+  const cost = parseCost(node.cost);
+  const keys = costKeys(node);
   if (keys.length === 0) return '<span class="tech-cost-free">Free</span>';
   return keys
     .map((k) => {
-      const need = parsed[k] ?? 0;
+      const need = cost[k] ?? 0;
       const short = need > (bank[k] ?? 0);
       return `<span class="tech-res${short ? ' is-short' : ''}">${iconHtml(RESOURCE_ICON_SMALL[k])}${need}</span>`;
     })
     .join('');
 }
 
-/** Second line under the name: cost, progress, or done. */
-function detailHtml(node: TechNode, bank: Bank): string {
-  if (node.status === 'researched') return '<span class="tech-done">Researched</span>';
-  if (node.status === 'researching') return `<span class="tech-busy">Researching ${Math.floor(node.progressFrac * 100)}%</span>`;
-  return costHtml(node.cost, bank);
+function costWords(node: TechNode): string {
+  const cost = parseCost(node.cost);
+  const parts = costKeys(node).map((k) => `${cost[k]} ${k}`);
+  return parts.length > 0 ? parts.join(', ') : 'nothing';
 }
 
-function sealHtml(node: TechNode, currentAge: number): string {
-  const ic = TECH_ICON[node.icon] ?? 'c-research';
-  const ring = node.status === 'researching' ? `<span class="tech-ring" style="--p:${node.progressFrac.toFixed(3)}"></span>` : '';
+/** What a screen reader hears for a seal. */
+function sealLabel(node: TechNode, nodes: readonly TechNode[], rings: TechRings, bank: Bank, mark: string): string {
+  const where = `${pathName(node.path)} path, ring ${ringNumeral(node.ring)}`;
+  let state: string;
+  if (node.status === 'researched') state = 'Researched';
+  else if (node.status === 'available' && node.affordable) state = `Ready to research for ${costWords(node)}`;
+  else if (node.status === 'available') state = `Not enough ${missingResources(parseCost(node.cost), bank).join(' and ')}: costs ${costWords(node)}`;
+  else state = `Locked. ${lockReason(node, nodes, rings)}`;
+  return escapeHtml(`${node.name}. ${where}. ${state}.${mark}`);
+}
+
+function nodeHtml(node: TechNode, place: PlacedNode, nodes: readonly TechNode[], rings: TechRings, bank: Bank, marks: GoalMarks): string {
+  const usable = node.status === 'available' && node.affordable;
+  const isGoal = marks.goalId === node.id;
+  const onPath = !isGoal && marks.pathIds.has(node.id);
+  const markWords = isGoal ? ' Your goal.' : onPath ? (marks.goalRing ? ` Opens ring ${ringNumeral(marks.goalRing)}.` : ' Needed for your goal.') : '';
+  const classes = [
+    'tech-node',
+    node.path,
+    `is-${node.status}`,
+    node.status === 'available' ? (node.affordable ? 'is-ready' : 'is-short') : '',
+    `side-${place.side}`,
+    isGoal ? 'is-goal' : '',
+    onPath ? 'is-path' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   const pip =
     node.status === 'researched'
       ? `<span class="tech-pip is-check">${iconHtml('check')}</span>`
       : node.status === 'locked'
         ? `<span class="tech-pip is-lock">${iconHtml('lock')}</span>`
         : '';
-  const age = MILESTONE_AGE[node.id] ?? node.requiresAge;
-  const numeral = age > 0 ? `<span class="tech-age${currentAge >= age ? ' is-met' : ''}">${AGE_NUMERAL[age] ?? ''}</span>` : '';
-  return `<span class="tech-seal">${ring}<span class="tech-face">${iconHtml(ic, 'tech-icon is-big')}</span>${pip}${numeral}</span>`;
-}
-
-function nodeHtml(node: TechNode, at: PlacedNode, bank: Bank, currentAge: number, marks: GoalMarks): string {
-  const usable = node.status === 'available' && node.affordable;
-  const mark = marks.goal?.id === node.id ? ' is-goal' : marks.pathIds.has(node.id) ? ' is-path' : '';
-  const markLabel = mark === ' is-goal' ? ' Your goal.' : mark ? ` Needed for ${marks.goal?.name}.` : '';
-  const needsAge = node.status === 'locked' && node.requiresAge > currentAge ? ` Needs ${ageName(node.requiresAge)}.` : '';
-  const classes = [
-    'tech-node',
-    node.path,
-    `is-${node.status}`,
-    node.status === 'available' ? (node.affordable ? 'is-ready' : 'is-short') : '',
-    at.milestone ? 'is-milestone' : '',
-    `label-${at.label}`,
-  ]
-    .filter(Boolean)
-    .join(' ');
-  return `<button type="button" class="${classes}${mark}" data-tech-id="${node.id}" aria-disabled="${!usable}"
-    aria-label="${node.name}. ${statusLabel(node)}.${needsAge}${markLabel}" style="--x:${at.x}rem;--y:${at.y}rem;--r:${at.r}rem">
-    ${sealHtml(node, currentAge)}
-    <span class="tech-label"><span class="tech-name">${node.name}</span><span class="tech-cost">${detailHtml(node, bank)}</span></span>
+  const detail = node.status === 'researched' ? '<span class="tech-done">Researched</span>' : costHtml(node, bank);
+  const style =
+    `--x:${place.x.toFixed(3)}rem;--y:${place.y.toFixed(3)}rem;--r:${place.r.toFixed(3)}rem;` +
+    `--lx:${(place.label.x0 - (place.x - place.r)).toFixed(3)}rem;--ly:${(place.label.y0 - (place.y - place.r)).toFixed(3)}rem;` +
+    `--lw:${(place.label.x1 - place.label.x0).toFixed(3)}rem;--lh:${(place.label.y1 - place.label.y0).toFixed(3)}rem`;
+  return `<button type="button" class="${classes}" data-tech-id="${node.id}" aria-disabled="${!usable}" aria-label="${sealLabel(node, nodes, rings, bank, markWords)}" style="${style}">
+    <span class="tech-seal"><span class="tech-face">${iconHtml(TECH_ICON[node.icon] ?? 'c-research', 'tech-icon is-big')}</span>${pip}</span>
+    <span class="tech-label"><span class="tech-name">${escapeHtml(node.name)}</span><span class="tech-cost">${detail}</span></span>
   </button>`;
 }
 
-function linksHtml(layout: TechLayout, byId: ReadonlyMap<string, TechNode>): string {
+function pathD(points: readonly Point[]): string {
+  return points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join('');
+}
+
+/** A small arrow head at the end of a cross link, pointing at the research that needs it. */
+function arrowHead(link: PlacedLink): string {
+  const tip = link.points[link.points.length - 1]!;
+  const before = link.points[link.points.length - 2]!;
+  const len = Math.hypot(tip.x - before.x, tip.y - before.y) || 1;
+  const ux = (tip.x - before.x) / len;
+  const uy = (tip.y - before.y) / len;
+  const back = { x: tip.x - ux * 0.9, y: tip.y - uy * 0.9 };
+  const corner = (sign: number): string => `${(back.x - uy * 0.5 * sign).toFixed(2)},${(back.y + ux * 0.5 * sign).toFixed(2)}`;
+  return `${(tip.x + ux * 0.3).toFixed(2)},${(tip.y + uy * 0.3).toFixed(2)} ${corner(1)} ${corner(-1)}`;
+}
+
+function chartHtml(layout: TechLayout, byId: ReadonlyMap<string, TechNode>, rings: TechRings, marks: GoalMarks): string {
   const { centre, width, height } = layout;
-  const rings = layout.rings.map((r) => `<circle class="tech-orbit" cx="${centre.x}" cy="${centre.y}" r="${r.toFixed(2)}" />`).join('');
-  const lines = layout.links
+  const next = nextRingProgress(rings);
+  // Outermost band first, so each inner band paints over the one around it.
+  const bands = [...layout.bands]
+    .reverse()
+    .map((band) => {
+      const state = ringState(rings, band.ring);
+      const cls = `tech-band ring-${band.ring} ${state?.open === false ? 'is-closed' : 'is-open'}${next?.ring === band.ring ? ' is-next' : ''}${marks.goalRing === band.ring ? ' is-goal' : ''}`;
+      const disc = `cx="${centre.x}" cy="${centre.y}" r="${band.r.toFixed(2)}"`;
+      return `<g class="${cls}"><circle class="tech-band-fill" ${disc} /><circle class="tech-band-rim" ${disc} /><circle class="tech-band-line" ${disc} /></g>`;
+    })
+    .join('');
+  const well = `<circle class="tech-well" cx="${centre.x}" cy="${centre.y}" r="${centre.well.toFixed(2)}" />`;
+  const spokes = layout.paths.map((p) => `<path class="tech-spoke ${p.path}" d="${pathD([p.from, p.to])}" />`).join('');
+  const links = layout.links
     .map((link) => {
       const done = link.from === CENTRE_ID || byId.get(link.from)?.status === 'researched';
       const reached = byId.get(link.to)?.status === 'researched';
-      const cls = `tech-link ${link.branch}${done ? ' is-done' : ''}${done && reached ? ' is-walked' : ''}`;
-      return `<line class="${cls}" x1="${link.a.x.toFixed(2)}" y1="${link.a.y.toFixed(2)}" x2="${link.b.x.toFixed(2)}" y2="${link.b.y.toFixed(2)}" />`;
+      const cls = `tech-link ${link.path}${link.cross ? ' is-cross' : ''}${done ? ' is-done' : ''}${done && reached ? ' is-walked' : ''}`;
+      const head = link.cross ? `<polygon class="tech-link-head ${link.path}${done ? ' is-done' : ''}" points="${arrowHead(link)}" />` : '';
+      return `<path class="${cls}" d="${pathD(link.points)}" />${head}`;
     })
     .join('');
-  return `<svg class="tech-links" viewBox="0 0 ${width} ${height}" aria-hidden="true">${rings}${lines}</svg>`;
+  const gates = layout.gates
+    .map((gate) => {
+      const full = ringState(rings, gate.ring)?.maxedPaths.includes(gate.path) ?? false;
+      const s = 0.72;
+      return `<rect class="tech-gate ${gate.path}${full ? ' is-full' : ''}" x="${(gate.x - s).toFixed(2)}" y="${(gate.y - s).toFixed(2)}" width="${2 * s}" height="${2 * s}" transform="rotate(45 ${gate.x.toFixed(2)} ${gate.y.toFixed(2)})" />`;
+    })
+    .join('');
+  return `<svg class="tech-chart" viewBox="0 0 ${width} ${height}" aria-hidden="true">${bands}${well}${spokes}${links}${gates}</svg>`;
 }
 
-function junctionsHtml(layout: TechLayout, byId: ReadonlyMap<string, TechNode>): string {
-  return layout.junctions
-    .map((j) => {
-      const target = byId.get(j.to);
-      if (!target) return '';
-      const open = target.status !== 'locked';
-      return `<div class="tech-junction${open ? ' is-open' : ''}" style="--x:${j.x}rem;--y:${j.y}rem" aria-hidden="true">
-        <span class="tech-or">or</span><span class="tech-or-note">${open ? `${target.name}<br>is open` : `Either path opens<br>${target.name}`}</span>
+/** "Open", "1 of 2 paths", "Closed": where a ring stands. */
+function ringStatus(rings: TechRings, ring: number): string {
+  const state = ringState(rings, ring);
+  const next = nextRingProgress(rings);
+  if (!state || state.open) return 'Open';
+  if (next?.ring === ring) return `${next.done} of ${next.need} paths`;
+  return 'Closed';
+}
+
+/** One name plate per ring, all alike: numeral, age, state. */
+function ringLabelsHtml(layout: TechLayout, rings: TechRings): string {
+  return layout.ringLabels
+    .map((label) => {
+      const open = ringState(rings, label.ring)?.open !== false;
+      return `<div class="tech-ring-label${open ? ' is-open' : ' is-closed'}" style="--x:${label.x.toFixed(3)}rem;--y:${label.y.toFixed(3)}rem;--w:${RING_LABEL.w}rem;--h:${RING_LABEL.h}rem" aria-hidden="true">
+        <b class="tech-ring-num">${ringNumeral(label.ring)}</b><span class="tech-ring-era">${ringEra(label.ring)}</span><span class="tech-ring-state">${open ? '' : iconHtml('lock')}${ringStatus(rings, label.ring)}</span>
       </div>`;
     })
     .join('');
 }
 
-function emblemHtml(layout: TechLayout, currentAge: number): string {
+function bannersHtml(layout: TechLayout): string {
+  return layout.paths
+    .map(
+      (p) =>
+        `<div class="tech-banner ${p.path}" style="--x:${p.banner.x.toFixed(3)}rem;--y:${p.banner.y.toFixed(3)}rem;--w:${BANNER.w}rem;--h:${BANNER.h}rem" aria-hidden="true">${escapeHtml(pathName(p.path))}</div>`
+    )
+    .join('');
+}
+
+/** "Ring II: 1 of 2 paths complete" for the ring that opens next, as words. */
+export function counterText(rings: TechRings): string {
+  const next = nextRingProgress(rings);
+  if (!next) return 'All rings open';
+  return `Ring ${ringNumeral(next.ring)}: ${next.done} of ${next.need} paths complete`;
+}
+
+function emblemHtml(layout: TechLayout, rings: TechRings): string {
   const { centre } = layout;
-  const ic = AGE_EMBLEM[currentAge] ?? 'crown';
-  return `<div class="tech-emblem" id="tech-emblem" role="img" aria-label="Your realm: ${ageName(currentAge)}" style="--x:${centre.x}rem;--y:${centre.y}rem;--r:${centre.r}rem">
-    <span class="tech-emblem-face">${iconHtml(ic, 'tech-emblem-icon is-big')}<span class="tech-emblem-name">${ageName(currentAge)}</span></span>
+  const next = nextRingProgress(rings);
+  const pips = next ? Array.from({ length: next.need }, (_, i) => `<i class="tech-count-pip${i < next.done ? ' is-full' : ''}"></i>`).join('') : '';
+  const label = `Your settlement. Ring ${ringNumeral(rings.openRing)} is open: ${ringEra(rings.openRing)}. ${counterText(rings)}.`;
+  const count = next
+    ? `<span class="tech-count-row"><span class="tech-count-pips">${pips}</span><b>${next.done} of ${next.need}</b></span><span class="tech-count-text">paths complete</span>`
+    : '<span class="tech-count-text">All rings open</span>';
+  return `<div class="tech-emblem" id="tech-emblem" role="img" aria-label="${escapeHtml(label)}" style="--x:${centre.x}rem;--y:${centre.y}rem;--r:${centre.r}rem">
+    <span class="tech-emblem-face">
+      ${iconHtml('tech-settlement', 'tech-emblem-icon is-big')}
+      <span class="tech-emblem-name">${ringEra(rings.openRing)}</span>
+      <span class="tech-count${next ? '' : ' is-all'}">${count}</span>
+    </span>
   </div>`;
 }
 
-export function boardHtml(layout: TechLayout, nodes: readonly TechNode[], bank: Bank, currentAge: number, marks: GoalMarks): string {
-  const byId = new Map(nodes.map((n) => [n.id as string, n]));
+export function boardHtml(layout: TechLayout, nodes: readonly TechNode[], rings: TechRings, bank: Bank, marks: GoalMarks): string {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const placed = new Map(layout.nodes.map((p) => [p.id, p]));
   const seals = nodes
     .map((n) => {
-      const at = placed.get(n.id);
-      return at ? nodeHtml(n, at, bank, currentAge, marks) : '';
+      const place = placed.get(n.id);
+      return place ? nodeHtml(n, place, nodes, rings, bank, marks) : '';
     })
     .join('');
-  return linksHtml(layout, byId) + junctionsHtml(layout, byId) + emblemHtml(layout, currentAge) + seals;
+  return chartHtml(layout, byId, rings, marks) + ringLabelsHtml(layout, rings) + bannersHtml(layout) + emblemHtml(layout, rings) + seals;
 }
