@@ -27,6 +27,7 @@ import {
   Gatherer,
   GathererStateId,
   Health,
+  NetId,
   Position,
   Resource,
   ResourceCarry,
@@ -35,8 +36,11 @@ import {
   Velocity,
 } from '@sim/components';
 import { UnitDefId } from '@sim/defs';
+import { villagerRole } from '@sim/core/villager-role';
 import type { CombatEvent } from '@sim/world';
 import { IdleGagTracker, idleGagFrame } from './commander-idle';
+import { pickVillagerAnim } from './villager-anim';
+import { villagerLook } from '../sprites/villager-look';
 import { DEFAULT_FACING, facingFromVector, type Facing } from '../sprites/facing';
 import type { UnitAnimInfo, UnitArtInfo } from '../sprites/sprite-source';
 import type { SceneContext } from '../scene-context';
@@ -92,7 +96,7 @@ export interface UnitPose {
 }
 
 export type FrameCountLookup = (unitDefId: number, anim: string) => number;
-export type UnitArtLookup = (unitDefId: number) => UnitArtInfo | null;
+export type UnitArtLookup = (unitDefId: number, look?: string) => UnitArtInfo | null;
 
 interface WalkState {
   x: number;
@@ -145,7 +149,8 @@ export class UnitAnimator {
    */
   pose(eid: number, x?: number, y?: number): UnitPose | null {
     const kind = UnitKind.kind[eid];
-    const art = this.art(kind);
+    const look = kind === UnitDefId.VILLAGER ? villagerLook(this.ctx.world, eid) : undefined;
+    const art = this.art(kind, look);
     const moving = this.isMoving(eid);
     if (art) return this.atlasPose(eid, kind, art, moving, x, y);
     const moveTicks = MOVE_FRAME_TICKS[kind];
@@ -211,7 +216,9 @@ export class UnitAnimator {
       const gag = this.commanderGag(eid, anim === 'idle' && !this.hasTarget(eid), art, now);
       if (gag) return { facing, ...gag };
     }
-    const info = art.anim(anim) ?? art.anim('idle');
+    // A role look that lacks the anim is drawn with the default art, so time it by that.
+    const own = art.hasOwn?.(anim) !== false;
+    const info = (own ? art.anim(anim) : this.art(kind)?.anim(anim)) ?? art.anim('idle');
     if (!info) return { facing, anim, frame: 0 };
     let frame: number;
     if (info.stride > 0) {
@@ -285,18 +292,27 @@ export class UnitAnimator {
   private villagerAtlasAnim(eid: number, moving: boolean, art: UnitArtInfo): string {
     const ecs = this.ctx.world.ecs;
     const carryAmt = hasComponent(ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;
-    const carry = carryAmt > 0 ? CARRY_ANIM[ResourceCarry.kind[eid]] ?? 'carry' : 'carry';
-    if (this.atBuildSite(eid, moving)) return 'build';
-    if (hasComponent(ecs, Gatherer, eid)) {
-      const state = Gatherer.state[eid];
-      if (state === GathererStateId.GATHERING) {
-        const work = this.workAnim(Gatherer.targetEid[eid]);
-        return art.anim(work) ? work : 'harvest';
-      }
-      if (state === GathererStateId.BUILDING) return 'build';
-      if ((moving || state === GathererStateId.DEPOSITING) && carryAmt > 0) return carry;
-    }
-    return moving ? 'move' : 'idle';
+    const gatherer = hasComponent(ecs, Gatherer, eid);
+    const raw = gatherer ? Gatherer.state[eid] : -1;
+    return pickVillagerAnim({
+      role: villagerRole(this.ctx.world, eid),
+      variant: NetId.value[eid],
+      moving,
+      atBuildSite: this.atBuildSite(eid, moving),
+      state:
+        raw === GathererStateId.GATHERING
+          ? 'gathering'
+          : raw === GathererStateId.BUILDING
+            ? 'building'
+            : raw === GathererStateId.DEPOSITING
+              ? 'depositing'
+              : gatherer
+                ? 'other'
+                : 'none',
+      gatherWork: gatherer && raw === GathererStateId.GATHERING ? this.workAnim(Gatherer.targetEid[eid]) : '',
+      carry: carryAmt > 0 ? CARRY_ANIM[ResourceCarry.kind[eid]] ?? 'carry' : null,
+      owns: (anim) => art.hasOwn?.(anim) ?? art.anim(anim) !== null,
+    });
   }
 
   /** Work loop for a gather target: chop trees, mine rock, hoe farms, pick berries. */

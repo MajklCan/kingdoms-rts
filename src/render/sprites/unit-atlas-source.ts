@@ -130,7 +130,12 @@ export class UnitAtlasSource implements SpriteSource {
     return [...this.byDef.keys()];
   }
 
-  unitArt(unitDefId: number): UnitArtInfo | null {
+  /** Art of a unit kind; with a `look` that has art of its own, that look's art. */
+  unitArt(unitDefId: number, look?: string): UnitArtInfo | null {
+    if (look !== undefined) {
+      const variant = this.byLook.get(lookKey(unitDefId, look));
+      if (variant) return variant;
+    }
     return this.byDef.get(unitDefId) ?? null;
   }
 

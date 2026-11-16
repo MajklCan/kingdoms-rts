@@ -81,7 +81,7 @@ export class UnitRenderer {
     this.animator = new UnitAnimator(
       ctx,
       (unitDefId, anim) => sprites.unitFrameCount(unitDefId, anim),
-      (unitDefId) => sprites.unitArt?.(unitDefId) ?? null
+      (unitDefId, look) => sprites.unitArt?.(unitDefId, look) ?? null
     );
     this.flash = new HitFlash(UNIT_FLASH, () => ctx.scene.time.now);
     this.units = new SpriteSync(

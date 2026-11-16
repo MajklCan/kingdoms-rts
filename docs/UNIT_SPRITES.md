@@ -61,7 +61,7 @@ crew about 50 px.
 | --- | --- | --- |
 | villager (builder) | `VILLAGER` | idle 4, move 8, carry_wood / carry_food / carry_gold / carry_stone 8, chop 6, mine 6, build 6, farm 6, forage 4, death 4 |
 | villager-lumberjack | `VILLAGER` look `lumberjack` | idle, move, carry_wood, chop, death |
-| villager-farmer | `VILLAGER` look `farmer` | idle, move, carry_food, farm, death |
+| villager-farmer | `VILLAGER` look `farmer` | idle, move, carry_food, farm 8 (scythe mowing), water 8 (watering can), death |
 | villager-quarryman | `VILLAGER` look `quarryman` | idle, move, carry_stone, mine, death |
 | villager-gold-miner | `VILLAGER` look `gold-miner` | idle, move, carry_gold, mine, death |
 | militia | `MILITIA` (legacy) | idle 4, move 8, attack 6 (sword), death 4 |
@@ -103,10 +103,18 @@ team tunic and skirt stay in the same place on every role.
 | --- | --- | --- |
 | builder | default `villager` art | wide rust beret, beard, rolled sleeves, leather apron, mallet on the shoulder, saw on the back |
 | lumberjack | `lumberjack` | moss wool cap on a fur brim, fur collar, bulkier, felling axe |
-| farmer | `farmer` | wide straw hat, light linen trousers, hoe on the shoulder, sickle at the hip |
+| farmer | `farmer` | wide straw hat, light linen trousers, scythe on the shoulder, mows with it or waters with a can (picked per worker by NetId) |
 | quarryman | `quarryman` | grey visor cap, dusty sleeves and apron, beard, pick |
-| gold-miner | `gold-miner` | white miner's hood and cape, lit lamp at the belt, leather seat patch, pick |
+| gold-miner | `gold-miner` | bare bearded face, small dark felt cap with a candle lamp, ochre smock over the blue tunic and skirt, pick, small ore sack |
 | miller | `farmer` | no art of its own (no mill crews today) |
+
+Worksite crews work in Gatherer state `BUILDING`, which used to map to the
+`build` anim. No role look has `build`, so `artFor` fell back to the builder's
+art (mallet) whenever a farm, camp or mine worker was at his site, whatever the
+facing. `pickVillagerAnim` (`src/render/entities/villager-anim.ts`) now gives a
+crew member his role's own work anim there (`roleWorkAnim`), and the animator
+times it by the look's art. `villager-role-art.test.ts` walks the shipped
+manifest and every role and worker state.
 
 The builder is the free villager and the villager's default art, so it has
 every anim. A crew is its own atlas unit named `villager-<role>` with

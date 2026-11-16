@@ -62,8 +62,8 @@ export class SpriteSourceRegistry implements SpriteSource {
     return overridden > 0 ? overridden : this.fallback.unitFrameCount(unitDefId, anim);
   }
 
-  unitArt(unitDefId: number): UnitArtInfo | null {
-    return this.units?.unitArt?.(unitDefId) ?? null;
+  unitArt(unitDefId: number, look?: string): UnitArtInfo | null {
+    return this.units?.unitArt?.(unitDefId, look) ?? null;
   }
 
   resource(query: ResourceSpriteQuery): SpriteRef | null {

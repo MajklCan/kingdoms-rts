@@ -10,9 +10,11 @@ with only the anims their job plays; the engine falls back to the builder for
 anything else (docs/UNIT_SPRITES.md, "Villager roles"):
 
     lumberjack   moss wool cap on a fur brim, fur collar, bulkier, felling axe
-    farmer       wide straw hat, light linen trousers, hoe on the shoulder
+    farmer       wide straw hat, light linen trousers, scythe on the shoulder; mows
+                 (`farm`) or waters (`water`), picked per farmer by the engine
     quarryman    grey visor cap, dusty sleeves and apron, beard, big pick
-    gold-miner   white miner's hood, leather seat patch, lit lamp at the belt, pick
+    gold-miner   bare face and beard, small dark felt cap with a candle lamp, soot-stained
+                 ochre sleeves and jerkin, ore sack at the hip, pick
 
 Every role keeps the team tunic and skirt in the same place, so team colour
 reads the same on all of them. Tools in work anims are the same as before.
@@ -27,7 +29,7 @@ from typing import Callable
 
 from units_body import HEAD_R, Leg, Look, Pose, Puppet, death_root, idle_pose, walk_pose
 from units_common import Anim, cycle, keyed, straw_hat, tool_frame, tool_point
-from units_rig import Mk, R, V
+from units_rig import Mk, R, T, V, xfp
 
 NAME = "villager"
 DEF_IDS = ["VILLAGER"]
@@ -51,8 +53,15 @@ SPECS = {
 }
 
 
-def _anims(names: list[str], aliases: dict[str, str]) -> dict[str, Anim]:
-    out = {n: SPECS[n] for n in names}
+#: farmer-only anims (the builder keeps the 6 frame hoe `farm`)
+FARMER_SPECS = {
+    "farm": Anim(frames=8, ms=105, hit=4),
+    "water": Anim(frames=8, ms=150),
+}
+
+
+def _anims(names: list[str], aliases: dict[str, str], specs: dict[str, Anim] | None = None) -> dict[str, Anim]:
+    out = {n: (specs or {}).get(n, SPECS.get(n)) for n in names}
     out.update({k: Anim(alias=v) for k, v in aliases.items()})
     return out
 
@@ -115,6 +124,27 @@ def hoe(mk: Mk) -> None:
     mk.box(V(0.43, 0, -0.05), (0.03, 0.09, 0.08), "steel_d")
 
 
+def scythe(mk: Mk) -> None:
+    """Long snath with two grips and a curved blade lying out to the left of its end."""
+    mk.line(V(-0.1, 0, 0), V(0.5, 0, 0), "wood_l", r=0.017)
+    mk.box(V(0.2, 0.0, 0.045), (0.03, 0.03, 0.06), "wood_d")  # the short grip
+    mk.box(V(0.5, 0.0, 0.0), (0.04, 0.04, 0.03), "iron")
+    pts = [(0.52, 0.02), (0.56, 0.1), (0.64, 0.17), (0.75, 0.21), (0.86, 0.22)]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        mk.capsule(V(x0, y0, 0.0), V(x1, y1, 0.0), 0.022, 0.015, "steel")
+
+
+def watering_can(mk: Mk) -> None:
+    """Tin can in the hand frame: body, handle ring, spout towards +x."""
+    mk.cyl(V(0.0, 0, -0.1), V(0.0, 0, 0.0), 0.062, "steel", ref=(1, 0, 0))
+    mk.cyl(V(0.0, 0, -0.012), V(0.0, 0, 0.0), 0.066, "steel_d", ref=(1, 0, 0))
+    mk.cyl(V(0.0, 0, -0.1), V(0.0, 0, -0.085), 0.066, "steel_d", ref=(1, 0, 0))
+    mk.capsule(V(0.04, 0, -0.07), V(0.15, 0, 0.02), 0.018, 0.012, "steel")
+    mk.ell(V(0.16, 0, 0.025), 0.02, "steel_d")
+    mk.capsule(V(-0.05, 0, -0.01), V(-0.1, 0, -0.06), 0.012, 0.012, "iron")
+    mk.capsule(V(-0.1, 0, -0.06), V(-0.055, 0, -0.095), 0.012, 0.012, "iron")
+
+
 def basket(mk: Mk, c, r: float = 0.085, fill: str | None = "berry") -> None:
     c = V(*c)
     mk.cyl(c + V(0, 0, -0.06), c + V(0, 0, 0.05), r, "basket", ref=(1, 0, 0))
@@ -159,14 +189,17 @@ def skull_cap(mk: Mk, pup: Puppet) -> None:
         mk.box(V(r * 1.05, 0, r * 0.42), (r * 0.8, r * 1.5, 0.03), "dust_d")
 
 
-def miner_hood(mk: Mk, pup: Puppet) -> None:
-    """Gold miner: the white hood of the old ore miners, short shoulder cape."""
+def miner_cap(mk: Mk, pup: Puppet) -> None:
+    """Gold miner: small dark felt cap with a short front brim and a candle lamp on the brow."""
     r = HEAD_R
     with mk.push(pup.head_m):
-        mk.ell(V(-0.03, 0, r * 0.12), (r * 1.12, r * 1.12, r * 1.14), "miner_white")
-        mk.box(V(r * 0.64, 0, r * 0.6), (0.03, r * 1.3, 0.03), "dust")
-    with mk.push(pup.torso_m):
-        mk.capsule(V(-0.005, 0, 0.28), V(-0.01, 0, 0.21), 0.08, 0.145, "miner_white", caps=False)
+        mk.ell(V(-0.02, 0, r * 0.62), (r * 1.04, r * 1.05, r * 0.62), "felt")
+        mk.capsule(V(-0.012, 0, r * 0.38), V(-0.012, 0, r * 0.56), r * 1.08, r * 1.06, "leather_d", caps=False)
+        mk.box(V(r * 1.08, 0, r * 0.5), (r * 0.5, r * 1.15, 0.026), "leather_d")
+        # candle lamp: iron bracket, tin cup and a steady flame
+        mk.box(V(r * 1.06, 0, r * 0.78), (0.035, 0.05, 0.05), "iron")
+        mk.cyl(V(r * 1.12, 0, r * 0.74), V(r * 1.12, 0, r * 0.92), 0.026, "steel_d", ref=(1, 0, 0))
+        mk.ell(V(r * 1.12, 0, r * 1.02), (0.022, 0.022, 0.034), "lamp")
 
 
 def farmer_hat(mk: Mk, pup: Puppet) -> None:
@@ -207,10 +240,16 @@ def quarry_gear(mk: Mk, pup: Puppet, anim: str) -> None:
 
 def miner_gear(mk: Mk, pup: Puppet, anim: str) -> None:
     with mk.push(pup.torso_m):
-        # leather seat patch at the back, lamp at the left hip
-        mk.box(V(-0.105, 0, -0.04), (0.03, 0.2, 0.18), "leather_d")
-        mk.box(V(0.05, 0.12, -0.02), (0.06, 0.05, 0.07), "iron")
-        mk.box(V(0.075, 0.125, -0.02), (0.02, 0.035, 0.04), "lamp")
+        # soot-stained ochre jerkin on the shoulders and back, leather braces across the chest
+        mk.capsule(V(-0.03, 0, 0.27), V(-0.03, 0, 0.1), 0.1, 0.125, "ochre", caps=False)
+        mk.box(V(-0.105, 0, 0.08), (0.03, 0.2, 0.22), "ochre_d")
+        for side in (1, -1):
+            mk.box(V(0.09, side * 0.07, 0.15), (0.03, 0.025, 0.19), "leather_d")
+        # small ore sack at the left hip, a gold nugget showing at its mouth
+        mk.ell(V(0.03, 0.14, -0.05), (0.06, 0.05, 0.075), "sack")
+        mk.capsule(V(0.03, 0.14, -0.005), V(0.03, 0.14, 0.015), 0.04, 0.03, "leather_d", caps=False)
+        mk.ell(V(0.045, 0.14, 0.025), 0.028, "gold")
+        mk.ell(V(0.02, 0.15, 0.03), 0.02, "gold")
 
 
 # -- kits ------------------------------------------------------------------------------
@@ -254,8 +293,9 @@ FARMER = Kit(
     look=Look(torso="team", sleeve="linen", skirt="team", skirt_len=0.075, trousers="linen_d", forearm="skin"),
     hat=farmer_hat,
     gear=farmer_gear,
-    shoulder=hoe,
-    shoulder_roll=180.0,
+    shoulder=scythe,
+    shoulder_roll=90.0,
+    tools={"farm": scythe},
 )
 QUARRYMAN = Kit(
     role="quarryman",
@@ -268,8 +308,9 @@ QUARRYMAN = Kit(
 )
 GOLD_MINER = Kit(
     role="gold-miner",
-    look=Look(torso="team", sleeve="felt", skirt="team", skirt_len=0.075, trousers="felt", hair=None),
-    hat=miner_hood,
+    look=Look(torso="team", sleeve="ochre", skirt="team", skirt_len=0.075, trousers="felt", beard=True,
+              forearm="skin"),
+    hat=miner_cap,
     gear=miner_gear,
     shoulder=big_pick,
     shoulder_roll=90.0,
@@ -315,6 +356,29 @@ FARM = [
     ((0.2, -0.05, 0.12), -30, 26),
     ((0.14, -0.05, 0.13), -26, 22),
     ((0.1, -0.05, 0.22), 40, 10),
+]
+
+MOW = [  # grip (torso frame), yaw, pitch, twist, lean: wide sweep from the right, across, to the left
+    ((0.08, -0.2, 0.2), -52, -26, -34, 6),
+    ((0.06, -0.21, 0.22), -66, -22, -42, 4),
+    ((0.14, -0.16, 0.16), -34, -30, -22, 10),
+    ((0.2, -0.07, 0.12), -4, -34, 2, 16),
+    ((0.2, -0.0, 0.12), 26, -34, 20, 18),
+    ((0.14, 0.05, 0.14), 52, -30, 34, 14),
+    ((0.1, 0.0, 0.17), 36, -26, 24, 10),
+    ((0.08, -0.12, 0.19), -10, -24, -8, 8),
+]
+
+#: watering can: tilt about the side axis (deg), can height, torso lean, pouring
+WATER = [
+    (0, 0.1, 4, False),
+    (14, 0.15, 6, False),
+    (46, 0.2, 12, True),
+    (62, 0.22, 16, True),
+    (66, 0.22, 16, True),
+    (58, 0.21, 14, True),
+    (24, 0.16, 8, False),
+    (4, 0.11, 4, False),
 ]
 
 BUILD = [  # grip, pitch, lean
@@ -366,6 +430,14 @@ def draw_kit(kit: Kit, mk: Mk, anim: str, frame: int) -> None:
             pose.hands = (V(0.17, 0.1, z), V(0.17, -0.1, z))
             pose.poles = (V(-0.4, 1.0, -0.8), V(-0.4, -1.0, -0.8))
             extra = (kind, bob)
+    elif anim == "water":
+        height, lean, pour = WATER[frame % len(WATER)][1:]
+        tilt = WATER[frame % len(WATER)][0]
+        pose = Pose(legs=(Leg(thigh=20, knee=24, spread=0.03), Leg(thigh=-10, knee=14, spread=0.03)), lean=lean)
+        grip = V(0.2, -0.12, height)
+        pose.hands = (V(0.06, 0.16, 0.0), grip + V(-0.03, 0, 0.0))
+        pose.poles = (V(-0.4, 1.0, -0.8), V(-0.2, -1.0, -0.7))
+        extra = ("water", (tilt, pour, grip))
     elif anim in ("chop", "mine", "farm", "build"):
         pose = Pose(legs=_work_legs())
         tool = kit.tools.get(anim, BASE_TOOLS[anim])
@@ -373,6 +445,11 @@ def draw_kit(kit: Kit, mk: Mk, anim: str, frame: int) -> None:
             grip, yaw, pitch, twist, lean = keyed(CHOP, frame)
             pose.twist, pose.lean = twist, lean
             tool_m = _two_handed(pose, grip, yaw, pitch, gap=0.1)
+        elif anim == "farm" and tool is scythe:
+            grip, yaw, pitch, twist, lean = keyed(MOW, frame)
+            pose.twist, pose.lean = twist, lean
+            pose.legs = (Leg(thigh=20, knee=22, spread=0.05), Leg(thigh=-14, knee=16, spread=0.05))
+            tool_m = _two_handed(pose, grip, yaw, pitch, gap=0.16)
         elif anim in ("mine", "farm"):
             grip, pitch, lean = keyed(MINE if anim == "mine" else FARM, frame)
             pose.lean = lean
@@ -418,6 +495,14 @@ def draw_kit(kit: Kit, mk: Mk, anim: str, frame: int) -> None:
                 basket(mk, (0.2, 0.0, 0.1 + arg), fill="gold")
             elif kind == "stone":
                 mk.box(V(0.21, 0.0, 0.1 + arg), (0.15, 0.2, 0.13), "stone", rot=R("z", 12))
+            elif kind == "water":
+                tilt, pour, grip = arg
+                with mk.push(T(*grip) @ R("s", -tilt)):
+                    watering_can(mk)
+                if pour:
+                    tip = xfp(pup.torso_m @ T(*grip) @ R("s", -tilt), V(0.17, 0, 0.03))
+                    for i in range(5):
+                        mk.ell(tip + V(0.035 * i, 0, -0.035 * i - 0.012 * i * i), 0.017, "water")
             elif kind == "forage":
                 basket(mk, (0.05, 0.22, 0.02), r=0.075, fill="berry")
                 if arg:
@@ -442,13 +527,14 @@ def draw(mk: Mk, anim: str, frame: int) -> None:
 PORTRAIT = {"fit": "head", "density": 4.0, "anim": "idle", "frame": 0, "facing": 1}
 
 
-def _role_unit(kit: Kit, work: list[str], aliases: dict[str, str]) -> SimpleNamespace:
+def _role_unit(kit: Kit, work: list[str], aliases: dict[str, str],
+               specs: dict[str, Anim] | None = None) -> SimpleNamespace:
     """A worksite crew as its own atlas unit: only the anims the job plays."""
     return SimpleNamespace(
         NAME=f"villager-{kit.role}",
         DEF_IDS=DEF_IDS,
         LOOK=kit.role,
-        ANIMS=_anims(["idle", "move", *work, "death"], aliases),
+        ANIMS=_anims(["idle", "move", *work, "death"], aliases, specs),
         draw=lambda mk, anim, frame: draw_kit(kit, mk, anim, frame),
         PORTRAIT=PORTRAIT,
     )
@@ -458,7 +544,8 @@ def _role_unit(kit: Kit, work: list[str], aliases: dict[str, str]) -> SimpleName
 ROLE_UNITS = {
     "lumberjack": _role_unit(LUMBERJACK, ["carry_wood", "chop"],
                              {"attack": "chop", "harvest": "chop", "carry": "carry_wood"}),
-    "farmer": _role_unit(FARMER, ["carry_food", "farm"], {"harvest": "farm", "carry": "carry_food"}),
+    "farmer": _role_unit(FARMER, ["carry_food", "farm", "water"], {"harvest": "farm", "carry": "carry_food"},
+                         FARMER_SPECS),
     "quarryman": _role_unit(QUARRYMAN, ["carry_stone", "mine"], {"harvest": "mine", "carry": "carry_stone"}),
     "gold-miner": _role_unit(GOLD_MINER, ["carry_gold", "mine"], {"harvest": "mine", "carry": "carry_gold"}),
 }

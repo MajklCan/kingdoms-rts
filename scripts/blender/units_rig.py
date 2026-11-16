@@ -101,6 +101,9 @@ PALETTE: dict[str, int] = {
     "moss": 0x55682C,
     "grey": 0xC2BCB0,
     "smoke": 0xDADCE0,
+    "ochre": 0xB8873A,
+    "ochre_d": 0x8A6128,
+    "water": 0x7FB8E0,
 }
 
 #: keys that are never saturation / value boosted
