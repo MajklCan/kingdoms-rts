@@ -224,6 +224,7 @@ export class GameScene extends Phaser.Scene {
       camera: this.camera,
       pointer: this.pointer,
       toggleGameSpeed: () => this.toggleGameSpeed(),
+      buildHotkey: (key) => this.actions.buildHotkey(key),
     });
     this.uiApi = new UiApi(this.ctx, {
       camera: this.camera, commands: this.commands, pointer: this.pointer, touch: this.touch, placement: this.placement,
