@@ -66,6 +66,9 @@ function resetMatchUi(): void {
   hideAgeBanner();
 }
 
+/** Shortest time the boot title card stays up, counted from page load. */
+const BOOT_SPLASH_MIN_MS = 1600;
+
 async function revealWhenReady(): Promise<void> {
   // The scene decodes audio and bakes textures before create() runs.
   for (let i = 0; i < 1200 && !isSceneReady(getScene()); i++) await wait(25);
@@ -76,6 +79,8 @@ async function revealWhenReady(): Promise<void> {
   else skipGate();
   const splash = byId('boot-splash');
   if (splash) {
+    // Hold the title card long enough to read as one, not a flash.
+    await wait(Math.max(0, BOOT_SPLASH_MIN_MS - performance.now()));
     splash.classList.add('is-done');
     window.setTimeout(() => splash.remove(), 600);
   }
