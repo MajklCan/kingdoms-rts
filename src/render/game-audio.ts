@@ -83,7 +83,8 @@ export class GameAudio {
     this.manager.setWorldSilenced(false);
     this.manager.setGamePaused(false);
     this.manager.setAmbience(NATURE_AMBIENCE, 3);
-    this.manager.playPeaceMusic({ fadeOut: 2.5, delay: 1 });
+    // 2.2 s: the match-start fanfare plays first, then the peace song.
+    this.manager.playPeaceMusic({ fadeOut: 2.5, delay: 2.2 });
   }
 
   /** Back to the title screens: world audio off, menu music. */

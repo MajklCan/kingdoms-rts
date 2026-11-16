@@ -1,79 +1,113 @@
 /**
- * Loading screen between the menu and a match. Covers the swap so there is
- * never a blank or half-built frame: it paints first, then runs the start
- * task, waits for the scene, and holds for a minimum time so the transition
- * reads as deliberate instead of a flash.
+ * Loading screen between the menu and a match: the destination named over
+ * the darkened title map, one chronicle line, the map plate, and a progress
+ * rule whose four notches each complete on real work (scene ready, world
+ * built, first frames drawn, minimum time held). It paints first, runs the
+ * start task under the cover, and holds long enough to read, never flashing.
  */
 
+import type { MapIdValue } from '../../sim/map-gen';
 import { setPhase } from '../app-state';
-import { afterPaint, h, wait } from '../dom';
-import { isSceneReady, getScene } from '../game-bridge';
+import { afterPaint, byId, h, wait } from '../dom';
+import { getScene, isSceneReady } from '../game-bridge';
+import {
+  LOADING_PHASES,
+  LORE,
+  LORE_ROTATE_MS,
+  PHASE_COUNT,
+  eyebrowFor,
+  minDisplayMs,
+  phaseCreep,
+  pickLore,
+  type LoadingKind,
+} from './loading-phases';
+import { paintMapPreview } from './map-preview';
 
-const TIPS = [
-  'Houses raise your population cap. Build one before you are blocked.',
-  'Press B, then a letter, to place buildings without touching the mouse.',
-  'Ctrl or Alt plus a number saves a control group. Tap the number to recall it, twice to jump there.',
-  'Press . to cycle through idle villagers.',
-  'Space jumps the camera to the latest alert.',
-  'Mills boost farm deliveries. Place them beside your fields.',
-  'Pikemen hold the line against cavalry. Archers shoot from behind them.',
-  'Worksites spawn their own workers. Villagers are free for building and farming.',
-  'Advancing an age unlocks new buildings, units and research.',
-  'Press Esc for the pause menu, where you can save, load and change settings.',
-];
+export type { LoadingKind } from './loading-phases';
 
-let root: HTMLElement | null = null;
-let titleEl: HTMLElement | null = null;
-let subEl: HTMLElement | null = null;
-let tipEl: HTMLElement | null = null;
-let barEl: HTMLElement | null = null;
-let statusEl: HTMLElement | null = null;
-let tipIndex = Math.floor(Math.random() * TIPS.length);
+const SLOW_PHASE_MS = 4000;
+const FAIL_HOLD_MS = 1200;
+const REVEAL_HOLD_MS = 220;
+const LEAVE_MS = 420;
 
-export function getLoadingRoot(): HTMLElement {
-  if (root) return root;
-  titleEl = h('h2', { class: 'loading-title title-display' });
-  subEl = h('p', { class: 'loading-sub' });
-  tipEl = h('p', { class: 'loading-tip' });
-  barEl = h('i');
-  statusEl = h('p', { class: 'loading-status', role: 'status', 'aria-live': 'polite' }, 'Preparing the realm');
-  root = h(
-    'div',
-    { id: 'loading-screen', class: 'loading-screen', hidden: true, 'aria-busy': 'true' },
-    h('div', { class: 'loading-bg', 'aria-hidden': 'true' }),
-    h(
-      'div',
-      { class: 'loading-card' },
-      h('img', { class: 'loading-crest', src: '/assets/ui/crest.svg', alt: '', width: 200, height: 244 }),
-      h('div', { class: 'eyebrow' }, 'Now entering'),
-      titleEl,
-      subEl,
-      h('div', { class: 'loading-bar bar', role: 'progressbar', 'aria-label': 'Loading', 'aria-valuemin': 0, 'aria-valuemax': 100 }, barEl),
-      statusEl,
-      h(
-        'aside',
-        { class: 'loading-note', 'aria-label': 'Tip' },
-        h('span', { class: 'loading-note-seal', 'aria-hidden': 'true' }),
-        h('span', { class: 'loading-note-label' }, 'Counsel of the steward'),
-        tipEl
-      )
-    )
-  );
-  return root;
+interface Parts {
+  root: HTMLElement;
+  bg: HTMLElement;
+  eyebrow: HTMLElement;
+  title: HTMLElement;
+  sub: HTMLElement;
+  lore: HTMLElement;
+  plate: HTMLElement;
+  map: HTMLCanvasElement;
+  status: HTMLElement;
+  rule: HTMLElement;
 }
 
-function setProgress(p: number): void {
-  barEl?.style.setProperty('--p', String(Math.max(0, Math.min(1, p))));
-  barEl?.parentElement?.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+let parts: Parts | null = null;
+let loreIndex = -1;
+
+function build(): Parts {
+  const bg = h('div', { class: 'loading-bg', 'aria-hidden': 'true' });
+  const eyebrow = h('p', { class: 'loading-eyebrow' });
+  const title = h('h2', { class: 'loading-title' });
+  const sub = h('p', { class: 'loading-sub' });
+  const lore = h('p', { class: 'loading-lore', 'aria-live': 'off' });
+  const map = h('canvas', { class: 'loading-map' });
+  const plate = h(
+    'div',
+    { class: 'loading-plate', 'aria-hidden': 'true' },
+    map,
+    h('img', { class: 'loading-plate-crest', src: '/assets/ui/crest.svg', alt: '', width: 200, height: 244, draggable: 'false' }),
+    h('div', { class: 'loading-fog' })
+  );
+  const status = h('p', { class: 'loading-status', role: 'status', 'aria-live': 'polite' }, LOADING_PHASES[0]);
+  const notches = [1, 2, 3].map((n) => h('span', { class: 'loading-notch', style: `left: ${(n / PHASE_COUNT) * 100}%` }));
+  const rule = h(
+    'div',
+    { class: 'loading-rule', role: 'progressbar', 'aria-label': 'Loading', 'aria-valuemin': 0, 'aria-valuemax': PHASE_COUNT, 'aria-valuenow': 0 },
+    h('i', { class: 'loading-fill' }),
+    ...notches
+  );
+  const root = h(
+    'div',
+    { id: 'loading-screen', class: 'loading-screen', hidden: true, 'aria-busy': 'true' },
+    bg,
+    h('div', { class: 'loading-scrim', 'aria-hidden': 'true' }),
+    h(
+      'div',
+      { class: 'loading-frame' },
+      h('div', { class: 'loading-brief' }, eyebrow, title, sub, lore),
+      plate,
+      h('div', { class: 'loading-foot' }, status, rule)
+    )
+  );
+  return { root, bg, eyebrow, title, sub, lore, plate, map, status, rule };
+}
+
+export function getLoadingRoot(): HTMLElement {
+  parts ??= build();
+  return parts.root;
+}
+
+/** Move the rule (and the plate's fog) to `p`; `slow` eases over seconds. */
+function setRule(p: Parts, value: number, done: number, slow: boolean): void {
+  p.root.style.setProperty('--p', value.toFixed(4));
+  p.root.style.setProperty('--rule-dur', slow ? '2.4s' : '0.3s');
+  p.rule.setAttribute('aria-valuenow', String(done));
 }
 
 export interface LoadingOptions {
   title: string;
   subtitle?: string;
-  /** Minimum time on screen in ms (default 900). */
+  kind: LoadingKind;
+  /** Map for the plate; the crest stands in when there is none. */
+  mapId?: MapIdValue | null;
+  /** Minimum time on screen in ms (default per kind, see loading-phases). */
   minMs?: number;
   /** Starts the match. Runs after the loading screen has painted. */
   task: () => void;
+  /** The cover starts to lift off a started match (match-start stinger). */
+  onReveal?: () => void;
 }
 
 let busy = false;
@@ -82,53 +116,76 @@ let busy = false;
 export async function runLoading(opts: LoadingOptions): Promise<boolean> {
   if (busy) return false;
   busy = true;
-  const el = getLoadingRoot();
-  titleEl!.textContent = opts.title;
-  subEl!.textContent = opts.subtitle ?? '';
-  tipIndex = (tipIndex + 1) % TIPS.length;
-  tipEl!.textContent = TIPS[tipIndex]!;
-  statusEl!.textContent = 'Preparing the realm';
+  const p = (parts ??= build());
+  const el = p.root;
+  p.eyebrow.textContent = eyebrowFor(opts.kind);
+  p.title.textContent = opts.title;
+  p.sub.textContent = opts.subtitle ?? '';
+  loreIndex = pickLore(loreIndex, Math.random);
+  p.lore.textContent = LORE[loreIndex]!;
+  p.status.textContent = LOADING_PHASES[0];
+  p.status.classList.remove('is-slow', 'is-error');
+  p.plate.dataset.plate = opts.mapId ? 'map' : 'crest';
+  // Pick the backdrop up exactly where the title's drifting map stands.
+  const menuBg = byId('menu-bg');
+  p.bg.style.transform = menuBg ? getComputedStyle(menuBg).transform : '';
   el.classList.remove('is-leaving');
+  setRule(p, 0, 0, false);
   el.hidden = false;
-  setProgress(0.08);
   setPhase('loading');
+  if (opts.mapId) paintMapPreview(p.map, opts.mapId, opts.kind === 'skirmish');
 
   const started = performance.now();
-  const minMs = opts.minMs ?? 900;
+  const minMs = opts.minMs ?? minDisplayMs(opts.kind);
+  let slowTimer = 0;
+  const enterPhase = (done: number): void => {
+    window.clearTimeout(slowTimer);
+    p.status.classList.remove('is-slow');
+    p.status.textContent = LOADING_PHASES[Math.min(done, PHASE_COUNT - 1)]!;
+    setRule(p, phaseCreep(done), done, true);
+    if (done < PHASE_COUNT) slowTimer = window.setTimeout(() => p.status.classList.add('is-slow'), SLOW_PHASE_MS);
+  };
+  const loreTimer = window.setInterval(() => {
+    loreIndex = pickLore(loreIndex, Math.random);
+    p.lore.textContent = LORE[loreIndex]!;
+  }, LORE_ROTATE_MS);
+
   let ok = true;
   try {
+    enterPhase(0);
     await afterPaint();
     // The scene may still be decoding audio on a cold start; wait for it.
-    for (let i = 0; i < 400 && !isSceneReady(getScene()); i++) {
-      setProgress(0.1 + Math.min(0.25, i / 400));
-      await wait(25);
-    }
-    setProgress(0.4);
-    statusEl!.textContent = 'Raising the map';
+    for (let i = 0; i < 400 && !isSceneReady(getScene()); i++) await wait(25);
+    enterPhase(1);
+    // Paint the new target first: the rule's transform keeps easing on the
+    // compositor while the task blocks the main thread.
     await afterPaint();
     opts.task();
-    setProgress(0.75);
-    statusEl!.textContent = 'Mustering the host';
+    enterPhase(2);
     // Let the scene render its first frames under the cover.
     await afterPaint();
     await afterPaint();
+    enterPhase(3);
+    const remaining = minMs - (performance.now() - started);
+    if (remaining > 0) await wait(remaining);
   } catch (err) {
     ok = false;
     console.error('[Kingdoms] failed to start match', err);
-    statusEl!.textContent = 'The realm could not be raised. Returning to the menu.';
+    p.status.classList.add('is-error');
+    p.status.textContent = 'The realm could not be raised. Returning to the menu.';
+    await wait(FAIL_HOLD_MS);
   }
-  const remaining = minMs - (performance.now() - started);
-  if (remaining > 0) {
-    const steps = 6;
-    for (let i = 1; i <= steps; i++) {
-      setProgress(0.75 + (0.25 * i) / steps);
-      await wait(remaining / steps);
-    }
+  window.clearTimeout(slowTimer);
+  window.clearInterval(loreTimer);
+  if (ok) {
+    setPhase('match');
+    p.status.textContent = LOADING_PHASES[PHASE_COUNT - 1];
+    setRule(p, 1, PHASE_COUNT, false);
+    await wait(REVEAL_HOLD_MS);
+    opts.onReveal?.();
   }
-  setProgress(1);
-  if (ok) setPhase('match');
   el.classList.add('is-leaving');
-  await wait(260);
+  await wait(LEAVE_MS);
   el.hidden = true;
   el.classList.remove('is-leaving');
   busy = false;

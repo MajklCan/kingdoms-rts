@@ -21,7 +21,7 @@
 .menu-bg {
   position: absolute;
   inset: -6%;
-  background: url("/assets/ui/menu-bg.jpg") center 38% / cover no-repeat;
+  background: url("/assets/ui/menu-bg.jpg") 60% 38% / cover no-repeat;
   will-change: transform, translate;
   animation: menu-drift 46s ease-in-out infinite alternate;
 }
@@ -52,6 +52,7 @@
 
 .menu-glow-core {
   position: absolute;
+  transition: translate 1.4s var(--ease-in-out);
   left: 50%;
   top: 30%;
   width: 60vmin;
@@ -60,6 +61,25 @@
   mix-blend-mode: screen;
   opacity: 0.85;
   background: radial-gradient(circle, rgba(255, 176, 84, 0.3), rgba(255, 150, 60, 0.1) 38%, transparent 66%);
+}
+
+/* Title: a dark wash behind the left column, the art keeps the right. */
+.menu-haze::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.9s var(--ease-out);
+  background: linear-gradient(90deg, rgba(5, 7, 10, 0.78) 0, rgba(5, 7, 10, 0.5) 24%, rgba(5, 7, 10, 0.12) 44%, transparent 58%);
+}
+
+.menu-root[data-screen="root"]:not([data-gate="armed"]) .menu-haze::after {
+  opacity: 1;
+}
+
+/* The hearth glow drifts right with the wordmark, off the column. */
+.menu-root[data-screen="root"]:not([data-gate="armed"]) .menu-glow-core {
+  translate: 9vw 0;
 }
 
 .menu-dust {
@@ -71,8 +91,9 @@
 
 .menu-corner {
   position: absolute;
-  width: 7.5rem;
-  height: 7.5rem;
+  width: 5.5rem;
+  height: 5.5rem;
+  transition: opacity var(--dur-slow) var(--ease-out);
   color: var(--gold-400);
   opacity: 0.5;
   background-color: currentColor;
@@ -85,6 +106,15 @@
 .menu-corner.tr { top: 1.4rem; right: 1.4rem; transform: scaleX(-1); }
 .menu-corner.bl { bottom: 1.4rem; left: 1.4rem; transform: scaleY(-1); }
 .menu-corner.br { bottom: 1.4rem; right: 1.4rem; transform: scale(-1, -1); }
+
+/* The title's left edge and footer belong to the UI. */
+.menu-root[data-screen="root"]:not([data-gate="armed"]) .menu-corner:is(.tl, .bl, .br) {
+  opacity: 0;
+}
+
+@media (max-width: 900px), (max-height: 560px) {
+  .menu-corner { display: none; }
+}
 
 /* Stage + screen transitions */
 .menu-stage {
@@ -111,8 +141,7 @@
   animation: screen-fade var(--dur-slow) var(--ease-out);
 }
 
-.menu-screen.is-entering > .menu-hero,
-.menu-screen.is-entering > .charter-list,
+.menu-screen.is-entering > .menu-col,
 .menu-screen.is-entering > .scroll-panel {
   animation: screen-rise var(--dur-slow) var(--ease-out);
 }
@@ -125,86 +154,6 @@
 @keyframes screen-rise {
   from { transform: translateY(0.8rem); }
   to { transform: none; }
-}
-
-/* Root screen */
-.menu-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  text-align: center;
-}
-
-.menu-crest {
-  width: 6.25rem;
-  height: auto;
-  filter: drop-shadow(0 0.6rem 1.4rem rgba(0, 0, 0, 0.6));
-  animation: crest-bob 6.5s ease-in-out infinite;
-}
-
-@keyframes crest-bob {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  50% { transform: translateY(-0.35rem) rotate(0.2deg); }
-}
-
-/* The one place the blackletter is allowed to be huge. */
-.menu-title {
-  margin: -0.4rem 0 0;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 5.75rem;
-  line-height: 0.9;
-  letter-spacing: 0.01em;
-  background: linear-gradient(180deg, #fff1bf 0%, #f0cf68 32%, #c9a227 54%, #8f6e16 76%, #e7cf7e 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  filter: drop-shadow(0 calc(2 * var(--px)) 0 #3a2806) drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.6));
-}
-
-.menu-subtitle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.9rem;
-  width: min(35rem, 86vw);
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--fs-sm);
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-  color: #f0e0b6;
-  text-shadow: 0 var(--px) 0 #000;
-}
-
-.menu-subtitle::before,
-.menu-subtitle::after {
-  content: "";
-  flex: 1;
-  height: calc(5 * var(--px));
-  background: var(--tex-rule) 0 0 / calc(8 * var(--px)) calc(5 * var(--px)) repeat-x;
-  image-rendering: pixelated;
-  -webkit-mask: linear-gradient(90deg, transparent, #000 70%);
-  mask: linear-gradient(90deg, transparent, #000 70%);
-}
-
-.menu-subtitle::after {
-  -webkit-mask: linear-gradient(270deg, transparent, #000 70%);
-  mask: linear-gradient(270deg, transparent, #000 70%);
-}
-
-.menu-lore {
-  max-width: 32rem;
-  margin: 0.1rem 0 0.5rem;
-  font-size: var(--fs-lg);
-  line-height: 1.45;
-  color: #e2d5b3;
-  font-style: italic;
-  text-shadow: 0 var(--px) 0 rgba(0, 0, 0, 0.8);
-  text-wrap: pretty;
 }
 
 /* Charters: heavy oak banners with iron end caps (slice 8 / 14) and a wax
@@ -241,6 +190,28 @@
 
 .charter:active {
   border-image-source: var(--tex-banner-pressed);
+}
+
+/* Continue: the one red seal banner, the action most players want. */
+.charter--continue {
+  min-height: calc(38 * var(--px));
+  border-image-source: var(--tex-banner-primary);
+}
+
+/* The bright hover seal drops light text under 3:1, so hover and focus keep
+   the base seal; the medallion gilds and the focus ring marks it. */
+.charter--continue:hover,
+.charter--continue:focus-visible {
+  border-image-source: var(--tex-banner-primary);
+}
+
+.charter--continue .charter-sub {
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #2a0508;
+}
+
+.charter--continue:active {
+  border-image-source: var(--tex-banner-primary-pressed);
 }
 
 .charter:active > * {
@@ -300,6 +271,9 @@
 }
 
 .charter-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: var(--fs-sm);
   font-style: italic;
   color: var(--parchment-200);
@@ -322,7 +296,7 @@
 .pill-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: calc(4 * var(--px));
   margin-top: 0.9rem;
 }
@@ -366,85 +340,11 @@
   transform: translateY(calc(2 * var(--px)));
 }
 
-/* Nameplate + build tag + hint */
-.nameplate {
-  position: fixed;
-  left: 2.2rem;
-  bottom: 2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.35rem 1.1rem 0.35rem 0.5rem;
-  background: var(--tex-wood-dark) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
-  background-clip: padding-box;
-  border: var(--px) solid transparent;
-  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.55));
-}
-
-.nameplate-avatar {
-  display: grid;
-  place-items: center;
-  width: calc(18 * var(--px));
-  height: calc(18 * var(--px));
-  color: #fde6cf;
-  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
-  image-rendering: pixelated;
-}
-
-.nameplate-avatar .icon {
-  width: 1.3rem;
-  height: 1.3rem;
-}
-
-.nameplate-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.nameplate-name {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--fs-md);
-  letter-spacing: 0.04em;
-  color: var(--gold-100);
-  text-shadow: 0 var(--px) 0 #000;
-}
-
-.nameplate-rank {
-  font-size: var(--fs-xs);
-  font-style: italic;
-  color: var(--text-muted);
-}
-
-.build-tag {
-  position: fixed;
-  right: 2.2rem;
-  bottom: 2rem;
-  font-family: var(--font-display);
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  text-shadow: 0 var(--px) 0 #000;
-}
-
-.menu-hint {
-  position: fixed;
-  left: 50%;
-  bottom: 1.4rem;
-  transform: translateX(-50%);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  text-shadow: 0 var(--px) 0 #000;
-  white-space: pre;
+/* Icon-only pill (fullscreen on the title). */
+.pill--icon {
+  justify-content: center;
+  min-width: calc(18 * var(--px));
+  padding: 0 0.6rem;
 }
 
 /* Back link */
@@ -460,9 +360,4 @@
   border-bottom: 2px solid currentColor;
   transform: rotate(45deg);
   margin-right: 0.15rem;
-}
-
-@media (max-height: 600px) {
-  .menu-crest { width: 5rem; }
-  .menu-lore { display: none; }
 }

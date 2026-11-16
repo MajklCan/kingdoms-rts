@@ -49,7 +49,7 @@ import { installRenderApi } from '../debug/render-api';
 import { installWindowApi } from '../debug/window-api';
 import type { MultiplayerSession } from '../net/session';
 import { AudioManager } from './audio/audio-manager';
-import { AMBIENCE_KEYS, MUSIC_KEYS, SFX_KEYS, UI_CLICK, UI_HOVER, VOICE_KEYS } from './audio/sound-map';
+import { AMBIENCE_KEYS, MATCH_START, MUSIC_KEYS, SFX_KEYS, UI_CLICK, UI_ENTER, UI_HOVER, VOICE_KEYS } from './audio/sound-map';
 import { CameraController, INITIAL_ZOOM } from './camera/camera-controller';
 import { PlayerCommands } from './commands/player-commands';
 import { CombatFeedback } from './effects/combat-feedback';
@@ -155,8 +155,9 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.layers = createWorldLayers(this);
     this.ctx = new SceneContext(this, this.layers, createSimWorld(Date.now() & 0xffff));
+    // Menu music waits for the title gate (src/ui/screens/menu-gate.ts): the
+    // first gesture unlocks audio, plays the entry stinger and swells it in.
     this.audio = new GameAudio(this.ctx);
-    this.audio.manager.playMenuMusic();
 
     bakeVoxelTextures(this);
     this.sprites = createSpriteRegistry(this);
@@ -319,6 +320,16 @@ export class GameScene extends Phaser.Scene {
 
   playUiHover(): void {
     this.audio?.playUi(UI_HOVER);
+  }
+
+  /** Title gate stinger (call after the audio unlock resolved). */
+  playUiEnter(): void {
+    this.audio?.playUi(UI_ENTER);
+  }
+
+  /** Fanfare as the loading cover lifts off a new match. */
+  playMatchStart(): void {
+    this.audio?.playUi(MATCH_START);
   }
 
   // ── Camera ────────────────────────────────────────────────────────────────

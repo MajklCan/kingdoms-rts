@@ -1,0 +1,366 @@
+/* Title screen and its entry gate. UI hugs the left edge and the bottom of
+   a centred 16:9 safe frame (1rem already scales with min(vw, 16:9 vh), see
+   base.css); the painted map, glow and embers own the rest. At 21:9 the
+   frame stays 16:9 and the backdrop fills the sides.
+
+   The gate (src/ui/screens/menu-gate.ts) runs on the same DOM: every element
+   sits in its final place from the first frame, the gate only moves the brand
+   with a transform and hides the rest, so the reveal never shifts layout. */
+
+.menu-screen.menu-screen--title {
+  --m: 2.25rem;
+  position: absolute;
+  inset: 0;
+  width: min(100%, 177.78vh);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 24.5rem) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "brand actions"
+    "col   ."
+    "foot  foot";
+  align-items: stretch;
+  column-gap: 2rem;
+  padding:
+    max(var(--m), env(safe-area-inset-top))
+    max(var(--m), env(safe-area-inset-right))
+    max(calc(var(--m) * 0.8), env(safe-area-inset-bottom))
+    max(var(--m), env(safe-area-inset-left));
+}
+
+/* Brand: crest and blackletter wordmark on one row. */
+.menu-brand {
+  grid-area: brand;
+  justify-self: start;
+}
+
+.menu-brand-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  transform-origin: 50% 50%;
+}
+
+.menu-crest {
+  width: 3.75rem;
+  height: auto;
+  filter: drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.6));
+}
+
+/* The one place the blackletter is allowed to be huge. */
+.menu-title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 4.5rem;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #fff1bf 0%, #f0cf68 32%, #c9a227 54%, #8f6e16 76%, #e7cf7e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 #3a2806) drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.6));
+}
+
+/* Column: charters, then the small riveted buttons. Scrolls rather than
+   overlapping the footer on a short window. */
+.menu-col {
+  grid-area: col;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  /* Room for the banner shadows and the focus ring inside the scroller. */
+  padding: 1rem 0.5rem 1rem 0.25rem;
+  margin-left: -0.25rem;
+  scrollbar-width: none;
+}
+
+.menu-screen--title .charter-list {
+  width: 100%;
+  margin: 0;
+}
+
+.menu-screen--title .pill-row {
+  margin: 0;
+}
+
+/* Three pills on one row under the charters. */
+.menu-screen--title .pill-row .pill {
+  padding-inline: 0.7rem;
+  letter-spacing: 0.1em;
+}
+
+.menu-actions {
+  grid-area: actions;
+  justify-self: end;
+  align-self: start;
+  display: flex;
+  gap: calc(4 * var(--px));
+}
+
+.menu-foot {
+  grid-area: foot;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.nameplate {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.35rem 1.1rem 0.35rem 0.5rem;
+  background: var(--tex-wood-dark) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
+  background-clip: padding-box;
+  border: var(--px) solid transparent;
+  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.55));
+}
+
+.nameplate-avatar {
+  display: grid;
+  place-items: center;
+  width: calc(18 * var(--px));
+  height: calc(18 * var(--px));
+  color: #fde6cf;
+  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+
+.nameplate-avatar .icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.nameplate-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.nameplate-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  letter-spacing: 0.04em;
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+.nameplate-rank {
+  font-size: var(--fs-xs);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.build-tag {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-shadow: 0 var(--px) 0 #000;
+}
+
+/* ---- Entry gate ------------------------------------------------------------ */
+
+.gate-btn {
+  position: absolute;
+  left: 50%;
+  top: 66%;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.75rem 1.5rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--gold-100);
+  text-shadow: 0 var(--px) 0 #000, 0 0 0.8rem rgba(0, 0, 0, 0.9);
+  background: none;
+  border: 0;
+  animation: gate-pulse 2.4s ease-in-out infinite alternate;
+}
+
+.gate-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+  text-decoration: underline max(1px, var(--px)) var(--focus-ring);
+  text-underline-offset: 0.55em;
+}
+
+.gate-btn[hidden] {
+  display: none;
+}
+
+/* A gilded hairline above the prompt. */
+.gate-btn::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -0.9rem;
+  width: 9rem;
+  height: max(1px, var(--px));
+  translate: -50% 0;
+  background: linear-gradient(90deg, transparent, var(--gold-400), transparent);
+}
+
+.gate-icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--gold-300);
+}
+
+@keyframes gate-pulse {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* Armed: the brand is moved to the centre, enlarged; everything else waits. */
+.menu-root[data-gate="armed"] .menu-brand-inner {
+  transform: translate(var(--gate-x, 0), var(--gate-y, 0)) scale(var(--gate-s, 1));
+}
+
+.menu-root[data-gate="armed"] .menu-crest {
+  animation: crest-bob 6.5s ease-in-out infinite;
+}
+
+.menu-root[data-gate="armed"] :is(.menu-col, .menu-foot, .menu-actions) {
+  visibility: hidden;
+}
+
+/* Entering: the brand glides to its corner, the column rises in. */
+.menu-root[data-gate="entering"] .menu-brand-inner {
+  transition: transform 700ms var(--ease-out);
+}
+
+.menu-root[data-gate="entering"] .gate-btn {
+  pointer-events: none;
+  animation: gate-out 160ms var(--ease-out) forwards;
+}
+
+.menu-root[data-gate="entering"] :is(.charter, .pill-row) {
+  animation: gate-rise 480ms var(--ease-out) both;
+  animation-delay: calc(300ms + var(--i, 4) * 70ms);
+}
+
+.menu-root[data-gate="entering"] :is(.menu-foot, .menu-actions) {
+  animation: gate-fade 400ms var(--ease-out) 650ms both;
+}
+
+@keyframes crest-bob {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-0.35rem) rotate(0.2deg); }
+}
+
+@keyframes gate-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes gate-rise {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes gate-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---- Small screens ---------------------------------------------------------- */
+
+/* Phones in landscape: compact brand, 44 px charters, no nameplate. */
+@media (max-height: 560px) {
+  .menu-screen.menu-screen--title {
+    --m: 1rem;
+    width: 100%;
+    grid-template-columns: minmax(0, min(26rem, 52vw)) minmax(0, 1fr);
+  }
+
+  .menu-screen--title .pill-row .pill {
+    padding-inline: 0.5rem;
+    letter-spacing: 0.06em;
+  }
+
+  .menu-crest {
+    display: none;
+  }
+
+  .menu-title {
+    font-size: 3rem;
+  }
+
+  .menu-col {
+    gap: 0.5rem;
+    padding-block: 0.5rem;
+  }
+
+  .menu-screen--title .charter-list {
+    gap: 6px;
+  }
+
+  .menu-screen--title .charter {
+    min-height: 44px;
+  }
+
+  .menu-screen--title .charter--continue {
+    min-height: 52px;
+  }
+
+  .menu-screen--title .charter-label {
+    font-size: var(--fs-lg);
+  }
+
+  .menu-foot .nameplate {
+    display: none;
+  }
+
+  .menu-foot {
+    justify-content: flex-end;
+  }
+}
+
+/* Portrait (the rotate card normally covers this): wordmark on top, the
+   column full width at the bottom. */
+@media (orientation: portrait) and (max-width: 700px) {
+  .menu-screen.menu-screen--title {
+    --m: 16px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "brand actions"
+      ".     ."
+      "col   col"
+      "foot  foot";
+    row-gap: 1rem;
+  }
+
+  .menu-col {
+    align-self: end;
+    padding-inline: 0;
+    margin-left: 0;
+  }
+
+  .menu-foot .nameplate {
+    display: none;
+  }
+
+  .menu-foot {
+    justify-content: flex-end;
+  }
+}

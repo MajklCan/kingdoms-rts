@@ -50,6 +50,8 @@ export type BarkResult = 'played' | 'busy' | 'none';
 export interface MusicTransition {
   fadeOut: number;
   delay?: number;
+  /** Fade-in of the first song only (default: the program's own). */
+  fadeIn?: number;
 }
 
 export class AudioManager {
@@ -121,6 +123,11 @@ export class AudioManager {
   toggleMuted(): boolean {
     this.setMuted(!this.settings.muted);
     return this.settings.muted;
+  }
+
+  /** Unlock audio from a user gesture (the title gate). True once it runs. */
+  unlock(): Promise<boolean> {
+    return this.engine ? this.engine.resume() : Promise.resolve(false);
   }
 
   // --- Music + ambience ---

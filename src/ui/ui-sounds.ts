@@ -18,7 +18,8 @@ const CLICK_DEDUPE_MS = 40;
 
 function pressable(target: EventTarget | null): HTMLElement | null {
   const el = (target as HTMLElement | null)?.closest<HTMLElement>(INTERACTIVE_SELECTOR) ?? null;
-  if (!el || (el as HTMLButtonElement).disabled || el.tagName === 'SELECT') return null;
+  // data-silent: the control plays its own sound (the title gate's stinger).
+  if (!el || (el as HTMLButtonElement).disabled || el.tagName === 'SELECT' || 'silent' in el.dataset) return null;
   return el;
 }
 

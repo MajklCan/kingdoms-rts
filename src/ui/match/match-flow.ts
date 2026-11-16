@@ -13,7 +13,7 @@ import type { AiDifficulty, SimWorld } from '../../sim/world';
 import { appState, setPhase, type MatchKind } from '../app-state';
 import { endMatch, getScene } from '../game-bridge';
 import { enterMenu, leaveMenu, type MenuScreenId } from '../screens/menu-shell';
-import { runLoading } from '../screens/loading';
+import { runLoading, type LoadingKind } from '../screens/loading';
 import { beginAutosaveSession, discardAutosave, endAutosaveSession } from '../saves/autosave';
 import { autosaveTitle } from '../saves/autosave-meta';
 import type { AutosaveRecord } from '../saves/autosave-store';
@@ -37,16 +37,28 @@ function beginMatch(kind: MatchKind): void {
   for (const fn of startListeners) fn(kind);
 }
 
-async function launch(kind: MatchKind, title: string, subtitle: string, task: () => void, minMs?: number): Promise<void> {
+interface LaunchSpec {
+  kind: MatchKind;
+  /** Eyebrow on the loading screen (a resumed autosave says "Continue"). */
+  loadingKind?: LoadingKind;
+  title: string;
+  subtitle: string;
+  mapId?: MapIdValue | null;
+  task: () => void;
+}
+
+async function launch(spec: LaunchSpec): Promise<void> {
   leaveMenu();
   const ok = await runLoading({
-    title,
-    subtitle,
-    minMs,
+    title: spec.title,
+    subtitle: spec.subtitle,
+    kind: spec.loadingKind ?? spec.kind,
+    mapId: spec.mapId ?? null,
     task: () => {
-      beginMatch(kind);
-      task();
+      beginMatch(spec.kind);
+      spec.task();
     },
+    onReveal: () => getScene()?.playMatchStart(),
   });
   if (!ok) {
     appState.matchKind = null;
@@ -55,34 +67,55 @@ async function launch(kind: MatchKind, title: string, subtitle: string, task: ()
   }
 }
 
+function missionMapId(missionId: string | null): MapIdValue | null {
+  return CAMPAIGN_MISSIONS.find((m) => m.id === missionId)?.mapId ?? null;
+}
+
 export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty): void {
   const map = MAP_DEFS.find((m) => m.id === mapId);
   const ageName = AGE_TABLE.find((a) => a.id === age)?.name ?? 'Dark Age';
   const diff = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-  void launch('skirmish', map?.name ?? 'Skirmish', `${ageName} · ${diff} AI`, () => {
-    const scene = getScene();
-    if (!scene) return;
-    scene.startNewGame(age, mapId, difficulty);
-    beginAutosaveSession(scene, { mapName: map?.name ?? null });
+  void launch({
+    kind: 'skirmish',
+    title: map?.name ?? 'Skirmish',
+    subtitle: `${ageName} · ${diff} AI`,
+    mapId,
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.startNewGame(age, mapId, difficulty);
+      beginAutosaveSession(scene, { mapName: map?.name ?? null });
+    },
   });
 }
 
 export function startCampaign(missionId: CampaignMissionIdValue): void {
   const mission = CAMPAIGN_MISSIONS.find((m) => m.id === missionId);
-  void launch('campaign', mission?.name ?? 'Campaign', mission?.description ?? '', () => {
-    const scene = getScene();
-    if (!scene) return;
-    scene.startCampaignMission(missionId);
-    beginAutosaveSession(scene, { mapName: null });
+  void launch({
+    kind: 'campaign',
+    title: mission?.name ?? 'Campaign',
+    subtitle: mission?.description ?? '',
+    mapId: mission?.mapId ?? null,
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.startCampaignMission(missionId);
+      beginAutosaveSession(scene, { mapName: null });
+    },
   });
 }
 
 export function loadSnapshot(snapshot: SavedGame, label: string): void {
-  void launch('loaded', label, 'Restoring a saved chronicle', () => {
-    const scene = getScene();
-    if (!scene) return;
-    scene.loadSaveSnapshot(snapshot, label);
-    beginAutosaveSession(scene, { mapName: null });
+  void launch({
+    kind: 'loaded',
+    title: label,
+    subtitle: '',
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.loadSaveSnapshot(snapshot, label);
+      beginAutosaveSession(scene, { mapName: null });
+    },
   });
 }
 
@@ -95,43 +128,54 @@ export function loadSnapshot(snapshot: SavedGame, label: string): void {
 export function continueAutosave(record: AutosaveRecord): void {
   const { meta, snapshot } = record;
   const title = autosaveTitle(meta);
-  void launch(meta.mode, title, 'Resuming your saved battle', () => {
-    const scene = getScene();
-    if (!scene) return;
-    try {
-      scene.loadSaveSnapshot(snapshot, title);
-    } catch (err) {
-      discardAutosave();
-      endMatch(scene); // swap the half-loaded world for an idle one
-      throw err;
-    }
-    scene.setGameSpeed(meta.gameSpeed);
-    scene.setPaused(true);
-    beginAutosaveSession(scene, { mapName: meta.mapName }, true);
+  void launch({
+    kind: meta.mode,
+    loadingKind: 'continue',
+    title,
+    subtitle: meta.mode === 'campaign' ? 'Campaign' : 'Skirmish',
+    mapId: meta.mode === 'campaign' ? missionMapId(meta.missionId) : (MAP_DEFS.find((m) => m.name === meta.mapName)?.id ?? null),
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      try {
+        scene.loadSaveSnapshot(snapshot, title);
+      } catch (err) {
+        discardAutosave();
+        endMatch(scene); // swap the half-loaded world for an idle one
+        throw err;
+      }
+      scene.setGameSpeed(meta.gameSpeed);
+      scene.setPaused(true);
+      beginAutosaveSession(scene, { mapName: meta.mapName }, true);
+    },
   });
 }
 
 export function loadLateGameTest(): void {
-  void launch('loaded', 'Late Game Test', 'Developer fixture', () => {
-    const scene = getScene();
-    if (!scene) return;
-    scene.loadLateGameTestSave();
-    beginAutosaveSession(scene, { mapName: null });
+  void launch({
+    kind: 'loaded',
+    title: 'Late Game Test',
+    subtitle: 'Developer fixture',
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.loadLateGameTestSave();
+      beginAutosaveSession(scene, { mapName: null });
+    },
   });
 }
 
 export function startMultiplayerMatch(world: SimWorld, localPlayerId: number): void {
   const session = appState.mpSession;
   if (!session) return;
-  void launch(
-    'multiplayer',
-    'Multiplayer',
-    `You command player ${localPlayerId}`,
-    () => {
+  void launch({
+    kind: 'multiplayer',
+    title: 'Multiplayer',
+    subtitle: `You command player ${localPlayerId}`,
+    task: () => {
       getScene()?.beginMultiplayerMatch(session, world, localPlayerId);
     },
-    450
-  );
+  });
 }
 
 /** Leave the running match and return to the title screens, in every mode

@@ -67,6 +67,7 @@ export function showMenuScreen(id: MenuScreenId, focus = true): void {
     prev.el.classList.remove('is-entering');
   }
   next.el.hidden = false;
+  if (root) root.dataset.screen = id;
   next.el.classList.remove('is-entering');
   // Force a reflow so the entrance animation restarts each time.
   void next.el.offsetWidth;

@@ -28,14 +28,19 @@ export const SFX_KEYS = [
   'command_move',
   'error',
   'alert',
+  'ui_enter',
+  'match_start',
 ] as const;
 
 export type SfxKey = (typeof SFX_KEYS)[number];
 
 // --- Music (public/assets/audio/music/<key>.ogg|.mp3) ---
 
-/** Single non-looping theme played on the title/menu screen. */
+/** Title theme: the first song after the entry gate. */
 export const MENU_MUSIC = 'menu_theme';
+
+/** Title screen program: alternates these (gapped), menu_theme first. */
+export const MENU_TRACKS = [MENU_MUSIC, 'menu_theme_2'] as const;
 
 /** Played (non-looping, with silence gaps via playGappedSingle) while the player
  *  lingers peacefully at their base - peaceful music breathes, song → quiet → song. */
@@ -66,7 +71,7 @@ export const INGAME_TRACKS = ['ingame_1', 'ingame_2'] as const;
  *  AMBIENCE_KEYS). Missing files load to nothing and every playback path no-ops
  *  on them - so partial sets are fine. */
 export const MUSIC_KEYS = [
-  MENU_MUSIC,
+  ...MENU_TRACKS,
   VILLAGE_MUSIC,
   ...BATTLE_TRACKS,
   ...INGAME_TRACKS,
@@ -186,6 +191,10 @@ export function combatSound(
 
 export const UI_CLICK: SfxConfig = { key: 'ui_click', minIntervalMs: 60, volume: 0.55 };
 export const UI_HOVER: SfxConfig = { key: 'ui_hover', minIntervalMs: 110, volume: 0.25 };
+/** Horn + bell stinger when the player passes the title gate. */
+export const UI_ENTER: SfxConfig = { key: 'ui_enter', minIntervalMs: 2000, volume: 0.8 };
+/** Short fanfare as the loading cover lifts off a new match. */
+export const MATCH_START: SfxConfig = { key: 'match_start', minIntervalMs: 2000, volume: 0.75 };
 export const UNIT_SELECT: SfxConfig = { key: 'unit_select', minIntervalMs: 80, volume: 0.63 };
 export const COMMAND_MOVE: SfxConfig = { key: 'command_move', minIntervalMs: 80, volume: 0.63 };
 export const ERROR: SfxConfig = { key: 'error', minIntervalMs: 200, volume: 0.75 };

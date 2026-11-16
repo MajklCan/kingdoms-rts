@@ -36,6 +36,7 @@ import { getConnectionLostRoot, resetConnectionLost } from './screens/connection
 import { getGameOverRoot, resetGameOver } from './screens/game-over';
 import { getLoadingRoot } from './screens/loading';
 import { bindMainMenu } from './screens/main-menu';
+import { armGate, gateWanted, skipGate } from './screens/menu-gate';
 import { bindMenuShell, enterMenu, getMenuRoot } from './screens/menu-shell';
 import { bindMultiplayerLobby } from './screens/multiplayer-lobby';
 import { bindSkirmishSetup } from './screens/skirmish-setup';
@@ -71,6 +72,8 @@ async function revealWhenReady(): Promise<void> {
   setPhase('menu');
   syncSceneKeyboard();
   enterMenu('root');
+  if (gateWanted()) armGate();
+  else skipGate();
   const splash = byId('boot-splash');
   if (splash) {
     splash.classList.add('is-done');

@@ -3,7 +3,7 @@
 import type { MusicProgram } from './music-player';
 import { pickNext } from './music-plan';
 import type { PeaceFlavor } from './music-director';
-import { BATTLE_TRACKS, INGAME_TRACKS, MENU_MUSIC, VILLAGE_MUSIC } from './sound-map';
+import { BATTLE_TRACKS, INGAME_TRACKS, MENU_MUSIC, MENU_TRACKS, VILLAGE_MUSIC } from './sound-map';
 
 export interface MusicPrograms {
   menu: MusicProgram;
@@ -18,11 +18,15 @@ export function buildPrograms(
 ): MusicPrograms {
   const present = (keys: readonly string[]): string[] => keys.filter(has);
   return {
-    // Menu: the theme, then a quiet stretch, then again.
+    // Menu: the main theme first, a quiet stretch, then the other title
+    // track, alternating.
     menu: {
       id: 'menu',
       kind: 'gapped',
-      pick: () => (has(MENU_MUSIC) ? MENU_MUSIC : null),
+      pick: (last) => {
+        if ((last === null || !MENU_TRACKS.some((k) => k === last)) && has(MENU_MUSIC)) return MENU_MUSIC;
+        return pickNext(present(MENU_TRACKS), last, rand);
+      },
       gap: [10, 18],
       fadeIn: 2.5,
       fadeOut: 2.5,
