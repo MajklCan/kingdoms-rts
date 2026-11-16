@@ -16,6 +16,7 @@ import type {
   LastSeenBuilding,
   MatchOutcome,
   PlayerMatchStats,
+  QueuedOrder,
 } from '../world';
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
@@ -116,6 +117,8 @@ export interface SavedGameV1 {
   /** Town center villager rallies (absent in older saves: none set). */
   villagerRallies?: Array<{ eid: number; x: number; y: number; targetEid: number; kind: number }>;
   paths: Array<{ eid: number; waypoints: GridPos[] }>;
+  /** Shift-queued orders per unit, next first (absent in older saves: none queued). */
+  orderQueues?: Array<{ eid: number; orders: QueuedOrder[] }>;
   movementStuck?: Array<{ eid: number; lastDist: number; waypointX: number; waypointY: number; noProgressTicks: number; cooldownTicks: number; attempts: number }>;
   formationSpeedCaps?: Array<{ eid: number; speedCap: number }>;
   cannonWindups?: Array<{ attackerEid: number; targetEid: number; ticksRemaining: number }>;

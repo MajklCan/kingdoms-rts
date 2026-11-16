@@ -17,8 +17,10 @@ export type SimInput =
   //    over the wire - a peer has no idea what the sender had selected. The
   //    network layer must translate these into their self-describing `cmd*`
   //    equivalents (which carry an explicit playerId + eid list) before sending.
-  | { type: 'moveSelected'; to: GridPos }
-  | { type: 'gatherSelected'; targetEid: number }
+  //    `queue` (Shift held): append the order to the units' order queue
+  //    instead of replacing what they are doing (input/order-queue.ts).
+  | { type: 'moveSelected'; to: GridPos; queue?: boolean }
+  | { type: 'gatherSelected'; targetEid: number; queue?: boolean }
   | { type: 'stopSelected' }
   | { type: 'toggleSelectedUnitStance' }
   | { type: 'setSelectedUnitStance'; stance: UnitStanceValue }
@@ -26,17 +28,17 @@ export type SimInput =
   | { type: 'adjustFormationMode'; delta: number }
   | { type: 'rotateSelectedFormation'; delta: number }
   | { type: 'reformSelectedFormation' }
-  | { type: 'attackSelected'; targetEid: number }
-  | { type: 'attackMoveSelected'; to: GridPos }
+  | { type: 'attackSelected'; targetEid: number; queue?: boolean }
+  | { type: 'attackMoveSelected'; to: GridPos; queue?: boolean }
   // ── Self-describing commands. Inside the sim these eids are local raw bitECS
   //    ids. MultiplayerSession converts them to deterministic NetIds before
   //    putting commands on the wire, then decodes them back before applyInput().
-  | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
-  | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
+  | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos; queue?: boolean }
+  | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number; queue?: boolean }
   | { type: 'cmdStop'; playerId: number; eids: number[] }
   | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
-  | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
-  | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos }
+  | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number; queue?: boolean }
+  | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos; queue?: boolean }
   | { type: 'cmdRemoveBuildings'; playerId: number; eids: number[] }
   | { type: 'cmdSetStance'; playerId: number; eids: number[]; stance: UnitStanceValue }
   | { type: 'cmdSetFormationMode'; playerId: number; eids: number[]; mode: number }
@@ -58,6 +60,20 @@ export type SimInput =
    *  most recently queued entry is cancelled. The cost is refunded either way. */
   | { type: 'cancelProduction'; atEid: number; playerId?: number; slot?: number }
   | { type: 'researchTech'; playerId: number; techId: TechIdValue };
+
+/**
+ * An order waiting behind what a unit is doing now (Shift + order). The unit
+ * starts it when its current order is finished (systems/order-queue.ts).
+ *
+ * A group move is resolved into each unit's own destination when it is
+ * queued (its formation slot), so every unit carries a plain tile; `speedCap`
+ * is the group's pace for a slot formation (0 = the unit's own speed).
+ * `targetEid` is a raw eid like every other entity reference in the world;
+ * entries naming a removed entity are dropped (core/entities.ts).
+ */
+export type QueuedOrder =
+  | { kind: 'move' | 'attackMove'; x: number; y: number; speedCap: number }
+  | { kind: 'attack' | 'gather'; targetEid: number };
 
 /**
  * A player's era (AgeId): the highest tech ring it has opened, minus one.
@@ -333,6 +349,11 @@ export interface SimWorld {
    * human player's new villagers pick work on their own (villager-assign.ts).
    */
   villagerRallies: Map<number, VillagerRally>;
+  /**
+   * Unit eid -> its Shift-queued orders, next one first. Never holds an
+   * empty list (the entry is deleted instead), so equal states hash equal.
+   */
+  orderQueues: Map<number, QueuedOrder[]>;
   /** Per-player era. ages[playerId] = AgeState. */
   ages: AgeState[];
   /** Per-player researched technologies. */

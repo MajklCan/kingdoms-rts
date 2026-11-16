@@ -45,6 +45,31 @@ describe('toSelfDescribingInput', () => {
     });
   });
 
+  it('carries the Shift-queue flag over, and leaves it out of plain orders', () => {
+    const { world, mine } = setup();
+    expect(toSelfDescribingInput(world, 1, { type: 'moveSelected', to: { x: 3, y: 4 }, queue: true })).toEqual({
+      type: 'cmdMove',
+      playerId: 1,
+      eids: mine,
+      to: { x: 3, y: 4 },
+      queue: true,
+    });
+    expect(toSelfDescribingInput(world, 1, { type: 'attackMoveSelected', to: { x: 1, y: 2 }, queue: true }))
+      .toMatchObject({ type: 'cmdAttackMove', queue: true });
+    expect(toSelfDescribingInput(world, 1, { type: 'attackSelected', targetEid: 99, queue: true }))
+      .toMatchObject({ type: 'cmdAttack', targetEid: 99, queue: true });
+    expect(toSelfDescribingInput(world, 1, { type: 'gatherSelected', targetEid: 42, queue: true }))
+      .toMatchObject({ type: 'cmdGather', targetEid: 42, queue: true });
+    // Not queued: the packet has no queue field at all, as before the flag existed.
+    for (const input of [
+      { type: 'moveSelected', to: { x: 3, y: 4 } },
+      { type: 'moveSelected', to: { x: 3, y: 4 }, queue: false },
+      { type: 'gatherSelected', targetEid: 42 },
+    ] satisfies SimInput[]) {
+      expect('queue' in toSelfDescribingInput(world, 1, input)).toBe(false);
+    }
+  });
+
   it('passes self-describing inputs through untouched', () => {
     const { world } = setup();
     const input: SimInput = { type: 'setArmyRallyPoint', playerId: 1, x: 2, y: 3 };

@@ -27,6 +27,8 @@ import { isEntityVisibleTo } from './visibility';
 
 const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
 const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
+/** An attack-move ends once the unit is this close to its goal with nothing to fight. */
+export const ATTACK_MOVE_ARRIVAL_RADIUS = 0.6;
 
 interface TargetScore {
   priority: number;
@@ -266,7 +268,7 @@ export function targetingSystem(world: SimWorld): void {
       const gx = AttackMoveGoal.x[eid];
       const gy = AttackMoveGoal.y[eid];
       const arrived =
-        Math.hypot(Position.x[eid] - gx, Position.y[eid] - gy) < 0.6;
+        Math.hypot(Position.x[eid] - gx, Position.y[eid] - gy) < ATTACK_MOVE_ARRIVAL_RADIUS;
       if (arrived) {
         AttackMoveGoal.active[eid] = 0;
       } else if (!world.paths.has(eid)) {
