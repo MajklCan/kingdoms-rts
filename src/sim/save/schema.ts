@@ -19,8 +19,9 @@ import type {
 } from '../world';
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
+import { migrateSaveV3ToV4 } from './migrate-tech-rings';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const LATE_GAME_TEST_SAVE_ID = 'late-game-test';
 
 export interface SavedMapV1 {
@@ -83,7 +84,7 @@ export interface SavedEntityV1 {
   dead?: true;
 }
 
-/** v1 layout. Only read by migrateSavedGame(); new saves are SavedGame (v3). */
+/** v1 layout. Only read by migrateSavedGame(); new saves are SavedGame (v4). */
 export interface SavedGameV1 {
   version: 1;
   label: string;
@@ -100,8 +101,10 @@ export interface SavedGameV1 {
   map: SavedMapV1;
   resources: number[][];
   population: Array<{ current: number; cap: number }>;
+  /** v1-v3: the age plus an advance in progress (progress -1 = none). */
   ages: Array<{ current: number; progress: number; totalTicks: number }>;
-  researchedTechs?: TechIdValue[][];
+  /** v1-v3 hold the age-era research ids (castle_age, lumber_huts, ...). */
+  researchedTechs?: string[][];
   revealedMapPlayers?: boolean[];
   humanPlayers?: number[];
   formationModes?: number[];
@@ -135,8 +138,19 @@ export interface SavedGameV3 extends Omit<SavedGameV2, 'version'> {
   mapSeed: number;
 }
 
+/**
+ * v4: the tech rings. Researches are the 17 ring researches (old ids mapped
+ * by save/migrate-tech-rings.ts) and an age is only the era, never in progress.
+ */
+export interface SavedGameV4 extends Omit<SavedGameV3, 'version' | 'ages' | 'researchedTechs' | 'campaign'> {
+  version: 4;
+  ages: Array<{ current: number }>;
+  researchedTechs: TechIdValue[][];
+  campaign?: SavedCampaignV4 | null;
+}
+
 /** The current save format. */
-export type SavedGame = SavedGameV3;
+export type SavedGame = SavedGameV4;
 
 export interface SavedAiPlayerStateV1 {
   plan: AiPlayerState['plan'];
@@ -162,7 +176,7 @@ export interface SavedCampaignV1 {
   name: string;
   description: string;
   briefing: string;
-  lockedTechs: TechIdValue[];
+  lockedTechs: string[];
   objectives: CampaignState['objectives'];
   trackedObjectiveEids: Record<string, number[]>;
   enemyAiMode: CampaignState['enemyAiMode'];
@@ -171,6 +185,10 @@ export interface SavedCampaignV1 {
   scriptedWaveCount?: number;
   zborovLinesTaken?: number;
   zborovForwardY?: number;
+}
+
+export interface SavedCampaignV4 extends Omit<SavedCampaignV1, 'lockedTechs'> {
+  lockedTechs: TechIdValue[];
 }
 
 function zeroStats(): PlayerMatchStats {
@@ -221,9 +239,25 @@ export function sanitizeSavedMatchStats(raw: unknown, players: number): PlayerMa
  * statistics; nothing in it lets us reconstruct them, so they start at zero
  * (peak population at the population saved). v1 and v2 predate the stored map
  * seed; it is derived from the map bytes instead (stable for that save).
+ * v1-v3 predate the tech rings (save/migrate-tech-rings.ts).
  * Returns null for unknown versions.
  */
-export function migrateSavedGame(save: SavedGameV1 | SavedGameV2 | SavedGameV3): SavedGame | null {
+export function migrateSavedGame(
+  save: SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4
+): SavedGame | null {
+  if (save.version === 4) {
+    const players = Array.isArray(save.resources) ? save.resources.length : 0;
+    return {
+      ...save,
+      matchStats: sanitizeSavedMatchStats(save.matchStats, players),
+      mapSeed: typeof save.mapSeed === 'number' ? normalizeMapSeed(save.mapSeed) : seedFromMap(save),
+    };
+  }
+  const v3 = migrateToV3(save);
+  return v3 ? migrateSaveV3ToV4(v3) : null;
+}
+
+function migrateToV3(save: SavedGameV1 | SavedGameV2 | SavedGameV3): SavedGameV3 | null {
   const players = Array.isArray(save.resources) ? save.resources.length : 0;
   if (save.version === 3) {
     return {
@@ -256,10 +290,12 @@ function seedFromMap(save: { map?: Partial<SavedMapV1> }): number {
 
 export function parseSavedGame(text: string): SavedGame | null {
   try {
-    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2 | SavedGameV3>;
-    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== SAVE_VERSION) return null;
+    const parsed = JSON.parse(text) as Partial<SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4>;
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== SAVE_VERSION) {
+      return null;
+    }
     if (!Array.isArray(parsed.entities) || !parsed.map) return null;
-    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2 | SavedGameV3);
+    return migrateSavedGame(parsed as SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4);
   } catch {
     return null;
   }

@@ -1,9 +1,10 @@
 /**
- * Walls: per-age tiers, line geometry and the age-up hp upgrade.
+ * Walls: research tiers, line geometry and the tier hp upgrade.
  *
  * A wall is a 1x1 WALL building per tile. Its cost, build time and hp come
- * from the owner's current age (defs.ts WALL_TIERS), so a palisade line
- * becomes stone when its owner reaches the Castle Age. Each tile blocks the
+ * from the owner's wall research (defs.ts WALL_TIERS: palisade, Stone Walls,
+ * Brick Walls), so a palisade line becomes stone when its owner researches
+ * Stone Walls. Each tile blocks the
  * shared walkability grid like any building footprint (markFootprintBlocked),
  * which is the EasyStar grid itself, so paths see a wall the tick it is placed
  * and the tile frees again in cleanupSystem when it falls.
@@ -16,13 +17,13 @@
 import { hasComponent } from 'bitecs';
 import { Building, ConstructionSite, Health, Owner } from '../components';
 import {
-  AgeId,
   BuildingDefId,
   type CostTuple,
   type WallTier,
   getBuildingDef,
   getWallTier,
 } from '../defs';
+import { wallTierIndex } from '../tech-tree';
 import { setFoundationMaxHp } from '../systems/construction';
 import { sortedEids } from './entities';
 import { buildingQuery } from './queries';
@@ -32,10 +33,11 @@ import type { SimWorld } from './types';
 export const WALL_LINE_MAX_TILES = 48;
 
 export function getPlayerWallTier(world: SimWorld, playerId: number): WallTier {
-  return getWallTier(world.ages[playerId]?.current ?? AgeId.DARK);
+  return getWallTier(wallTierIndex(world, playerId));
 }
 
-/** What `playerId` pays to place one `defId` right now (walls follow the age tier). */
+
+/** What `playerId` pays to place one `defId` right now (walls follow the research tier). */
 export function getBuildingCost(world: SimWorld, playerId: number, defId: number): CostTuple {
   if (defId === BuildingDefId.WALL) return getPlayerWallTier(world, playerId).cost;
   return getBuildingDef(defId)?.cost ?? { food: 0, wood: 0, gold: 0, stone: 0 };
@@ -47,7 +49,7 @@ export function getBuildingBuildTicks(world: SimWorld, playerId: number, defId: 
   return getBuildingDef(defId)?.buildTimeTicks ?? 0;
 }
 
-/** Display name for `defId` as `playerId` would build it now ("Stone Wall" in the Castle Age). */
+/** Display name for `defId` as `playerId` would build it now ("Stone Wall" after Stone Walls). */
 export function getBuildingDisplayName(world: SimWorld, playerId: number, defId: number): string {
   if (defId === BuildingDefId.WALL) return getPlayerWallTier(world, playerId).name;
   return getBuildingDef(defId)?.name ?? '';
@@ -96,7 +98,7 @@ export function applyWallTierToFoundation(eid: number, tier: WallTier): void {
 }
 
 /**
- * The owner reached a new age: every wall it owns moves up to the new tier's
+ * The owner researched a new wall tier: every wall it owns moves up to its
  * max hp. Finished walls gain the difference (damage stays damage);
  * foundations keep the damage they took below their build curve.
  */

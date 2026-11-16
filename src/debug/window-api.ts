@@ -34,7 +34,7 @@ import {
   WorksiteWorker,
 } from '../sim/components';
 import { BuildingDefId, UnitDefId, getBuildingDef, getUnitDef } from '../sim/defs';
-import { techDef } from '../sim/tech-tree';
+import { type TechIdValue, openRing, techDef } from '../sim/tech-tree';
 import type { SimInput, SimWorld } from '../sim/world';
 
 export interface WindowGameApi {
@@ -79,7 +79,8 @@ export interface WindowGameApi {
     y: number
   ): void;
   /** Queue an advance to the next age (cost spent immediately). */
-  advanceAge(playerId?: number): void;
+  /** Research `techId` (a TechId value such as 'archers') for `playerId` (default 1). */
+  research(techId: string, playerId?: number): void;
   /** Queue one villager at the local player's town center. */
   trainVillager(): void;
   /** Train a unit def at the first selected producer that can make it. */
@@ -169,8 +170,8 @@ export function installWindowApi(
       const defId = BuildingDefId[defName];
       world.inputs.push({ type: 'placeBuilding', defId, x, y, playerId: 1 });
     },
-    advanceAge(playerId = 1) {
-      world.inputs.push({ type: 'advanceAge', playerId });
+    research(techId, playerId = 1) {
+      world.inputs.push({ type: 'researchTech', playerId, techId: techId as TechIdValue });
     },
     trainVillager() {
       const tc = townCenterQuery(world.ecs).find((eid) => Owner.player[eid] === LOCAL_PLAYER_ID);
@@ -326,8 +327,7 @@ export function installWindowApi(
         ages: world.ages.map((age, playerId) => ({
           playerId,
           current: age?.current ?? 0,
-          progress: age?.progress ?? -1,
-          totalTicks: age?.totalTicks ?? 0,
+          openRing: openRing(world, playerId),
         })),
         researchedTechs: world.researchedTechs.map((set, playerId) => ({
           playerId,

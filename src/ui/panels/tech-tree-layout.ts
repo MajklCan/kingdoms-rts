@@ -1,34 +1,29 @@
 /**
- * Geometry of the radial technology chart. Pure math, no DOM.
+ * Geometry of the ring chart in the Technology panel. Pure math, no DOM.
  *
- * The realm's emblem sits in the middle and research spreads outward from
- * it: the further from the emblem, the deeper the research. Links come from
- * the real `requires` / `requiresAny` graph; only where a seal sits on the
- * chart is designed by hand (SLOTS), so that no link crosses another:
+ * The settlement sits in the middle. Around it lie the ring bands (I, II,
+ * III) as true circles, and the research paths run outward through them as
+ * straight rays, evenly spread. The chart is drawn at a comfortable size
+ * and is usually larger than the dialog: the panel pans and zooms over it
+ * (tech-tree-viewport.ts), it is never squeezed to fit.
  *
- *   Manor - Timber - BARRACKS - Archers
- *                  /    |              \
- *   Crop - Farm - Mills EMBLEM          CASTLE AGE - GUNPOWDER AGE
- *                       |              /
- *                     LUMBER - Mining
+ * Nothing here knows a research by name. A seal's place follows from its
+ * path (which ray), its ring (which band) and its parents (its order inside
+ * the band; a parent on another path becomes a curved cross link). A band
+ * is as wide as its fullest path needs. Names and costs sit beside the
+ * seals where they collide with nothing.
  *
- * The two early paths (military above, economy below) close a ring around
- * the "either path" mark and meet in the Castle Age seal. Age requirements
- * are not links: seals carry the numeral of the age they need.
- *
- * All lengths are in rem; the panel scales the whole board to fit. On a
- * very wide, short dialog (phone landscape) the `compact` shape squeezes the
- * rows together so the seals can be drawn larger.
+ * All lengths are in rem.
  */
 
-import { TechId, type TechIdValue } from '../../sim/tech-tree';
-
-/** What the layout needs to know about a research node. */
 export interface LayoutInput {
   id: string;
   path: string;
-  requires: readonly string[];
-  requiresAny: readonly (readonly string[])[];
+  ring: number;
+  /** Prerequisites: the parent on the same path first, then any on another path. */
+  parents: readonly string[];
+  /** Width of the name-and-cost label beside the seal. */
+  labelW?: number;
 }
 
 export interface Point {
@@ -36,186 +31,376 @@ export interface Point {
   y: number;
 }
 
+export interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export type LabelSide = 'below' | 'above' | 'right' | 'left';
+
 export interface PlacedNode extends Point {
   id: string;
+  path: string;
+  ring: number;
   /** Seal radius. */
   r: number;
-  /** Ages are the big seals. */
-  milestone: boolean;
-  /** Side of the seal the name and cost sit on: away from the emblem. */
-  label: 'above' | 'below';
+  /** Where the name and cost sit; text is centred above and below, and starts at the seal on the sides. */
+  side: LabelSide;
+  label: Box;
 }
 
 export interface PlacedLink {
-  /** Tech id, or CENTRE_ID for the emblem. */
+  /** Parent research, or CENTRE_ID for the settlement. */
   from: string;
   to: string;
-  /** Branch whose colour the link wears. */
-  branch: string;
-  /** Segment between the two seal rims. */
-  a: Point;
-  b: Point;
+  /** Path whose colour the link wears. */
+  path: string;
+  /** Rim to rim; a cross link (a parent on another path) bends along its ring. */
+  points: Point[];
+  cross: boolean;
 }
 
-/** Where a tech with several alternative paths says "either path". */
-export interface PlacedJunction extends Point {
-  to: string;
+export interface PlacedBand {
+  ring: number;
+  /** Radius of the band's outer edge. */
+  r: number;
+}
+
+/** The mark on a ring's outer edge that fills when a path is complete in that ring. */
+export interface PlacedGate extends Point {
+  ring: number;
+  path: string;
+}
+
+/** A path's ray from the settlement to its name banner beyond the outer ring. */
+export interface PlacedPath {
+  path: string;
+  from: Point;
+  to: Point;
+  /** Centre of the name banner. */
+  banner: Point;
+}
+
+/** Where a ring's name plate sits: on the band, just inside its outer edge, between two paths. */
+export interface PlacedRingLabel extends Point {
+  ring: number;
 }
 
 export interface TechLayout {
-  compact: boolean;
   width: number;
   height: number;
-  centre: Point & { r: number };
-  /** Radii of the faint guide circles around the emblem. */
-  rings: number[];
+  /** The settlement's medallion (`r`) in its clear disc (`well`), where ring I begins. */
+  centre: Point & { r: number; well: number };
+  bands: PlacedBand[];
   nodes: PlacedNode[];
   links: PlacedLink[];
-  junctions: PlacedJunction[];
+  gates: PlacedGate[];
+  paths: PlacedPath[];
+  ringLabels: PlacedRingLabel[];
 }
 
 export const CENTRE_ID = 'centre';
 
-const BOARD_W = 77;
-const CENTRE_X = 37.5;
-
-/** The two shapes of the chart: roomy (desktop) and compact (phone landscape). */
-interface Shape {
-  height: number;
-  emblemR: number;
-  /** Rows are squeezed towards the emblem's row by this factor. */
-  ySqueeze: number;
-}
-
-const ROOMY: Shape = { height: 31.5, emblemR: 4.25, ySqueeze: 1 };
-const COMPACT: Shape = { height: 26, emblemR: 3, ySqueeze: 0.7 };
-
-/** Dialogs wider than this (width / height) get the compact shape. */
-export const COMPACT_ASPECT = 2.8;
-
-const NODE_R = 2.75;
-const MILESTONE_R = 3.6;
-/** Clear parchment between a seal rim and the end of a link. */
+/** Radius of the clear disc around the settlement, where ring I begins. */
+const CENTRE_R = 6.6;
+const EMBLEM_R = 5.2;
+export const SEAL_R = 2.3;
+/** Room one seal takes along its ray: the seal and the air around it. */
+const SLOT = 6.4;
+/** Beyond the outer ring: the path banners, then a margin. */
+const BANNER_REACH = 2.9;
+const MARGIN = 7.2;
+/** Clear field between a seal rim and the end of a link. */
 const LINK_GAP = 0.35;
+const LABEL_GAP = 0.4;
+const LABEL_H = 2.6;
+const LABEL_AIR = 0.4;
+const DEFAULT_LABEL_W = 7;
+/** How far a gate sits to the side of its ray, along the ring edge. */
+const GATE_OFFSET = 3.6;
+const GATE_R = 0.75;
+export const RING_LABEL: Readonly<{ w: number; h: number; inset: number }> = { w: 12.5, h: 2.2, inset: 1.9 };
+export const BANNER: Readonly<{ w: number; h: number }> = { w: 7, h: 2 };
 
-/** Seal positions as offsets from the emblem. */
-const SLOTS: Partial<Record<TechIdValue, readonly [number, number]>> = {
-  [TechId.BARRACKS_PIKEMEN]: [0, -9.2],
-  [TechId.ARCHERS]: [11, -9.4],
-  [TechId.LUMBER_CREWS]: [0, 9.2],
-  [TechId.MINING_CREWS]: [11, 9.4],
-  [TechId.CASTLE_AGE]: [21.5, 0],
-  [TechId.GUNPOWDER_AGE]: [33, 0],
-  [TechId.HOUSING_I]: [-11, -9.4],
-  [TechId.HOUSING_II]: [-22.5, -7],
-  [TechId.MILLS]: [-11.5, 1],
-  [TechId.FARMS]: [-22, 4.6],
-  [TechId.FARMS_II]: [-32.5, 8.2],
-};
+/** Paths the chart knows take the rays in this order (arms next to mines, which it borrows from); others follow. */
+const PATH_ORDER = ['mines', 'arms', 'timber', 'walls', 'land'];
+/** Angle of the first ray in degrees, anticlockwise from east; the rest follow evenly. */
+const FIRST_RAY = -18;
 
-/** Research without a designed slot still shows: an extra row under the chart. */
-const SPARE_ROW_H = 9;
-const SPARE_STEP = 9;
-
-function isMilestone(node: LayoutInput): boolean {
-  return node.path === 'age';
+function at(centre: Point, r: number, deg: number): Point {
+  const t = (deg * Math.PI) / 180;
+  return { x: centre.x + r * Math.cos(t), y: centre.y - r * Math.sin(t) };
 }
 
-function place(nodes: readonly LayoutInput[], shape: Shape): PlacedNode[] {
-  const centreY = shape.height / 2;
-  const spares = nodes.filter((node) => !SLOTS[node.id as TechIdValue]);
-  return nodes.map((node) => {
-    const slot = SLOTS[node.id as TechIdValue];
-    const spare = spares.indexOf(node);
-    const dx = slot ? slot[0] : (spare - (spares.length - 1) / 2) * SPARE_STEP;
-    const dy = slot ? slot[1] * shape.ySqueeze : centreY + SPARE_ROW_H / 2 - 1;
-    const milestone = isMilestone(node);
-    return {
-      id: node.id,
-      x: CENTRE_X + dx,
-      y: centreY + dy,
-      r: milestone ? MILESTONE_R : NODE_R,
-      milestone,
-      label: dy < -3 ? 'above' : 'below',
-    };
+/** Each path's ray angle. */
+function assignRays(nodes: readonly LayoutInput[]): Map<string, number> {
+  const found = [...new Set(nodes.map((n) => n.path))];
+  const paths = [...PATH_ORDER.filter((p) => found.includes(p)), ...found.filter((p) => !PATH_ORDER.includes(p))];
+  return new Map(paths.map((path, i) => [path, FIRST_RAY + (i * 360) / paths.length]));
+}
+
+/** The angle for the ring name plates: the middle of the widest gap between rays, the one nearest the top. */
+function ladderAngle(rays: ReadonlyMap<string, number>): number {
+  const angles = [...rays.values()].map((a) => ((a % 360) + 360) % 360).sort((a, b) => a - b);
+  if (angles.length === 0) return 90;
+  let best = 90;
+  let bestScore = -Infinity;
+  angles.forEach((a, i) => {
+    const next = i + 1 < angles.length ? angles[i + 1]! : angles[0]! + 360;
+    const mid = (a + next) / 2;
+    const fromTop = Math.abs(((mid - 90 + 540) % 360) - 180);
+    const score = (next - a) * 10 - fromTop;
+    if (score > bestScore) {
+      bestScore = score;
+      best = mid;
+    }
   });
+  return best;
+}
+
+/** Seals of one path in one ring, parents before children. */
+function orderInBand(group: readonly LayoutInput[]): LayoutInput[] {
+  const depth = (node: LayoutInput, seen = new Set<string>()): number => {
+    if (seen.has(node.id)) return 0;
+    seen.add(node.id);
+    const inside = node.parents.map((id) => group.find((n) => n.id === id)).filter((n): n is LayoutInput => !!n);
+    return inside.reduce((max, parent) => Math.max(max, depth(parent, seen) + 1), 0);
+  };
+  return [...group].sort((a, b) => depth(a) - depth(b));
+}
+
+function intersects(a: Box, b: Box): boolean {
+  return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+}
+
+function boxHitsCircle(box: Box, c: Point, r: number): boolean {
+  const dx = c.x - Math.max(box.x0, Math.min(c.x, box.x1));
+  const dy = c.y - Math.max(box.y0, Math.min(c.y, box.y1));
+  return dx * dx + dy * dy < r * r;
+}
+
+function boxHitsPoint(box: Box, p: Point, pad: number): boolean {
+  return p.x > box.x0 - pad && p.x < box.x1 + pad && p.y > box.y0 - pad && p.y < box.y1 + pad;
+}
+
+function centred(c: Point, w: number, h: number): Box {
+  return { x0: c.x - w / 2, y0: c.y - h / 2, x1: c.x + w / 2, y1: c.y + h / 2 };
+}
+
+/** Points along a polyline, about `step` apart. */
+function sample(points: readonly Point[], step: number): Point[] {
+  const out: Point[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+    for (let k = 0; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
+}
+
+interface Obstacles {
+  width: number;
+  height: number;
+  circles: Array<Point & { r: number }>;
+  boxes: Box[];
+  points: Point[];
+}
+
+/** How badly a label box collides with what is already on the chart (0 = clear). */
+function collisions(box: Box, obstacles: Obstacles): number {
+  let score = 0;
+  if (box.x0 < 0.2 || box.y0 < 0.2 || box.x1 > obstacles.width - 0.2 || box.y1 > obstacles.height - 0.2) score += 100;
+  for (const c of obstacles.circles) if (boxHitsCircle(box, c, c.r + 0.3)) score += 10;
+  // Text needs air beside it: other boxes count from a little way off sideways.
+  const wide = { ...box, x0: box.x0 - LABEL_AIR, x1: box.x1 + LABEL_AIR };
+  for (const b of obstacles.boxes) if (intersects(wide, b)) score += 10;
+  for (const p of obstacles.points) if (boxHitsPoint(box, p, 0.25)) score += 1;
+  return score;
+}
+
+function labelBox(node: Point & { r: number }, side: LabelSide, w: number, shift: number): Box {
+  const off = node.r + LABEL_GAP;
+  if (side === 'below') return { x0: node.x - w / 2 + shift, y0: node.y + off, x1: node.x + w / 2 + shift, y1: node.y + off + LABEL_H };
+  if (side === 'above') return { x0: node.x - w / 2 + shift, y0: node.y - off - LABEL_H, x1: node.x + w / 2 + shift, y1: node.y - off };
+  if (side === 'right') return { x0: node.x + off, y0: node.y - LABEL_H / 2 + shift, x1: node.x + off + w, y1: node.y + LABEL_H / 2 + shift };
+  return { x0: node.x - off - w, y0: node.y - LABEL_H / 2 + shift, x1: node.x - off, y1: node.y + LABEL_H / 2 + shift };
+}
+
+interface LabelCandidate {
+  side: LabelSide;
+  shift: number;
+  /** How far this place is from the one the label would take on an empty chart. */
+  penalty: number;
 }
 
 /**
- * Parents of a node on the chart: its `requires`, the last research of each
- * `requiresAny` path, else the age before it, else the emblem (research that
- * needs only what the realm starts with).
+ * Places to try for a seal's label. Beside a flat ray the label belongs
+ * under the seal, else over it; beside a steep one it belongs at the seal's
+ * side, on the outer side of the chart first. Every side is also tried slid
+ * along the seal in small steps, each step a little less welcome.
  */
-function parentsOf(node: LayoutInput, shown: ReadonlyMap<string, LayoutInput>, order: readonly LayoutInput[]): string[] {
-  const parents = node.requires.filter((id) => shown.has(id));
-  for (const group of node.requiresAny) {
-    const last = [...group].reverse().find((id) => shown.has(id));
-    if (last && !parents.includes(last)) parents.push(last);
+function labelCandidates(node: Point & { r: number }, w: number, centre: Point): LabelCandidate[] {
+  const dx = node.x - centre.x;
+  const dy = node.y - centre.y;
+  const outer: LabelSide = dx >= -0.01 ? 'right' : 'left';
+  const inner: LabelSide = outer === 'right' ? 'left' : 'right';
+  const away: LabelSide = dy < 0 ? 'above' : 'below';
+  const toward: LabelSide = dy < 0 ? 'below' : 'above';
+  const flat = Math.abs(dy) < Math.abs(dx) * 0.6;
+  // [side, how unwelcome the side is]
+  const sides: Array<[LabelSide, number]> = flat
+    ? [
+        ['below', 0],
+        ['above', 0.5],
+        [outer, 4],
+        [inner, 4.5],
+      ]
+    : [
+        [outer, 0],
+        [inner, 0.5],
+        [away, 3],
+        [toward, 3.5],
+      ];
+  const out: LabelCandidate[] = [];
+  for (const [side, unwelcome] of sides) {
+    const reach = side === 'above' || side === 'below' ? w / 2 : LABEL_H / 2 + node.r * 0.5;
+    for (let step = -4; step <= 4; step++) out.push({ side, shift: (step * reach) / 4, penalty: unwelcome + Math.abs(step) * 0.6 });
   }
-  if (parents.length > 0) return parents;
-  if (isMilestone(node)) {
-    const earlier = order.slice(0, order.indexOf(node)).reverse().find(isMilestone);
-    if (earlier) return [earlier.id];
-  }
-  return [CENTRE_ID];
+  return out.sort((a, b) => a.penalty - b.penalty);
 }
 
-function rimToRim(from: Point & { r: number }, to: Point & { r: number }): { a: Point; b: Point } {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
-  const start = from.r + LINK_GAP;
-  const end = to.r + LINK_GAP;
-  return {
-    a: { x: from.x + ux * start, y: from.y + uy * start },
-    b: { x: to.x - ux * end, y: to.y - uy * end },
-  };
+/** The best place for one label given everything else on the chart: the clearest, then the most welcome. */
+function placeLabel(node: Point & { r: number }, w: number, centre: Point, obstacles: Obstacles): { side: LabelSide; label: Box; score: number } {
+  let best: { side: LabelSide; label: Box; score: number } | null = null;
+  for (const { side, shift } of labelCandidates(node, w, centre)) {
+    const label = labelBox(node, side, w, shift);
+    const score = collisions(label, obstacles);
+    if (!best || score < best.score) best = { side, label, score };
+    if (score === 0) break;
+  }
+  return best!;
 }
 
-export function layoutTechTree(nodes: readonly LayoutInput[], compact = false): TechLayout {
-  const shape = compact ? COMPACT : ROOMY;
-  const shown = new Map(nodes.map((n) => [n.id, n]));
-  const placed = place(nodes, shape);
-  const at = new Map<string, Point & { r: number }>(placed.map((p) => [p.id, p]));
-  const centre = { x: CENTRE_X, y: shape.height / 2, r: shape.emblemR };
-  at.set(CENTRE_ID, centre);
+/** Trim a polyline so it starts and ends `startGap` / `endGap` short of its end points. */
+function trimmed(points: readonly Point[], startGap: number, endGap: number): Point[] {
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const kept = points.filter((p) => Math.hypot(p.x - first.x, p.y - first.y) >= startGap && Math.hypot(p.x - last.x, p.y - last.y) >= endGap);
+  return kept.length >= 2 ? kept : [first, last];
+}
 
+export function layoutTechTree(nodes: readonly LayoutInput[]): TechLayout {
+  const rays = assignRays(nodes);
+  const lastRing = nodes.reduce((max, n) => Math.max(max, n.ring), 1);
+  const group = (path: string, ring: number): LayoutInput[] => orderInBand(nodes.filter((n) => n.path === path && n.ring === ring));
+
+  // A band is as wide as its fullest path needs.
+  const edges = [CENTRE_R];
+  for (let ring = 1; ring <= lastRing; ring++) {
+    let most = 1;
+    for (const path of rays.keys()) most = Math.max(most, group(path, ring).length);
+    edges.push(edges[edges.length - 1]! + most * SLOT);
+  }
+  const outer = edges[edges.length - 1]!;
+  const half = outer + MARGIN;
+  const mid: Point = { x: half, y: half };
+  const centre = { ...mid, r: EMBLEM_R, well: CENTRE_R };
+
+  const polar = new Map<string, { r: number; deg: number }>();
+  for (const [path, deg] of rays) {
+    for (let ring = 1; ring <= lastRing; ring++) {
+      const seals = group(path, ring);
+      const inner = edges[ring - 1]!;
+      const width = edges[ring]! - inner;
+      seals.forEach((node, i) => polar.set(node.id, { r: inner + ((i + 0.5) / seals.length) * width, deg }));
+    }
+  }
+  const spot = new Map<string, Point>();
+  for (const [id, p] of polar) spot.set(id, at(mid, p.r, p.deg));
+
+  const shown = new Set(nodes.map((n) => n.id));
   const links: PlacedLink[] = [];
-  const junctions: PlacedJunction[] = [];
   for (const node of nodes) {
-    const to = at.get(node.id);
-    if (!to) continue;
-    const parents = parentsOf(node, shown, nodes);
-    for (const parentId of parents) {
-      const from = at.get(parentId);
+    const to = spot.get(node.id);
+    const here = polar.get(node.id);
+    if (!to || !here) continue;
+    const parents = node.parents.filter((id) => shown.has(id));
+    const main = parents[0];
+    const start = main ? spot.get(main)! : at(mid, EMBLEM_R, here.deg);
+    links.push({ from: main ?? CENTRE_ID, to: node.id, path: node.path, cross: false, points: trimmed([start, to], main ? SEAL_R + LINK_GAP : LINK_GAP, SEAL_R + LINK_GAP) });
+    for (const other of parents.slice(1)) {
+      const from = polar.get(other);
+      const fromPath = nodes.find((n) => n.id === other)?.path ?? node.path;
       if (!from) continue;
-      const parentPath = shown.get(parentId)?.path;
-      // A link into an age wears the colour of the path that leads there.
-      const branch = isMilestone(node) && parentPath && parentPath !== 'age' ? parentPath : node.path;
-      links.push({ from: parentId, to: node.id, branch, ...rimToRim(from, to) });
-    }
-    if (node.requiresAny.length > 1) {
-      const ends = parents.map((id) => at.get(id)).filter((p): p is Point & { r: number } => !!p);
-      if (ends.length > 1) {
-        junctions.push({
-          to: node.id,
-          x: ends.reduce((sum, p) => sum + p.x, 0) / ends.length,
-          y: ends.reduce((sum, p) => sum + p.y, 0) / ends.length,
-        });
-      }
+      // Along the ring: sweep the angle the short way round, easing the radius across.
+      const sweep = ((here.deg - from.deg + 540) % 360) - 180;
+      const steps = 40;
+      const curve: Point[] = [];
+      for (let k = 0; k <= steps; k++) curve.push(at(mid, from.r + ((here.r - from.r) * k) / steps, from.deg + (sweep * k) / steps));
+      links.push({ from: other, to: node.id, path: fromPath, cross: true, points: trimmed(curve, SEAL_R + LINK_GAP, SEAL_R + LINK_GAP + 0.4) });
     }
   }
 
-  // Guide circles through the first research and through the first age.
-  const ringThrough = (id: TechIdValue): number[] => {
-    const p = at.get(id);
-    return p && shown.has(id) ? [Math.hypot(p.x - centre.x, p.y - centre.y)] : [];
+  const bands: PlacedBand[] = [];
+  for (let ring = 1; ring <= lastRing; ring++) bands.push({ ring, r: edges[ring]! });
+
+  // Gates on every edge that leads to a further ring, a short way anticlockwise of the ray.
+  const gates: PlacedGate[] = [];
+  for (let ring = 1; ring < lastRing; ring++) {
+    for (const [path, deg] of rays) {
+      if (group(path, ring).length === 0) continue;
+      const r = edges[ring]!;
+      gates.push({ ring, path, ...at(mid, r, deg + (GATE_OFFSET / r) * (180 / Math.PI)) });
+    }
+  }
+
+  const paths: PlacedPath[] = [...rays].map(([path, deg]) => ({
+    path,
+    from: at(mid, EMBLEM_R, deg),
+    to: at(mid, outer + BANNER_REACH - BANNER.h / 2, deg),
+    banner: at(mid, outer + BANNER_REACH, deg),
+  }));
+
+  const ladder = ladderAngle(rays);
+  const ringLabels: PlacedRingLabel[] = [];
+  for (let ring = 1; ring <= lastRing; ring++) ringLabels.push({ ring, ...at(mid, edges[ring]! - RING_LABEL.inset, ladder) });
+
+  const obstacles: Obstacles = {
+    width: half * 2,
+    height: half * 2,
+    circles: [...[...spot.values()].map((p) => ({ ...p, r: SEAL_R })), { ...mid, r: CENTRE_R - 0.6 }],
+    boxes: [
+      ...gates.map((g) => centred(g, GATE_R * 2.6, GATE_R * 2.6)),
+      ...ringLabels.map((l) => centred(l, RING_LABEL.w, RING_LABEL.h)),
+      ...paths.map((p) => centred(p.banner, BANNER.w, BANNER.h)),
+    ],
+    points: [...links.flatMap((link) => sample(link.points, 0.5)), ...paths.flatMap((p) => sample([p.from, p.to], 0.5))],
   };
-  const rings = [...ringThrough(TechId.BARRACKS_PIKEMEN), ...ringThrough(TechId.CASTLE_AGE)];
-  const height = shape.height + (placed.some((p) => p.y > shape.height) ? SPARE_ROW_H : 0);
-  return { compact, width: BOARD_W, height, centre, rings, nodes: placed, links, junctions };
+
+  // Labels: inner seals first, each where it is clearest. Then a few rounds in which every label is
+  // placed again with all the others in view, so an early choice can give way.
+  const fixed = obstacles.boxes;
+  const byReach = [...nodes].sort((a, b) => (polar.get(a.id)?.r ?? 0) - (polar.get(b.id)?.r ?? 0)).filter((n) => spot.has(n.id));
+  const labels = new Map<string, { side: LabelSide; label: Box; score: number }>();
+  const place = (node: LayoutInput): void => {
+    const others = [...labels].filter(([id]) => id !== node.id).map(([, l]) => l.label);
+    labels.set(node.id, placeLabel({ ...spot.get(node.id)!, r: SEAL_R }, node.labelW ?? DEFAULT_LABEL_W, mid, { ...obstacles, boxes: [...fixed, ...others] }));
+  };
+  for (const node of byReach) place(node);
+  for (let round = 0; round < 6 && [...labels.values()].some((l) => l.score > 0); round++) {
+    for (const node of byReach) place(node);
+  }
+  const placed: PlacedNode[] = [];
+  for (const node of nodes) {
+    const p = spot.get(node.id);
+    const found = labels.get(node.id);
+    if (p && found) placed.push({ id: node.id, path: node.path, ring: node.ring, x: p.x, y: p.y, r: SEAL_R, side: found.side, label: found.label });
+  }
+
+  return { width: half * 2, height: half * 2, centre, bands, nodes: placed, links, gates, paths, ringLabels };
 }
 
 export type Direction = 'up' | 'down' | 'left' | 'right';

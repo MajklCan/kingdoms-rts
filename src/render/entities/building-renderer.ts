@@ -20,8 +20,9 @@ import {
   Producer,
   ResourceWorksite,
 } from '@sim/components';
-import { AgeId, BUILDING_TABLE, BuildingDefId, getUnitDef, type BuildingDef } from '@sim/defs';
+import { BUILDING_TABLE, BuildingDefId, getUnitDef, type BuildingDef } from '@sim/defs';
 import {
+  buildingEraFor,
   buildingQuery,
   getPlayerVisibility,
   getWorksiteWorkerSlots,
@@ -153,7 +154,7 @@ export class BuildingRenderer {
         : undefined;
       const ref = this.sprites.building({
         defId,
-        age: world.ages[playerId]?.current ?? AgeId.DARK,
+        age: buildingEraFor(world, playerId, defId),
         playerId,
         wallMask: defId === BuildingDefId.WALL ? this.wallMask(eid) : undefined,
         farmStage: defId === BuildingDefId.FARM && !isFoundation ? this.farmStage(eid) : undefined,

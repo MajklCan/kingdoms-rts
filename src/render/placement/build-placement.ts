@@ -17,7 +17,7 @@ import { ISO } from '../../config';
 import { Resource } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import { findResourceAt, getBuildingCost, isPlacementInSight, wallLineTiles } from '@sim/world';
+import { buildingEraFor, findResourceAt, getBuildingCost, isPlacementInSight, wallLineTiles } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -563,7 +563,8 @@ export class BuildPlacement {
     valid: boolean
   ): boolean {
     if (!this.sprites) return false;
-    const age = this.ctx.world.ages[playerId]?.current ?? 0;
+    // Walls preview their research tier, other buildings the owner's era.
+    const age = buildingEraFor(this.ctx.world, playerId, defId);
     const ref = this.sprites.building({ defId, age, playerId });
     if (!ref) return false;
     let sprite = this.ghostSprite;

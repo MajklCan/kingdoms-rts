@@ -122,7 +122,8 @@ export {
   tileVisibilityIndex,
   updatePlayerVisibility,
 } from './systems/visibility';
-export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
+export { applyResearchTech, syncPlayerEra } from './systems/tech-rings';
+export { buildingEraFor } from './core/era';
 export { getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
 export { canPlaceBuildingAt, isPlacementInSight } from './input/buildings';
 export { aiPlayerDifficulty, aiSettingsFor, createAiPlayerState, normalizeAiDifficulty } from './ai/difficulty';

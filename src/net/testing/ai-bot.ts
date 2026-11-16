@@ -14,7 +14,7 @@
 
 import { hasComponent } from 'bitecs';
 import { Position } from '@sim/components';
-import { AGE_TABLE, canAfford, getAgeDef, getBuildingDef, getUnitDef, spend } from '@sim/defs';
+import { canAfford, getBuildingDef, getUnitDef, spend } from '@sim/defs';
 import { techDef, type TechIdValue } from '@sim/tech-tree';
 import type { GridPos } from '@sim/pathfinding';
 import { isMovableEntity } from '@sim/input/formation';
@@ -32,8 +32,7 @@ import {
 type Effect =
   | { kind: 'train'; atEid: number; defId: number }
   | { kind: 'place'; defId: number; x: number; y: number }
-  | { kind: 'research'; techId: TechIdValue }
-  | { kind: 'advance' };
+  | { kind: 'research'; techId: TechIdValue };
 
 interface Issued {
   input: SimInput;
@@ -53,7 +52,6 @@ interface Rect {
 class Undo {
   private bank: Int32Array | null = null;
   private bankCopy: Int32Array | null = null;
-  private age: { current: number; progress: number; totalTicks: number } | null = null;
   private readonly queues = new Map<number, number[] | undefined>();
   private readonly techs: TechIdValue[] = [];
 
@@ -66,8 +64,6 @@ class Undo {
       this.bank = bank;
       this.bankCopy = Int32Array.from(bank);
     }
-    const age = world.ages[playerId];
-    if (age) this.age = { current: age.current, progress: age.progress, totalTicks: age.totalTicks };
   }
 
   touchQueue(eid: number): number[] {
@@ -90,8 +86,6 @@ class Undo {
 
   restore(): void {
     if (this.bank && this.bankCopy) this.bank.set(this.bankCopy);
-    const age = this.world.ages[this.playerId];
-    if (age && this.age) Object.assign(age, this.age);
     for (const [eid, original] of this.queues) {
       const live = this.world.productionQueues.get(eid);
       if (original === undefined) this.world.productionQueues.delete(eid);
@@ -220,16 +214,6 @@ export class CommandBot {
         undo.addTech(effect.techId);
         return;
       }
-      case 'advance': {
-        const age = world.ages[this.playerId];
-        if (!age || age.progress >= 0 || age.current >= AGE_TABLE.length - 1) return;
-        const next = getAgeDef(age.current + 1);
-        if (!next || !canAfford(bank, next.advanceCost)) return;
-        spend(bank, next.advanceCost);
-        age.progress = 0;
-        age.totalTicks = next.advanceTicks;
-        return;
-      }
     }
   }
 
@@ -252,10 +236,6 @@ export class CommandBot {
     },
     researchTech: (world, playerId, techId) => {
       this.commit(world, { type: 'researchTech', playerId, techId }, { kind: 'research', techId });
-      return true;
-    },
-    advanceAge: (world, playerId) => {
-      this.commit(world, { type: 'advanceAge', playerId }, { kind: 'advance' });
       return true;
     },
     move: (world, eid, to) => {

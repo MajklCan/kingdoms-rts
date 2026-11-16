@@ -68,8 +68,10 @@ import {
   getCampaignMission,
   getPop,
   getResources,
+  getTechRings,
   getTechTree,
   type CampaignMissionInfo,
+  type TechRingsView,
   type TechTreeNode,
 } from './hud/player-queries';
 import { getSelectionInfo, getStatusInfo, type SelectionInfo } from './hud/selection-info';
@@ -500,6 +502,11 @@ export class GameScene extends Phaser.Scene {
 
   getTechTree(playerId = this.ctx.perspectivePlayerId): TechTreeNode[] {
     return getTechTree(this.world, playerId);
+  }
+
+  /** The tech rings: which is open and the paths maxed in each. */
+  getTechRings(playerId = this.ctx.perspectivePlayerId): TechRingsView {
+    return getTechRings(this.world, playerId);
   }
 
   researchTech(techId: TechIdValue, playerId = this.ctx.perspectivePlayerId): void {

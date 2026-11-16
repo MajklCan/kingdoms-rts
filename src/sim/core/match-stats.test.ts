@@ -311,7 +311,7 @@ describe('match statistics', () => {
     world.matchStats[P1]!.gathered = [10, 20, 30, 40];
     world.matchStats[P2]!.buildingsRazed = 2;
     const save = JSON.parse(JSON.stringify(serializeSimWorld(world, 'stats'))) as ReturnType<typeof serializeSimWorld>;
-    expect(save.version).toBe(3);
+    expect(save.version).toBe(4);
 
     const restored = createSimWorld(1);
     loadSimWorldSnapshot(restored, save);
@@ -319,9 +319,14 @@ describe('match statistics', () => {
     expect(restored.matchStats[P2]!.buildingsRazed).toBe(2);
 
     const { matchStats: _dropped, ...rest } = save;
-    const v1: SavedGameV1 = { ...rest, version: 1 };
+    const v1: SavedGameV1 = {
+      ...rest,
+      version: 1,
+      ages: save.ages.map((age) => ({ current: age.current, progress: -1, totalTicks: 0 })),
+      campaign: null,
+    };
     const migrated = migrateSavedGame(v1);
-    expect(migrated?.version).toBe(3);
+    expect(migrated?.version).toBe(4);
     const fromV1 = createSimWorld(1);
     loadSimWorldSnapshot(fromV1, v1);
     expect(fromV1.matchStats[P1]!.unitsTrained).toBe(0);

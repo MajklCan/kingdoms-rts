@@ -1,10 +1,11 @@
 """HUD icon sheets: coloured, shaded pixel-art icons for the resource bar,
-the command grid, the production queue, the tech tree and the selection
-sheet.
+the command grid, the production queue, the technology panel and the
+selection sheet.
 
     resources (20, and 16 for inline costs): icons_resources.py
-    commands, tech and stats (30 / 16):       icons_commands.py, drawn with iconkit.py
+    commands and stats (30 / 16):             icons_commands.py, drawn with iconkit.py
     buildings (30):                           icons_buildings.py, one symbol each
+    research (30):                            icons_tech.py, one symbol each
     construction site and units (30):         icon_pictures.py, from the style A atlas
                                               and the voxel unit puppets
 
@@ -36,6 +37,7 @@ from icon_pictures import foundation_icon, unit_icons  # noqa: E402
 from icons_buildings import building_icons  # noqa: E402
 from icons_commands import COMMAND_ICONS, STAT_ICONS  # noqa: E402
 from icons_resources import RESOURCE_ICONS  # noqa: E402
+from icons_tech import tech_icons  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT_DIR = os.path.join(ROOT, 'public', 'assets', 'ui', 'icons')
@@ -54,12 +56,12 @@ def collect() -> dict[str, dict[int, np.ndarray]]:
         icons[f'r-{name}-s'] = {s: render(fn(16), s) for s in (1, 2)}
     for name, fn in COMMAND_ICONS.items():
         ic = fn()
-        key = name if name.startswith('tech-') else f'c-{name}'
-        icons[key] = {s: render(ic, s) for s in (1, 2)}
+        icons[f'c-{name}'] = {s: render(ic, s) for s in (1, 2)}
     for name, fn in STAT_ICONS.items():
         ic = fn()
         icons[name] = {s: render(ic, s) for s in (1, 2)}
     icons.update(building_icons())
+    icons.update(tech_icons())
     icons.update(foundation_icon())
     icons.update(unit_icons())
     return icons

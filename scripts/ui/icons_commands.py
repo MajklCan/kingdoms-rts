@@ -1,4 +1,4 @@
-"""Command, tech and stat icons for gen_icons.py, drawn on a 30 unit grid
+"""Command and stat icons for gen_icons.py, drawn on a 30 unit grid
 (stat icons on 16). Steel, wood, leather, red and gold, lit from the top left."""
 from __future__ import annotations
 
@@ -222,76 +222,6 @@ def research() -> Icon:
 
 
 # ---------------------------------------------------------------------------
-# tech (30)
-# ---------------------------------------------------------------------------
-
-def tech_axe() -> Icon:
-    ic = Icon(30)
-    ic.ellipse(16, 25.4, 10.5, 3.4, 'cut', shade='sphere', level=0.6, edge=True)
-    ic.ellipse(16, 24.6, 7.0, 1.8, 'cut', shade='flat', level=0.82)
-    ic.capsule((8.0, 27.6), (19.6, 5.0), 1.3, 'wood', level=0.58, edge=True)
-    blade = [(16.0, 4.4), (21.4, 6.8), (27.6, 2.6), (28.4, 12.6), (22.6, 10.6), (17.2, 11.6)]
-    ic.poly(blade, 'steel', shade='bevel', level=0.64, bevel=1.6, edge=True)
-
-    def edge_hi(x, y):
-        return (np.abs(x - 27.4) < 0.5) & (y > 4.0) & (y < 11.0)
-    ic.detail(edge_hi, '#e8eef3')
-    return ic
-
-
-def tech_pick() -> Icon:
-    ic = Icon(30)
-    ic.poly([(16.6, 28.6), (18.0, 22.0), (23.4, 19.4), (28.4, 22.6), (28.6, 28.6)], 'stone', shade='bevel', level=0.58, bevel=1.8, edge=True)
-    ic.circle(22.4, 24.4, 1.4, 'gold', level=0.8)
-    ic.circle(25.6, 26.4, 1.1, 'gold', level=0.8)
-    ic.capsule((5.4, 27.4), (19.4, 8.4), 1.3, 'wood', level=0.58, edge=True)
-    head = sdf_ring(19.0, 20.6, 15.0, 1.6, math.radians(232), math.radians(318))
-    ic.add(Prim(head, 'steel', 'bevel', level=0.66, bevel=1.0, edge=True))
-    return ic
-
-
-def tech_castle() -> Icon:
-    ic = Icon(30)
-    # side towers
-    for x0 in (2.4, 21.0):
-        ic.rect(x0, 11.6, x0 + 6.6, 28.6, 'stone', shade='bevel', level=0.6, bevel=1.2, edge=True)
-        ic.poly([(x0 - 0.8, 12.0), (x0 + 3.3, 3.4), (x0 + 7.4, 12.0)], 'red', shade='bevel', level=0.58, bevel=1.6, edge=True)
-    # keep with merlons
-    ic.rect(8.4, 9.6, 21.6, 28.6, 'stone', shade='bevel', level=0.66, bevel=1.4, edge=True)
-    for x in (8.4, 12.8, 17.2):
-        ic.rect(x, 6.6, x + 3.0, 9.8, 'stone', shade='bevel', level=0.7, bevel=0.8, edge=True)
-    ic.poly([(12.4, 28.6), (12.4, 22.6), (15.0, 20.0), (17.6, 22.6), (17.6, 28.6)], 'wood', shade='flat', level=0.25, edge=True)
-    ic.rect(14.2, 12.6, 15.8, 16.6, 'iron', shade='flat', level=0.1)
-    # banner
-    ic.capsule((15.0, 6.8), (15.0, 0.8), 0.5, 'wood', level=0.5)
-    ic.poly([(15.4, 0.8), (21.0, 2.0), (15.4, 4.2)], 'blue', shade='flat', level=0.66, edge=True)
-    return ic
-
-
-def tech_gunpowder() -> Icon:
-    ic = Icon(30)
-    # cannonballs
-    for (x, y) in [(22.4, 25.6), (26.6, 25.8), (24.4, 22.0)]:
-        ic.circle(x, y, 2.4, 'iron', level=0.7, edge=True)
-    # keg: barrel body, iron hoops, top lid
-    body = lambda x, y: np.maximum(np.abs(x - 11.0) - (7.0 - ((y - 17.5) / 9.0) ** 2 * 1.4), np.abs(y - 17.5) - 9.0)  # noqa: E731
-    ic.add(Prim(body, 'wood', 'cyl', level=0.6, seg=(11.0, 8.5, 11.0, 26.5, 7.0, 7.0), edge=True))
-    for y in (11.6, 23.4):
-        ic.rect(4.4, y - 1.0, 17.6, y + 1.0, 'iron', shade='flat', level=0.6)
-
-    def staves(x, y):
-        return ((np.abs(((x - 11.0) / 2.6) % 1.0 - 0.5) < 0.09) & (np.abs(y - 17.5) < 8.6))
-    ic.detail(staves, '#4f3018')
-    ic.ellipse(11.0, 8.6, 6.0, 1.8, 'cut', shade='flat', level=0.6, edge=True)
-    # fuse and spark
-    ic.capsule((11.6, 8.0), (16.4, 3.6), 0.6, 'linen', level=0.4)
-    ic.circle(17.2, 3.0, 1.8, 'ember', shade='sphere', level=0.8)
-    for (dx, dy) in [(2.6, -1.4), (2.2, 1.6), (-0.4, -2.6), (3.2, 0.2)]:
-        ic.circle(17.2 + dx, 3.0 + dy, 0.7, 'ember', shade='none', level=0.95)
-    return ic
-
-
-# ---------------------------------------------------------------------------
 # stat icons (16), shown on parchment in the selection sheet
 # ---------------------------------------------------------------------------
 
@@ -342,7 +272,6 @@ COMMAND_ICONS = {
     'advance-age': advance_age, 'rally': rally, 'demolish': demolish, 'hold': hold, 'auto-defend': auto_defend,
     'formation-free': formation_free, 'formation-line': formation_line, 'formation-compact': formation_compact,
     'rotate-ccw': rotate_ccw, 'rotate-cw': rotate_cw, 'stop': stop, 'more': more, 'research': research,
-    'tech-axe': tech_axe, 'tech-pick': tech_pick, 'tech-castle': tech_castle, 'tech-gunpowder': tech_gunpowder,
 }
 STAT_ICONS = {
     'stat-attack': stat_attack, 'stat-range': stat_range, 'stat-speed': stat_speed, 'stat-hp': stat_hp, 'stat-build': stat_build,

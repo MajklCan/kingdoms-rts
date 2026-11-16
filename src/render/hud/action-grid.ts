@@ -23,8 +23,8 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from '@sim/components';
-import { AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getAgeDef } from '@sim/defs';
-import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
+import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId } from '@sim/defs';
+import { TechId, isBuildingUnlocked, isUnitUnlocked, type TechIdValue } from '@sim/tech-tree';
 import {
   getBuildingBuildTicks,
   getBuildingCost,
@@ -41,8 +41,7 @@ import {
   formatCost,
   formatTrainTime,
   hasPopulationRoomForUnit,
-  missingResearchText,
-  nextAgeTechId,
+  unlockResearchFor,
   type Cost,
 } from '../commands/economy';
 import {
@@ -70,7 +69,7 @@ export interface ActionGridAction {
   disabledReason?: string;
   /**
    * Locked behind research: clicking opens the Technology panel on this tech
-   * (its missing research marked) instead of only refusing.
+   * (its missing parent research or closed ring marked) instead of only refusing.
    */
   researchGoal?: TechIdValue;
 }
@@ -107,6 +106,23 @@ const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]>
   'build-wall': ['WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
 };
 
+/**
+ * A button for something still behind research: disabled, saying which
+ * research unlocks it, and opening Technology on that research when clicked.
+ * Null (no button) when the research is shut for this mission.
+ */
+function lockedAction(
+  id: string,
+  label: string,
+  key: string,
+  glyph: string,
+  kind: ActionKind,
+  research: { techId: TechIdValue; text: string } | null
+): ActionGridAction | null {
+  if (!research) return null;
+  return { id, label, key, glyph, enabled: false, kind, meta: 'Locked', disabledReason: research.text, researchGoal: research.techId };
+}
+
 export class ActionGrid {
   constructor(
     private readonly ctx: SceneContext,
@@ -139,7 +155,6 @@ export class ActionGrid {
       case 'formation-rotate-ccw': this.commands.rotateFormation(-1); return;
       case 'formation-rotate-cw': this.commands.rotateFormation(1); return;
       case 'stop': this.commands.dispatch({ type: 'stopSelected' }); return;
-      case 'advance-age': this.commands.advanceAge(); return;
     }
   }
 
@@ -201,10 +216,14 @@ export class ActionGrid {
     const addBuildActions = () => {
       for (const [id, mode, key, glyph, hudIcon] of BUILD_BUTTONS) {
         const defId = BUILD_MODE_TO_DEF[mode];
-        if (!isBuildingUnlocked(world, playerId, defId)) continue;
         const def = BUILDING_TABLE[defId];
         if (!def) continue;
-        // Walls follow the age tier (palisade, stone, brick); others use the def.
+        if (!isBuildingUnlocked(world, playerId, defId)) {
+          const locked = lockedAction(id, `Build ${def.name}`, key, glyph, 'build', unlockResearchFor(world, playerId, 'building', defId));
+          if (locked) actions.push({ ...locked, hudIcon });
+          continue;
+        }
+        // Walls follow the research tier (palisade, stone, brick); others use the def.
         const cost = getBuildingCost(world, playerId, defId);
         const affordable = canAfford(cost);
         // Houses before the Barracks tech: a few, with the count left shown.
@@ -225,8 +244,9 @@ export class ActionGrid {
           disabledReason: atMaximum
             ? `Housing already reaches the ${POP_CAP_HARD_LIMIT} population maximum`
             : capped
-              ? 'House limit reached. Research Barracks to build more'
+              ? 'House limit reached. Needs the Carpentry research. Click to open it in Technology.'
               : affordable ? undefined : `Needs ${formatCost(cost)}`,
+          researchGoal: capped && !atMaximum ? TechId.HOUSING_I : undefined,
         });
       }
     };
@@ -234,7 +254,11 @@ export class ActionGrid {
     const addTrainAction = (unitDefId: number, key: string, glyph: string) => {
       const unit = UNIT_TABLE[unitDefId];
       if (!unit) return;
-      if (!isUnitUnlocked(world, playerId, unitDefId)) return;
+      if (!isUnitUnlocked(world, playerId, unitDefId)) {
+        const locked = lockedAction(`train-unit-${unitDefId}`, `Train ${unit.name}`, key, glyph, 'train', unlockResearchFor(world, playerId, 'unit', unitDefId));
+        if (locked) actions.push({ ...locked, cost: formatCost(unit.cost) });
+        return;
+      }
       const affordable = canAfford(unit.cost);
       const hasPopRoom = hasPopulationRoomForUnit(world, playerId, unitDefId);
       actions.push({
@@ -310,34 +334,6 @@ export class ActionGrid {
     };
 
     if (sel.length === 0 || hasVillager) addBuildActions();
-
-    if (hasTc) {
-      const ageTechId = nextAgeTechId(world, playerId);
-      const nextAgeDef = getAgeDef((world.ages[playerId]?.current ?? AgeId.DARK) + 1);
-      const nextAgeTech = ageTechId ? techDef(ageTechId) : null;
-      const status = ageTechId ? techStatus(world, playerId, ageTechId) : 'locked';
-      if (nextAgeTech && nextAgeDef) {
-        const available = status === 'available';
-        const affordable = canAfford(nextAgeTech.cost);
-        const missingResearch = status === 'locked' && ageTechId ? missingResearchText(world, playerId, ageTechId) : null;
-        actions.push({
-          id: 'advance-age',
-          label: nextAgeDef.name,
-          key: 'E',
-          glyph: '^',
-          cost: formatCost(nextAgeTech.cost),
-          enabled: available && affordable,
-          kind: 'tech',
-          meta: 'Research',
-          disabledReason: available
-            ? (affordable ? undefined : `Needs ${formatCost(nextAgeTech.cost)}`)
-            : missingResearch
-              ? `Research one path in Technology first: ${missingResearch}. This button opens it.`
-              : 'Locked',
-          researchGoal: missingResearch && ageTechId ? ageTechId : undefined,
-        });
-      }
-    }
 
     if (selectedWorksiteEids.length > 0) addWorksiteWorkerAction();
     else if (hasTc) addTrainAction(UnitDefId.VILLAGER, 'Q', '🧑');

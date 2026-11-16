@@ -333,7 +333,7 @@ describe('enemy AI', () => {
   it('uses barracks and stable for a mixed army', () => {
     const world = createSimWorld(202);
     world.paused = false;
-    world.ages[AI_PLAYER_ID] = { current: AgeId.CASTLE, progress: -1, totalTicks: 0 };
+    world.ages[AI_PLAYER_ID] = { current: AgeId.CASTLE };
     world.resources[AI_PLAYER_ID].set([1000, 1000, 1000, 1000]);
     world.population[AI_PLAYER_ID].cap = 40;
     const spot = findOpenTile(world);

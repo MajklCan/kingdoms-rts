@@ -41,8 +41,8 @@ export function createLateGameTestWorld(): SimWorld {
   world.tick = SIM.TICK_HZ * 60 * 28;
   world.outcome = { state: 'playing' };
 
-  world.ages[1] = { current: AgeId.GUNPOWDER, progress: -1, totalTicks: 0 };
-  world.ages[2] = { current: AgeId.GUNPOWDER, progress: -1, totalTicks: 0 };
+  world.ages[1] = { current: AgeId.GUNPOWDER };
+  world.ages[2] = { current: AgeId.GUNPOWDER };
   world.researchedTechs[1] = createAllTechSet();
   world.researchedTechs[2] = createAllTechSet();
   world.resources[1].set([2200, 2200, 1800, 1300]);

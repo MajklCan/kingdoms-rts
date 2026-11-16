@@ -63,8 +63,8 @@ export function hasPopulationRoom(world: SimWorld, playerId: number, cost: numbe
 }
 
 /**
- * Houses a player may raise before the Barracks tech: enough to grow the
- * Dark Age economy past the town center's cap. The Barracks tech lifts it.
+ * Houses a player may raise before Carpentry: enough to grow the early
+ * economy past the town center's cap. Carpentry (housing_i) lifts it.
  */
 export const EARLY_HOUSE_ALLOWANCE = 4;
 
@@ -80,11 +80,10 @@ export function countOwnHouses(world: SimWorld, playerId: number): number {
 
 /** Houses the player may still start, or null when there is no limit. */
 export function remainingHouseAllowance(world: SimWorld, playerId: number): number | null {
-  if (hasTech(world, playerId, TechId.BARRACKS_PIKEMEN)) return null;
+  if (hasTech(world, playerId, TechId.HOUSING_I)) return null;
   return Math.max(0, EARLY_HOUSE_ALLOWANCE - countOwnHouses(world, playerId));
 }
 
-/** True when `defId` is a house and the early allowance is used up. */
 /**
  * True when `defId` is a house that may not be started: the early allowance
  * is used up, or finished plus rising houses already reach the population

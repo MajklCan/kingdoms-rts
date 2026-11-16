@@ -45,7 +45,6 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from '../components';
-import { AgeId } from '../defs';
 import {
   AI_PLAYER_ID,
   LOCAL_PLAYER_ID,
@@ -59,15 +58,25 @@ import {
   updatePlayerVisibility,
 } from '../world';
 import { Pathfinder } from '../pathfinding';
-import { TECH_TREE, type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
-import { type SavedEntityV1, type SavedGame, type SavedGameV1, type SavedGameV2, migrateSavedGame } from './schema';
+import { type TechIdValue, isTechId } from '../tech-tree';
+import {
+  type SavedEntityV1,
+  type SavedGame,
+  type SavedGameV1,
+  type SavedGameV2,
+  type SavedGameV3,
+  migrateSavedGame,
+} from './schema';
 
 /** Ticks are never negative; a negative (or missing) saved tick means never. */
 function fromSavedTick(tick: number | null | undefined): number {
   return typeof tick === 'number' && Number.isFinite(tick) && tick >= 0 ? tick : -Infinity;
 }
 
-export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV2 | SavedGameV1): void {
+export function loadSimWorldSnapshot(
+  world: SimWorld,
+  saved: SavedGame | SavedGameV3 | SavedGameV2 | SavedGameV1
+): void {
   const snapshot = migrateSavedGame(saved);
   if (!snapshot) {
     throw new Error(`Unsupported save version ${String((saved as { version?: unknown }).version)}`);
@@ -123,7 +132,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   }
   world.ages.length = 0;
   for (const age of snapshot.ages) {
-    world.ages.push({ ...age });
+    world.ages.push({ current: age.current });
   }
   world.aiPlayers.length = 0;
   for (let playerId = 0; playerId < snapshot.resources.length; playerId++) {
@@ -149,14 +158,8 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   }
   world.researchedTechs.length = 0;
   for (let playerId = 0; playerId < world.resources.length; playerId++) {
-    const saved = snapshot.researchedTechs?.[playerId];
-    if (Array.isArray(saved)) {
-      world.researchedTechs.push(
-        new Set(saved.filter((techId): techId is TechIdValue => isKnownTechId(techId)))
-      );
-    } else {
-      world.researchedTechs.push(fallbackTechSet(snapshot, playerId));
-    }
+    const saved = snapshot.researchedTechs[playerId] ?? [];
+    world.researchedTechs.push(new Set(saved.filter((techId): techId is TechIdValue => isTechId(techId))));
   }
   world.revealedMapPlayers.length = 0;
   for (let playerId = 0; playerId < world.resources.length; playerId++) {
@@ -212,7 +215,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
       name: snapshot.campaign.name,
       description: snapshot.campaign.description,
       briefing: snapshot.campaign.briefing,
-      lockedTechs: snapshot.campaign.lockedTechs.slice(),
+      lockedTechs: snapshot.campaign.lockedTechs.filter((techId) => isTechId(techId)),
       objectives: snapshot.campaign.objectives.map((objective) => ({ ...objective })),
       trackedObjectiveEids: Object.fromEntries(
         Object.entries(snapshot.campaign.trackedObjectiveEids)
@@ -329,16 +332,6 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   }
 
   restoreVisibility(world, snapshot, eidMap);
-}
-
-const KNOWN_TECH_IDS = new Set<string>(TECH_TREE.map((tech) => tech.id));
-
-function isKnownTechId(techId: unknown): techId is TechIdValue {
-  return typeof techId === 'string' && KNOWN_TECH_IDS.has(techId);
-}
-
-function fallbackTechSet(snapshot: SavedGame, playerId: number): Set<TechIdValue> {
-  return createStartingTechSetForAge(snapshot.ages[playerId]?.current ?? AgeId.DARK);
 }
 
 function isSavedMilitaryEntity(saved: SavedEntityV1): boolean {

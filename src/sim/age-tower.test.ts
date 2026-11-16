@@ -1,13 +1,15 @@
 import { hasComponent } from 'bitecs';
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
-import { Cooldown, Health } from './components';
-import { AgeId, BuildingDefId, AGE_TABLE, BUILDING_TABLE } from './defs';
+import { Building, Cooldown, Health, Owner } from './components';
+import { BuildingDefId, BUILDING_TABLE } from './defs';
 import { TechId } from './tech-tree';
 import {
+  buildingQuery,
   createSimWorld,
   findBuildingAt,
   findResourceAt,
+  revealMapForPlayer,
   spawnArcher,
   spawnCompletedBuilding,
   step,
@@ -36,29 +38,32 @@ function stepN(world: SimWorld, ticks: number): void {
   for (let i = 0; i < ticks; i++) step(world);
 }
 
-describe('age progression and towers', () => {
+describe('defensive towers', () => {
   it('sets defensive tower hp to 750', () => {
     expect(BUILDING_TABLE[BuildingDefId.DEFENSIVE_TOWER].hp).toBe(750);
   });
 
-  it('advances from Dark Age directly to Castle Age when paid for', () => {
+  it('builds towers only after the Watchtowers research', () => {
     const world = createSimWorld(321);
     world.paused = false;
-    const castle = AGE_TABLE[AgeId.CASTLE];
-    world.researchedTechs[1].add(TechId.BARRACKS_PIKEMEN);
-    world.researchedTechs[1].add(TechId.ARCHERS);
-    world.resources[1].set([
-      castle.advanceCost.food,
-      castle.advanceCost.wood,
-      castle.advanceCost.gold,
-      castle.advanceCost.stone,
-    ]);
+    const spot = findTowerTestTile(world);
+    revealMapForPlayer(world, 1);
+    world.resources[1].set([0, 5000, 0, 5000]);
+    const towers = () => buildingQuery(world.ecs).filter(
+      (eid) => Owner.player[eid] === 1 && Building.defId[eid] === BuildingDefId.DEFENSIVE_TOWER
+    ).length;
 
-    world.inputs.push({ type: 'researchTech', playerId: 1, techId: TechId.CASTLE_AGE });
-    for (let i = 0; i < castle.advanceTicks; i++) step(world);
+    world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.DEFENSIVE_TOWER, x: spot.x, y: spot.y, playerId: 1 });
+    step(world);
+    expect(towers()).toBe(0);
 
-    expect(world.ages[1].current).toBe(AgeId.CASTLE);
-    expect(Array.from(world.resources[1])).toEqual([0, 0, 0, 0]);
+    world.inputs.push(
+      { type: 'researchTech', playerId: 1, techId: TechId.PALISADES },
+      { type: 'researchTech', playerId: 1, techId: TechId.WATCHTOWERS },
+      { type: 'placeBuilding', defId: BuildingDefId.DEFENSIVE_TOWER, x: spot.x, y: spot.y, playerId: 1 }
+    );
+    step(world);
+    expect(towers()).toBe(1);
   });
 
   it('lets defensive towers auto-engage enemies at range', () => {

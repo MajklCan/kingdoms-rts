@@ -20,7 +20,8 @@ export type CommandFailure =
   | { reason: 'resources'; subject: string; missing: ResourceName[] }
   | { reason: 'population'; subject: string }
   | { reason: 'placement'; subject: string; detail: 'blocked' | 'needs-resource' | 'outside-map' }
-  | { reason: 'locked'; subject: string }
+  /** Behind research; `research` names it when there is one to do. */
+  | { reason: 'locked'; subject: string; research?: string }
   | { reason: 'queue-full'; subject: string }
   | { reason: 'unavailable'; text: string };
 
@@ -43,7 +44,9 @@ export function describeFailure(failure: CommandFailure): string {
           ? 'Cannot build outside the map'
           : `Cannot build ${failure.subject} here`;
     case 'locked':
-      return `${failure.subject} is not available yet`;
+      return failure.research
+        ? `${failure.subject} needs the ${failure.research} research. Open Technology (K)`
+        : `${failure.subject} is not available yet`;
     case 'queue-full':
       return `${failure.subject}: queue is full`;
     case 'unavailable':

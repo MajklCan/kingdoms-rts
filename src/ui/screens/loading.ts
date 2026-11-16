@@ -18,7 +18,7 @@ const TIPS = [
   'Mills boost farm deliveries. Place them beside your fields.',
   'Pikemen hold the line against cavalry. Archers shoot from behind them.',
   'Worksites spawn their own workers. Villagers are free for building and farming.',
-  'Advancing an age unlocks new buildings, units and research.',
+  'Complete two paths of a tech ring and the next ring opens, with a new age for your town.',
   'Press Esc for the pause menu, where you can save, load and change settings.',
 ];
 

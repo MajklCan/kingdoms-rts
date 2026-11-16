@@ -1,7 +1,8 @@
 /**
  * Skirmish setup: map list with descriptions, the two banners (colours are
  * fixed by the sim today), AI difficulty and starting age as segmented
- * radios, and the Begin button. Choices persist between visits.
+ * radios, and the Begin button. Choices persist between visits. A starting
+ * age is a research preset: the rings before it come already researched.
  */
 
 import { AgeId, AGE_TABLE, type AgeIdValue } from '../../sim/defs';
@@ -25,6 +26,13 @@ export const SKIRMISH_STARTING_AGES: readonly AgeIdValue[] = [AgeId.DARK, AgeId.
 export function parseStartingAge(value: string | undefined): AgeIdValue {
   const parsed = Number(value);
   return SKIRMISH_STARTING_AGES.find((age) => age === parsed) ?? AgeId.DARK;
+}
+
+/** What a starting age gives, shown under the choice. */
+export function startingAgeNote(age: AgeIdValue): string {
+  if (age === AgeId.CASTLE) return 'All of ring I researched, so ring II is open. A larger bank.';
+  if (age === AgeId.GUNPOWDER) return 'Rings I and II researched, so ring III is open. A large bank with gold.';
+  return 'Nothing researched yet: ring I is open, with 300 wood to start.';
 }
 
 export function parseStartingMap(value: string | undefined): MapIdValue {
@@ -115,6 +123,8 @@ export function bindSkirmishSetup(): void {
     ages.append(radio('skirmish-age', String(age.id), age.name.replace(/ Age$/, ''), age.id === prefs.age));
   }
 
+  const ageNote = h('p', { class: 'field-note', 'aria-live': 'polite' }, startingAgeNote(prefs.age));
+
   const begin = h(
     'button',
     { type: 'button', class: 'btn btn-seal btn-lg btn-block', id: 'start-button' },
@@ -146,7 +156,7 @@ export function bindSkirmishSetup(): void {
         h('p', { class: 'field-note' }, 'Banner colours are fixed: you fly blue, the rival flies red.')
       ),
       h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'AI difficulty'), difficulty),
-      h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Starting age'), ages),
+      h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Starting age'), ages, ageNote),
       h('div', { class: 'setup-actions' }, begin)
     )
   );
@@ -161,7 +171,9 @@ export function bindSkirmishSetup(): void {
   };
 
   form.addEventListener('change', () => {
-    writeStorage(PREFS_KEY, JSON.stringify(readChoice()));
+    const choice = readChoice();
+    writeStorage(PREFS_KEY, JSON.stringify(choice));
+    ageNote.textContent = startingAgeNote(choice.age);
   });
   // Enter on any choice starts the match, like a classic setup screen.
   form.addEventListener('keydown', (ev) => {

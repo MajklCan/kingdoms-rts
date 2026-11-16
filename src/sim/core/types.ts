@@ -57,16 +57,14 @@ export type SimInput =
   /** Cancel queue entry `slot` (0 = the one training now). Without a slot the
    *  most recently queued entry is cancelled. The cost is refunded either way. */
   | { type: 'cancelProduction'; atEid: number; playerId?: number; slot?: number }
-  | { type: 'advanceAge'; playerId: number }
   | { type: 'researchTech'; playerId: number; techId: TechIdValue };
 
-/** Per-player age progression state. */
+/**
+ * A player's era (AgeId): the highest tech ring it has opened, minus one.
+ * Written only when a ring opens (systems/tech-rings.ts); drives building looks.
+ */
 export interface AgeState {
   current: number;
-  /** Ticks of progress on advance to next age. -1 = not advancing. */
-  progress: number;
-  /** Cached totalTicks for the in-flight advance. 0 when idle. */
-  totalTicks: number;
 }
 
 /** Outcome of the match - set by winConditionSystem when one player loses or wins. */
@@ -335,7 +333,7 @@ export interface SimWorld {
    * human player's new villagers pick work on their own (villager-assign.ts).
    */
   villagerRallies: Map<number, VillagerRally>;
-  /** Per-player age progression. ages[playerId] = AgeState. */
+  /** Per-player era. ages[playerId] = AgeState. */
   ages: AgeState[];
   /** Per-player researched technologies. */
   researchedTechs: Array<Set<TechIdValue>>;

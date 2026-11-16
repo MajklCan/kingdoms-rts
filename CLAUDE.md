@@ -46,13 +46,13 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 
-Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
+Pre-input visibility → drain `world.inputs` → ai → techRings (a ring opened by research moves the era) → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
 `world.paused = true` after `createSimWorld()`. Tests must set it to `false`.
 
 ### Data flow
 
-Input (DOM/Phaser) → `world.inputs.push(...)` → consumed by `applyInput` switch during `step()`. Render layer drains `world.combatEvents` / `world.aiEvents` / `world.gameEvents` (append-only per tick; `gameEvents` is the typed HUD feed: unit trained, building complete or lost, research, age). Sim never reads them back. `world.matchStats` holds exact per-player counters for the game-over screen: write-only, excluded from the checksum, saved.
+Input (DOM/Phaser) → `world.inputs.push(...)` → consumed by `applyInput` switch during `step()`. Render layer drains `world.combatEvents` / `world.aiEvents` / `world.gameEvents` (append-only per tick; `gameEvents` is the typed HUD feed: unit trained, building complete or lost, research, ring opened / era). Sim never reads them back. `world.matchStats` holds exact per-player counters for the game-over screen: write-only, excluded from the checksum, saved.
 
 ## Repo layout
 
@@ -72,8 +72,8 @@ src/
     maps/              map generators; map-gen.ts is their barrel
     save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
-    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE, WALL_TIERS (palisade/stone/brick per age) + canAfford/spend/refund
-    tech-tree.ts       TECH_TREE nodes + pure prereq/age helpers
+    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE (era names), WALL_TIERS (palisade/stone/brick by research) + canAfford/spend/refund
+    tech-tree.ts       the tech rings: 17 researches (ring, path, parents), ring rule, unlock mapping, starting presets
     campaign.ts        2 missions: SIEGE_OF_BRNO, BATTLE_OF_BILA_HORA
     pathfinding.ts     EasyStar wrapper, LOS smoothing, nearest-walkable fallback
     rng.ts             Mulberry32; getState/setState
@@ -121,7 +121,8 @@ index.html             27-line shell; CSS lives in src/ui/styles
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.
 - Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN.
 - Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen, archery range archers (unlocked by the Archers tech).
-- Ages: DARK → CASTLE → GUNPOWDER → TOTAL_WAR. **TOTAL_WAR and MACHINE_GUN are scaffolded but unreachable** in normal play (`applyAdvanceAge` blocks; `isUnitUnlocked` returns false).
+- Tech rings, not age research: 17 researches on 5 paths (arms, timber, mines, walls, land) in rings I-III. Ring N+1 opens when 2 paths are maxed in ring N (every research of the path in that ring done); research is instant. Every unit/building past the settlement (TC, house, farm, lumber hut, quarry) is unlocked by one research (`BUILDING_UNLOCK_TECH` / `UNIT_UNLOCK_TECH`). The early 4-house limit is lifted by Carpentry (`housing_i`).
+- Eras: `world.ages[p].current` = highest open ring - 1 (DARK, CASTLE, GUNPOWDER), written by `systems/tech-rings.ts` when a ring opens; it only drives building art and the banner. Walls draw and fight at their research tier (Palisades / Stone Walls / Brick Walls). Starting ages are presets: Castle = ring I researched, Gunpowder = rings I+II. **TOTAL_WAR and MACHINE_GUN are scaffolded but unreachable** (no research unlocks them).
 
 ## Sprite pipeline
 
@@ -151,7 +152,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 
 ## Save / load
 
-- `SAVE_VERSION=3`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
+- `SAVE_VERSION=4`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes, v1-v3 saves move to the tech rings (`save/migrate-tech-rings.ts`: a saved age becomes its preset, an age advance in progress is refunded) (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 
@@ -168,7 +169,7 @@ Test pattern: `const world = createSimWorld(seed); world.paused = false;` → pu
 
 ## Agent affordances
 
-In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `advanceAge`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
+In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `research`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
 
 ## Conventions & rules
 
