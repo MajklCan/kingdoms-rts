@@ -9,6 +9,7 @@
  */
 
 import { UnitDefId } from '@sim/defs';
+import { versioned } from '../asset-version';
 import { SPRITE_ASSET_BASE, atlasTextureKey, type SpriteAtlasDef } from './sprite-manifest';
 
 export const UNIT_MANIFEST_KEY = 'unit-sprite-manifest';
@@ -179,10 +180,14 @@ export function queueUnitManifest(load: Phaser.Loader.LoaderPlugin): void {
       console.warn(`[Kingdoms] unit manifest: ${problem}`);
     }
     for (const atlas of manifest.atlases) {
-      load.atlas(atlasTextureKey(atlas.key), SPRITE_ASSET_BASE + atlas.image, SPRITE_ASSET_BASE + atlas.json);
+      load.atlas(
+        atlasTextureKey(atlas.key),
+        versioned(SPRITE_ASSET_BASE + atlas.image),
+        versioned(SPRITE_ASSET_BASE + atlas.json)
+      );
     }
   });
-  load.json(UNIT_MANIFEST_KEY, SPRITE_ASSET_BASE + UNIT_MANIFEST_FILE);
+  load.json(UNIT_MANIFEST_KEY, versioned(SPRITE_ASSET_BASE + UNIT_MANIFEST_FILE));
 }
 
 /** The parsed unit manifest from the JSON cache (empty when it never loaded). */
