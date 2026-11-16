@@ -6,6 +6,12 @@
   z-index: var(--z-modal);
 }
 
+/* Settings, Load Game and Controls also open from the title screen, where
+   the menu layer would otherwise cover them. */
+body[data-app-state="menu"] .modal-root {
+  z-index: calc(var(--z-menu) + 10);
+}
+
 .modal-filigree {
   position: absolute;
   width: 3.2rem;
