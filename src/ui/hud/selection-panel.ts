@@ -245,7 +245,7 @@ export function buildSelectionPanel(): HTMLElement {
   const hpText = h('span', { class: 'hp-text num' });
   const hpRow = h('div', { class: 'hp-row' }, icon('stat-hp', 'hp-icon'), hpBar, hpText);
   const stats = h('ul', { class: 'stat-chips', id: 'sel-stats', 'aria-label': 'Stats' });
-  const statusText = h('span', { class: 'sel-status-text' });
+  const statusText = h('span', { class: 'sel-status-text', role: 'status' });
   const statusBar = h('div', { class: 'bar sel-status-bar' }, h('i'));
   const carryIcon = icon(RESOURCE_ICON_SMALL.wood, 'carry-icon');
   const carryPips: HTMLElement[] = [];
@@ -256,15 +256,17 @@ export function buildSelectionPanel(): HTMLElement {
     pips.append(pip);
   }
   const carry = h('span', { class: 'carry', hidden: true }, carryIcon, pips);
-  const status = h('div', { class: 'sel-status', role: 'status' }, h('span', { class: 'sel-status-line' }, statusText, carry), statusBar);
+  // Stance and formation chips share the action's line: as a row of their
+  // own they pushed past the bottom of the sheet.
   const state = h('ul', { class: 'sel-state', 'aria-label': 'Orders in force' });
+  const status = h('div', { class: 'sel-status' }, h('div', { class: 'sel-status-line' }, statusText, carry, state), statusBar);
   const { queueWrap, queueSlots, queueMore } = buildQueue();
 
   const single = h(
     'div',
     { class: 'sel-single' },
     portrait,
-    h('div', { class: 'sel-main' }, h('div', { class: 'sel-name-row' }, name, owner), hpRow, stats, status, state),
+    h('div', { class: 'sel-main' }, h('div', { class: 'sel-name-row' }, name, owner), hpRow, stats, status),
     queueWrap
   );
 
