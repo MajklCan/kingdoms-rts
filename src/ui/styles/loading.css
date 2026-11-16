@@ -91,11 +91,71 @@
 }
 
 .loading-foot {
-  width: min(100%, 18rem);
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
   animation: loading-fade 450ms var(--ease-out) 120ms both;
+}
+
+/* Destination left, one line of lore right, both sitting on the rule. */
+.loading-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 0.6rem;
+}
+
+.loading-dest {
+  min-width: 0;
+}
+
+.loading-kicker,
+.loading-meta {
+  margin: 0;
+  font-family: "Jersey 25", var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.loading-kicker {
+  font-size: 1.25rem;
+  text-transform: uppercase;
+}
+
+.loading-meta {
+  min-height: 1.3em;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+}
+
+.loading-title {
+  margin: 0;
+  padding-bottom: 0.18em;
+  font-family: "Jacquard 24", var(--font-title);
+  font-size: clamp(2.75rem, 7vw, 5.25rem);
+  line-height: 1.05;
+  background: linear-gradient(180deg, #fff1bf 0%, #f0cf68 32%, #c9a227 54%, #8f6e16 76%, #e7cf7e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0.19rem 0 #3a2806);
+}
+
+.loading-lore {
+  flex: 0 1 22rem;
+  margin: 0 0 0.3rem;
+  text-align: right;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .loading-lore { display: none; }
 }
 
 @keyframes loading-fade {
@@ -140,7 +200,7 @@
 
 .loading-rule {
   position: relative;
-  height: 2px;
+  height: 4px;
   background: rgba(233, 227, 212, 0.14);
 }
 

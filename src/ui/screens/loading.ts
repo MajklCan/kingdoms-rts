@@ -1,8 +1,8 @@
 /**
  * Loading screen between the menu and a match: the title's own painted map,
- * haze and glows, darkened, with one quiet line bottom-left (the real
- * start-up phase) over a thin gold hairline that fills as the work
- * completes. It paints first, runs the start task under the cover, and holds
+ * haze and glows, darkened. Bottom-left names where you are going (kind,
+ * map, and for a save where you left off), bottom-right one line of lore,
+ * and under both the real start-up phase over a gold rule across the frame. It paints first, runs the start task under the cover, and holds
  * long enough to read, never flashing.
  */
 
@@ -10,7 +10,7 @@ import type { MapIdValue } from '../../sim/map-gen';
 import { setPhase } from '../app-state';
 import { afterPaint, byId, h, wait } from '../dom';
 import { getScene, isSceneReady } from '../game-bridge';
-import { LOADING_PHASES, PHASE_COUNT, minDisplayMs, phaseCreep, type LoadingKind } from './loading-phases';
+import { LOADING_PHASES, LORE, PHASE_COUNT, eyebrowFor, minDisplayMs, phaseCreep, type LoadingKind } from './loading-phases';
 
 export type { LoadingKind } from './loading-phases';
 
@@ -22,6 +22,10 @@ const LEAVE_MS = 420;
 interface Parts {
   root: HTMLElement;
   bg: HTMLElement;
+  kicker: HTMLElement;
+  title: HTMLElement;
+  meta: HTMLElement;
+  lore: HTMLElement;
   status: HTMLElement;
   rule: HTMLElement;
 }
@@ -30,6 +34,10 @@ let parts: Parts | null = null;
 
 function build(): Parts {
   const bg = h('div', { class: 'menu-bg loading-bg', 'aria-hidden': 'true' });
+  const kicker = h('p', { class: 'loading-kicker' });
+  const title = h('p', { class: 'loading-title' });
+  const meta = h('p', { class: 'loading-meta' });
+  const lore = h('p', { class: 'loading-lore', 'aria-hidden': 'true' });
   const status = h('p', { class: 'loading-status', role: 'status', 'aria-live': 'polite' }, LOADING_PHASES[0]);
   const rule = h(
     'div',
@@ -45,9 +53,19 @@ function build(): Parts {
     h('div', { class: 'menu-glow-core loading-glow', 'aria-hidden': 'true' }),
     h('div', { class: 'loading-motes', 'aria-hidden': 'true' }),
     h('div', { class: 'loading-scrim', 'aria-hidden': 'true' }),
-    h('div', { class: 'loading-frame' }, h('div', { class: 'loading-foot' }, status, rule))
+    h(
+      'div',
+      { class: 'loading-frame' },
+      h(
+        'div',
+        { class: 'loading-foot' },
+        h('div', { class: 'loading-head' }, h('div', { class: 'loading-dest' }, kicker, title, meta), lore),
+        status,
+        rule
+      )
+    )
   );
-  return { root, bg, status, rule };
+  return { root, bg, kicker, title, meta, lore, status, rule };
 }
 
 export function getLoadingRoot(): HTMLElement {
@@ -63,8 +81,9 @@ function setRule(p: Parts, value: number, done: number, slow: boolean): void {
 }
 
 export interface LoadingOptions {
-  /** Destination name; announced to screen readers, not drawn. */
+  /** Destination name, drawn large (the map or mission). */
   title: string;
+  /** Second line under the title, e.g. the rival or where a save left off. */
   subtitle?: string;
   kind: LoadingKind;
   mapId?: MapIdValue | null;
@@ -75,6 +94,7 @@ export interface LoadingOptions {
 }
 
 let busy = false;
+let loreAt = -1;
 
 /** Show the loading screen, run the task, then reveal the match. */
 export async function runLoading(opts: LoadingOptions): Promise<boolean> {
@@ -83,6 +103,12 @@ export async function runLoading(opts: LoadingOptions): Promise<boolean> {
   const p = (parts ??= build());
   const el = p.root;
   el.setAttribute('aria-label', `Loading ${opts.title}`);
+  p.kicker.textContent = eyebrowFor(opts.kind);
+  p.title.textContent = opts.title;
+  p.meta.textContent = opts.subtitle ?? '';
+  // Cosmetic only, outside the sim: any line will do.
+  loreAt = (loreAt + 1) % LORE.length;
+  p.lore.textContent = LORE[loreAt] ?? '';
   p.status.textContent = LOADING_PHASES[0];
   p.status.classList.remove('is-slow', 'is-error');
   // Pick the backdrop up exactly where the title's drifting map stands.
