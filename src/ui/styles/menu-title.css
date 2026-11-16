@@ -43,7 +43,8 @@
 }
 
 .menu-crest {
-  width: 3.75rem;
+  /* 20 art pixels wide, 2 UI pixels each: same grid as the wordmark. */
+  width: calc(40 * var(--px));
   height: auto;
   filter: drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.6));
 }
@@ -53,7 +54,8 @@
   margin: 0;
   font-family: "Jacquard 24", var(--font-title);
   font-weight: 400;
-  font-size: 5.5rem;
+  /* Jacquard 24 sits on a 24 unit grid: 48 * --px = 2 UI pixels per font pixel. */
+  font-size: calc(48 * var(--px));
   line-height: 0.9;
   letter-spacing: 0.01em;
   /* The gradient only paints inside the box: give descenders (g) room. */
@@ -366,4 +368,25 @@
   .menu-foot {
     justify-content: flex-end;
   }
+}
+
+/* Pixel labels. One font pixel = one UI pixel (--px): size is the face's
+   grid (Jersey 15 or 10) times --px, spacing in whole pixels, no faux bold. */
+.menu-root :is(.charter-label, .pill, .nameplate-name, .build-tag, .gate-btn) {
+  font-family: "Jersey 10", var(--font-display);
+  font-weight: 400;
+  font-size: calc(10 * var(--px));
+  letter-spacing: var(--px);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+.menu-root .charter-label {
+  font-family: "Jersey 15", var(--font-display);
+  font-size: calc(15 * var(--px));
+}
+
+.menu-title {
+  -webkit-font-smoothing: none;
+  font-smooth: never;
 }
