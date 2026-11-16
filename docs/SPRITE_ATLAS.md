@@ -39,7 +39,7 @@ and the scroll is snapped, so style A pixels never shimmer while panning.
 | Game thing | Asset / variant |
 | --- | --- |
 | Building of `BuildingDefId` X | `building.<x>` (by `defId`), variant = era of the owner's age (`AgeId` name lower-cased, `total_war` falls back to `gunpowder`, missing eras to the nearest earlier one) |
-| Building under construction | `construction.<w>x<h>`, stage by `ConstructionSite.progress / totalTicks` (0 / 0.34 / 0.67), no team mask |
+| Building under construction | the asset named by the building's `construction` field: `construction.<w>x<h>` (timber scaffold, stages 0 / 0.34 / 0.67) or the farm's own `construction.farm` (a plot being laid out, six stages), stage by `ConstructionSite.progress / totalTicks`, no team mask |
 | Destroyed building | `rubble.<w>x<h>`, left for 75 s (fades over the last 6 s), only where the player saw it go down |
 | Farm | `building.farm` stage: render-only cycle (sim farms never deplete) `sown` > `growing` > `ripe` over 90 s per farm; `depleted` while no worker is assigned |
 | Wall | `building.wall` variant `<era>.<mask>`, mask bits 1 = +x, 2 = +y, 4 = -x, 8 = -y; neighbours are live walls and towers, or remembered ones in fog |

@@ -58,6 +58,8 @@ const FIRE_STAGES: ReadonlyArray<readonly [number, number, number, number]> = [
 /** Minimum ms between construction bursts on one site. */
 const BUILD_FX_GAP = 340;
 const KNOCK: SfxConfig = { key: 'chop_wood', minIntervalMs: 420, volume: 0.2 };
+/** Turning soil on a farm plot: the soft rustle farm work already uses. */
+const DIG: SfxConfig = { key: 'forage', minIntervalMs: 420, volume: 0.25 };
 
 export class BuildingFx {
   private readonly progress = new Map<number, number>();
@@ -108,7 +110,7 @@ export class BuildingFx {
         if (isNew && this.primed && p <= Math.max(1, ConstructionSite.totalTicks[eid] * 0.05)) {
           dustRing(fx, c.x, c.y, hw * 0.85, hh * 0.85, 14, FX_COLORS.dust, 1.1);
         } else if (prev !== undefined && p > prev) {
-          this.building(eid, c.x, c.y, hw, view.ref.top);
+          this.building(eid, defId, c.x, c.y, hw, view.ref.top);
         }
         continue;
       }
@@ -242,12 +244,18 @@ export class BuildingFx {
   }
 
   /** Builders at work: hammer sparks on the frame, dust at the base, a knock. */
-  private building(eid: number, cx: number, cy: number, hw: number, top: number): void {
+  private building(eid: number, defId: number, cx: number, cy: number, hw: number, top: number): void {
     const now = this.host.time;
     const last = this.lastBuildFx.get(eid);
     if (last !== undefined && now - last < BUILD_FX_GAP) return;
     this.lastBuildFx.set(eid, now);
     const fx = this.host.fx;
+    if (defId === BuildingDefId.FARM) {
+      // A field is dug, not hammered: earth kicked up, no sparks or knocks.
+      dustPuff(fx, cx + rand(-hw, hw) * 0.5, cy + rand(-8, 4), 0.5, FX_COLORS.dustDark, 2);
+      this.audio.playWorld(DIG, Math.round(Position.x[eid]), Math.round(Position.y[eid]));
+      return;
+    }
     const x = cx + rand(-hw, hw) * 0.55;
     const y = cy - rand(4, Math.max(8, top * 0.6));
     sparks(fx, x, y, 2, 0xffe2a0, 55);

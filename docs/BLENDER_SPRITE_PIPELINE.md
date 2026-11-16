@@ -90,6 +90,7 @@ Python has no Pillow, so it could not quantize).
 | `scripts/blender/decor.py` | Fences, hay, carts, rocks, grass, flowers, small props |
 | `scripts/blender/render_all.py` | Entry point, runs families and the packer |
 | `scripts/pack_sprites.py` | Trim, bleed, MaxRects packing, atlas JSON, manifest |
+| `scripts/farm_construction_frames.py` | The farm's own construction stages (`construction.farm`), composed from the packed farm frames with Pillow, no Blender. Appended to the buildings atlas after every pack (existing pixels and the palette stay as they are); `--preview out.png` to look at them |
 | `scripts/contact_sheet.py` | Contact sheet and mock village from the manifest (also a usage reference) |
 
 A family module exposes `jobs(only)` returning `kr_lib.Job`s (one 3D build
@@ -196,6 +197,7 @@ pixel lattice:
 | `building.farm` | `sown`, `growing`, `ripe`, `depleted` | Listed in `stages`, default `ripe`. Not era dependent. |
 | `building.wall` | `<era>.<mask>` | `mask` = sum of connected neighbours: 1 = +x, 2 = +y, 4 = -x, 8 = -y (game tile directions), 0..15. |
 | `construction.NxN` | `0`, `1`, `2` | `stages` in order, each variant has `progress` (0, 0.34, 0.67): show the last stage whose progress is reached. One set per footprint size (1x1, 2x2, 3x3). |
+| `construction.farm` | `0` .. `5` | The farm's own stages (`building.farm.construction` points here instead of `construction.2x2`): the plot staked out with string, then the soil bed turned furrow by furrow (`progress` 0, 0.1, 0.28, 0.46, 0.64, 0.82). Same frame size and anchor as the farm. Written by `scripts/farm_construction_frames.py`, not by Blender. |
 | `rubble.NxN` | `default` | Per footprint size. |
 | `resource.tree` | `spruce_a`, `spruce_b`, `pine`, `oak`, `beech`, `linden`, `birch` | Pick per tile with a position hash. Also `resource.tree_snow` (`a`, `b`), `resource.tree_dead`, `resource.stump` (`conifer`, `broadleaf`). |
 | `resource.berry_bush`, `resource.gold`, `resource.stone` | `full`, `half`, `low` | `amount` 1.0 / 0.5 / 0.2: show the variant whose amount is closest to remaining / initial. |
