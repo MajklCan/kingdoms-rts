@@ -19,7 +19,7 @@ import type { CommandFeedback } from '../commands/feedback';
 import type { PlayerCommands } from '../commands/player-commands';
 import type { GameAudio } from '../game-audio';
 import { entityKindName } from '../hud/selection-info';
-import { BUILD_MODE_TO_DEF, type BuildPlacement } from '../placement/build-placement';
+import type { BuildPlacement } from '../placement/build-placement';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
 import { drawSelectionBox, WorldOrders, type MapOrderKind } from './world-orders';
@@ -112,13 +112,7 @@ export class PointerController {
 
     // Refuse an invalid placement up front and keep the build mode armed, so
     // the player sees why and can click somewhere else.
-    if (placement.mode !== 'none' && pointer.leftButtonDown()) {
-      const failure = commands.placementFailure(BUILD_MODE_TO_DEF[placement.mode], tx, ty);
-      if (failure) {
-        commands.fail(failure);
-        return;
-      }
-    }
+    if (placement.mode !== 'none' && pointer.leftButtonDown() && placement.refuseClick(tx, ty)) return;
     const wasRallyMode = placement.armyRallyMode;
     if (placement.handlePointerDown(pointer, tx, ty)) {
       if (wasRallyMode && pointer.leftButtonDown() && isInsideMap(tx, ty)) {

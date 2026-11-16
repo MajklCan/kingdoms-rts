@@ -26,8 +26,10 @@ import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdVal
 import {
   canPlaceBuildingAt,
   EARLY_HOUSE_ALLOWANCE,
+  getBuildingPopProvided,
   housingAtMaximum,
   isPlacementInSight,
+  pendingPopCapGain,
   POP_CAP_HARD_LIMIT,
   getWorksiteWorkerSlots,
   remainingHouseAllowance,
@@ -184,14 +186,20 @@ export class PlayerCommands {
 
   // ── Placement ─────────────────────────────────────────────────────────────
 
-  /** Why no new house may be started right now (early allowance, population maximum), or null. */
-  houseStartFailure(): CommandFailure | null {
+  /**
+   * Why no new house may be started right now (early allowance, population
+   * maximum), or null. `pending` counts houses already placed whose input the
+   * sim has not applied yet (Shift-placement), so a row of houses stops at
+   * the limit instead of sending ones the sim would refuse.
+   */
+  houseStartFailure(pending = 0): CommandFailure | null {
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
-    if (housingAtMaximum(world, playerId)) {
+    if (housingAtMaximum(world, playerId) || this.pendingHousesReachMaximum(pending)) {
       return { reason: 'unavailable', text: `Your houses already reach the ${POP_CAP_HARD_LIMIT} population maximum` };
     }
-    if (remainingHouseAllowance(world, playerId) === 0) {
+    const allowance = remainingHouseAllowance(world, playerId);
+    if (allowance !== null && allowance - pending <= 0) {
       return {
         reason: 'unavailable',
         text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before Housing I. Research Housing I in Technology (K) to build more`,
@@ -200,22 +208,51 @@ export class PlayerCommands {
     return null;
   }
 
-  /** Why `defId` cannot be placed at tile (tx, ty) right now, or null if it can. */
-  placementFailure(defId: number, tx: number, ty: number): CommandFailure | null {
+  private pendingHousesReachMaximum(pending: number): boolean {
+    if (pending <= 0) return false;
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const cap = world.population[playerId]?.cap ?? 0;
+    const perHouse = getBuildingPopProvided(world, playerId, BuildingDefId.HOUSE);
+    return cap + pendingPopCapGain(world, playerId) + pending * perHouse >= POP_CAP_HARD_LIMIT;
+  }
+
+  /**
+   * Why one more `defId` cannot be started wherever it is put: locked, the
+   * house limit, or the bank. `pending` is how many of it are already on
+   * their way to the sim. Null when another one can be afforded.
+   */
+  nextPlacementFailure(defId: number, pending = 0): CommandFailure | null {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const def = getBuildingDef(defId);
+    if (!def) return { reason: 'unavailable', text: 'Unknown building' };
+    if (!isBuildingUnlocked(world, playerId, defId)) {
+      return { reason: 'locked', subject: def.name, research: this.unlockResearchName('building', defId) };
+    }
+    if (defId === BuildingDefId.HOUSE) {
+      const houseFailure = this.houseStartFailure(pending);
+      if (houseFailure) return houseFailure;
+    }
+    const missing = this.missingResources(def.cost, pending + 1);
+    if (missing.length > 0) {
+      return { reason: 'resources', subject: pending > 0 ? `another ${def.name}` : def.name, missing };
+    }
+    return null;
+  }
+
+  /**
+   * Why `defId` cannot be placed at tile (tx, ty) right now, or null if it
+   * can. `pending`: as in {@link nextPlacementFailure}.
+   */
+  placementFailure(defId: number, tx: number, ty: number, pending = 0): CommandFailure | null {
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
     const def = getBuildingDef(defId);
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
     if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
-    if (!isBuildingUnlocked(world, playerId, defId)) {
-      return { reason: 'locked', subject: def.name, research: this.unlockResearchName('building', defId) };
-    }
-    if (defId === BuildingDefId.HOUSE) {
-      const houseFailure = this.houseStartFailure();
-      if (houseFailure) return houseFailure;
-    }
-    const missing = this.missingResources(def.cost);
-    if (missing.length > 0) return { reason: 'resources', subject: def.name, missing };
+    const startFailure = this.nextPlacementFailure(defId, pending);
+    if (startFailure) return startFailure;
     if (!isPlacementInSight(world, playerId, def, tx, ty)) {
       return { reason: 'unavailable', text: 'You can only build where your people can see. Scout the spot first' };
     }

@@ -81,7 +81,8 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['R / N / T / F / Y / Z', 'Barracks / archery range / stable / foundry / tower / wall'],
       ['Q / E', 'Train first / second unit'],
       ['G', 'Town center villager rally point'],
-      ['Shift+click', 'Queue five units'],
+      ['Shift+click', 'On a train button: queue five units'],
+      ['Shift+click', 'While placing a building: place it and keep placing the same one'],
     ],
   },
   {
