@@ -19,6 +19,8 @@ export interface TechTreeNode {
   unlocks: string[];
   requires: TechIdValue[];
   requiresAny: TechIdValue[][];
+  /** Age the research needs (AgeId; 0 = none beyond the start). */
+  requiresAge: number;
   status: string;
   affordable: boolean;
   progressFrac: number;
@@ -105,6 +107,7 @@ export function getTechTree(world: SimWorld, playerId: number): TechTreeNode[] {
     unlocks: tech.unlocks,
     requires: tech.requires ?? [],
     requiresAny: tech.requiresAny ?? [],
+    requiresAge: tech.requiresAge ?? 0,
     status: techStatus(world, playerId, tech.id),
     affordable: canAffordCost(world, playerId, tech.cost),
     progressFrac:

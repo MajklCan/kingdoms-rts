@@ -440,23 +440,9 @@
   display: none;
 }
 
-/* The goal and the research on its paths: an outline, readable on any branch colour. */
-.tech-node.is-goal {
-  outline: 0.3rem solid var(--red-600);
-  outline-offset: 0.2rem;
-}
 
-.tech-node.is-path {
-  outline: 0.25rem dashed var(--red-600);
-  outline-offset: 0.2rem;
-}
-
-.tech-node.is-locked.is-goal,
-.tech-node.is-locked.is-path {
-  filter: grayscale(0.35);
-  opacity: 0.92;
-}
-
+/* Radial chart: the emblem in the middle, seals spreading outward. Sized in
+   rem by tech-tree-layout.ts and scaled as a whole to fit the dialog. */
 .tech-fit {
   width: 100%;
   height: 100%;
@@ -465,149 +451,312 @@
 
 .tech-board {
   position: relative;
-  width: 77.5rem;
-  height: 43rem;
   transform-origin: 0 0;
-  --c-military: #a3241b;
-  --c-economy: #8a6a1c;
-  --c-food: #4d7a2a;
-  --c-housing: #2f5f8a;
-  --c-castle: #5b5560;
-  --c-gunpowder: #b5561a;
-  --c-age: #6b3d8a;
 }
 
+.tech-board .military,
+.legend-item.military { --branch-c: #a3241b; }
+.tech-board .economy,
+.legend-item.economy { --branch-c: #8a6a1c; }
+.tech-board .food,
+.legend-item.food { --branch-c: #4d7a2a; }
+.tech-board .housing,
+.legend-item.housing { --branch-c: #2f5f8a; }
+.tech-board .age,
+.legend-item.age { --branch-c: #6b3d8a; }
+
+/* Links and the faint guide circles around the emblem. */
 .tech-links {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.tech-links polyline {
+.tech-orbit {
   fill: none;
-  stroke: rgba(94, 74, 44, 0.45);
-  stroke-width: 2px;
-  stroke-dasharray: 5 4;
-  vector-effect: non-scaling-stroke;
+  stroke: rgba(94, 74, 44, 0.2);
+  stroke-width: 0.07;
+  stroke-dasharray: 0.3 0.5;
 }
 
-.tech-links polyline.is-done {
+.tech-link {
+  fill: none;
+  stroke: rgba(94, 74, 44, 0.5);
+  stroke-width: 0.2;
+  stroke-dasharray: 0.55 0.5;
+  stroke-linecap: round;
+}
+
+.tech-link.is-done {
+  stroke: var(--branch-c, var(--gold-600));
+  stroke-width: 0.32;
   stroke-dasharray: none;
-  stroke-width: 3px;
 }
 
-.tech-links .military.is-done { stroke: var(--c-military); }
-.tech-links .economy.is-done { stroke: var(--c-economy); }
-.tech-links .food.is-done { stroke: var(--c-food); }
-.tech-links .housing.is-done { stroke: var(--c-housing); }
-.tech-links .castle.is-done { stroke: var(--c-castle); }
-.tech-links .gunpowder.is-done { stroke: var(--c-gunpowder); }
-.tech-links .age.is-done { stroke: var(--c-age); }
+.tech-link.is-walked {
+  stroke-width: 0.46;
+}
 
+/* The realm in the middle: a wooden boss in a gold rim, showing the age. */
+.tech-emblem {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: calc(2 * var(--r));
+  height: calc(2 * var(--r));
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 0.125rem solid var(--gold-700);
+  background: var(--surface-gold);
+}
+
+.tech-emblem-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  width: calc(100% - 0.7rem);
+  height: calc(100% - 0.7rem);
+  border-radius: 50%;
+  border: 0.0625rem solid var(--wood-950);
+  color: var(--gold-200);
+  background: radial-gradient(circle at 50% 35%, var(--wood-600), var(--wood-800) 62%, var(--wood-900));
+}
+
+.tech-emblem-icon,
+.tech-emblem-icon.is-px {
+  width: 3rem;
+  height: 3rem;
+}
+
+.tech-emblem-name {
+  max-width: 6.4rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--gold-100);
+}
+
+/* A research seal: round medallion with its name and cost beside it, on
+   the side away from the emblem so links never run through the text. */
 .tech-node {
   position: absolute;
-  width: 15.6rem;
-  height: 5.25rem;
-  display: grid;
-  grid-template-columns: 3.4rem minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  column-gap: 0.6rem;
+  left: var(--x);
+  top: calc(var(--y) - var(--r));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 0.45rem 0.65rem 0.45rem 0.5rem;
+  gap: 0.55rem;
+  min-width: calc(2 * var(--r));
+  padding: 0;
   border: 0;
-  text-align: left;
   color: var(--ink-900);
-  background: linear-gradient(180deg, #fffaf0, var(--parchment-200));
-  box-shadow: inset 0 0 0 1px var(--parchment-600), inset 0.28rem 0 0 var(--branch-c, var(--gold-600)), 0 0.2rem 0.4rem rgba(60, 40, 10, 0.3);
-  overflow: hidden;
-  transition: box-shadow var(--dur-fast), transform var(--dur-fast), filter var(--dur-fast);
+  background: none;
+  --rim: linear-gradient(180deg, var(--gold-500), var(--gold-700));
 }
 
-.tech-node.military { --branch-c: var(--c-military); }
-.tech-node.economy { --branch-c: var(--c-economy); }
-.tech-node.food { --branch-c: var(--c-food); }
-.tech-node.housing { --branch-c: var(--c-housing); }
-.tech-node.castle { --branch-c: var(--c-castle); }
-.tech-node.gunpowder { --branch-c: var(--c-gunpowder); }
-.tech-node.age { --branch-c: var(--c-age); }
-
-.tech-node.is-available:not(.is-short):hover {
-  transform: translateY(-2px);
-  box-shadow: inset 0 0 0 2px var(--branch-c), inset 0.28rem 0 0 var(--branch-c), 0 0.4rem 0.8rem rgba(60, 40, 10, 0.35);
+.tech-node.label-above {
+  top: calc(var(--y) + var(--r));
+  transform: translate(-50%, -100%);
+  flex-direction: column-reverse;
 }
 
-.tech-node.is-available:not(.is-short) {
-  box-shadow: inset 0 0 0 1px var(--branch-c), inset 0.28rem 0 0 var(--branch-c), 0 0.2rem 0.5rem rgba(60, 40, 10, 0.35), 0 0 0.8rem rgba(231, 196, 90, 0.45);
+.tech-seal {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(2 * var(--r));
+  height: calc(2 * var(--r));
+  border-radius: 50%;
+  border: 0.125rem solid var(--gold-700);
+  background: var(--rim);
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
+.tech-face {
+  display: grid;
+  place-items: center;
+  width: calc(100% - 0.6rem);
+  height: calc(100% - 0.6rem);
+  border-radius: 50%;
+  border: 0.0625rem solid rgba(20, 12, 4, 0.6);
+  background: radial-gradient(
+    circle at 38% 30%,
+    color-mix(in srgb, var(--branch-c, var(--gold-600)) 68%, #fff),
+    var(--branch-c, var(--gold-600)) 58%,
+    color-mix(in srgb, var(--branch-c, var(--gold-600)) 62%, #000)
+  );
+}
+
+.tech-icon,
+.tech-icon.is-px {
+  width: 58%;
+  height: 58%;
+  color: #fff7df;
+  filter: drop-shadow(0 0.0625rem 0 rgba(0, 0, 0, 0.55));
+}
+
+/* Ready to research: bright gold rim and a ring in the branch colour. */
+.tech-node.is-ready {
+  --rim: linear-gradient(180deg, var(--gold-100), var(--gold-300) 50%, var(--gold-400));
+}
+
+.tech-node.is-ready .tech-seal::before {
+  content: "";
+  position: absolute;
+  inset: -0.5rem;
+  border-radius: 50%;
+  border: 0.16rem solid var(--branch-c);
+}
+
+.tech-node.is-ready:hover .tech-seal,
+.tech-node.is-ready:focus-visible .tech-seal {
+  transform: scale(1.07);
+}
+
+.tech-node.is-ready:active .tech-seal {
+  transform: scale(0.97);
+}
+
+/* Open but too dear: the seal keeps its colour, the rim stays dull. */
 .tech-node.is-short,
 .tech-node.is-locked {
   cursor: var(--cur-forbidden);
 }
 
-.tech-node.is-locked {
-  filter: grayscale(0.85);
-  opacity: 0.62;
+.tech-node.is-short .tech-face {
+  filter: saturate(0.7);
 }
 
+.tech-node.is-locked {
+  --rim: linear-gradient(180deg, var(--parchment-300), var(--parchment-600));
+}
+
+.tech-node.is-locked .tech-seal {
+  border-color: var(--parchment-600);
+}
+
+.tech-node.is-locked .tech-face {
+  filter: grayscale(0.6);
+  opacity: 0.7;
+}
+
+.tech-node.is-locked .tech-label {
+  opacity: 0.75;
+}
+
+/* Researched: gold leaf, ringed in the branch colour. */
 .tech-node.is-researched {
-  background: linear-gradient(180deg, #fbefc4, #e8d08a);
-  box-shadow: inset 0 0 0 1px var(--gold-600), inset 0.28rem 0 0 var(--branch-c), 0 0.15rem 0.3rem rgba(60, 40, 10, 0.25);
+  --rim: var(--branch-c);
+}
+
+.tech-node.is-researched .tech-face {
+  background: radial-gradient(circle at 38% 30%, var(--gold-100), var(--gold-300) 55%, var(--gold-500));
+  border-color: var(--gold-700);
 }
 
 .tech-node.is-researching {
-  box-shadow: inset 0 0 0 2px var(--gold-500), inset 0.28rem 0 0 var(--branch-c), 0 0 0.9rem rgba(231, 196, 90, 0.6);
+  --rim: linear-gradient(180deg, var(--gold-100), var(--gold-300) 50%, var(--gold-400));
 }
 
-.tech-medal {
-  grid-row: 1 / 3;
+/* Progress ring around a seal that is being researched. */
+.tech-ring {
+  position: absolute;
+  inset: -0.62rem;
+  border-radius: 50%;
+  background: conic-gradient(var(--red-500) calc(var(--p, 0) * 1turn), rgba(94, 74, 44, 0.28) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 0.36rem), #000 calc(100% - 0.36rem + 1px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 0.36rem), #000 calc(100% - 0.36rem + 1px));
+}
+
+/* Corner marks: done / locked at the bottom right, the age it needs top left. */
+.tech-pip,
+.tech-age {
+  position: absolute;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 3.4rem;
-  height: 3.4rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
-  color: #fff7df;
-  background: radial-gradient(circle at 40% 30%, color-mix(in srgb, var(--branch-c, var(--gold-600)) 75%, #fff), var(--branch-c, var(--gold-600)) 60%, color-mix(in srgb, var(--branch-c, var(--gold-600)) 60%, #000));
-  box-shadow: inset 0 0 0 2px var(--gold-400), inset 0 0 0 4px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.4);
+  border: 0.125rem solid var(--parchment-50);
 }
 
-.tech-icon {
-  width: 1.9rem;
-  height: 1.9rem;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+.tech-pip {
+  right: -0.25rem;
+  bottom: -0.25rem;
+  color: var(--parchment-50);
 }
 
-.tech-icon.is-px {
-  filter: drop-shadow(0 var(--px) 0 rgba(0, 0, 0, 0.45));
+.tech-pip .icon {
+  width: 0.8rem;
+  height: 0.8rem;
 }
 
-.tech-copy {
+.tech-pip.is-check {
+  background: #3b6d1f;
+}
+
+.tech-pip.is-lock {
+  background: var(--wood-600);
+}
+
+.tech-age {
+  left: -0.25rem;
+  top: -0.25rem;
+  font-family: var(--font-num);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--parchment-50);
+  background: #5b5560;
+}
+
+.tech-age.is-met {
+  color: var(--gold-100);
+  background: #6b3d8a;
+}
+
+.tech-label {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
+  align-items: center;
+  gap: 0.1rem;
+  white-space: nowrap;
 }
 
 .tech-name {
   font-family: var(--font-display);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   font-weight: 700;
   line-height: 1.15;
   color: var(--ink-900);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.tech-node.is-milestone .tech-name {
+  font-size: var(--fs-lg);
+  letter-spacing: 0.02em;
 }
 
 .tech-cost {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.1rem 0.55rem;
-  font-size: var(--fs-xs);
+  gap: 0.5rem;
+  font-size: var(--fs-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
   color: var(--ink-700);
 }
 
@@ -630,46 +779,110 @@
   color: var(--ink-muted);
 }
 
-.tech-status {
-  grid-column: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
-.tech-node.is-researched .tech-status {
+.tech-done {
   color: #3b6d1f;
 }
 
-.tech-node.is-available:not(.is-short) .tech-status {
+.tech-busy {
   color: var(--red-600);
 }
 
-.tech-status-icon {
-  width: 0.9rem;
-  height: 0.9rem;
+/* Keyboard focus: a ring around the seal and the name underlined. */
+.tech-board .tech-node:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
-.tech-progress {
-  position: absolute;
-  left: 0.28rem;
-  right: 0;
-  bottom: 0;
-  height: 0.25rem;
-  background: rgba(94, 74, 44, 0.2);
+.tech-board .tech-node:focus-visible .tech-seal {
+  outline: 0.2rem solid var(--ink-900);
+  outline-offset: 0.2rem;
 }
 
-.tech-progress > i {
+.tech-board .tech-node:focus-visible .tech-name {
+  text-decoration: underline;
+  text-decoration-thickness: 0.12rem;
+  text-underline-offset: 0.15rem;
+}
+
+/* The goal and the research on its paths: a red ring outside the seal
+   (in place of the ready ring; a seal being researched shows progress there). */
+.tech-node.is-goal,
+.tech-node.is-path {
+  gap: 0.8rem;
+}
+
+.tech-node.is-goal:not(.is-researching) .tech-seal::after,
+.tech-node.is-path .tech-seal::after {
+  content: "";
   position: absolute;
-  inset: 0;
-  transform-origin: left;
-  transform: scaleX(var(--p, 0));
-  background: var(--surface-gold);
+  inset: -0.6rem;
+  border-radius: 50%;
+  border: 0.24rem solid var(--red-600);
+}
+
+.tech-node.is-path .tech-seal::after {
+  border-style: dashed;
+}
+
+.tech-node.is-goal .tech-seal::before,
+.tech-node.is-path .tech-seal::before {
+  content: none;
+}
+
+.tech-node.is-goal .tech-name,
+.tech-node.is-path .tech-name {
+  color: var(--red-600);
+}
+
+.tech-node.is-locked.is-goal .tech-face,
+.tech-node.is-locked.is-path .tech-face {
+  filter: grayscale(0.35);
+  opacity: 0.9;
+}
+
+/* "Either path": where two research paths lead to the same seal. */
+.tech-junction {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+
+.tech-or {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  border-radius: 50%;
+  border: 0.125rem solid var(--red-600);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--red-600);
+  background: var(--parchment-50);
+}
+
+.tech-or-note {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.tech-junction.is-open .tech-or {
+  border-color: #3b6d1f;
+  color: #3b6d1f;
 }
 
 .tech-legend {
@@ -698,12 +911,65 @@
   background: var(--branch-c);
 }
 
-.legend-item.military { --branch-c: #a3241b; }
-.legend-item.economy { --branch-c: #8a6a1c; }
-.legend-item.food { --branch-c: #4d7a2a; }
-.legend-item.housing { --branch-c: #2f5f8a; }
-.legend-item.castle { --branch-c: #5b5560; }
-.legend-item.gunpowder { --branch-c: #b5561a; }
+.legend-age b {
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  font-family: var(--font-num);
+  letter-spacing: 0;
+  color: var(--parchment-50);
+  background: #5b5560;
+}
+
+/* Compact chart (phone landscape): larger type, the emblem shows its icon only. */
+.tech-board.is-compact .tech-name {
+  font-size: var(--fs-lg);
+}
+
+.tech-board.is-compact .tech-node.is-milestone .tech-name {
+  font-size: 1.3rem;
+}
+
+.tech-board.is-compact .tech-cost {
+  font-size: var(--fs-md);
+}
+
+.tech-board.is-compact .tech-emblem-name {
+  display: none;
+}
+
+.tech-board.is-compact .tech-or-note {
+  font-size: var(--fs-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tech-seal {
+    transition: none;
+  }
+}
+
+/* Short screens (phone landscape): the chart gets the footer's room. */
+@media (max-height: 560px) {
+  .modal-tech {
+    padding: 0.7rem 1rem 0.6rem;
+  }
+
+  .modal-tech .eyebrow,
+  .tech-legend {
+    display: none;
+  }
+
+  .modal-tech .modal-head {
+    margin-bottom: 0.2rem;
+    padding-bottom: 0.3rem;
+  }
+
+  .modal-tech .modal-foot {
+    margin-top: 0.2rem;
+  }
+}
 
 @media (max-width: 760px) {
   .hotkeys {
