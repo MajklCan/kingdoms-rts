@@ -58,7 +58,6 @@ async function launch(spec: LaunchSpec): Promise<void> {
       beginMatch(spec.kind);
       spec.task();
     },
-    onReveal: () => getScene()?.playMatchStart(),
   });
   if (!ok) {
     appState.matchKind = null;

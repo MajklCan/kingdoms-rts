@@ -1,8 +1,8 @@
-/* Loading screen between the title and a match. Reads as a scenario brief
-   on the title's own darkened map: the destination bottom-left in
-   blackletter, one chronicle line, the map plate bottom-right (its fog lifts
-   with the progress) and a thin iron rule along the bottom edge whose four
-   notches are the real start-up phases (src/ui/screens/loading.ts). */
+/* Loading screen between the title and a match. It is the title's own
+   painted map, haze and glows (shared .menu-bg / .menu-haze / .menu-glow-*
+   rules), only darker, with one quiet line and a thin gold hairline at the
+   title's left margin. The hairline fills on the real start-up phases
+   (src/ui/screens/loading.ts). */
 
 .loading-screen {
   position: fixed;
@@ -20,28 +20,82 @@
   transition: opacity 420ms var(--ease-out);
 }
 
-/* Same art and framing as the title backdrop; the drift transform is copied
-   from it on show, so the cut is a dimming, not a new picture. */
+/* The drift transform is copied from the title on show, so the cut is a
+   dimming, not a new picture. */
 .loading-bg {
-  position: absolute;
-  inset: -6%;
-  background: url("/assets/ui/menu-bg.jpg") 60% 38% / cover no-repeat;
-  filter: saturate(0.75) brightness(0.7);
   animation: loading-dim 450ms var(--ease-out) both;
+  filter: saturate(0.75) brightness(1);
 }
 
 @keyframes loading-dim {
   from { filter: none; }
-  to { filter: saturate(0.75) brightness(0.7); }
+  to { filter: saturate(0.75) brightness(1); }
 }
 
+.loading-glow {
+  animation: loading-flicker 3.4s ease-in-out infinite alternate;
+}
+
+@keyframes loading-flicker {
+  from { opacity: 0.7; }
+  to { opacity: 0.95; }
+}
+
+/* Lighter vignette than the title's, so the painted map still reads. */
+.loading-screen .menu-haze {
+  background: radial-gradient(130% 90% at 50% 46%, transparent 50%, rgba(5, 7, 10, 0.6) 100%);
+}
+
+/* A slow field of pale motes, standing in for the title's dust canvas. */
+.loading-motes {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(255, 232, 186, 0.7), transparent),
+    radial-gradient(1px 1px at 55% 70%, rgba(255, 232, 186, 0.6), transparent),
+    radial-gradient(2px 2px at 80% 25%, rgba(255, 232, 186, 0.5), transparent),
+    radial-gradient(1px 1px at 35% 85%, rgba(255, 232, 186, 0.6), transparent),
+    radial-gradient(1px 1px at 90% 60%, rgba(255, 232, 186, 0.5), transparent);
+  background-size: 23rem 17rem;
+  animation: loading-motes 60s linear infinite;
+}
+
+@keyframes loading-motes {
+  to { background-position: 23rem -17rem; }
+}
+
+/* Extra darkening, strongest bottom-left where the text sits. */
 .loading-scrim {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(0deg, rgba(5, 7, 10, 0.94) 0, rgba(5, 7, 10, 0.62) 34%, transparent 62%),
-    linear-gradient(90deg, rgba(5, 7, 10, 0.55) 0, transparent 55%);
-  animation: loading-fade 320ms var(--ease-out) both;
+    radial-gradient(60% 40% at 0% 100%, rgba(5, 7, 10, 0.6), transparent 70%),
+    rgba(5, 7, 10, 0.18);
+}
+
+/* Same safe frame and margins as the title screen. */
+.loading-frame {
+  --m: 2.25rem;
+  position: absolute;
+  inset: 0;
+  width: min(100%, 177.78vh);
+  margin-inline: auto;
+  display: flex;
+  align-items: flex-end;
+  padding:
+    max(var(--m), env(safe-area-inset-top))
+    max(var(--m), env(safe-area-inset-right))
+    max(calc(var(--m) * 1.4), env(safe-area-inset-bottom))
+    max(var(--m), env(safe-area-inset-left));
+}
+
+.loading-foot {
+  width: min(100%, 18rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  animation: loading-fade 450ms var(--ease-out) 120ms both;
 }
 
 @keyframes loading-fade {
@@ -49,160 +103,17 @@
   to { opacity: 1; }
 }
 
-.loading-frame {
-  --m: 2.25rem;
-  position: absolute;
-  inset: 0;
-  width: min(100%, 177.78vh);
-  margin-inline: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 21rem);
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "brief plate"
-    "foot  foot";
-  column-gap: 3rem;
-  row-gap: 1.75rem;
-  padding:
-    max(var(--m), env(safe-area-inset-top))
-    max(var(--m), env(safe-area-inset-right))
-    max(calc(var(--m) * 0.8), env(safe-area-inset-bottom))
-    max(var(--m), env(safe-area-inset-left));
-}
-
-.loading-brief {
-  grid-area: brief;
-  align-self: end;
-  min-width: 0;
-  max-width: 40rem;
-  animation: loading-rise 450ms var(--ease-out) both;
-}
-
-@keyframes loading-rise {
-  from { opacity: 0; transform: translateY(0.75rem); }
-  to { opacity: 1; transform: none; }
-}
-
-.loading-eyebrow {
+.loading-status {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--gold-300);
-  text-shadow: 0 var(--px) 0 #000;
-}
-
-.loading-title {
-  margin: 0.15rem 0 0.35rem;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 4rem;
-  line-height: 0.95;
-  overflow-wrap: anywhere;
-  background: linear-gradient(180deg, #fff1bf 0%, #f0cf68 32%, #c9a227 54%, #8f6e16 76%, #e7cf7e 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  filter: drop-shadow(0 calc(2 * var(--px)) 0 #3a2806) drop-shadow(0 0.3rem 0.8rem rgba(0, 0, 0, 0.7));
-}
-
-.loading-sub {
-  margin: 0;
+  /* One line reserved, so a longer label never moves the hairline. */
+  height: 1.4em;
+  line-height: 1.4;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: var(--fs-lg);
-  font-style: italic;
-  color: var(--parchment-200);
-  text-shadow: 0 var(--px) 0 #000;
-}
-
-.loading-sub:empty {
-  display: none;
-}
-
-/* One chronicle line, set off by a gilded rule. */
-.loading-lore {
-  max-width: 36ch;
-  margin: 1.4rem 0 0;
-  padding-left: 0.9rem;
-  border-left: calc(2 * var(--px)) solid var(--gold-600);
+  font-family: var(--font-body);
   font-size: var(--fs-md);
-  line-height: 1.55;
-  color: #e2d5b3;
-  text-shadow: 0 var(--px) 0 #000;
-  text-wrap: pretty;
-}
-
-/* Map plate: the generated map diamond on dark oak, under a fog that
-   lifts left to right with the progress. Crest when there is no map. */
-.loading-plate {
-  grid-area: plate;
-  align-self: end;
-  position: relative;
-  width: 100%;
-  aspect-ratio: 2 / 1;
-  background: var(--wood-950) var(--tex-wood-dark) 0 0 / calc(64 * var(--px)) calc(48 * var(--px)) repeat;
-  background-clip: padding-box;
-  border: calc(6 * var(--px)) solid transparent;
-  border-image: var(--tex-frame-thin) 6 / calc(6 * var(--px)) / 0 repeat;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(0, 0, 0, 0.55));
-  animation: loading-fade 450ms var(--ease-out) 150ms both;
-}
-
-.loading-map,
-.loading-plate-crest,
-.loading-fog {
-  position: absolute;
-  inset: 0;
-}
-
-.loading-map {
-  width: 100%;
-  height: 100%;
-}
-
-.loading-plate-crest {
-  inset: 12% 0;
-  width: 100%;
-  height: 76%;
-  object-fit: contain;
-  filter: drop-shadow(0 0.3rem 0.6rem rgba(0, 0, 0, 0.6));
-}
-
-.loading-plate[data-plate="map"] .loading-plate-crest,
-.loading-plate[data-plate="crest"] .loading-map {
-  display: none;
-}
-
-.loading-fog {
-  background: rgba(12, 9, 6, 0.86);
-  clip-path: inset(0 0 0 calc(var(--p, 0) * 100%));
-  transition: clip-path var(--rule-dur, 0.3s) var(--ease-out);
-}
-
-/* Phase label over the right end of the rule, then the rule itself. */
-.loading-foot {
-  grid-area: foot;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.loading-status {
-  align-self: flex-end;
-  margin: 0;
-  min-height: 1.4em;
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold-200);
+  color: var(--parchment-200);
   text-shadow: 0 var(--px) 0 #000;
 }
 
@@ -222,67 +133,54 @@
 }
 
 .loading-status.is-error {
-  align-self: flex-start;
-  letter-spacing: 0.08em;
-  text-transform: none;
-  font-size: var(--fs-md);
+  white-space: normal;
+  height: auto;
   color: var(--danger);
 }
 
 .loading-rule {
   position: relative;
-  height: calc(3 * var(--px));
-  background: #0c0805;
-  box-shadow:
-    0 0 0 var(--px) #4a4038,
-    0 0 0 calc(2 * var(--px)) #120d09;
+  height: 2px;
+  background: rgba(233, 227, 212, 0.14);
 }
 
 .loading-fill {
   position: absolute;
   inset: 0;
+  background: var(--gold-300);
   transform-origin: left center;
   transform: scaleX(var(--p, 0));
   transition: transform var(--rule-dur, 0.3s) var(--ease-out);
-  background: linear-gradient(180deg, var(--gold-200) 0 40%, var(--gold-500) 40%);
 }
 
-.loading-notch {
-  position: absolute;
-  top: calc(-3 * var(--px));
-  bottom: calc(-3 * var(--px));
-  width: calc(2 * var(--px));
-  translate: -50% 0;
-  background: var(--gold-600);
-  box-shadow: 0 0 0 var(--px) #120d09;
+@media (prefers-reduced-motion: reduce) {
+  .loading-bg,
+  .loading-foot {
+    animation: none;
+  }
+
+  .loading-glow {
+    animation: none;
+    opacity: 0.82;
+  }
+
+  .loading-motes {
+    animation: none;
+  }
+
+  .loading-screen.is-leaving,
+  .loading-fill {
+    transition-duration: 0.01ms;
+  }
+
+  .loading-status.is-slow::after {
+    animation: none;
+    content: "...";
+  }
 }
 
-/* Phones: the brief and the rule only. */
 @media (max-height: 560px), (orientation: portrait) and (max-width: 700px) {
   .loading-frame {
     --m: 1rem;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "brief"
-      "foot";
-    row-gap: 1rem;
-  }
-
-  .loading-plate {
-    display: none;
-  }
-
-  .loading-title {
-    font-size: 2.75rem;
-  }
-
-  .loading-lore {
-    margin-top: 0.8rem;
-  }
-}
-
-@media (max-height: 360px) {
-  .loading-lore {
-    display: none;
   }
 }

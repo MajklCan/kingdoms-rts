@@ -1,7 +1,7 @@
 /**
  * Title gate: the first frame after boot. Browsers keep audio locked until a
  * gesture, so the menu opens on "Press any key" over the backdrop; the press
- * unlocks audio, plays the entry stinger, swells the menu theme in and glides
+ * unlocks audio, swells the menu theme in and glides
  * the wordmark from the centre to its corner. Shown on every page load;
  * `?nogate` skips it (dev reloads, automated tests).
  *
@@ -20,7 +20,7 @@ type GateState = 'idle' | 'armed' | 'entering';
 const IGNORED_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape', 'Fn', 'ContextMenu']);
 const ENTRY_MS = 1150;
 const ENTRY_REDUCED_MS = 150;
-/** The music starts a beat after the stinger and swells in slowly
+/** The music starts a beat after the press and swells in slowly
  *  (menu_theme opens about 15 dB under its body, so a long swell suits it). */
 const MUSIC_DELAY_S = 0.35;
 const MUSIC_FADE_IN_S = 2.8;
@@ -83,7 +83,6 @@ async function enter(): Promise<void> {
   const audio = getScene()?.getAudio();
   if (audio) {
     void audio.unlock().then(() => {
-      getScene()?.playUiEnter();
       startMenuMusic(MUSIC_FADE_IN_S);
     });
   }

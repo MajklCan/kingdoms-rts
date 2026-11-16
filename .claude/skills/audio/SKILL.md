@@ -56,7 +56,7 @@ Buses: `music`, `ambience`, `sfx`, `ui`, `voice`. Each maps to one user channel.
 | `src/render/audio/audio-debug.ts` | Dev only: `window.__AUDIO__`. |
 | `src/render/audio/sound-map.ts` | Pure tables: keys, cue -> SFX, combat -> SFX, UI configs. |
 | `src/ui/ui-sounds.ts` | DOM button click / hover sounds (rate-limited, deduped; `data-silent` opts a control out). |
-| `src/ui/screens/menu-gate.ts` | Title gate: first gesture unlocks audio, plays `ui_enter`, swells the menu program in (`?nogate` skips). Menu music never starts before it. |
+| `src/ui/screens/menu-gate.ts` | Title gate: first gesture unlocks audio, swells the menu program in (`?nogate` skips). Menu music never starts before it. |
 | `src/ui/panels/settings.ts` | Volume sliders per channel. |
 | `scripts/gen-sfx-elevenlabs.mjs`, `gen-music.mjs`, `gen-voices.mjs` | ElevenLabs generators. |
 

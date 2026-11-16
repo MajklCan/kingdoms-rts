@@ -1,27 +1,16 @@
 /**
- * Loading screen between the menu and a match: the destination named over
- * the darkened title map, one chronicle line, the map plate, and a progress
- * rule whose four notches each complete on real work (scene ready, world
- * built, first frames drawn, minimum time held). It paints first, runs the
- * start task under the cover, and holds long enough to read, never flashing.
+ * Loading screen between the menu and a match: the title's own painted map,
+ * haze and glows, darkened, with one quiet line bottom-left (the real
+ * start-up phase) over a thin gold hairline that fills as the work
+ * completes. It paints first, runs the start task under the cover, and holds
+ * long enough to read, never flashing.
  */
 
 import type { MapIdValue } from '../../sim/map-gen';
 import { setPhase } from '../app-state';
 import { afterPaint, byId, h, wait } from '../dom';
 import { getScene, isSceneReady } from '../game-bridge';
-import {
-  LOADING_PHASES,
-  LORE,
-  LORE_ROTATE_MS,
-  PHASE_COUNT,
-  eyebrowFor,
-  minDisplayMs,
-  phaseCreep,
-  pickLore,
-  type LoadingKind,
-} from './loading-phases';
-import { paintMapPreview } from './map-preview';
+import { LOADING_PHASES, PHASE_COUNT, minDisplayMs, phaseCreep, type LoadingKind } from './loading-phases';
 
 export type { LoadingKind } from './loading-phases';
 
@@ -33,55 +22,32 @@ const LEAVE_MS = 420;
 interface Parts {
   root: HTMLElement;
   bg: HTMLElement;
-  eyebrow: HTMLElement;
-  title: HTMLElement;
-  sub: HTMLElement;
-  lore: HTMLElement;
-  plate: HTMLElement;
-  map: HTMLCanvasElement;
   status: HTMLElement;
   rule: HTMLElement;
 }
 
 let parts: Parts | null = null;
-let loreIndex = -1;
 
 function build(): Parts {
-  const bg = h('div', { class: 'loading-bg', 'aria-hidden': 'true' });
-  const eyebrow = h('p', { class: 'loading-eyebrow' });
-  const title = h('h2', { class: 'loading-title' });
-  const sub = h('p', { class: 'loading-sub' });
-  const lore = h('p', { class: 'loading-lore', 'aria-live': 'off' });
-  const map = h('canvas', { class: 'loading-map' });
-  const plate = h(
-    'div',
-    { class: 'loading-plate', 'aria-hidden': 'true' },
-    map,
-    h('img', { class: 'loading-plate-crest', src: '/assets/ui/crest.svg', alt: '', width: 200, height: 244, draggable: 'false' }),
-    h('div', { class: 'loading-fog' })
-  );
+  const bg = h('div', { class: 'menu-bg loading-bg', 'aria-hidden': 'true' });
   const status = h('p', { class: 'loading-status', role: 'status', 'aria-live': 'polite' }, LOADING_PHASES[0]);
-  const notches = [1, 2, 3].map((n) => h('span', { class: 'loading-notch', style: `left: ${(n / PHASE_COUNT) * 100}%` }));
   const rule = h(
     'div',
     { class: 'loading-rule', role: 'progressbar', 'aria-label': 'Loading', 'aria-valuemin': 0, 'aria-valuemax': PHASE_COUNT, 'aria-valuenow': 0 },
-    h('i', { class: 'loading-fill' }),
-    ...notches
+    h('i', { class: 'loading-fill' })
   );
   const root = h(
     'div',
     { id: 'loading-screen', class: 'loading-screen', hidden: true, 'aria-busy': 'true' },
     bg,
+    h('div', { class: 'menu-haze', 'aria-hidden': 'true' }),
+    h('div', { class: 'menu-glow-hall', 'aria-hidden': 'true' }),
+    h('div', { class: 'menu-glow-core loading-glow', 'aria-hidden': 'true' }),
+    h('div', { class: 'loading-motes', 'aria-hidden': 'true' }),
     h('div', { class: 'loading-scrim', 'aria-hidden': 'true' }),
-    h(
-      'div',
-      { class: 'loading-frame' },
-      h('div', { class: 'loading-brief' }, eyebrow, title, sub, lore),
-      plate,
-      h('div', { class: 'loading-foot' }, status, rule)
-    )
+    h('div', { class: 'loading-frame' }, h('div', { class: 'loading-foot' }, status, rule))
   );
-  return { root, bg, eyebrow, title, sub, lore, plate, map, status, rule };
+  return { root, bg, status, rule };
 }
 
 export function getLoadingRoot(): HTMLElement {
@@ -89,7 +55,7 @@ export function getLoadingRoot(): HTMLElement {
   return parts.root;
 }
 
-/** Move the rule (and the plate's fog) to `p`; `slow` eases over seconds. */
+/** Move the hairline to `value` (0..1); `slow` eases over seconds. */
 function setRule(p: Parts, value: number, done: number, slow: boolean): void {
   p.root.style.setProperty('--p', value.toFixed(4));
   p.root.style.setProperty('--rule-dur', slow ? '2.4s' : '0.3s');
@@ -97,17 +63,15 @@ function setRule(p: Parts, value: number, done: number, slow: boolean): void {
 }
 
 export interface LoadingOptions {
+  /** Destination name; announced to screen readers, not drawn. */
   title: string;
   subtitle?: string;
   kind: LoadingKind;
-  /** Map for the plate; the crest stands in when there is none. */
   mapId?: MapIdValue | null;
   /** Minimum time on screen in ms (default per kind, see loading-phases). */
   minMs?: number;
   /** Starts the match. Runs after the loading screen has painted. */
   task: () => void;
-  /** The cover starts to lift off a started match (match-start stinger). */
-  onReveal?: () => void;
 }
 
 let busy = false;
@@ -118,22 +82,17 @@ export async function runLoading(opts: LoadingOptions): Promise<boolean> {
   busy = true;
   const p = (parts ??= build());
   const el = p.root;
-  p.eyebrow.textContent = eyebrowFor(opts.kind);
-  p.title.textContent = opts.title;
-  p.sub.textContent = opts.subtitle ?? '';
-  loreIndex = pickLore(loreIndex, Math.random);
-  p.lore.textContent = LORE[loreIndex]!;
+  el.setAttribute('aria-label', `Loading ${opts.title}`);
   p.status.textContent = LOADING_PHASES[0];
   p.status.classList.remove('is-slow', 'is-error');
-  p.plate.dataset.plate = opts.mapId ? 'map' : 'crest';
   // Pick the backdrop up exactly where the title's drifting map stands.
   const menuBg = byId('menu-bg');
   p.bg.style.transform = menuBg ? getComputedStyle(menuBg).transform : '';
+  p.bg.style.translate = menuBg ? getComputedStyle(menuBg).translate : '';
   el.classList.remove('is-leaving');
   setRule(p, 0, 0, false);
   el.hidden = false;
   setPhase('loading');
-  if (opts.mapId) paintMapPreview(p.map, opts.mapId, opts.kind === 'skirmish');
 
   const started = performance.now();
   const minMs = opts.minMs ?? minDisplayMs(opts.kind);
@@ -145,10 +104,6 @@ export async function runLoading(opts: LoadingOptions): Promise<boolean> {
     setRule(p, phaseCreep(done), done, true);
     if (done < PHASE_COUNT) slowTimer = window.setTimeout(() => p.status.classList.add('is-slow'), SLOW_PHASE_MS);
   };
-  const loreTimer = window.setInterval(() => {
-    loreIndex = pickLore(loreIndex, Math.random);
-    p.lore.textContent = LORE[loreIndex]!;
-  }, LORE_ROTATE_MS);
 
   let ok = true;
   try {
@@ -176,13 +131,11 @@ export async function runLoading(opts: LoadingOptions): Promise<boolean> {
     await wait(FAIL_HOLD_MS);
   }
   window.clearTimeout(slowTimer);
-  window.clearInterval(loreTimer);
   if (ok) {
     setPhase('match');
     p.status.textContent = LOADING_PHASES[PHASE_COUNT - 1];
     setRule(p, 1, PHASE_COUNT, false);
     await wait(REVEAL_HOLD_MS);
-    opts.onReveal?.();
   }
   el.classList.add('is-leaving');
   await wait(LEAVE_MS);

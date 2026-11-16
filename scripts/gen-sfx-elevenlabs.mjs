@@ -60,8 +60,6 @@ const SOUNDS = [
   { id: 'alert',          text: 'Urgent medieval town alarm bell ringing fast, a large bronze church bell clanging repeatedly as a warning, danger is near, clear metallic tolls, no music', dur: 1.6, infl: 0.45 },
 
   // --- Title entry + match start stingers (ui bus) ---
-  { id: 'ui_enter',       text: 'Single deep medieval war horn note rising slowly, a low bronze bell strike and a shimmering orchestral swell that fades into a long reverberant tail, cinematic title screen entrance, no music bed', dur: 2.5, infl: 0.3 },
-  { id: 'match_start',    text: 'Short bold medieval brass fanfare of three rising notes with a snare roll and a bronze bell hit, a call to arms, confident, dry short tail, no music bed', dur: 2.0, infl: 0.3 },
 ];
 
 function ensureDirs() {

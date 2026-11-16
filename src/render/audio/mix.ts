@@ -60,9 +60,6 @@ export const SFX_TRIM_DB: Record<SfxKey, number> = {
   command_move: -1.5,
   error: -5,
   alert: 6.2,
-  // Measured 2026-11-16, loud 50 ms window: -14.5 / -15.3 dBFS (age_up -16.6).
-  ui_enter: 3,
-  match_start: 3.7,
 };
 
 /** Songs to -16 LUFS; battle bed to sit ~8 dB under battle music (it was
@@ -136,8 +133,6 @@ export const SFX_POLICY: Record<SfxKey, SfxPolicy> = {
   command_move: UI(2, 2, 50),
   place_building: UI(2, 2, 60),
   error: UI(1, 3, 0),
-  ui_enter: { bus: 'ui', maxVoices: 1, priority: 4, detuneCents: 0, volJitterDb: 0, startJitterMs: 0 },
-  match_start: { bus: 'ui', maxVoices: 1, priority: 4, detuneCents: 0, volJitterDb: 0, startJitterMs: 0 },
 };
 
 /** Most voices a bus may hold before new sounds steal or drop. */
