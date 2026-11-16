@@ -16,6 +16,7 @@ import { selectedQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnFoundation } from '../factories/buildings';
 import { markWorksiteWorkersDead, worksiteUsesResourceNodes } from '../systems/worksites';
+import { applyBuildCommand } from './unit-orders';
 import { applyPlaceWallLine } from './walls';
 
 export function applyRemoveSelectedBuildings(world: SimWorld, playerId: number): void {
@@ -49,7 +50,8 @@ export function applyPlaceBuilding(
   defId: number,
   x: number,
   y: number,
-  playerId: number
+  playerId: number,
+  builderEids: number[] = []
 ): void {
   const def = getBuildingDef(defId);
   if (!def) return;
@@ -58,7 +60,7 @@ export function applyPlaceBuilding(
   if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return;
   if (defId === BuildingDefId.WALL) {
     // A one-tile line: same tier cost, hp and unit check as a dragged line.
-    applyPlaceWallLine(world, playerId, x, y, x, y);
+    applyPlaceWallLine(world, playerId, x, y, x, y, builderEids);
     return;
   }
 
@@ -71,7 +73,8 @@ export function applyPlaceBuilding(
   if (!canPlaceBuildingAt(world, def, x, y)) return;
 
   spend(bank, def.cost);
-  spawnFoundation(world, defId, x, y, playerId);
+  const siteEid = spawnFoundation(world, defId, x, y, playerId);
+  applyBuildCommand(world, playerId, builderEids, siteEid);
 }
 
 /**

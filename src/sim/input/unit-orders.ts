@@ -28,6 +28,7 @@ import { findSpawnSpot } from '../core/grid';
 import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { SimWorld } from '../core/types';
 import { routeToNearestDropOff } from '../systems/dropoff';
+import { canBuild, isOpenFoundation } from '../systems/builders';
 import { startGatheringResource } from '../systems/gathering';
 import { isTargetInAttackRange } from '../systems/targeting';
 import { isEntityVisibleTo } from '../systems/visibility';
@@ -238,6 +239,7 @@ export function applyGatherCommand(
   for (const eid of ownedCommandableEids(world, playerId, eids)) {
     if (!hasComponent(world.ecs, Gatherer, eid)) continue;
     clearCombatOrders(world, eid);
+    if (hasComponent(world.ecs, BuildOrder, eid)) BuildOrder.targetEid[eid] = -1;
     if (
       ResourceCarry.amount[eid] > 0 &&
       ResourceCarry.kind[eid] !== kind
@@ -250,6 +252,31 @@ export function applyGatherCommand(
       continue;
     }
     startGatheringResource(world, eid, targetEid);
+  }
+}
+
+export function applyBuildSelected(world: SimWorld, targetEid: number): void {
+  applyBuildCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
+}
+
+/**
+ * Send `eids` (the player's free villagers among them) to work on own
+ * foundation `targetEid`. The builder system walks them there; a villager
+ * that cannot reach it drops the order on its own.
+ */
+export function applyBuildCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  targetEid: number
+): void {
+  if (!isOpenFoundation(world, targetEid, playerId)) return;
+  for (const eid of ownedCommandableEids(world, playerId, eids)) {
+    if (!canBuild(world, eid)) continue;
+    clearCombatOrders(world, eid);
+    clearWorkOrders(world, eid);
+    world.paths.delete(eid);
+    BuildOrder.targetEid[eid] = targetEid;
   }
 }
 

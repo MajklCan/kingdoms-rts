@@ -9,6 +9,7 @@ import { isAiControlledPlayer } from '../core/players';
 import { countQueuedPopCost } from '../core/population';
 import type { AiDifficulty, AiPlayerState, SimWorld } from '../core/types';
 import { aiHandleDefense, aiManageAttackPlan, findAiDefenseTarget } from './attack';
+import { aiManageBuilders } from './builders';
 import { type AiActuator, currentAiThinkScope, withAiThinkScope } from './context';
 import { activeAiActuator, directAiActuator } from './direct-actuator';
 import {
@@ -70,6 +71,7 @@ function aiPlayerTick(world: SimWorld, playerId: number, state: AiPlayerState): 
   aiResearchTechs(world, playerId, snapshot);
   aiMaintainMilitaryInfrastructure(world, playerId, snapshot);
   aiMaintainEconomy(world, playerId, snapshot);
+  aiManageBuilders(world, playerId, collectAiSnapshot(world, playerId) ?? snapshot);
   const scope = currentAiThinkScope();
   if (scope) scope.reserve = aiAgeUpReserve(world, playerId, state, snapshot);
   aiTrainArmy(world, playerId, snapshot);

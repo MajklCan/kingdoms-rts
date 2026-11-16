@@ -14,12 +14,14 @@ import type { SimWorld } from '../core/types';
 import { applyWallTierToFoundation, getPlayerWallTier, wallLineTiles } from '../core/walls';
 import { spawnFoundation } from '../factories/buildings';
 import { canPlaceBuildingAt, isPlacementInSight } from './buildings';
+import { applyBuildCommand } from './unit-orders';
 
 /**
  * Lay wall foundations along the 4-connected line (x0, y0) -> (x1, y1), start
  * first. Tiles that cannot take a wall (blocked, resource, building, a unit
  * standing there) are skipped, so a line around a tree still goes up; placing
- * stops when the player runs out of resources. Returns the number placed.
+ * stops when the player runs out of resources. `builderEids` are sent to
+ * build the line. Returns the number placed.
  */
 export function applyPlaceWallLine(
   world: SimWorld,
@@ -27,7 +29,8 @@ export function applyPlaceWallLine(
   x0: number,
   y0: number,
   x1: number,
-  y1: number
+  y1: number,
+  builderEids: number[] = []
 ): number {
   if (![x0, y0, x1, y1].every(Number.isInteger)) return 0;
   if (!isTileInBounds(x0, y0) || !isTileInBounds(x1, y1)) return 0;
@@ -47,6 +50,9 @@ export function applyPlaceWallLine(
     spend(bank, tier.cost);
     const eid = spawnFoundation(world, BuildingDefId.WALL, x, y, playerId);
     applyWallTierToFoundation(eid, tier);
+    // Builders start on the first segment; the builder system chains them
+    // along the rest of the line as each one finishes.
+    if (placed === 0) applyBuildCommand(world, playerId, builderEids, eid);
     placed++;
   }
   return placed;

@@ -11,7 +11,12 @@ import { pushAiEvent } from '../core/events';
 import { pathTo, pathToAttackTarget } from '../core/navigation';
 import { spawnFoundation } from '../factories/buildings';
 import { isMovableEntity } from '../input/formation';
-import { clearCombatOrders, clearFormationSpeedCap, clearWorkOrders } from '../input/unit-orders';
+import {
+  applyBuildCommand,
+  clearCombatOrders,
+  clearFormationSpeedCap,
+  clearWorkOrders,
+} from '../input/unit-orders';
 import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
 import { type AiActuator, currentAiThinkScope } from './context';
 
@@ -74,6 +79,9 @@ export const directAiActuator: AiActuator = {
     if (inRange) world.paths.delete(eid);
     clearWorkOrders(world, eid);
     clearFormationSpeedCap(world, eid);
+  },
+  build(world, playerId, eids, siteEid) {
+    applyBuildCommand(world, playerId, eids, siteEid);
   },
   event(world, playerId, message) {
     pushAiEvent(world, playerId, message);

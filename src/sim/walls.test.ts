@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { staffFoundations } from './testing/staff-foundations';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../config';
 import { Building, ConstructionSite, Health, Owner, Position, Resource, ResourceKindId } from './components';
@@ -140,6 +141,7 @@ describe('walls', () => {
       expect(Health.hpMax[eid]).toBe(PALISADE.hp);
       expect(ConstructionSite.totalTicks[eid]).toBe(PALISADE.buildTimeTicks);
     }
+    staffFoundations(world, P1);
     stepN(world, PALISADE.buildTimeTicks + 2);
     for (const eid of walls) {
       expect(hasComponent(world.ecs, ConstructionSite, eid)).toBe(false);
@@ -193,12 +195,14 @@ describe('walls', () => {
     const tc = townCenterOf(world, P1);
     const at = openBlock(world, Math.round(Position.x[tc]), Math.round(Position.y[tc]), 6, 3);
     placeLine(world, at.x, at.y, at.x + 1, at.y);
+    staffFoundations(world, P1);
     stepN(world, PALISADE.buildTimeTicks + 2);
     const [done, other] = wallsOf(world, P1);
     applyDamage(world, done, 100, P2);
     // One foundation still building when the age arrives.
     placeLine(world, at.x + 4, at.y, at.x + 4, at.y);
     const site = wallsOf(world, P1).find((eid) => hasComponent(world.ecs, ConstructionSite, eid))!;
+    staffFoundations(world, P1);
     stepN(world, 10);
     const siteHpBefore = Health.hp[site];
 
@@ -220,6 +224,7 @@ describe('walls', () => {
     const fresh = wallsOf(world, P1).filter((eid) => Position.y[eid] === at.y + 2);
     expect(fresh).toHaveLength(3);
     expect(world.resources[P1][3]).toBe(stoneBefore - 3 * STONE.cost.stone);
+    staffFoundations(world, P1);
     stepN(world, STONE.buildTimeTicks + 2);
     for (const eid of fresh) expect(Health.hp[eid]).toBe(STONE.hp);
   });

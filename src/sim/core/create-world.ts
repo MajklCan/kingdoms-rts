@@ -12,7 +12,7 @@ import { Rng } from '../rng';
 import { type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
 import { createAiPlayers, normalizeAiDifficulty } from '../ai/difficulty';
 import { spawnResource, spawnTownCenter } from '../factories/buildings';
-import { spawnArcher, spawnScoutCavalry, spawnSpearman } from '../factories/units';
+import { spawnArcher, spawnScoutCavalry, spawnSpearman, spawnVillager } from '../factories/units';
 import { createCampaignWorld } from '../missions/campaign-world';
 import { edgeProximity01, trySpawnTreeAt } from '../systems/forest-regrowth';
 import { createVisibilityStates, updatePlayerVisibility } from '../systems/visibility';
@@ -122,8 +122,9 @@ export function createAgeState(current: AgeIdValue): AgeState {
 /**
  * Build a fresh sim world:
  * - 1 Town Center per player
- * - 1 of each combat unit per player
- * - no starter villagers; specialist resource buildings spawn work crews
+ * - 1 scout rider per player
+ * - starter villagers to raise the first buildings; specialist resource
+ *   buildings still spawn their own work crews
  * - local wood, gold, and stone patches near each TC; farms generate food
  */
 export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}): SimWorld {
@@ -489,10 +490,26 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     }
   }
 
+  // Starter villagers: buildings need a villager to raise them. Spawned last
+  // (no rng draws) so everything above keeps its creation order.
+  for (const playerId of options.starterVillagers === false ? [] : [1, 2]) {
+    const spawn = mapData.spawns[playerId];
+    for (const [dx, dy] of STARTER_VILLAGER_OFFSETS) {
+      const spot = findSpawnSpot(world, spawn.x + dx, spawn.y + dy, 6);
+      if (spot) spawnVillager(world, spot.x, spot.y, playerId);
+    }
+  }
+
   updatePlayerVisibility(world, LOCAL_PLAYER_ID);
   resetMatchStats(world);
   return world;
 }
+
+/** Where each player's starter villagers stand, relative to the town center. */
+const STARTER_VILLAGER_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-2, 2],
+  [-2, 3],
+];
 
 function seedInitialForestTrees(world: SimWorld, mirrored = false): void {
   const canSeedForestTile = (x: number, y: number): boolean => {

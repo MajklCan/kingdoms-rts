@@ -19,6 +19,8 @@ export type SimInput =
   //    equivalents (which carry an explicit playerId + eid list) before sending.
   | { type: 'moveSelected'; to: GridPos }
   | { type: 'gatherSelected'; targetEid: number }
+  /** Send the selected villagers to build (or help build) own foundation `targetEid`. */
+  | { type: 'buildSelected'; targetEid: number }
   | { type: 'stopSelected' }
   | { type: 'toggleSelectedUnitStance' }
   | { type: 'setSelectedUnitStance'; stance: UnitStanceValue }
@@ -33,6 +35,7 @@ export type SimInput =
   //    putting commands on the wire, then decodes them back before applyInput().
   | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
   | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
+  | { type: 'cmdBuild'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdStop'; playerId: number; eids: number[] }
   | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
   | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
@@ -49,9 +52,10 @@ export type SimInput =
   | { type: 'setVillagerRally'; playerId: number; atEid: number; x: number; y: number; targetEid?: number }
   /** Back to automatic work for the town center's new villagers. */
   | { type: 'clearVillagerRally'; playerId: number; atEid: number }
-  | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
+  /** `eids`: villagers sent to build it. A foundation without builders just waits. */
+  | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number; eids?: number[] }
   /** Wall foundations along the 4-connected line (x0, y0) -> (x1, y1), integer tiles. */
-  | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number }
+  | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number; eids?: number[] }
   | { type: 'removeSelectedBuildings'; playerId: number }
   | { type: 'trainUnit'; atEid: number; defId: number; count?: number; playerId?: number }
   /** Cancel queue entry `slot` (0 = the one training now). Without a slot the
@@ -392,4 +396,6 @@ export interface CreateSimWorldOptions {
   mapId?: MapIdValue;
   aiDifficulty?: AiDifficulty;
   campaignMissionId?: CampaignMissionIdValue;
+  /** Skirmish gives each player starter villagers; missions set up their own units. */
+  starterVillagers?: boolean;
 }

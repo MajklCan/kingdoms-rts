@@ -271,6 +271,9 @@ export class CommandBot {
       if (!hasComponent(world.ecs, Position, eid)) return;
       this.batch.push({ type: 'cmdAttack', playerId: this.playerId, eids: [eid], targetEid: target });
     },
+    build: (_world, playerId, eids, siteEid) => {
+      this.batch.push({ type: 'cmdBuild', playerId, eids: [...eids], targetEid: siteEid });
+    },
     event: () => {},
   };
 }

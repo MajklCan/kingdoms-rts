@@ -31,6 +31,8 @@ export interface AiActuator {
   attackMove(world: SimWorld, eid: number, to: GridPos): boolean;
   /** Attack `target` with `eid` (validated by the caller). */
   attack(world: SimWorld, eid: number, target: number, inRange: boolean): void;
+  /** Send villagers `eids` to work on own foundation `siteEid`. */
+  build(world: SimWorld, playerId: number, eids: number[], siteEid: number): void;
   /** Player-facing AI message (render only). */
   event(world: SimWorld, playerId: number, message: string): void;
 }

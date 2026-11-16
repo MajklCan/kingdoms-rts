@@ -31,6 +31,8 @@ import {
   applyAttackMoveCommand,
   applyAttackMoveSelected,
   applyAttackSelected,
+  applyBuildCommand,
+  applyBuildSelected,
   applyGatherCommand,
   applyGatherSelected,
   applyMoveCommand,
@@ -85,6 +87,12 @@ export function applyInput(world: SimWorld, input: SimInput): void {
     case 'cmdGather':
       applyGatherCommand(world, input.playerId, input.eids, input.targetEid);
       return;
+    case 'buildSelected':
+      applyBuildSelected(world, input.targetEid);
+      return;
+    case 'cmdBuild':
+      applyBuildCommand(world, input.playerId, input.eids, input.targetEid);
+      return;
     case 'cmdStop':
       applyStopCommand(world, input.playerId, input.eids);
       return;
@@ -109,10 +117,10 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       world.villagerRallies.delete(input.atEid);
       return;
     case 'placeBuilding':
-      applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId);
+      applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId, input.eids);
       return;
     case 'placeWallLine':
-      applyPlaceWallLine(world, input.playerId, input.x0, input.y0, input.x1, input.y1);
+      applyPlaceWallLine(world, input.playerId, input.x0, input.y0, input.x1, input.y1, input.eids);
       return;
     case 'removeSelectedBuildings':
       applyRemoveSelectedBuildings(world, input.playerId);

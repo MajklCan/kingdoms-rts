@@ -1,5 +1,5 @@
 /**
- * Foundation build progress and building completion.
+ * Foundation build progress (driven by villager builders) and building completion.
  */
 
 import { addComponent, removeComponent } from 'bitecs';
@@ -22,19 +22,25 @@ import { getBuildingPopProvided, recalculatePlayerPopCap } from '../core/populat
 import { foundationQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { attachBuildingCombat } from '../factories/buildings';
+import { builderSystem, buildWorkThisTick } from './builders';
 import { trySpawnInitialWorksiteWorker } from './worksites';
 
 export function constructionSystem(world: SimWorld): void {
+  // Builders first: who stands at which foundation this tick.
+  const buildersAt = builderSystem(world);
   const sites = sortedEids(world, foundationQuery(world.ecs));
   for (const siteEid of sites) {
     // Killed this tick: leave it for the death system, never build it back up.
     if (Health.hp[siteEid] <= 0) continue;
+    // No villager at work, no progress: a foundation waits for its builders.
+    const work = buildWorkThisTick(buildersAt.get(siteEid) ?? 0, world.tick);
+    if (work <= 0) continue;
     const total = Math.max(1, ConstructionSite.totalTicks[siteEid]);
     const builtBefore = builtHp(siteEid, ConstructionSite.progress[siteEid], total);
     // Damage taken so far is kept as a deficit below the built curve, so hits
     // on a foundation stick instead of being healed by the next tick.
     const deficit = Math.max(0, builtBefore - Health.hp[siteEid]);
-    ConstructionSite.progress[siteEid] += 1;
+    ConstructionSite.progress[siteEid] = Math.min(total, ConstructionSite.progress[siteEid] + work);
     Health.hp[siteEid] = builtHp(siteEid, ConstructionSite.progress[siteEid], total) - deficit;
     if (ConstructionSite.progress[siteEid] >= total) {
       const defId = ConstructionSite.defId[siteEid];

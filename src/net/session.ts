@@ -559,7 +559,7 @@ function infoToDebug(info?: TransportCloseInfo): Record<string, unknown> {
 function inputDebug(input: SimInput): Record<string, unknown> {
   const out: Record<string, unknown> = { type: input.type };
   if ('playerId' in input) out.playerId = input.playerId;
-  if ('eids' in input) out.eidCount = input.eids.length;
+  if ('eids' in input && input.eids) out.eidCount = input.eids.length;
   if ('targetEid' in input) out.targetEid = input.targetEid;
   if ('atEid' in input) out.atEid = input.atEid;
   if ('defId' in input) out.defId = input.defId;

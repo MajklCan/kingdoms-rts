@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { staffFoundations } from '../testing/staff-foundations';
 import { Building, ConstructionSite, Health, Owner, Position, Producer, TownCenterTag } from '../components';
 import { hasComponent } from 'bitecs';
 import { checksumWorld } from '../checksum';
@@ -197,6 +198,7 @@ describe('match statistics', () => {
       }
     }
     expect(site).toBeGreaterThanOrEqual(0);
+    staffFoundations(world, P1);
     for (let i = 0; i < Math.floor(def.buildTimeTicks / 2); i++) step(world);
     const halfway = Health.hp[site];
     expect(halfway).toBeGreaterThan(10);
@@ -272,6 +274,8 @@ describe('match statistics', () => {
     expect(spot).not.toBeNull();
     const defId = BUILDING_TABLE.indexOf(def!);
     world.inputs.push({ type: 'placeBuilding', defId, x: spot!.x, y: spot!.y, playerId: P1 });
+    step(world);
+    staffFoundations(world, P1);
     stepUntil(world, () => world.matchStats[P1]!.buildingsBuilt > 0, def!.buildTimeTicks + 50);
     expect(world.matchStats[P1]!.buildingsBuilt).toBe(1);
     expect(events(world, 'buildingCompleted').filter((e) => e.kind === 'buildingCompleted' && e.playerId === P1)[0])

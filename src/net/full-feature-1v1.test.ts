@@ -325,6 +325,12 @@ function findFreeTile(
 
 // ───────────────────────────── action + confirm ─────────────────────────────
 
+/** The player's free villagers: every placement sends them all to build it,
+ *  and they chain on to whatever is still unfinished nearby. */
+function freeVillagers(w: SimWorld, pid: number): number[] {
+  return unitsOfKind(w, pid, UnitKindId.VILLAGER).filter((eid) => !hasComponent(w.ecs, WorksiteWorker, eid));
+}
+
 function placeAndConfirm(d: Driver, pid: number, defId: number, clear = 2): number | null {
   const w = d.world;
   const tc = ownTownCenter(w, pid);
@@ -332,7 +338,7 @@ function placeAndConfirm(d: Driver, pid: number, defId: number, clear = 2): numb
   const before = buildingsOfDef(w, pid, defId).length;
   const tile = findFreeTile(w, Position.x[tc], Position.y[tc], clear);
   if (!tile) return null;
-  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid });
+  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid, eids: freeVillagers(w, pid) });
   d.step(3);
   const after = buildingsOfDef(w, pid, defId);
   return after.length > before ? after[after.length - 1] : null;
@@ -354,6 +360,7 @@ function placeWallLineAndConfirm(d: Driver, pid: number): number {
     y0: tile.y,
     x1: tile.x + 2,
     y1: tile.y,
+    eids: freeVillagers(w, pid),
   });
   if (!cmd) return 0;
   d.push(cmd);
@@ -372,7 +379,7 @@ function placeMineralWorksite(d: Driver, pid: number, defId: number, kind: numbe
   // the ring search at 6 tiles from the node.
   const tile = findFreeTile(w, Position.x[node], Position.y[node], 0, 6);
   if (!tile) return null;
-  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid });
+  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid, eids: freeVillagers(w, pid) });
   d.step(3);
   const after = buildingsOfDef(w, pid, defId);
   return after.length > before ? after[after.length - 1] : null;
@@ -420,13 +427,20 @@ function advanceBothAges(d: Driver, expected: number, maxTicks = 1400): boolean 
   return PLAYERS.every((pid) => d.world.ages[pid].current >= expected);
 }
 
-function finishConstruction(d: Driver, maxTicks = 1200): void {
+/** Wait for every foundation to finish. Like a player would, send villagers
+ *  with nothing to build on to a foundation that is still waiting. */
+function finishConstruction(d: Driver, maxTicks = 6000): void {
   for (let i = 0; i < maxTicks; i += 20) {
-    d.step(20);
-    const pending = [1, 2].some((pid) =>
-      buildingQuery(d.world.ecs).some((e) => Owner.player[e] === pid && isFoundation(d.world, e))
-    );
+    let pending = false;
+    for (const pid of [1, 2]) {
+      const sites = buildingQuery(d.world.ecs).filter((e) => Owner.player[e] === pid && isFoundation(d.world, e));
+      if (sites.length === 0) continue;
+      pending = true;
+      const free = freeVillagers(d.world, pid).filter((eid) => BuildOrder.targetEid[eid] < 0);
+      if (free.length > 0) d.push({ type: 'cmdBuild', playerId: pid, eids: free, targetEid: sites[0] });
+    }
     if (!pending) return;
+    d.step(20);
   }
 }
 

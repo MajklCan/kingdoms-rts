@@ -21,6 +21,7 @@ type WireCommandType = Exclude<
   SimInput['type'],
   | 'moveSelected'
   | 'gatherSelected'
+  | 'buildSelected'
   | 'stopSelected'
   | 'toggleSelectedUnitStance'
   | 'setSelectedUnitStance'
@@ -33,13 +34,14 @@ type WireCommandType = Exclude<
   | 'removeSelectedBuildings'
 >;
 
-type FieldKind = 'int' | 'optInt' | 'num' | 'string' | 'eids' | 'point';
+type FieldKind = 'int' | 'optInt' | 'num' | 'string' | 'eids' | 'optEids' | 'point';
 
 /** Field schema per wire-safe command (playerId is checked separately). A new
  *  SimInput command type must be added here before it can be sent. */
 const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   cmdMove: { eids: 'eids', to: 'point' },
   cmdGather: { eids: 'eids', targetEid: 'int' },
+  cmdBuild: { eids: 'eids', targetEid: 'int' },
   cmdStop: { eids: 'eids' },
   cmdToggleStance: { eids: 'eids' },
   cmdAttack: { eids: 'eids', targetEid: 'int' },
@@ -53,8 +55,8 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   setArmyRallyPoint: { x: 'num', y: 'num' },
   setVillagerRally: { atEid: 'int', x: 'int', y: 'int', targetEid: 'optInt' },
   clearVillagerRally: { atEid: 'int' },
-  placeBuilding: { defId: 'int', x: 'int', y: 'int' },
-  placeWallLine: { x0: 'int', y0: 'int', x1: 'int', y1: 'int' },
+  placeBuilding: { defId: 'int', x: 'int', y: 'int', eids: 'optEids' },
+  placeWallLine: { x0: 'int', y0: 'int', x1: 'int', y1: 'int', eids: 'optEids' },
   trainUnit: { atEid: 'int', defId: 'int', count: 'optInt' },
   cancelProduction: { atEid: 'int', slot: 'optInt' },
   advanceAge: {},
@@ -85,6 +87,8 @@ function fieldOk(kind: FieldKind, value: unknown): boolean {
       return typeof value === 'string';
     case 'eids':
       return Array.isArray(value) && value.every((eid) => Number.isInteger(eid));
+    case 'optEids':
+      return value === undefined || fieldOk('eids', value);
     case 'point':
       return isRecord(value) && fieldOk('num', value.x) && fieldOk('num', value.y);
   }
@@ -128,7 +132,7 @@ export function sanitizeTurnCommands(senderId: number, cmds: unknown): SimInput[
 function mapEntityRefs(input: SimInput, mapEid: (eid: number) => number | null): SimInput {
   if (!isWireCommandType(input.type)) return input;
   const out: Record<string, unknown> = { ...input };
-  if ('eids' in input) out.eids = input.eids.map(mapEid).filter((eid): eid is number => eid !== null);
+  if ('eids' in input && input.eids) out.eids = input.eids.map(mapEid).filter((eid): eid is number => eid !== null);
   if ('targetEid' in input && input.targetEid !== undefined) out.targetEid = mapEid(input.targetEid) ?? -1;
   if ('atEid' in input) out.atEid = mapEid(input.atEid) ?? -1;
   return out as unknown as SimInput;

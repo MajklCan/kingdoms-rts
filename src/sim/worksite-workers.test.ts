@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { staffFoundations } from './testing/staff-foundations';
 import { addComponent, hasComponent, removeEntity } from 'bitecs';
 import { BUILDING_TABLE, BuildingDefId, UnitDefId } from './defs';
 import {
@@ -137,6 +138,7 @@ describe('resource worksite workers', () => {
       spawn.y - 1,
       1
     );
+    staffFoundations(world, 1);
 
     stepN(world, BUILDING_TABLE[BuildingDefId.LUMBER_CAMP].buildTimeTicks);
 
