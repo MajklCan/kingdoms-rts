@@ -46,7 +46,7 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 
-Pre-input visibility → drain `world.inputs` → ai → techRings (a ring opened by research moves the era) → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
+Pre-input visibility → drain `world.inputs` → orderQueue (a unit that finished its order starts its next Shift-queued one) → ai → techRings (a ring opened by research moves the era) → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
 `world.paused = true` after `createSimWorld()`. Tests must set it to `false`.
 
@@ -116,6 +116,7 @@ index.html             27-line shell; CSS lives in src/ui/styles
 
 ## Key constants / IDs
 
+- Order queue: move / attack / attack-move / gather inputs with `queue: true` (Shift held) append to `world.orderQueues` (per unit, `ORDER_QUEUE_MAX=8`) instead of replacing the current order; rules in `src/sim/input/order-queue.ts`, system in `src/sim/systems/order-queue.ts`. Checksummed and saved (optional `orderQueues` field).
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
 - `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks.
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.

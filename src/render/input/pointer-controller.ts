@@ -1,7 +1,8 @@
 /**
  * Mouse input on the battlefield: click / double-click / drag-box selection,
- * right-click context command, A+click attack-move, and hand-off to
- * placement modes while one is armed. What a click means lives in
+ * right-click context command, A+click attack-move (either with Shift held:
+ * queued behind the units' current order), and hand-off to placement modes
+ * while one is armed. What a click means lives in
  * world-orders.ts, shared with touch (touch-controller.ts).
  *
  * Orders leave a ground marker and refusals are reported through the
@@ -100,10 +101,11 @@ export class PointerController {
 
   /**
    * Move or attack-move the selection to a tile (minimap right-click and the
-   * battlefield share this). Returns false when nothing commandable is selected.
+   * battlefield share this); `queue` puts it behind the current order.
+   * Returns false when nothing commandable is selected.
    */
-  issueMapOrder(kind: MapOrderKind, tx: number, ty: number): boolean {
-    return this.orders.issueMapOrder(kind, tx, ty);
+  issueMapOrder(kind: MapOrderKind, tx: number, ty: number, queue = false): boolean {
+    return this.orders.issueMapOrder(kind, tx, ty, queue);
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
@@ -123,7 +125,7 @@ export class PointerController {
     }
 
     if (pointer.rightButtonDown()) {
-      this.orders.command(pointer.worldX, pointer.worldY);
+      this.orders.command(pointer.worldX, pointer.worldY, isShiftHeld(pointer));
     } else if (pointer.leftButtonDown()) {
       this.onLeftClick(pointer, tx, ty);
     }
@@ -141,7 +143,7 @@ export class PointerController {
     if (aKey?.isDown) {
       this.lastLeftUnitClick = null;
       this.cancelDragBox();
-      this.issueMapOrder('attackMove', tx, ty);
+      this.issueMapOrder('attackMove', tx, ty, isShiftHeld(pointer));
       return;
     }
 
@@ -249,4 +251,10 @@ export class PointerController {
     this.lastLeftUnitClick = { eid, atMs: now };
     return last !== null && last.eid === eid && now - last.atMs <= DOUBLE_CLICK_MS;
   }
+}
+
+/** Shift held during this mouse press: the order is queued, not replacing. */
+function isShiftHeld(pointer: Phaser.Input.Pointer): boolean {
+  const event = pointer.event as MouseEvent | undefined;
+  return event?.shiftKey === true;
 }

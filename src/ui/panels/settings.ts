@@ -43,7 +43,7 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['W A S D', 'Pan the camera'],
       ['Wheel / + -', 'Zoom'],
       ['Minimap', 'Click or drag to move the view'],
-      ['Minimap right-click', 'Send the selection there (A held: attack-move)'],
+      ['Minimap right-click', 'Send the selection there (A held: attack-move, Shift held: queue it)'],
       ['Space', 'Jump to the latest alert'],
     ],
   },
@@ -66,6 +66,8 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
     rows: [
       ['Right-click', 'Move, gather or attack'],
       ['A then click', 'Attack-move toward the cursor'],
+      ['Shift+right-click', 'Queue a move, attack or gather after the current order (gathering ends the queue)'],
+      ['Shift+A then click', 'Queue an attack-move'],
       ['H', 'Hold position'],
       ['V', 'Set army rally point'],
       ['Right-click', 'With only army buildings selected: set the rally point'],

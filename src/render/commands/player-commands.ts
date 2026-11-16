@@ -29,6 +29,8 @@ import {
   getBuildingPopProvided,
   housingAtMaximum,
   isPlacementInSight,
+  ORDER_QUEUE_MAX,
+  orderQueueRefusalForAll,
   pendingPopCapGain,
   POP_CAP_HARD_LIMIT,
   getWorksiteWorkerSlots,
@@ -97,6 +99,31 @@ export class PlayerCommands {
     return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
       hasComponent(ecs, Gatherer, eid)
     ).length;
+  }
+
+  /**
+   * Why a Shift-queued order would reach none of the selected units, or null
+   * when at least one of them takes it. `gatherersOnly`: the order is a
+   * gather, which only villagers take. The sim refuses the same orders
+   * without a word, so the refusal has to be said here.
+   */
+  queuedOrderFailure(gatherersOnly = false): CommandFailure | null {
+    const world = this.ctx.world;
+    const ecs = world.ecs;
+    const units = selectedCommandableEids(world, this.ctx.perspectivePlayerId).filter((eid) =>
+      hasComponent(ecs, gatherersOnly ? Gatherer : UnitKind, eid)
+    );
+    const refusal = orderQueueRefusalForAll(world, units);
+    if (refusal === 'gathering') {
+      return {
+        reason: 'unavailable',
+        text: 'Gathering never ends, so no order can be queued after it. Give the order without Shift',
+      };
+    }
+    if (refusal === 'full') {
+      return { reason: 'unavailable', text: `These units already have ${ORDER_QUEUE_MAX} orders queued` };
+    }
+    return null;
   }
 
   // ── Town center villager rally ────────────────────────────────────────────
