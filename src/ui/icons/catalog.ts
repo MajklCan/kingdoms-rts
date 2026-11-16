@@ -54,6 +54,7 @@ export const UNIT_ICON_BY_DEF: Record<number, IconName> = {
   6: 'u-cannon',
   7: 'machine-gun',
   8: 'mortar',
+  9: 'u-commander',
 };
 
 export const UNIT_COPY_BY_DEF: Record<number, string> = {
@@ -66,6 +67,7 @@ export const UNIT_COPY_BY_DEF: Record<number, string> = {
   6: 'Field cannon. Smashes buildings and packed formations from range.',
   7: 'Deploys before firing, then shreds infantry in its arc.',
   8: 'Indirect artillery that lobs shells over cover and walls.',
+  9: 'A hard veteran with the strength of four pikemen. One per realm. If he falls, train another.',
 };
 
 export const BUILDING_ICON_BY_DEF: Record<number, IconName> = {
@@ -89,6 +91,7 @@ export const SELECTION_ICON: Record<string, IconName> = {
   villager: 'u-villager',
   archer: 'u-archer',
   spearman: 'u-spearman',
+  commander: 'u-commander',
   scoutCavalry: 'u-cavalry',
   gunman: 'u-gunman',
   cannon: 'u-cannon',

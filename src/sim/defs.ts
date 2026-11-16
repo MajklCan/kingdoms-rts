@@ -148,7 +148,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x5d4037,
     isDropOff: false,
     dropOffMask: 0,
-    trains: ['SPEARMAN', 'ARCHER'],
+    trains: ['SPEARMAN', 'ARCHER', 'COMMANDER'],
   },
   {
     id: 'ARCHERY_RANGE',
@@ -308,6 +308,7 @@ export const UnitDefId = {
   CANNON: 6,
   MACHINE_GUN: 7,
   MORTAR: 8,
+  COMMANDER: 9,
 } as const;
 
 export type UnitDefIdValue = (typeof UnitDefId)[keyof typeof UnitDefId];
@@ -393,6 +394,15 @@ export const UNIT_TABLE: UnitDef[] = [
     trainTimeTicks: Math.round(SIM.TICK_HZ * 42),
     popCost: 2,
     trainAt: 'TOTAL_WAR_DEPOT',
+  },
+  {
+    id: 'COMMANDER',
+    name: 'Commander',
+    hp: 200,
+    cost: { food: 150, wood: 0, gold: 120, stone: 0 },
+    trainTimeTicks: Math.round(SIM.TICK_HZ * 40),
+    popCost: 1,
+    trainAt: 'BARRACKS',
   },
 ];
 

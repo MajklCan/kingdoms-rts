@@ -24,6 +24,7 @@ import {
   WorksiteWorker,
 } from '@sim/components';
 import { AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getAgeDef } from '@sim/defs';
+import { unitLimitReason } from '@sim/core/unit-limits';
 import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
 import {
   getBuildingBuildTicks,
@@ -237,19 +238,20 @@ export class ActionGrid {
       if (!isUnitUnlocked(world, playerId, unitDefId)) return;
       const affordable = canAfford(unit.cost);
       const hasPopRoom = hasPopulationRoomForUnit(world, playerId, unitDefId);
+      const limitReason = unitLimitReason(world, playerId, unitDefId);
       actions.push({
         id: `train-unit-${unitDefId}`,
         label: `Train ${unit.name}`,
         key,
         glyph,
         cost: formatCost(unit.cost),
-        enabled: affordable && hasPopRoom,
+        enabled: affordable && hasPopRoom && limitReason === null,
         kind: 'train',
         meta: `${formatTrainTime(unit.trainTimeTicks)} / Pop ${unit.popCost}`,
         queue: queuedAtSelectedProducers(unitDefId),
-        disabledReason: affordable
+        disabledReason: limitReason ?? (affordable
           ? (hasPopRoom ? undefined : 'Population cap reached')
-          : `Needs ${formatCost(unit.cost)}`,
+          : `Needs ${formatCost(unit.cost)}`),
       });
     };
 
@@ -346,6 +348,7 @@ export class ActionGrid {
     if (selectedProducerDefs.has(BuildingDefId.BARRACKS)) {
       addTrainAction(UnitDefId.SPEARMAN, 'Q', '♜');
       addTrainAction(UnitDefId.ARCHER, 'E', '🏹');
+      addTrainAction(UnitDefId.COMMANDER, 'R', '♛');
     }
     if (selectedProducerDefs.has(BuildingDefId.ARCHERY_RANGE) && !selectedProducerDefs.has(BuildingDefId.BARRACKS)) {
       addTrainAction(UnitDefId.ARCHER, 'Q', '🏹');

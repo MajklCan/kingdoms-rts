@@ -23,6 +23,7 @@ import {
   type UnitStanceValue,
 } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getBuildingDef, type CostTuple } from '@sim/defs';
+import { unitLimitReason } from '@sim/core/unit-limits';
 import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
 import {
   canPlaceBuildingAt,
@@ -345,6 +346,11 @@ export class PlayerCommands {
         this.fail({ reason: 'locked', subject: unitDef.name });
         return;
       }
+      const limitReason = unitLimitReason(world, playerId, unitDefId);
+      if (limitReason !== null) {
+        this.fail({ reason: 'unavailable', text: limitReason });
+        return;
+      }
       const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
       if (affordable <= 0) {
         this.fail({ reason: 'resources', subject: unitDef.name, missing: this.missingResources(unitDef.cost) });
@@ -355,7 +361,9 @@ export class PlayerCommands {
         this.fail({ reason: 'population', subject: unitDef.name });
         return;
       }
-      const trainCount = Math.min(targetCount, affordable, popRoom);
+      // The Commander is one per realm: a shift-click batch is still one.
+      const batchCap = unitDefId === UnitDefId.COMMANDER ? 1 : targetCount;
+      const trainCount = Math.min(batchCap, affordable, popRoom);
       this.dispatch({
         type: 'trainUnit',
         atEid: eid,

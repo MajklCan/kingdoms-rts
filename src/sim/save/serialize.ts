@@ -11,6 +11,7 @@ import {
   BuildOrder,
   Building,
   CannonTag,
+  CommanderTag,
   Combat,
   ConstructionSite,
   Cooldown,
@@ -79,6 +80,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     if (hasComponent(world.ecs, CannonTag, eid)) entity.cannon = true;
     if (hasComponent(world.ecs, MachineGunTag, eid)) entity.machineGun = true;
     if (hasComponent(world.ecs, MortarTag, eid)) entity.mortar = true;
+    if (hasComponent(world.ecs, CommanderTag, eid)) entity.commander = true;
     if (hasComponent(world.ecs, MachineGunDeployment, eid)) {
       entity.machineGunDeployment = {
         deployed: MachineGunDeployment.deployed[eid],

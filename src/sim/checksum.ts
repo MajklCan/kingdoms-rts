@@ -32,6 +32,7 @@ import {
   BuildOrder,
   CannonTag,
   Combat,
+  CommanderTag,
   ConstructionSite,
   Cooldown,
   DeadTag,
@@ -266,6 +267,7 @@ export function checksumWorld(world: SimWorld): number {
     h.bit(hasComponent(ecs, CannonTag, eid));
     h.bit(hasComponent(ecs, MortarTag, eid));
     h.bit(hasComponent(ecs, MachineGunTag, eid));
+    h.bit(hasComponent(ecs, CommanderTag, eid));
     h.bit(hasComponent(ecs, TownCenterTag, eid));
     h.bit(hasComponent(ecs, FoundationTag, eid));
     h.bit(hasComponent(ecs, DeadTag, eid));

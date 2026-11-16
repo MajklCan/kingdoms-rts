@@ -10,6 +10,7 @@ import {
   ArcherTag,
   Building,
   CannonTag,
+  CommanderTag,
   Combat,
   ConstructionSite,
   Gatherer,
@@ -45,6 +46,7 @@ export type SelectionKind =
   | 'villager'
   | 'archer'
   | 'spearman'
+  | 'commander'
   | 'scoutCavalry'
   | 'gunman'
   | 'cannon'
@@ -81,6 +83,7 @@ const NAME_BY_KIND: Record<string, string> = {
   villager: 'Villager',
   archer: 'Archer',
   spearman: 'Pikeman',
+  commander: 'Commander',
   scoutCavalry: 'Scout Cavalry',
   gunman: 'Gunman',
   cannon: 'Field Cannon',
@@ -106,6 +109,7 @@ const GLYPH_BY_KIND: Record<string, string> = {
   villager: '🧑',
   archer: '🏹',
   spearman: '♜',
+  commander: '♛',
   scoutCavalry: '♞',
   gunman: '•',
   cannon: '●',
@@ -142,7 +146,7 @@ const BUILDING_KIND_BY_DEF: Partial<Record<number, SelectionKind>> = {
 };
 
 const UNIT_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
-  'villager', 'archer', 'spearman', 'scoutCavalry', 'gunman', 'cannon', 'machineGun', 'mortar',
+  'villager', 'archer', 'spearman', 'commander', 'scoutCavalry', 'gunman', 'cannon', 'machineGun', 'mortar',
 ]);
 
 const BUILDING_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
@@ -165,6 +169,7 @@ function selectionKindOf(world: SimWorld, eid: number): SelectionKind {
   if (hasComponent(ecs, VillagerTag, eid)) return 'villager';
   if (hasComponent(ecs, ArcherTag, eid)) return 'archer';
   if (hasComponent(ecs, SpearmanTag, eid)) return 'spearman';
+  if (hasComponent(ecs, CommanderTag, eid)) return 'commander';
   if (hasComponent(ecs, ScoutCavalryTag, eid)) return 'scoutCavalry';
   if (hasComponent(ecs, GunmanTag, eid)) return 'gunman';
   if (hasComponent(ecs, CannonTag, eid)) return 'cannon';
@@ -299,6 +304,7 @@ export function entityKindName(world: SimWorld, eid: number): string {
   if (hasComponent(ecs, VillagerTag, eid)) return 'villager';
   if (hasComponent(ecs, ArcherTag, eid)) return 'archer';
   if (hasComponent(ecs, SpearmanTag, eid)) return 'spearman';
+  if (hasComponent(ecs, CommanderTag, eid)) return 'commander';
   if (hasComponent(ecs, ScoutCavalryTag, eid)) return 'scout cavalry';
   if (hasComponent(ecs, GunmanTag, eid)) return 'gunman';
   if (hasComponent(ecs, CannonTag, eid)) return 'field cannon';

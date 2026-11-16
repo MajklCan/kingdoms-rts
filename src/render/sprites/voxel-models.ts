@@ -169,6 +169,16 @@ export const VOXEL_UNIT_MODELS: Readonly<Partial<Record<number, VoxelUnitModel>>
     build: (color, pose) =>
       buildSpearmanVoxels(color, pose as Parameters<typeof buildSpearmanVoxels>[1]),
   },
+  /** No voxel art of his own: stands in as a pikeman if the atlas is missing. */
+  [UnitDefId.COMMANDER]: {
+    keyPrefix: 'voxel-spearman-p',
+    anims: SPEARMAN_ANIMS,
+    frameCounts: SPEARMAN_FRAME_COUNTS,
+    bounds: SPEARMAN_BAKE_BOUNDS,
+    originY: 0.7,
+    build: (color, pose) =>
+      buildSpearmanVoxels(color, pose as Parameters<typeof buildSpearmanVoxels>[1]),
+  },
   [UnitDefId.SCOUT_CAVALRY]: {
     keyPrefix: 'voxel-scout-cavalry-p',
     anims: SCOUT_CAVALRY_ANIMS,

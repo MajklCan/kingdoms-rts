@@ -21,6 +21,7 @@ import {
   ResourceWorksite,
   ScoutCavalryTag,
   SpearmanTag,
+  CommanderTag,
   TownCenterTag,
   UnitKind,
   VillagerTag,
@@ -296,7 +297,7 @@ export class GameAudio {
     if (hasComponent(ecs, VillagerTag, eid)) {
       return this.isFarmWorker(eid) ? 'villager_female' : 'villager_male';
     }
-    if (hasComponent(ecs, SpearmanTag, eid)) return 'soldier_1';
+    if (hasComponent(ecs, SpearmanTag, eid) || hasComponent(ecs, CommanderTag, eid)) return 'soldier_1';
     if (hasComponent(ecs, ArcherTag, eid)) return 'soldier_2';
     if (hasComponent(ecs, ScoutCavalryTag, eid)) return 'soldier_3';
     if (hasComponent(ecs, GunmanTag, eid)) return 'soldier_1';

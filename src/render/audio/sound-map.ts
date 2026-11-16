@@ -163,7 +163,7 @@ export function combatSound(
   if (phase === 'windup') return null;
 
   // Melee.
-  if (range <= 1 && (attackerKind === UnitDefId.SPEARMAN || attackerKind === UnitDefId.SCOUT_CAVALRY)) {
+  if (range <= 1 && (attackerKind === UnitDefId.SPEARMAN || attackerKind === UnitDefId.COMMANDER || attackerKind === UnitDefId.SCOUT_CAVALRY)) {
     return { key: 'sword_clash', minIntervalMs: 90, volume: 0.53 };
   }
   // Villagers fighting with tools: the same clash, softer.

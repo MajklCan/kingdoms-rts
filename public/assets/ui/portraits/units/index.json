@@ -3,6 +3,7 @@
  "units": {
   "ARCHER": "archer.png",
   "CANNON": "cannon.png",
+  "COMMANDER": "commander.png",
   "GUNMAN": "gunman.png",
   "MILITIA": "militia.png",
   "SCOUT_CAVALRY": "cavalry.png",

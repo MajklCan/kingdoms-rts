@@ -83,7 +83,7 @@ export interface WindowGameApi {
   /** Queue one villager at the local player's town center. */
   trainVillager(): void;
   /** Train a unit def at the first selected producer that can make it. */
-  trainUnit(defName: 'VILLAGER' | 'ARCHER' | 'SPEARMAN' | 'SCOUT_CAVALRY' | 'GUNMAN' | 'CANNON'): void;
+  trainUnit(defName: 'VILLAGER' | 'ARCHER' | 'SPEARMAN' | 'COMMANDER' | 'SCOUT_CAVALRY' | 'GUNMAN' | 'CANNON'): void;
   /** Player population state. */
   pop(playerId?: number): { current: number; cap: number };
   /** Player resource bank. */

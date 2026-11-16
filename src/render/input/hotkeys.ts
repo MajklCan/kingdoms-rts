@@ -65,6 +65,10 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-G', () => {
     if (!placement.awaitingBuildKind) placement.startVillagerRallyMode();
   });
+  // Same reason: R trains the Commander only when no build menu is open.
+  onHotkey('keydown-R', () => {
+    if (!placement.awaitingBuildKind) commands.trainHotkey(2, true);
+  });
   for (const [key, mode, message] of BUILD_KEYS) {
     onHotkey(`keydown-${key}`, () => {
       if (placement.awaitingBuildKind) placement.startBuildMode(mode, message);

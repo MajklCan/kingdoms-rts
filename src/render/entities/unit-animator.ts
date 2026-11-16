@@ -36,6 +36,7 @@ import {
 } from '@sim/components';
 import { UnitDefId } from '@sim/defs';
 import type { CombatEvent } from '@sim/world';
+import { IdleGagTracker, idleGagFrame } from './commander-idle';
 import { DEFAULT_FACING, facingFromVector, type Facing } from '../sprites/facing';
 import type { UnitAnimInfo, UnitArtInfo } from '../sprites/sprite-source';
 import type { SceneContext } from '../scene-context';
@@ -48,6 +49,7 @@ const MOVE_FRAME_TICKS: Readonly<Partial<Record<number, number>>> = {
   [UnitDefId.VILLAGER]: 6,
   [UnitDefId.ARCHER]: 6,
   [UnitDefId.SPEARMAN]: 6,
+  [UnitDefId.COMMANDER]: 6,
   [UnitDefId.SCOUT_CAVALRY]: 5,
   [UnitDefId.GUNMAN]: 6,
   [UnitDefId.CANNON]: 8,
@@ -63,6 +65,7 @@ const ANIMATED_ATTACKERS: ReadonlySet<number> = new Set([
   UnitDefId.SCOUT_CAVALRY,
   UnitDefId.ARCHER,
   UnitDefId.SPEARMAN,
+  UnitDefId.COMMANDER,
   UnitDefId.GUNMAN,
   UnitDefId.CANNON,
   UnitDefId.MACHINE_GUN,
@@ -105,6 +108,7 @@ export class UnitAnimator {
   private readonly lastHitMs = new Map<number, number>();
   private readonly windupEndMs = new Map<number, number>();
   private readonly walk = new Map<number, WalkState>();
+  private readonly idleGags = new IdleGagTracker();
 
   constructor(
     private readonly ctx: SceneContext,
@@ -170,6 +174,7 @@ export class UnitAnimator {
     this.lastHitMs.delete(eid);
     this.windupEndMs.delete(eid);
     this.walk.delete(eid);
+    this.idleGags.forget(eid);
   }
 
   clear(): void {
@@ -178,6 +183,7 @@ export class UnitAnimator {
     this.lastHitMs.clear();
     this.windupEndMs.clear();
     this.walk.clear();
+    this.idleGags.clear();
   }
 
   // -- atlas units ---------------------------------------------------------------
@@ -196,8 +202,15 @@ export class UnitAnimator {
     const walked = this.trackWalk(eid, x, y);
     const attack = art.anim('attack');
     const attackFrame = attack ? this.attackFrame(eid, attack, moving, now) : -1;
-    if (attackFrame >= 0) return { facing, anim: 'attack', frame: attackFrame };
+    if (attackFrame >= 0) {
+      this.idleGags.forget(eid);
+      return { facing, anim: 'attack', frame: attackFrame };
+    }
     const anim = villager ? this.villagerAtlasAnim(eid, moving, art) : moving ? 'move' : 'idle';
+    if (kind === UnitDefId.COMMANDER) {
+      const gag = this.commanderGag(eid, anim === 'idle' && !this.hasTarget(eid), art, now);
+      if (gag) return { facing, ...gag };
+    }
     const info = art.anim(anim) ?? art.anim('idle');
     if (!info) return { facing, anim, frame: 0 };
     let frame: number;
@@ -209,6 +222,28 @@ export class UnitAnimator {
       frame = (Math.floor(now / info.ms) + phase) % info.frames;
     }
     return { facing, anim, frame };
+  }
+
+  /**
+   * The Commander's idle gag (smoke, sit), or null while he is busy or the
+   * art lacks the anim: he then plays the plain idle like any other unit.
+   */
+  private commanderGag(
+    eid: number,
+    idle: boolean,
+    art: UnitArtInfo,
+    now: number
+  ): { anim: string; frame: number } | null {
+    const pick = this.idleGags.pick(eid, idle, now);
+    if (!pick || pick.anim === 'idle') return null;
+    const info = art.anim(pick.anim);
+    if (!info || info.ms <= 0) return null;
+    return { anim: pick.anim, frame: idleGagFrame(pick, info.frames, info.ms) };
+  }
+
+  private hasTarget(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    return hasComponent(ecs, AttackTarget, eid) && AttackTarget.targetEid[eid] >= 0;
   }
 
   /** Attack frame for this instant, or -1 when the unit is not mid-attack. */

@@ -57,6 +57,8 @@ export interface SavedEntityV1 {
   machineGun?: true;
   machineGunDeployment?: { deployed: number; setupTicks: number };
   mortar?: true;
+  /** Added without a version bump: older saves simply have no commander. */
+  commander?: true;
   resource?: { kind: number; amount: number };
   resourceCarry?: { kind: number; amount: number };
   gatherer?: { targetEid: number; state: number; cooldown: number };

@@ -7,6 +7,7 @@ import {
   AttackTarget,
   Building,
   Combat,
+  CommanderTag,
   ConstructionSite,
   Cooldown,
   DeadTag,
@@ -58,4 +59,5 @@ export const combatQuery = defineQuery([
 ]);
 export const damageableQuery = defineQuery([Position, Health, Owner]);
 export const unitQuery = defineQuery([Position, UnitKind, Owner, Health]);
+export const commanderQuery = defineQuery([CommanderTag, Owner]);
 export const deadQuery = defineQuery([DeadTag]);

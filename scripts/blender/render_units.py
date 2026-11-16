@@ -59,6 +59,8 @@ UNITS = {
     "villager-quarryman": "units_villager:quarryman",
     "villager-gold-miner": "units_villager:gold-miner",
     "militia": "units_militia",
+    "commander": "units_commander",
+    "commander": "units_commander",
     "spearman": "units_spearman",
     "archer": "units_archer",
     "cavalry": "units_cavalry",

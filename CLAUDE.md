@@ -119,8 +119,8 @@ index.html             27-line shell; CSS lives in src/ui/styles
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
 - `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks.
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.
-- Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN.
-- Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen, archery range archers (unlocked by the Archers tech).
+- Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN, MORTAR, COMMANDER.
+- Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen + the Commander (one alive or queued per player, `src/sim/core/unit-limits.ts`; 200 hp, atk 10, armor 1, 150 food + 120 gold), archery range archers (unlocked by the Archers tech).
 - Ages: DARK → CASTLE → GUNPOWDER → TOTAL_WAR. **TOTAL_WAR and MACHINE_GUN are scaffolded but unreachable** in normal play (`applyAdvanceAge` blocks; `isUnitUnlocked` returns false).
 
 ## Sprite pipeline

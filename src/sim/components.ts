@@ -80,6 +80,7 @@ export const UnitKindId = {
   CANNON: 6,
   MACHINE_GUN: 7,
   MORTAR: 8,
+  COMMANDER: 9,
 } as const;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -267,6 +268,9 @@ export const ArcherTag = defineComponent();
 
 /** Tag - entity is a Spearman unit. */
 export const SpearmanTag = defineComponent();
+
+/** Tag - entity is a Commander (the veteran, at most one alive per player). */
+export const CommanderTag = defineComponent();
 
 /** Tag - entity is a Scout Cavalry unit. */
 export const ScoutCavalryTag = defineComponent();

@@ -20,6 +20,7 @@ import {
   createAiPlayerState,
 } from './difficulty';
 import { aiMaintainEconomy } from './economy';
+import { aiMaybeTrainCommander } from './commander';
 import { aiMaintainMilitaryInfrastructure, aiTrainArmy } from './military';
 import { type AiSnapshot, aiHasAnyBuilding, collectAiSnapshot, countAiBuildings } from './snapshot';
 
@@ -76,6 +77,7 @@ function aiPlayerTick(world: SimWorld, playerId: number, state: AiPlayerState): 
   const scope = currentAiThinkScope();
   if (scope) scope.reserve = aiAgeUpReserve(world, playerId, state, snapshot);
   aiTrainArmy(world, playerId, snapshot);
+  aiMaybeTrainCommander(world, playerId, snapshot);
   aiMaybeAdvanceAge(world, playerId, state, snapshot);
 
   const refreshed = collectAiSnapshot(world, playerId) ?? snapshot;

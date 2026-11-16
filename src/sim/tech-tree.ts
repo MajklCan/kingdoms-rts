@@ -359,6 +359,8 @@ export function isUnitUnlocked(
     case UnitDefId.VILLAGER:
       return true;
     case UnitDefId.SPEARMAN:
+    case UnitDefId.COMMANDER:
+      // Both come from the barracks, so both unlock with it.
       return hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);
     case UnitDefId.ARCHER:
       return hasTech(world, playerId, TechId.ARCHERS);

@@ -28,6 +28,7 @@ import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { distToBuildingEdge } from '../core/grid';
 import { ResourceProbe } from '../core/placement-probe';
 import { sortedEids } from '../core/entities';
+import { unitLimitReached } from '../core/unit-limits';
 import { countQueuedPopCost, hasPopulationRoom, houseLimitReached } from '../core/population';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
@@ -65,6 +66,7 @@ export function aiQueueUnit(world: SimWorld, atEid: number, defId: number): bool
 
   if (!producerDef.trains.includes(unitDef.id)) return false;
   if (!isUnitUnlocked(world, playerId, defId)) return false;
+  if (unitLimitReached(world, playerId, defId)) return false;
   const reserve = currentAiThinkScope()?.reserve;
   if (
     reserve &&

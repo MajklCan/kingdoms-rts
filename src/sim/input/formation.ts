@@ -8,6 +8,7 @@ import {
   MachineGunTag,
   Position,
   ScoutCavalryTag,
+  CommanderTag,
   SpearmanTag,
   Speed,
   UnitStance,
@@ -227,7 +228,7 @@ function formationSpacing(mode: number): number {
 
 function formationRank(world: SimWorld, eid: number): number {
   if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return 0;
-  if (hasComponent(world.ecs, SpearmanTag, eid)) return 1;
+  if (hasComponent(world.ecs, SpearmanTag, eid) || hasComponent(world.ecs, CommanderTag, eid)) return 1;
   if (hasComponent(world.ecs, VillagerTag, eid)) return 2;
   if (hasComponent(world.ecs, ArcherTag, eid)) return 3;
   if (hasComponent(world.ecs, MachineGunTag, eid)) return 4;

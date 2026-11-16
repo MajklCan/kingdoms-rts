@@ -10,6 +10,7 @@ import {
   BuildOrder,
   Building,
   CannonTag,
+  CommanderTag,
   Combat,
   ConstructionSite,
   Cooldown,
@@ -362,7 +363,8 @@ function isSavedMilitaryEntity(saved: SavedEntityV1): boolean {
       saved.gunman ||
       saved.cannon ||
       saved.machineGun ||
-      saved.mortar
+      saved.mortar ||
+      saved.commander
   );
 }
 
@@ -404,6 +406,7 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
   if (saved.cannon) addComponent(ecs, CannonTag, eid);
   if (saved.machineGun) addComponent(ecs, MachineGunTag, eid);
   if (saved.mortar) addComponent(ecs, MortarTag, eid);
+  if (saved.commander) addComponent(ecs, CommanderTag, eid);
   if (saved.machineGunDeployment || saved.machineGun) {
     addComponent(ecs, MachineGunDeployment, eid);
     MachineGunDeployment.deployed[eid] = saved.machineGunDeployment?.deployed ?? 1;

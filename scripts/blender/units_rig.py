@@ -99,6 +99,8 @@ PALETTE: dict[str, int] = {
     "miner_white": 0xEEEBE2,
     "lamp": 0xFFD46A,
     "moss": 0x55682C,
+    "grey": 0xC2BCB0,
+    "smoke": 0xDADCE0,
 }
 
 #: keys that are never saturation / value boosted

@@ -380,6 +380,58 @@
     }
    }
   },
+  "commander": {
+   "defIds": [
+    "COMMANDER"
+   ],
+   "size": [
+    118,
+    79
+   ],
+   "anchor": [
+    49,
+    50
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "attack": {
+     "frames": 6,
+     "ms": 90,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    },
+    "idle-smoke": {
+     "frames": 24,
+     "ms": 250,
+     "shadow": "static"
+    },
+    "idle-sit": {
+     "frames": 12,
+     "ms": 500,
+     "shadow": "frame"
+    }
+   }
+  },
   "spearman": {
    "defIds": [
     "SPEARMAN"
