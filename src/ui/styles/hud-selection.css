@@ -313,10 +313,20 @@
   visibility: visible;
 }
 
+/* No progress to show: the line takes the bar's column too. */
+.sel-status:not(.has-progress) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sel-status:not(.has-progress) .sel-status-bar {
+  display: none;
+}
+
 /* Stance and formation in force. */
 .sel-state {
+  flex: none;
   list-style: none;
-  margin: 0;
+  margin: 0 0 0 auto;
   padding: 0;
   display: flex;
   gap: 0.4rem;
