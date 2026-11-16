@@ -117,7 +117,7 @@ index.html             27-line shell; CSS lives in src/ui/styles
 ## Key constants / IDs
 
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
-- `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks.
+- `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks (one unit per 5 ticks); stone alone is slower, `STONE_GATHER_COOLDOWN=9` (one per 10 ticks, `gatherCooldownForKind`).
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.
 - Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN.
 - Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen, archery range archers (unlocked by the Archers tech).
