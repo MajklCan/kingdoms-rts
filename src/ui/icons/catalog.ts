@@ -145,9 +145,10 @@ export const RESOURCE_ICON_SMALL = {
 const ERA_SUFFIX = ['', '.castle', '.gunpowder', '.gunpowder'] as const;
 
 /**
- * Building icons follow the owner's age like the buildings on the map: the
- * newest era variant at or below `age` that exists, else the base picture
- * (drawn in the age the building unlocks). Other icons pass through.
+ * Building icons may follow the owner's age: the newest era variant at or
+ * below `age` that exists in the sheet, else the base icon. Today's building
+ * symbols have no era variants, so they stay the same in every age; other
+ * icons pass through.
  */
 export function eraIcon(name: IconName, age: number): IconName {
   if (!name.startsWith('b-')) return name;

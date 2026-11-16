@@ -4,7 +4,8 @@ sheet.
 
     resources (20, and 16 for inline costs): icons_resources.py
     commands, tech and stats (30 / 16):       icons_commands.py, drawn with iconkit.py
-    buildings and units (30):                 icon_pictures.py, from the style A atlas
+    buildings (30):                           icons_buildings.py, one symbol each
+    construction site and units (30):         icon_pictures.py, from the style A atlas
                                               and the voxel unit puppets
 
 Each icon is rendered twice, at 1x (one pixel per half texel, so a 30 px icon
@@ -31,7 +32,8 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from iconkit import render  # noqa: E402
-from icon_pictures import building_icons, unit_icons  # noqa: E402
+from icon_pictures import foundation_icon, unit_icons  # noqa: E402
+from icons_buildings import building_icons  # noqa: E402
 from icons_commands import COMMAND_ICONS, STAT_ICONS  # noqa: E402
 from icons_resources import RESOURCE_ICONS  # noqa: E402
 
@@ -58,6 +60,7 @@ def collect() -> dict[str, dict[int, np.ndarray]]:
         ic = fn()
         icons[name] = {s: render(ic, s) for s in (1, 2)}
     icons.update(building_icons())
+    icons.update(foundation_icon())
     icons.update(unit_icons())
     return icons
 
@@ -80,7 +83,8 @@ def pack(icons: dict[str, dict[int, np.ndarray]]) -> tuple[dict[str, tuple[int, 
 
 
 def is_picture(name: str) -> bool:
-    return name.startswith('b-') or name.startswith('u-')
+    """Rendered pictures, whose colours are fitted; drawn icons and building symbols keep exact colours."""
+    return name == 'b-foundation' or name.startswith('u-')
 
 
 def build_palette(icons) -> np.ndarray:
@@ -135,7 +139,7 @@ def write_ts(frames, height: int) -> None:
         '// public/assets/ui/icons (icons.png, icons@2x.png). Do not edit by hand.',
         '// Frames are [x, y, w, h] in 1x sheet pixels; one pixel is half a texel.',
         '// Prefixes: r- resources (-s = 16 px inline size), c- commands, tech-,',
-        '// stat-, b- buildings (.castle / .gunpowder era variants), u- units.',
+        '// stat-, b- buildings (one symbol in every age), u- units.',
         '',
         f'export const RASTER_SHEET = {{ w: {SHEET_W}, h: {height} }} as const;',
         '',

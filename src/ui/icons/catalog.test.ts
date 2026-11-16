@@ -7,15 +7,10 @@ describe('eraIcon', () => {
     expect(eraIcon('b-house', 0)).toBe('b-house');
   });
 
-  it('uses the newest era variant at or below the age', () => {
-    expect(eraIcon('b-house', 1)).toBe('b-house.castle');
-    expect(eraIcon('b-house', 2)).toBe('b-house.gunpowder');
-    expect(eraIcon('b-house', 3)).toBe('b-house.gunpowder');
-  });
-
-  it('falls back when a building has no later variant', () => {
-    expect(eraIcon('b-stable', 2)).toBe('b-stable.castle');
-    expect(eraIcon('b-farm', 2)).toBe('b-farm');
+  it('keeps a building symbol the same in every age (no era variants drawn)', () => {
+    expect(eraIcon('b-house', 1)).toBe('b-house');
+    expect(eraIcon('b-house', 3)).toBe('b-house');
+    expect(eraIcon('b-stable', 2)).toBe('b-stable');
   });
 
   it('passes non-building icons through', () => {

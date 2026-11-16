@@ -1,11 +1,9 @@
-"""Picture icons for gen_icons.py: buildings cut from the style A building
-atlas, units re-rendered from their voxel puppets at icon resolution.
+"""Picture icons for gen_icons.py: the construction-site icon cut from the
+style A building atlas, units re-rendered from their voxel puppets at icon
+resolution. (Building icons are symbols now: icons_buildings.py.)
 
-Buildings: the sprite and its overlays (mill sails, the first flag frame) are
-composed with the team mask tinted player-1 blue, cropped to the building
-body, downscaled with a box filter and given a hard alpha edge, so the icon
-is the in-game building at a clean small size. Producers that look alike at
-icon size carry a small iron roundel with what they make.
+Foundation: the half-built 2x2 site is composed from the atlas, downscaled
+with a box filter and given a hard alpha edge.
 
 Units: `scripts/blender/units_rig.py` renders the idle pose at the density
 that fills the icon, so the 2x icon has twice the voxel detail instead of
@@ -28,24 +26,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 SPRITES = os.path.join(ROOT, 'public', 'assets', 'sprites')
 TEAM = np.array([0x2E, 0x86, 0xDE], float) / 255.0  # player 1 blue, like the unit portraits
-
-# building key -> (crop l, t, r, b as fractions of the composed sprite, roundel symbol)
-BUILDINGS: dict[str, tuple[tuple[float, float, float, float], str | None]] = {
-    'town_center': ((0.06, 0.0, 0.94, 0.86), None),
-    'house': ((0.0, 0.0, 1.0, 0.94), None),
-    'farm': ((0.0, 0.0, 1.0, 1.0), None),
-    'mill': ((0.08, 0.0, 0.92, 0.9), None),
-    'barracks': ((0.04, 0.0, 0.92, 0.88), 'spears'),
-    'archery_range': ((0.04, 0.0, 1.0, 0.9), 'bow'),
-    'stable': ((0.04, 0.0, 1.0, 0.88), 'horseshoe'),
-    'lumber_camp': ((0.0, 0.0, 1.0, 0.92), 'axe'),
-    'gold_mine': ((0.0, 0.0, 1.0, 0.94), None),
-    'stone_quarry': ((0.0, 0.0, 1.0, 0.94), None),
-    'defensive_tower': ((0.0, 0.0, 1.0, 0.96), None),
-    'foundry': ((0.04, 0.0, 0.96, 0.9), None),
-    'wall': ((0.0, 0.0, 1.0, 1.0), None),
-}
-ERAS = ('dark', 'castle', 'gunpowder')
 
 # unit -> (module, facing, anim, frame, fit) ; fit 'body' crops at the knees, 'whole' fits all
 UNITS: dict[str, tuple[str, int, str, int, str]] = {
@@ -146,78 +126,16 @@ class Atlas:
         ys, xs = np.nonzero(out[..., 3] > 0.02)
         return out[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 
-    def variants(self, key: str) -> dict[str, dict]:
-        asset = self.manifest['assets'][f'building.{key}']
-        v = asset['variants']
-        if key == 'farm':
-            return {'dark': v['ripe']}
-        if key == 'wall':
-            # a straight x-run of wall (mask 5 = +x and -x neighbours)
-            return {era: v[f'{era}.5'] for era in ERAS if f'{era}.5' in v}
-        return {era: v[era] for era in ERAS if era in v}
 
-
-def _figure(unit: str, S: int, s: int, frac: float) -> np.ndarray:
-    """A whole unit, feet down, about frac * S tall, outlined (uint8 RGBA, tight crop)."""
-    modname, _, _, _, _ = UNITS[unit]
-    anim, frame, facing = FIGURE_POSE.get(unit, ('idle', 0, 1))
-    mod = _unit_module(modname)
-    tall = HEAD_HEIGHT * (1.4 if unit == 'cavalry' else 1.0)
-    d = S * frac / tall
-    img, _, _ = _unit_frame(mod, facing, anim, frame, d)
-    ys, xs = np.nonzero(img[..., 3] > 0)
-    img = img[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    pad = np.zeros((img.shape[0] + 2 * s, img.shape[1] + 2 * s, 4))
-    pad[s:-s, s:-s] = img
-    return _finish(pad, s)
-
-
-#: the unit shown in front of a producer whose building alone reads like its neighbours
-FIGURE: dict[str, str] = {'barracks': 'spearman', 'archery_range': 'archer', 'stable': 'cavalry', 'lumber_camp': 'villager'}
-#: (anim, frame, facing) for those figures
-FIGURE_POSE: dict[str, tuple[str, int, int]] = {
-    'spearman': ('idle', 0, 1), 'archer': ('idle', 0, 1), 'cavalry': ('idle', 0, 0), 'villager': ('chop', 1, 2),
-}
-
-
-def building_icons(N: int = 30) -> dict[str, dict[int, np.ndarray]]:
+def foundation_icon(N: int = 30) -> dict[str, dict[int, np.ndarray]]:
+    """b-foundation: the half-built 2x2 site, for buildings under construction."""
     atlas = Atlas()
-    icons: dict[str, dict[int, np.ndarray]] = {}
-    for key, (crop, _) in BUILDINGS.items():
-        for i, (era, var) in enumerate(atlas.variants(key).items()):
-            img = atlas.compose(var)
-            h, w = img.shape[:2]
-            l, t, r, b = crop
-            img = img[int(t * h):max(int(t * h) + 1, int(round(b * h))), int(l * w):max(int(l * w) + 1, int(round(r * w)))]
-            # the earliest era with art carries the plain name; the runtime falls back to it
-            name = f'b-{key.replace("_", "-")}' + ('' if i == 0 else f'.{era}')
-            icons[name] = {}
-            for s in (1, 2):
-                S = N * s
-                fig_unit = FIGURE.get(key)
-                if fig_unit:
-                    # building up and to the left, the unit it trains in front, bottom right
-                    pic = _place(img, N, s)
-                    shifted = np.zeros_like(pic)
-                    dx, dy = 3 * s, 2 * s
-                    shifted[:S - dy, :S - dx] = pic[dy:, dx:]
-                    out = _finish(shifted, s)
-                    fig = _figure(fig_unit, S, s, 0.62 if fig_unit != 'cavalry' else 0.5)
-                    fh, fw = fig.shape[:2]
-                    fh, fw = min(fh, S), min(fw, S)
-                    reg = out[S - fh:, S - fw:]
-                    m = fig[-fh:, -fw:, 3] > 0
-                    reg[m] = fig[-fh:, -fw:][m]
-                else:
-                    out = _finish(_place(img, N, s), s)
-                icons[name][s] = out
-    # foundation: the half-built 2x2 site
     v = atlas.manifest['assets'].get('construction.2x2')
-    if v:
-        stage = v['variants'].get('1') or next(iter(v['variants'].values()))
-        img = atlas.compose(stage)
-        icons['b-foundation'] = {s: _finish(_place(img, N, s), s) for s in (1, 2)}
-    return icons
+    if not v:
+        return {}
+    stage = v['variants'].get('1') or next(iter(v['variants'].values()))
+    img = atlas.compose(stage)
+    return {'b-foundation': {s: _finish(_place(img, N, s), s) for s in (1, 2)}}
 
 
 # ---------------------------------------------------------------------------
