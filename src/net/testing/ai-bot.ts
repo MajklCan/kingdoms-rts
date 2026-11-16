@@ -274,6 +274,12 @@ export class CommandBot {
     build: (_world, playerId, eids, siteEid) => {
       this.batch.push({ type: 'cmdBuild', playerId, eids: [...eids], targetEid: siteEid });
     },
+    assignWorksite: (_world, playerId, eids, siteEid) => {
+      this.batch.push({ type: 'cmdAssignWorksite', playerId, eids: [...eids], targetEid: siteEid });
+    },
+    gather: (_world, playerId, eids, targetEid) => {
+      this.batch.push({ type: 'cmdGather', playerId, eids: [...eids], targetEid });
+    },
     event: () => {},
   };
 }

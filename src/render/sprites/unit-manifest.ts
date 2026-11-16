@@ -45,6 +45,11 @@ export interface UnitArtDef {
   aliases: Readonly<Record<string, string>>;
   /** Projectile / muzzle point per facing (screen px from the feet), at the hit frame. */
   projectile?: ReadonlyArray<readonly [number, number]>;
+  /**
+   * Extra look of its unit defs (villager roles such as "lumberjack"): drawn
+   * only when a query asks for that look, never claims the defs.
+   */
+  look?: string;
 }
 
 export interface UnitManifest {
@@ -83,6 +88,10 @@ export function parseUnitManifest(raw: unknown): { manifest: UnitManifest; probl
   for (const [name, item] of Object.entries(isRecord(raw.units) ? raw.units : {})) {
     const unit = parseUnit(name, item, problems);
     if (!unit) continue;
+    if (unit.look !== undefined) {
+      units.push(unit);
+      continue;
+    }
     const fresh = unit.unitDefIds.filter((id) => !claimed.has(id));
     if (fresh.length === 0) {
       problems.push(`units["${name}"] has no unit def that is not drawn already`);
@@ -153,6 +162,7 @@ function parseUnit(name: string, item: unknown, problems: string[]): UnitArtDef 
     anims,
     aliases,
   };
+  if (isText(item.look)) unit.look = item.look;
   if (Array.isArray(item.projectile) && item.projectile.length === 8) {
     const pts = item.projectile.map(pair);
     if (pts.every((p): p is [number, number] => p !== null)) unit.projectile = pts;

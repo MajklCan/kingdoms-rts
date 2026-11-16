@@ -28,6 +28,7 @@ import { gathererQuery, resourceQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { routeToNearestDropOff, routeWorksiteWorkerToResource } from './dropoff';
 import { routeToNearestReachableResource } from './gathering';
+import { HERD_RETARGET_RADIUS, isGameAnimal, routeToNearestGame } from './hunting';
 
 /** How far a gatherer looks for another node of the same kind (tiles). */
 export const DEPLETED_NODE_RETARGET_RADIUS = 15;
@@ -43,16 +44,17 @@ export function resourceDepletionSystem(world: SimWorld): void {
     const kind = Resource.kind[node] as ResourceKind;
     const x = Position.x[node];
     const y = Position.y[node];
+    const game = isGameAnimal(world, node);
     for (const gatherer of sortedEids(world, gathererQuery(world.ecs))) {
       if (Gatherer.targetEid[gatherer] !== node) continue;
-      releaseGatherer(world, gatherer, kind);
+      releaseGatherer(world, gatherer, kind, game ? node : -1);
     }
     pushGameEvent(world, { kind: 'resourceDepleted', eid: node, resourceKind: kind, x, y });
     removeSimEntity(world, node);
   }
 }
 
-function releaseGatherer(world: SimWorld, gatherer: number, kind: ResourceKind): void {
+function releaseGatherer(world: SimWorld, gatherer: number, kind: ResourceKind, gameNode: number): void {
   Gatherer.targetEid[gatherer] = -1;
   const state = Gatherer.state[gatherer];
   // Carriers on their way home pick their next node after the drop-off.
@@ -63,6 +65,13 @@ function releaseGatherer(world: SimWorld, gatherer: number, kind: ResourceKind):
     return;
   }
   if (routeWorksiteWorkerToResource(world, gatherer, kind)) return;
+  // A hunter moves on to the next animal of the herd.
+  if (
+    gameNode >= 0 &&
+    routeToNearestGame(world, gatherer, Position.x[gameNode], Position.y[gameNode], HERD_RETARGET_RADIUS, gameNode)
+  ) {
+    return;
+  }
   if (routeToNearestReachableResource(world, gatherer, kind, DEPLETED_NODE_RETARGET_RADIUS)) return;
 
   // Nothing of that kind nearby: deliver a partial load rather than idle on

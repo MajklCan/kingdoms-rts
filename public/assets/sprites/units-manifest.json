@@ -17,6 +17,11 @@
    "key": "kr-units-0",
    "image": "units-0.png",
    "json": "units-0.json"
+  },
+  {
+   "key": "kr-units-1",
+   "image": "units-1.png",
+   "json": "units-1.json"
   }
  ],
  "units": {
@@ -113,6 +118,225 @@
      "alias": "carry_food"
     }
    }
+  },
+  "villager-lumberjack": {
+   "defIds": [
+    "VILLAGER"
+   ],
+   "size": [
+    118,
+    78
+   ],
+   "anchor": [
+    50,
+    50
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "carry_wood": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "chop": {
+     "frames": 6,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    },
+    "attack": {
+     "alias": "chop"
+    },
+    "harvest": {
+     "alias": "chop"
+    },
+    "carry": {
+     "alias": "carry_wood"
+    }
+   },
+   "look": "lumberjack"
+  },
+  "villager-farmer": {
+   "defIds": [
+    "VILLAGER"
+   ],
+   "size": [
+    118,
+    77
+   ],
+   "anchor": [
+    49,
+    49
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "carry_food": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "farm": {
+     "frames": 6,
+     "ms": 130,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    },
+    "harvest": {
+     "alias": "farm"
+    },
+    "carry": {
+     "alias": "carry_food"
+    }
+   },
+   "look": "farmer"
+  },
+  "villager-quarryman": {
+   "defIds": [
+    "VILLAGER"
+   ],
+   "size": [
+    114,
+    74
+   ],
+   "anchor": [
+    48,
+    47
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "carry_stone": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "mine": {
+     "frames": 6,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    },
+    "harvest": {
+     "alias": "mine"
+    },
+    "carry": {
+     "alias": "carry_stone"
+    }
+   },
+   "look": "quarryman"
+  },
+  "villager-gold-miner": {
+   "defIds": [
+    "VILLAGER"
+   ],
+   "size": [
+    113,
+    74
+   ],
+   "anchor": [
+    48,
+    47
+   ],
+   "height": 37,
+   "ring": [
+    24,
+    10
+   ],
+   "anims": {
+    "idle": {
+     "frames": 4,
+     "ms": 260,
+     "shadow": "static"
+    },
+    "move": {
+     "frames": 8,
+     "stride": 0.7,
+     "shadow": "static"
+    },
+    "carry_gold": {
+     "frames": 8,
+     "stride": 0.63,
+     "shadow": "static"
+    },
+    "mine": {
+     "frames": 6,
+     "ms": 110,
+     "hit": 3,
+     "shadow": "static"
+    },
+    "death": {
+     "frames": 4,
+     "ms": 110,
+     "once": true,
+     "shadow": "frame"
+    },
+    "harvest": {
+     "alias": "mine"
+    },
+    "carry": {
+     "alias": "carry_gold"
+    }
+   },
+   "look": "gold-miner"
   },
   "militia": {
    "defIds": [

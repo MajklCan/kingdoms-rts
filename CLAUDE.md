@@ -46,7 +46,7 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 
-Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction (builders walk to / work at their foundation first, `systems/builders.ts`) → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
+Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction (builders walk to / work at their foundation first, `systems/builders.ts`) → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → gameAnimal (huntable game wanders, `systems/hunting.ts`) → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
 `world.paused = true` after `createSimWorld()`. Tests must set it to `false`.
 
@@ -139,6 +139,13 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 - Pixel-art chain: `pixelArt: true` + `roundPixels: true` + `antialias{,GL}: false`. Internal height stays `RENDER.HEIGHT` (720); width follows the window aspect (4:3 .. 21:9, `src/main.ts`).
 - Render reads via queries (`buildingQuery`, `unitQuery`, etc.) + `hasComponent` gates. `PrevPosition` enables 60 fps interpolation between 20 Hz sim ticks (`accumulator/TICK_MS`).
 
+## Villager jobs
+
+- Free villagers (town center trained) build, gather or hunt by hand, or help at a completed worksite (`cmdAssignWorksite`, `systems/worksite-helpers.ts`): a helper fills open crew slots at full rate, plus up to 2 extras at 60 % (3 of 5 ticks, `core/worksite-membership.ts`). Helpers are not crew: `countWorksiteWorkers` and slots ignore them. Any other order (`clearWorkOrders`) takes him off.
+- `VillagerWork` remembers the last job; a builder with nothing left to build resumes it (`systems/villager-work.ts`). Move, stop and attack orders clear it.
+- Huntable game (`GameAnimal` + FOOD `Resource`): mirrored herds placed after the berry bushes, wander via `world.rng`, become a carcass when a hunter arrives. Render: `render/entities/game-renderer.ts` (life-sheet sprites).
+- Render reads `villagerRole` (look) and `villagerJob` (status) from `core/villager-role.ts` / `core/villager-job.ts`.
+
 ## Combat / movement gotchas
 
 - **Buildings need builders.** A foundation gains progress only while a free villager with `BuildOrder.targetEid` on it stands at its edge ((n+2)/3 speed for n builders); builders then chain to the nearest open foundation. `placeBuilding` / `placeWallLine` take the builders as `eids`, `cmdBuild` sends more. Skirmish players start with 1 scout rider + 2 villagers (3/5 pop); campaign worlds pass `starterVillagers: false`. Tests that need finished buildings call `staffFoundations` (`src/sim/testing/`), which spawns pop-free builders.
@@ -153,7 +160,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 
 ## Save / load
 
-- `SAVE_VERSION=3`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
+- `SAVE_VERSION=4`. Round-trips entities (incl. worksite helpers, villager work memory, huntable game), map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes, v3 -> v4 only added optional entity fields (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 

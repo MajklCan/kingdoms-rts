@@ -18,6 +18,7 @@ import type { StatusOverlay, UnitStatusSize } from '../overlays/status-overlay';
 import type { SceneContext } from '../scene-context';
 import { DEFAULT_FACING, type Facing } from '../sprites/facing';
 import type { SpriteRef, SpriteSource, UnitArtInfo } from '../sprites/sprite-source';
+import { villagerLook } from '../sprites/villager-look';
 import { AlphaMasks } from './alpha-masks';
 import { HitFlash } from './hit-flash';
 import { SpriteSync } from './sprite-sync';
@@ -60,7 +61,10 @@ export class UnitRenderer {
   private readonly flash: HitFlash;
   private occlusion: UnitOcclusion | null = null;
   /** eid -> kind / owner / tile / facing last frame, to tell a death from a recycled eid. */
-  private readonly meta = new Map<number, { kind: number; owner: number; x: number; y: number; facing: Facing }>();
+  private readonly meta = new Map<
+    number,
+    { kind: number; owner: number; x: number; y: number; facing: Facing; look: string | undefined }
+  >();
   private readonly deathListeners: Array<(death: UnitDeath) => void> = [];
   /** unitDefId -> px from the feet to the top of the art (status bar height). */
   private readonly lifts = new Map<number, number>();
@@ -124,12 +128,14 @@ export class UnitRenderer {
       if (!pose) continue;
       const owner = Owner.player[eid];
       const kind = UnitKind.kind[eid];
+      const look = villagerLook(world, eid);
       const ref = this.sprites.unit({
         unitDefId: kind,
         playerId: owner,
         facing: pose.facing,
         anim: pose.anim,
         frame: pose.frame,
+        look,
       });
       if (!ref) continue;
 
@@ -138,7 +144,7 @@ export class UnitRenderer {
       view.setDepth(screen.y + 1);
       if (hasComponent(ecs, Health, eid)) view.setFlash(this.flash.colorFor(eid, Health.hp[eid]));
       this.occlusion?.track(view, px, py, owner);
-      this.remember(eid, owner, px, py, pose.facing);
+      this.remember(eid, owner, px, py, pose.facing, look);
       const size = this.statusSize(kind);
       const lift = size ? ref.top : this.barLift(kind, view, ref.top);
       overlay.drawUnit(eid, screen, screen.y - lift, size ?? undefined);
@@ -220,19 +226,24 @@ export class UnitRenderer {
   }
 
   /** Every frame of the death anim of a unit kind, in the facing it died in. */
-  private deathFrames(kind: number, owner: number, facing: Facing): UnitDeath['deathFrames'] {
+  private deathFrames(
+    kind: number,
+    owner: number,
+    facing: Facing,
+    look: string | undefined
+  ): UnitDeath['deathFrames'] {
     const info = this.sprites.unitArt?.(kind)?.anim('death');
     if (!info || info.frames < 1) return undefined;
     const refs: SpriteRef[] = [];
     for (let frame = 0; frame < info.frames; frame++) {
-      const ref = this.sprites.unit({ unitDefId: kind, playerId: owner, facing, anim: 'death', frame });
+      const ref = this.sprites.unit({ unitDefId: kind, playerId: owner, facing, anim: 'death', frame, look });
       if (!ref || ref.source !== 'atlas') return undefined;
       refs.push(ref);
     }
     return { refs, frameMs: info.ms };
   }
 
-  private remember(eid: number, owner: number, x: number, y: number, facing: Facing): void {
+  private remember(eid: number, owner: number, x: number, y: number, facing: Facing, look: string | undefined): void {
     const kind = UnitKind.kind[eid];
     const m = this.meta.get(eid);
     if (m) {
@@ -241,8 +252,9 @@ export class UnitRenderer {
       m.x = x;
       m.y = y;
       m.facing = facing;
+      m.look = look;
     } else {
-      this.meta.set(eid, { kind, owner, x, y, facing });
+      this.meta.set(eid, { kind, owner, x, y, facing, look });
     }
   }
 
@@ -257,7 +269,7 @@ export class UnitRenderer {
       (!hasComponent(ecs, Health, eid) || Health.hp[eid] > 0);
     if (alive) return;
     const death: UnitDeath = { eid, unitDefId: m.kind, owner: m.owner, x: m.x, y: m.y, sprite: view.snapshot() };
-    const frames = this.deathFrames(m.kind, m.owner, m.facing ?? DEFAULT_FACING);
+    const frames = this.deathFrames(m.kind, m.owner, m.facing ?? DEFAULT_FACING, m.look);
     if (frames) death.deathFrames = frames;
     for (const listener of this.deathListeners) listener(death);
   }

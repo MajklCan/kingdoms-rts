@@ -11,6 +11,7 @@ import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
 import { applyCancelProduction, applyTrainUnit } from '../systems/production';
 import { applySetVillagerRally } from '../systems/villager-assign';
 import { applyPlaceWallLine } from './walls';
+import { applyAssignWorksiteCommand } from './worksite-orders';
 import {
   applyPlaceBuilding,
   applyRemoveBuildingsCommand,
@@ -92,6 +93,12 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       return;
     case 'cmdBuild':
       applyBuildCommand(world, input.playerId, input.eids, input.targetEid);
+      return;
+    case 'assignWorksiteSelected':
+      applyAssignWorksiteCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), input.targetEid);
+      return;
+    case 'cmdAssignWorksite':
+      applyAssignWorksiteCommand(world, input.playerId, input.eids, input.targetEid);
       return;
     case 'cmdStop':
       applyStopCommand(world, input.playerId, input.eids);

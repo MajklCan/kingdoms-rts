@@ -44,6 +44,9 @@ import {
   Velocity,
   VillagerTag,
   WorksiteWorker,
+  WorksiteHelper,
+  VillagerWork,
+  GameAnimal,
 } from '../components';
 import { type SimWorld, createLateGameTestWorld, positionQuery } from '../world';
 import { SAVE_VERSION, type SavedEntityV1, type SavedGame } from './schema';
@@ -127,6 +130,29 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     }
     if (hasComponent(world.ecs, WorksiteWorker, eid)) {
       entity.worksiteWorker = { siteEid: WorksiteWorker.siteEid[eid] };
+    }
+    if (hasComponent(world.ecs, WorksiteHelper, eid)) {
+      entity.worksiteHelper = { siteEid: WorksiteHelper.siteEid[eid], extra: WorksiteHelper.extra[eid] };
+    }
+    if (hasComponent(world.ecs, VillagerWork, eid)) {
+      entity.villagerWork = {
+        job: VillagerWork.job[eid],
+        kind: VillagerWork.kind[eid],
+        siteNetId: VillagerWork.siteNetId[eid],
+        x: VillagerWork.x[eid],
+        y: VillagerWork.y[eid],
+      };
+    }
+    if (hasComponent(world.ecs, GameAnimal, eid)) {
+      entity.gameAnimal = {
+        species: GameAnimal.species[eid],
+        state: GameAnimal.state[eid],
+        homeX: GameAnimal.homeX[eid],
+        homeY: GameAnimal.homeY[eid],
+        targetX: GameAnimal.targetX[eid],
+        targetY: GameAnimal.targetY[eid],
+        wait: GameAnimal.wait[eid],
+      };
     }
     if (hasComponent(world.ecs, Health, eid)) {
       entity.health = {

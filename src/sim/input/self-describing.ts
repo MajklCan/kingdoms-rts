@@ -31,6 +31,7 @@ export type SelectionRelativeInput = Extract<
       | 'moveSelected'
       | 'gatherSelected'
       | 'buildSelected'
+      | 'assignWorksiteSelected'
       | 'stopSelected'
       | 'toggleSelectedUnitStance'
       | 'setSelectedUnitStance'
@@ -48,6 +49,7 @@ const SELECTION_RELATIVE = new Set<SimInput['type']>([
   'moveSelected',
   'gatherSelected',
   'buildSelected',
+  'assignWorksiteSelected',
   'stopSelected',
   'toggleSelectedUnitStance',
   'setSelectedUnitStance',
@@ -81,6 +83,8 @@ export function toSelfDescribingInput(world: SimWorld, playerId: number, input: 
       return { type: 'cmdGather', playerId, eids, targetEid: input.targetEid };
     case 'buildSelected':
       return { type: 'cmdBuild', playerId, eids, targetEid: input.targetEid };
+    case 'assignWorksiteSelected':
+      return { type: 'cmdAssignWorksite', playerId, eids, targetEid: input.targetEid };
     case 'stopSelected':
       return { type: 'cmdStop', playerId, eids };
     case 'attackMoveSelected':

@@ -49,6 +49,7 @@ const STAT_LABEL: Record<string, string> = {
   Carry: 'Carrying',
   Pop: 'Population',
   Workers: 'Workers',
+  Helpers: 'Helpers',
   Build: 'Construction',
   Deploy: 'Deploying',
 };
@@ -58,6 +59,7 @@ const STAT_ICON: Record<string, IconName> = {
   Spd: 'stat-speed',
   Pop: 'r-pop-s',
   Workers: 'r-pop-s',
+  Helpers: 'r-pop-s',
   Build: 'stat-build',
   Deploy: 'machine-gun',
 };

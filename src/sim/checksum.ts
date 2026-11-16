@@ -63,6 +63,9 @@ import {
   Velocity,
   VillagerTag,
   WorksiteWorker,
+  WorksiteHelper,
+  VillagerWork,
+  GameAnimal,
 } from './components';
 import { sortedEids } from './core/entities';
 import { positionQuery, type SimWorld } from './world';
@@ -299,6 +302,26 @@ export function checksumWorld(world: SimWorld): number {
       h.u32(ResourceWorksite.progress[eid]);
     }
     if (hasComponent(ecs, WorksiteWorker, eid)) h.u32(canon(WorksiteWorker.siteEid[eid]));
+    if (hasComponent(ecs, WorksiteHelper, eid)) {
+      h.u32(canon(WorksiteHelper.siteEid[eid]));
+      h.u32(WorksiteHelper.extra[eid]);
+    }
+    if (hasComponent(ecs, VillagerWork, eid)) {
+      h.u32(VillagerWork.job[eid]);
+      h.u32(VillagerWork.kind[eid]);
+      h.u32(VillagerWork.siteNetId[eid]);
+      h.f32(VillagerWork.x[eid]);
+      h.f32(VillagerWork.y[eid]);
+    }
+    if (hasComponent(ecs, GameAnimal, eid)) {
+      h.u32(GameAnimal.species[eid]);
+      h.u32(GameAnimal.state[eid]);
+      h.f32(GameAnimal.homeX[eid]);
+      h.f32(GameAnimal.homeY[eid]);
+      h.f32(GameAnimal.targetX[eid]);
+      h.f32(GameAnimal.targetY[eid]);
+      h.u32(GameAnimal.wait[eid]);
+    }
     if (hasComponent(ecs, Health, eid)) {
       h.u32(Health.hp[eid]);
       h.u32(Health.hpMax[eid]);

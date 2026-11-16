@@ -1,12 +1,15 @@
 /**
  * `?inspect=<unit>` debug sheets: every facing x animation frame of one voxel
  * unit laid out in a grid (world hidden, sim paused). Art review tool only.
+ * `?inspect=villager-<role>` / `villager-roles` show the pre-rendered villager
+ * role looks instead (villager-role-sheets.ts).
  */
 
 import { RENDER } from '../../config';
 import { UnitDefId } from '@sim/defs';
 import { FACINGS } from '../sprites/facing';
 import { voxelUnitTextureKey } from '../sprites/voxel-models';
+import { createVillagerRoleSheet, isVillagerRoleSheet } from './villager-role-sheets';
 
 interface SheetRow {
   label: string;
@@ -32,6 +35,8 @@ interface SheetConfig {
 const COL_W = 135;
 const FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 const HIDDEN_DOM_IDS = [
+  'ui-root',
+  'boot-splash',
   'title-screen',
   'resource-bar',
   'minimap-panel',
@@ -150,18 +155,22 @@ const SHEETS: Record<string, SheetConfig> = {
 export function requestedInspectionSheet(): string | null {
   if (typeof window === 'undefined') return null;
   const id = new URLSearchParams(window.location.search).get('inspect');
-  return id && id in SHEETS ? id : null;
+  return id && (id in SHEETS || isVillagerRoleSheet(id)) ? id : null;
 }
 
 /** Draw the sheet in camera space. Caller hides the world and pauses the sim. */
 export function createInspectionSheet(scene: Phaser.Scene, id: string): void {
   const config = SHEETS[id];
-  if (!config) return;
+  if (!config && !isVillagerRoleSheet(id)) return;
   scene.cameras.main.setZoom(1);
   scene.cameras.main.setScroll(0, 0);
   for (const domId of HIDDEN_DOM_IDS) {
     const el = document.getElementById(domId);
     if (el) el.style.display = 'none';
+  }
+  if (!config) {
+    createVillagerRoleSheet(scene, id);
+    return;
   }
 
   scene.add.rectangle(0, 0, RENDER.WIDTH, RENDER.HEIGHT, 0x161922).setOrigin(0).setScrollFactor(0);

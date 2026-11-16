@@ -33,6 +33,10 @@ export interface AiActuator {
   attack(world: SimWorld, eid: number, target: number, inRange: boolean): void;
   /** Send villagers `eids` to work on own foundation `siteEid`. */
   build(world: SimWorld, playerId: number, eids: number[], siteEid: number): void;
+  /** Send free villagers `eids` to help at own completed worksite `siteEid`. */
+  assignWorksite(world: SimWorld, playerId: number, eids: number[], siteEid: number): void;
+  /** Send villagers `eids` to gather or hunt resource node `targetEid`. */
+  gather(world: SimWorld, playerId: number, eids: number[], targetEid: number): void;
   /** Player-facing AI message (render only). */
   event(world: SimWorld, playerId: number, message: string): void;
 }
