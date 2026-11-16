@@ -358,7 +358,8 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
         elif a["kind"] == "construction":
             a["stages"] = sorted(keys, key=lambda k: a["variants"][k].get("progress", 0))
             a["default"] = a["stages"][0]
-        elif set(keys) <= set(FARM_STAGES):
+        elif {k.removeprefix("hemp_") for k in keys} <= set(FARM_STAGES):
+            # "hemp_<stage>" are the easter-egg crop variants; stages/default stay the grain field
             a["stages"] = [k for k in FARM_STAGES if k in keys]
             a["default"] = "ripe" if "ripe" in keys else a["stages"][0]
         else:

@@ -23,6 +23,7 @@ import {
 import { AgeId, BUILDING_TABLE, BuildingDefId, getUnitDef, type BuildingDef } from '@sim/defs';
 import {
   buildingQuery,
+  getMapSeed,
   getPlayerVisibility,
   getWorksiteWorkerSlots,
   isBuildingFootprintVisibleTo,
@@ -37,6 +38,7 @@ import type { FarmStage, SpriteSource } from '../sprites/sprite-source';
 import { tileHash } from '../tile-hash';
 import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, spriteAnchorPoint } from '../world-projection';
+import { farmCrop } from './farm-crop-variant';
 import { HitFlash } from './hit-flash';
 import { SpriteSync } from './sprite-sync';
 import type { SpriteSnapshot, SpriteView } from './sprite-view';
@@ -157,6 +159,7 @@ export class BuildingRenderer {
         playerId,
         wallMask: defId === BuildingDefId.WALL ? this.wallMask(eid) : undefined,
         farmStage: defId === BuildingDefId.FARM && !isFoundation ? this.farmStage(eid) : undefined,
+        hemp: defId === BuildingDefId.FARM && this.isHemp(Position.x[eid], Position.y[eid]),
         construction: progress,
       });
       if (!ref) continue;
@@ -245,6 +248,7 @@ export class BuildingRenderer {
           ? this.maskAt(Math.round(snap.x), Math.round(snap.y))
           : undefined,
         farmStage: snap.defId === BuildingDefId.FARM ? 'growing' : undefined,
+        hemp: snap.defId === BuildingDefId.FARM && this.isHemp(snap.x, snap.y),
         construction: snap.isFoundation ? 0 : undefined,
       });
       if (!ref) continue;
@@ -454,6 +458,11 @@ export class BuildingRenderer {
   }
 
   // ── Farms ───────────────────────────────────────────────────────────────
+
+  /** Easter egg: about one farm in ten grows hemp (pure function of tile + map seed). */
+  private isHemp(x: number, y: number): boolean {
+    return farmCrop(x, y, getMapSeed(this.ctx.world)) === 'hemp';
+  }
 
   /** Worked farms cycle through their crop; a farm without a worker lies fallow. */
   private farmStage(eid: number): FarmStage {

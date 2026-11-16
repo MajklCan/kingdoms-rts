@@ -86,6 +86,8 @@ export interface BuildingSpriteQuery {
   wallMask?: number;
   /** Farms: crop stage. */
   farmStage?: FarmStage;
+  /** Farms: grow the hemp easter-egg crop (falls back to grain when the art lacks it). */
+  hemp?: boolean;
   /** Foundations: construction progress 0..1. */
   construction?: number;
 }

@@ -475,7 +475,38 @@ def stable(col, rng, era: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def farm(col, rng, stage: str) -> None:
+def _hemp_plant(b, rng, x: float, y: float, stage: str) -> None:
+    """One comically oversized hemp plant: slim stalk, splayed fan leaves, fat flower head."""
+    if stage == "sown":
+        for a in (0.0, 2.1, 4.2):
+            dx, dy = 0.025 * math.cos(a), 0.025 * math.sin(a)
+            b.beam((x, y, 0.03), (x + dx, y + dy, 0.075), 0.012, "hemp_leaf")
+        return
+    if stage == "depleted":
+        b.cone(x, y, 0.03, 0.018, 0.05, "stubble", segs=4)
+        return
+    h = 0.26 if stage == "growing" else 0.46
+    h *= rng.uniform(0.9, 1.1)
+    b.cyl((x, y, 0.03), (x, y, 0.03 + h), 0.012, "hemp_leaf", r2=0.008, segs=5)
+    tiers = 3 if stage == "growing" else 5
+    for t in range(tiers):
+        z = 0.03 + h * (0.3 + 0.62 * t / max(1, tiers - 1)) * (0.85 if stage == "growing" else 1.0)
+        reach = (0.075 if stage == "growing" else 0.1) * (1.0 - 0.45 * t / tiers)
+        for k in range(4):
+            a = math.radians(90 * k + 45 * (t % 2) + rng.uniform(-12, 12))
+            tip = (x + reach * math.cos(a), y + reach * math.sin(a), z + 0.035)
+            b.beam((x, y, z), tip, 0.016, "hemp_leaf", d=0.008)
+    top = 0.03 + h
+    if stage == "growing":
+        b.sphere((x, y, top + 0.02), 0.03, "hemp_head", scale=(1, 1, 1.5), subdiv=1)
+    else:
+        b.sphere((x, y, top + 0.09), 0.075, "hemp_head", scale=(1, 1, 2.2), subdiv=1)
+        for a in (0.0, 2.1, 4.2):
+            b.sphere((x + 0.045 * math.cos(a), y + 0.045 * math.sin(a), top - 0.02), 0.032, "hemp_head",
+                     scale=(1, 1, 1.5), subdiv=1)
+
+
+def farm(col, rng, stage: str, hemp: bool = False) -> None:
     b = _b(col, rng)
     b.pad(2, 2, "soil_plowed", inset=0.03, irregular=0.02)
     rows = 9
@@ -484,7 +515,11 @@ def farm(col, rng, stage: str) -> None:
         y = -0.85 + 1.7 * i / (rows - 1)
         b.side_prism([(y - 0.085, 0.0), (y + 0.085, 0.0), (y + 0.03, 0.04), (y - 0.03, 0.04)], -hx, hx, "soil_plowed",
                      axis="x")
-        if stage == "sown":
+        if hemp:
+            for k in range(5):
+                x = -hx + 0.14 + (2 * hx - 0.28) * (k + rng.uniform(0.3, 0.7)) / 5
+                _hemp_plant(b, rng, x, y + rng.uniform(-0.02, 0.02), stage)
+        elif stage == "sown":
             for k in range(14):
                 x = -hx + 0.06 + (2 * hx - 0.12) * (k + rng.uniform(0.2, 0.8)) / 14
                 b.cone(x, y + rng.uniform(-0.02, 0.02), 0.035, 0.015, 0.05, "crop_young", segs=5)
@@ -509,7 +544,7 @@ def farm(col, rng, stage: str) -> None:
     b.box(sx - 0.07, sy - 0.04, 0.26, sx + 0.07, sy + 0.04, 0.45, "team", 0.012)
     b.sphere((sx, sy, 0.5), 0.045, "straw", subdiv=2)
     b.cone(sx, sy, 0.52, 0.08, 0.06, "straw", segs=10)
-    if stage == "ripe":
+    if stage == "ripe" and not hemp:
         b.hay_bale(0.82, 0.82, 0, 0.07, 0.4)
 
 
@@ -1137,6 +1172,10 @@ def jobs(only: str | None = None) -> list[Job]:
         out.append(Job(f"farm_{stage}", lambda col, rng, s=stage: farm(col, rng, s), (2, 2), group="farm",
                        meta=_meta("building.farm", "FARM", stage, footprint=2,
                                   construction="construction.2x2", rubble="rubble.2x2")))
+    for stage in FARM_STAGES:
+        out.append(Job(f"farm_hemp_{stage}", lambda col, rng, s=stage: farm(col, rng, s, hemp=True), (2, 2),
+                       group="farm", meta=_meta("building.farm", "FARM", f"hemp_{stage}", footprint=2,
+                                                construction="construction.2x2", rubble="rubble.2x2")))
     for era in ERAS:
         for mask in range(16):
             out.append(Job(f"wall_{era}_{mask:02d}", lambda col, rng, era=era, m=mask: wall(col, rng, era, m), (1, 1),

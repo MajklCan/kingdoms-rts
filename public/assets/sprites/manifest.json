@@ -39,9 +39,9 @@
    "json": "buildings-0.json",
    "size": [
     2048,
-    1269
+    1247
    ],
-   "frames": 535
+   "frames": 546
   },
   {
    "key": "kr-decor-0",
@@ -474,12 +474,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_depleted",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_depleted__mask",
      "shadow": "farm_depleted__shadow"
@@ -488,26 +488,81 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_growing",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_growing__mask",
      "shadow": "farm_growing__shadow"
+    },
+    "hemp_depleted": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_depleted",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "mask": "farm_hemp_depleted__mask",
+     "shadow": "farm_hemp_depleted__shadow"
+    },
+    "hemp_growing": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_growing",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "mask": "farm_hemp_growing__mask",
+     "shadow": "farm_hemp_growing__shadow"
+    },
+    "hemp_ripe": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_ripe",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "shadow": "farm_hemp_ripe__shadow"
+    },
+    "hemp_sown": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_sown",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "mask": "farm_hemp_sown__mask",
+     "shadow": "farm_hemp_sown__shadow"
     },
     "ripe": {
      "atlas": "kr-buildings-0",
      "frame": "farm_ripe",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_ripe__mask",
      "shadow": "farm_ripe__shadow"
@@ -516,12 +571,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_sown",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_sown__mask",
      "shadow": "farm_sown__shadow"
