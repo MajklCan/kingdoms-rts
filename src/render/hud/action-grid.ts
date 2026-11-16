@@ -80,14 +80,14 @@ const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, 
   ['build-stone-quarry', 'STONE_QUARRY', 'C', '▣', 'stoneQuarry'],
   ['build-house', 'HOUSE', 'H', '⌂', 'house'],
   ['build-barracks', 'BARRACKS', 'R', '⚒', 'barracks'],
-  ['build-archery-range', 'ARCHERY_RANGE', 'A', '🏹', 'archeryRange'],
+  ['build-archery-range', 'ARCHERY_RANGE', 'N', '🏹', 'archeryRange'],
   ['build-gold-mine', 'GOLD_MINE', 'G', '⛏', 'goldMine'],
   ['build-stable', 'STABLE', 'T', '♞', 'stable'],
   ['build-farm', 'FARM', 'M', '🌾', 'farm'],
   ['build-mill', 'MILL', 'I', '◈', 'mill'],
   ['build-foundry', 'FOUNDRY', 'F', '●', 'foundry'],
   ['build-defensive-tower', 'DEFENSIVE_TOWER', 'Y', '♜', 'defensiveTower'],
-  ['build-wall', 'WALL', 'W', '▬', 'wall'],
+  ['build-wall', 'WALL', 'Z', '▬', 'wall'],
 ];
 
 /** Placement prompt shown when a build button is clicked. */
@@ -445,7 +445,7 @@ export class ActionGrid {
         id: 'formation-rotate-cw', label: 'Rotate CW', key: '', glyph: '⟳',
         enabled: canForm && formationMode !== 0, kind: 'command', meta: facingLabel,
       },
-      { id: 'stop', label: 'Stop', key: 'S', glyph: 'X', enabled: true, kind: 'command' },
+      { id: 'stop', label: 'Stop', key: '', glyph: 'X', enabled: true, kind: 'command' },
     ];
   }
 }
