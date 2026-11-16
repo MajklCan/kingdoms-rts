@@ -106,8 +106,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     'div',
     { class: 'age-plaque', tabindex: '0', role: 'button', 'aria-label': 'Age: open the next age in Technology' },
     icon('crown', 'age-crown'),
-    h('span', { class: 'age-text' }, ageName, ageNext),
-    ageWrap
+    h('span', { class: 'age-text' }, ageName, ageNext, ageWrap)
   );
   plaque.addEventListener('click', handlers.onAge);
   plaque.addEventListener('keydown', (ev) => {

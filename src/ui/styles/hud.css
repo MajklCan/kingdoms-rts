@@ -186,7 +186,8 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  height: calc(var(--hud-top-h) + 0.6rem);
+  /* min-height: the three reserved rows below always fit, at any scale. */
+  min-height: calc(var(--hud-top-h) + 0.6rem);
   min-width: 13.5rem;
   padding: 0 1.3rem calc(2 * var(--px));
   color: var(--gold-100);
@@ -213,6 +214,10 @@
   min-width: 0;
 }
 
+/* Three rows, always reserved so starting or finishing research never
+   shifts the plaque: name 22px + label 11px + bar 6px + 2 gaps of 1.6px
+   = 42.2px inside a 43.6px content box (desktop, --px 2px). */
+
 .age-name {
   font-family: var(--font-title);
   font-size: 1.375rem;
@@ -224,21 +229,17 @@
 }
 
 .age-next {
+  min-height: 0.6875rem;
   font-size: var(--fs-2xs);
+  line-height: 0.6875rem;
   font-weight: 700;
   color: rgba(251, 239, 196, 0.88);
   white-space: nowrap;
 }
 
-.age-next:empty {
-  display: none;
-}
-
 .age-progress {
-  position: absolute;
-  left: 18%;
-  right: 18%;
-  bottom: calc(4 * var(--px));
+  flex: none;
+  align-self: stretch;
   height: calc(3 * var(--px));
   opacity: 0;
 }

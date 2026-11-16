@@ -556,7 +556,13 @@ kbd,
   box-shadow: none;
 }
 
-/* Toggle switch (button role="switch"): iron knob sliding in a groove. */
+/* Toggle switch (button role="switch"): iron knob sliding in a groove.
+   Off: dark empty groove, knob left, "OFF" on the right. On: red lacquered
+   groove with a gold rim, knob right, "ON" on the left. Position and word
+   carry the state, the fill only reinforces it. The track is drawn with
+   plain backgrounds and box-shadows, not border-image: a border-image fill
+   would paint over the track colour and hide the on state. Size is fixed,
+   so toggling never shifts layout. */
 .switch {
   display: inline-flex;
   align-items: center;
@@ -569,20 +575,42 @@ kbd,
   color: inherit;
 }
 
+.switch:focus-visible {
+  outline: max(2px, var(--px)) solid var(--red-600);
+  outline-offset: calc(2 * var(--px));
+}
+
 .switch-track {
   position: relative;
-  width: calc(24 * var(--px));
+  flex: none;
+  width: calc(30 * var(--px));
   height: calc(12 * var(--px));
-  border: var(--px) solid transparent;
-  border-image: var(--tex-well) 5 fill / calc(5 * var(--px)) / 0 repeat;
+  background: #0c0805;
+  box-shadow:
+    inset 0 var(--px) 0 #050302,
+    0 0 0 var(--px) #050302,
+    0 calc(2 * var(--px)) 0 rgba(246, 221, 134, 0.12);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: calc(12 * var(--px));
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
   image-rendering: pixelated;
+}
+
+.switch-track::before {
+  content: "OFF";
+  position: absolute;
+  top: 0;
+  right: calc(3 * var(--px));
+  text-align: right;
 }
 
 .switch-track::after {
   content: "";
   position: absolute;
-  top: calc(-1 * var(--px));
-  left: calc(-1 * var(--px));
+  top: 0;
+  left: 0;
   width: calc(12 * var(--px));
   height: calc(12 * var(--px));
   background: var(--tex-knob) 0 0 / 100% 100%;
@@ -591,14 +619,27 @@ kbd,
 }
 
 .switch[aria-checked="true"] .switch-track {
-  border-image-source: var(--tex-slot);
-  border-image-slice: 6 fill;
-  border-image-width: calc(6 * var(--px));
-  background: linear-gradient(var(--red-500), var(--red-500)) calc(3 * var(--px)) calc(3 * var(--px)) / calc(100% - 6 * var(--px)) calc(100% - 6 * var(--px)) no-repeat;
+  background: linear-gradient(180deg, var(--red-500) 0 50%, var(--red-600) 50% 100%);
+  box-shadow:
+    inset 0 var(--px) 0 rgba(255, 150, 140, 0.35),
+    0 0 0 var(--px) var(--gold-600),
+    0 calc(2 * var(--px)) 0 rgba(0, 0, 0, 0.5);
+  color: var(--gold-100);
+}
+
+.switch[aria-checked="true"] .switch-track::before {
+  content: "ON";
+  right: auto;
+  left: calc(4 * var(--px));
+  text-align: left;
 }
 
 .switch[aria-checked="true"] .switch-track::after {
-  transform: translateX(calc(12 * var(--px)));
+  transform: translateX(calc(18 * var(--px)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-track::after { transition: none; }
 }
 
 /* ---- Progress bars: a gold rod in an iron-lined groove ------------------ */
