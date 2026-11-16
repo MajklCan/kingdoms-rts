@@ -435,8 +435,9 @@ export class MultiplayerSession {
         return;
       case 'error':
         this.recordEvent('relay-error', { message: msg.message });
-        this.cb.onError?.(msg.message);
+        // State first, so the relay's own reason is the last thing the lobby shows.
         this.setState('disconnected');
+        this.cb.onError?.(msg.message);
         return;
     }
   }

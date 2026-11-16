@@ -2,6 +2,7 @@
  * Slow forest regrowth near existing trees.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { MAP, SIM } from '../../config';
 import { Health, Position, Resource, ResourceKindId } from '../components';
@@ -93,7 +94,7 @@ function countNearbyTrees(
   for (const eid of resourceQuery(world.ecs)) {
     if (Resource.kind[eid] !== ResourceKindId.WOOD) continue;
     if (Resource.amount[eid] <= 0) continue;
-    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) count++;
+    if (dhypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) count++;
   }
   return count;
 }

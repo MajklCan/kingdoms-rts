@@ -637,12 +637,15 @@ describe('multiplayer lobby + transport', () => {
     new MultiplayerSession(tB, 'room', 'B', {});
     let errMsg = '';
     let cState = 'connecting';
+    const order: string[] = [];
     new MultiplayerSession(tC, 'room', 'C', {
       onError: (m) => {
         errMsg = m;
+        order.push('error');
       },
       onStateChange: (s) => {
         cState = s;
+        order.push(s);
       },
     });
     tA.fireOpen();
@@ -650,6 +653,9 @@ describe('multiplayer lobby + transport', () => {
     tC.fireOpen();
     expect(errMsg).toBe('room full');
     expect(cState).toBe('disconnected');
+    // The lobby shows whatever came last: the relay's reason must win over
+    // the generic "Disconnected" line.
+    expect(order.slice(-2)).toEqual(['disconnected', 'error']);
   });
 });
 

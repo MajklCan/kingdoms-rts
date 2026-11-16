@@ -2,6 +2,7 @@
  * Formation shapes, facing and slot assignment for group orders.
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import {
   ArcherTag,
@@ -131,7 +132,7 @@ export function formationDestinations(
 
   let dirX = facing?.x ?? (to.x - center.x);
   let dirY = facing?.y ?? (to.y - center.y);
-  const dirLen = Math.hypot(dirX, dirY);
+  const dirLen = dhypot(dirX, dirY);
   if (dirLen < 0.001) {
     const defaultFacing = formationFacingVector(FORMATION_FACING_DEFAULT);
     dirX = defaultFacing.x;
@@ -198,8 +199,8 @@ function normalizeFormationFacing(facing: number): number {
 function formationFacingVector(facing: number): { x: number; y: number } {
   const angle = Math.PI / 2 + normalizeFormationFacing(facing) * (Math.PI * 2 / FORMATION_FACING_STEPS);
   return {
-    x: Math.cos(angle),
-    y: Math.sin(angle),
+    x: dcos(angle),
+    y: dsin(angle),
   };
 }
 

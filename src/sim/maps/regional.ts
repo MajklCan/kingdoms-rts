@@ -2,6 +2,7 @@
  * Smaller hand-shaped skirmish maps (border forest, ore pass, Machovo jezero, Silesian marsh, flooded basin).
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import type { Rng } from '../rng';
 import {
   H,
@@ -131,10 +132,10 @@ export function generateMachovoJezeroMap(): MapData {
       const idx = mapIndex(x, y);
       const nx = (x - cx) / rx;
       const ny = (y - cy) / ry;
-      const d = Math.hypot(nx, ny);
+      const d = dhypot(nx, ny);
       const shoreline = d
-        + Math.sin((x + y) * 0.12) * 0.035
-        + Math.cos((x - y) * 0.10) * 0.03;
+        + dsin((x + y) * 0.12) * 0.035
+        + dcos((x - y) * 0.10) * 0.03;
 
       if (shoreline <= 0.68) {
         map.elevation[idx] = 0;
@@ -187,7 +188,7 @@ export function generateSilesianMarshMap(rng: Rng): MapData {
   for (const channel of channels) {
     const phase = rng.next() * Math.PI * 2;
     for (let x = 0; x < W; x++) {
-      const centerY = Math.round(H * channel + Math.sin(x * 0.18 + phase) * 3);
+      const centerY = Math.round(H * channel + dsin(x * 0.18 + phase) * 3);
       for (let dy = -3; dy <= 3; dy++) {
         const y = centerY + dy;
         if (!inBounds(x, y)) continue;
@@ -230,9 +231,9 @@ export function generateFloodedBasinMap(): MapData {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const idx = mapIndex(x, y);
-      const d = Math.hypot(x - cx, y - cy);
+      const d = dhypot(x - cx, y - cy);
       if (d <= R) {
-        const crater = Math.sin(x * 0.45 + y * 0.31) + Math.cos(x * 0.21 - y * 0.6);
+        const crater = dsin(x * 0.45 + y * 0.31) + dcos(x * 0.21 - y * 0.6);
         if (crater > 1.55) {
           map.tiles[idx] = TileType.MUD;
           map.elevation[idx] = 2;

@@ -7,6 +7,7 @@
  * creation-time draw (see createSimWorld), so existing layouts are unchanged.
  */
 
+import { dhypot } from '../core/dmath';
 import { addComponent } from 'bitecs';
 import { MAP } from '../../config';
 import {
@@ -72,7 +73,7 @@ export function placeGameHerds(
 ): void {
   const mirror = (p: GridPos): GridPos => ({ x: MAP.WIDTH - 1 - p.x, y: MAP.HEIGHT - 1 - p.y });
   const farFromSpawns = (p: GridPos) =>
-    spawns.every((s) => Math.hypot(s.x - p.x, s.y - p.y) >= HERD_MIN_SPAWN_DISTANCE);
+    spawns.every((s) => dhypot(s.x - p.x, s.y - p.y) >= HERD_MIN_SPAWN_DISTANCE);
 
   for (let herd = 0; herd < HERDS_PER_SIDE; herd++) {
     for (let attempt = 0; attempt < HERD_PLACEMENT_ATTEMPTS; attempt++) {
@@ -81,7 +82,7 @@ export function placeGameHerds(
       const size = species === GameSpeciesId.BOAR ? 2 : 3 + world.rng.int(2);
       const other = mirror(center);
       if (!farFromSpawns(center) || !farFromSpawns(other)) continue;
-      if (Math.hypot(center.x - other.x, center.y - other.y) < HERD_MIN_MIRROR_DISTANCE) continue;
+      if (dhypot(center.x - other.x, center.y - other.y) < HERD_MIN_MIRROR_DISTANCE) continue;
       if (!canPlace(center.x, center.y) || !canPlace(other.x, other.y)) continue;
       for (const [dx, dy] of HERD_OFFSETS.slice(0, size)) {
         const a = { x: center.x + dx, y: center.y + dy };

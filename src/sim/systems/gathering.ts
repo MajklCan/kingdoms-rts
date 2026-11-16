@@ -2,6 +2,7 @@
  * Gatherer state machine: walk to node, harvest, return.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import {
@@ -108,7 +109,7 @@ function gatheringWalkingTo(world: SimWorld, eid: number): void {
 
   const dx = Position.x[eid] - Position.x[target];
   const dy = Position.y[eid] - Position.y[target];
-  const dist = Math.hypot(dx, dy);
+  const dist = dhypot(dx, dy);
   if (dist <= RESOURCE_GATHER_DISTANCE || (!world.paths.has(eid) && dist <= RESOURCE_GATHER_REACH)) {
     // Arrived at the resource node. Keep this tight so harvesting animations
     // visually connect with the trunk / rock / bush rather than swinging at air.
@@ -224,7 +225,7 @@ export function startGatheringResource(world: SimWorld, eid: number, target: num
   if (!pathToResourceContact(world, eid, target)) return false;
   Gatherer.targetEid[eid] = target;
   const isClose =
-    Math.hypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) <=
+    dhypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) <=
     RESOURCE_GATHER_DISTANCE;
   Gatherer.cooldown[eid] = isClose ? huntArrivalCooldown(world, eid, target, VILLAGER_GATHER_COOLDOWN) : 0;
   Gatherer.state[eid] = isClose ? GathererStateId.GATHERING : GathererStateId.WALKING_TO;
@@ -255,7 +256,7 @@ export function routeToNearestReachableResource(
     .filter((target) => Resource.kind[target] === kind && Resource.amount[target] > 0)
     .map((target) => ({
       target,
-      dist: Math.hypot(Position.x[target] - originX, Position.y[target] - originY),
+      dist: dhypot(Position.x[target] - originX, Position.y[target] - originY),
     }))
     .filter((candidate) => candidate.dist <= maxRange)
     .sort((a, b) => a.dist - b.dist || compareDeterministicEids(world, a.target, b.target));
@@ -291,7 +292,7 @@ export function routeFarmWorkerToNextPatch(world: SimWorld, worker: number, site
     const final = nextPath[nextPath.length - 1];
     if (
       !final ||
-      Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
+      dhypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
     ) {
       nextPath.push(candidate.point);
     }
@@ -335,7 +336,7 @@ function farmWorkPatchCandidates(
       tile: candidate.tile,
       point,
       score:
-        Math.hypot(Position.x[worker] - point.x, Position.y[worker] - point.y) +
+        dhypot(Position.x[worker] - point.x, Position.y[worker] - point.y) +
         candidate.resourcePenalty,
     });
   }

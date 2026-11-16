@@ -2,6 +2,7 @@
  * Soft unit separation (runs inside the movement system).
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { Health, Owner, Position, VillagerTag, WorksiteWorker } from '../components';
 import { deterministicEidKey, sortedEids } from '../core/entities';
@@ -33,14 +34,14 @@ export function unitSeparationSystem(world: SimWorld): void {
         if (dy >= MAX_SEPARATION_RADIUS || dy <= -MAX_SEPARATION_RADIUS) continue;
         if (areVillagersMutuallyNonBlocking(world, a, b)) continue;
         const radius = unitSeparationRadius(world, a, b);
-        let dist = Math.hypot(dx, dy);
+        let dist = dhypot(dx, dy);
         if (dist >= radius) continue;
 
         const overlapDist = dist;
         if (dist < 0.001) {
           const angle = deterministicPairAngle(world, a, b);
-          dx = Math.cos(angle);
-          dy = Math.sin(angle);
+          dx = dcos(angle);
+          dy = dsin(angle);
           dist = 1;
         } else {
           dx /= dist;

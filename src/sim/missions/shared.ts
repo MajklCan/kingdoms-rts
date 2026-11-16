@@ -2,6 +2,7 @@
  * Helpers shared by several campaign missions.
  */
 
+import { dhypot } from '../core/dmath';
 import { MAP } from '../../config';
 import { Building, Owner, PopulationCost, Position } from '../components';
 import { getBuildingDef } from '../defs';
@@ -78,7 +79,7 @@ export function clearBattlefieldForTownlessMission(world: SimWorld): void {
 }
 
 export function normalizeVector(x: number, y: number): GridPos {
-  const len = Math.hypot(x, y) || 1;
+  const len = dhypot(x, y) || 1;
   return { x: x / len, y: y / len };
 }
 

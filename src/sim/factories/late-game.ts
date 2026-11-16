@@ -2,6 +2,7 @@
  * Deterministic late-game stress fixture and preset placement helpers.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { MAP, SIM } from '../../config';
 import {
@@ -144,7 +145,7 @@ export function placePresetBuildingExact(
 
 function clearCampaignPlacementTile(world: SimWorld, x: number, y: number): void {
   for (const eid of [...resourceQuery(world.ecs)]) {
-    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= 0.6) {
+    if (dhypot(Position.x[eid] - x, Position.y[eid] - y) <= 0.6) {
       removeSimEntity(world, eid);
     }
   }
@@ -204,7 +205,7 @@ function findPresetArmyAnchor(
         if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
         const x = cx + dx;
         const y = cy + dy;
-        if (Math.hypot(x - home.x, y - home.y) > 18) continue;
+        if (dhypot(x - home.x, y - home.y) > 18) continue;
         if (!canPresetUnitStandAt(world, x, y, 3, playerId, 22)) continue;
         return { x, y };
       }
@@ -312,7 +313,7 @@ export function hasEnemyEntityNear(
       hasComponent(world.ecs, UnitKind, eid) ||
       hasComponent(world.ecs, Building, eid);
     if (!isRelevant) continue;
-    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
+    if (dhypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
   }
   return false;
 }

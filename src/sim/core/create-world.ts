@@ -2,6 +2,7 @@
  * Skirmish world construction: map, banks, starting towns, units and resources.
  */
 
+import { dhypot } from './dmath';
 import { createWorld } from 'bitecs';
 import { MAP } from '../../config';
 import { type ResourceKind, ResourceKindId } from '../components';
@@ -482,7 +483,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     // Checked on the resolved tile (and its mirror), so no base gets a bonus bush.
     const awayFromBases = (tile: GridPos) =>
       [p1, p2].every(
-        (spawn) => Math.hypot(spawn.x - tile.x, spawn.y - tile.y) >= SCATTERED_BERRY_MIN_SPAWN_DISTANCE
+        (spawn) => dhypot(spawn.x - tile.x, spawn.y - tile.y) >= SCATTERED_BERRY_MIN_SPAWN_DISTANCE
       );
     if (!awayFromBases(spot)) continue;
     if (mirroredSnowSkirmish) {

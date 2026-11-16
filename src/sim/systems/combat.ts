@@ -2,6 +2,7 @@
  * Attack resolution: cooldowns, melee hits, projectile and siege fire.
  */
 
+import { dhypot } from '../core/dmath';
 import { addComponent, hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import {
@@ -170,7 +171,7 @@ function processMachineGunDeployment(world: SimWorld, eid: number): boolean {
   const path = world.paths.get(eid);
   const isMoving =
     (path !== undefined && path.length > 0) ||
-    Math.hypot(Velocity.x[eid], Velocity.y[eid]) > 0.05;
+    dhypot(Velocity.x[eid], Velocity.y[eid]) > 0.05;
 
   if (isMoving) {
     MachineGunDeployment.deployed[eid] = 0;
@@ -194,7 +195,7 @@ function fireProjectileAttack(
   target: number,
   range: number
 ): void {
-  const distance = Math.hypot(
+  const distance = dhypot(
     Position.x[attacker] - Position.x[target],
     Position.y[attacker] - Position.y[target]
   );
@@ -282,7 +283,7 @@ function startCannonWindup(world: SimWorld, attacker: number, target: number, ra
 
 function fireCannonShot(world: SimWorld, attacker: number, target: number): void {
   const isMortar = hasComponent(world.ecs, MortarTag, attacker);
-  const dist = Math.hypot(Position.x[attacker] - Position.x[target], Position.y[attacker] - Position.y[target]);
+  const dist = dhypot(Position.x[attacker] - Position.x[target], Position.y[attacker] - Position.y[target]);
   const projectileTicks = isMortar
     ? mortarProjectileTravelTicks(dist)
     : cannonProjectileTravelTicks(dist);

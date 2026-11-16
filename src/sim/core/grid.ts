@@ -2,6 +2,7 @@
  * Walkability grid occupancy and building footprint geometry.
  */
 
+import { dhypot } from './dmath';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../../config';
 import { Building, Gatherer, Position } from '../components';
@@ -23,14 +24,14 @@ export function distToBuildingEdge(
   buildingEid: number
 ): number {
   if (!hasComponent(world.ecs, Building, buildingEid)) {
-    return Math.hypot(
+    return dhypot(
       fromX - Position.x[buildingEid],
       fromY - Position.y[buildingEid]
     );
   }
   const def = BUILDING_TABLE[Building.defId[buildingEid]];
   if (!def) {
-    return Math.hypot(
+    return dhypot(
       fromX - Position.x[buildingEid],
       fromY - Position.y[buildingEid]
     );
@@ -43,7 +44,7 @@ export function distToBuildingEdge(
   const maxY = y0 + def.footprint.h - 0.5;
   const dx = fromX < minX ? minX - fromX : fromX > maxX ? fromX - maxX : 0;
   const dy = fromY < minY ? minY - fromY : fromY > maxY ? fromY - maxY : 0;
-  return Math.hypot(dx, dy);
+  return dhypot(dx, dy);
 }
 
 /** Find a walkable tile near (cx, cy) for spawning units. Searches outward

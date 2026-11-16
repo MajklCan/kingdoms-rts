@@ -2,6 +2,7 @@
  * Local selection helpers used by render and the debug API.
  */
 
+import { dhypot } from './dmath';
 import { addComponent, hasComponent, removeComponent } from 'bitecs';
 import { Owner, Position, Selected, UnitKind } from '../components';
 import { isEntityVisibleTo } from '../systems/visibility';
@@ -55,7 +56,7 @@ export function selectUnitsOfSameKindInRadius(
   for (const eid of unitQuery(world.ecs)) {
     if (Owner.player[eid] !== playerId) continue;
     if (UnitKind.kind[eid] !== sourceKind) continue;
-    const dist = Math.hypot(Position.x[eid] - sourceX, Position.y[eid] - sourceY);
+    const dist = dhypot(Position.x[eid] - sourceX, Position.y[eid] - sourceY);
     if (dist > radius) continue;
     setSelected(world, eid, true);
     selectedCount++;

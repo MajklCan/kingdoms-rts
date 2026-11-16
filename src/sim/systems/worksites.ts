@@ -2,6 +2,7 @@
  * Resource worksites (farms, camps, mines): crews, harvest orders and self-production.
  */
 
+import { dhypot } from '../core/dmath';
 import { addComponent, hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import {
@@ -281,7 +282,7 @@ function enemySoldierNear(world: SimWorld, siteEid: number, radius: number): boo
     if (player === owner || player === 0) continue;
     if (Health.hp[eid] <= 0) continue;
     if (hasComponent(world.ecs, VillagerTag, eid)) continue;
-    if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) return true;
+    if (dhypot(Position.x[eid] - x, Position.y[eid] - y) <= radius) return true;
   }
   return false;
 }
@@ -401,7 +402,7 @@ function assignWorksiteHarvestOrders(
       const stalled =
         Gatherer.state[worker] === GathererStateId.WALKING_TO &&
         !world.paths.has(worker) &&
-        Math.hypot(Position.x[worker] - Position.x[target], Position.y[worker] - Position.y[target]) >
+        dhypot(Position.x[worker] - Position.x[target], Position.y[worker] - Position.y[target]) >
           RESOURCE_GATHER_REACH;
       const duplicateTarget = (claimedTargets.get(target) ?? 0) > 1;
       if (!stalled && !duplicateTarget) continue;

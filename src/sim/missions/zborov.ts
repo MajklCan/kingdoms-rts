@@ -2,6 +2,7 @@
  * Battle of Zborov setup: trench lines, wire, garrisons and the player base.
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import { MAP, SIM } from '../../config';
 import { Position, type ResourceKind, ResourceKindId } from '../components';
 import { AgeId, BuildingDefId, UnitDefId } from '../defs';
@@ -221,7 +222,7 @@ function zborovHash01(x: number, y: number, seed: number): number {
 function zborovDeadTreeScore(x: number, y: number): number {
   const broad = zborovHash01(Math.floor(x / 4), Math.floor(y / 4), 41);
   const local = zborovHash01(x, y, 97);
-  const scar = Math.sin(x * 0.29 + y * 0.17) * 0.08 + Math.cos(x * 0.13 - y * 0.31) * 0.08;
+  const scar = dsin(x * 0.29 + y * 0.17) * 0.08 + dcos(x * 0.13 - y * 0.31) * 0.08;
   return broad * 0.45 + local * 0.42 + scar + (isZborovMudPatch(x, y) ? 0.04 : 0);
 }
 
@@ -238,14 +239,14 @@ function seedZborovBaseDeadTrees(
       const x = base.x + dx;
       const y = base.y + rearDir * dy;
       if (!isZborovDeadTreeCandidate(world, x, y)) continue;
-      const lumberCampBias = Math.max(0, 1 - Math.hypot(dx - 11, dy - 3) / 24) * 0.12;
+      const lumberCampBias = Math.max(0, 1 - dhypot(dx - 11, dy - 3) / 24) * 0.12;
       candidates.push({ x, y, score: zborovDeadTreeScore(x, y) + lumberCampBias });
     }
   }
 
   const selected: GridPos[] = [];
   for (const candidate of candidates.sort((a, b) => b.score - a.score)) {
-    if (selected.some((spot) => Math.hypot(spot.x - candidate.x, spot.y - candidate.y) < 3.6)) continue;
+    if (selected.some((spot) => dhypot(spot.x - candidate.x, spot.y - candidate.y) < 3.6)) continue;
     if (!trySpawnZborovDeadTree(world, candidate.x, candidate.y, TREE_RESOURCE_AMOUNT, 3.1)) continue;
     selected.push(candidate);
     if (selected.length >= ZBOROV_BASE_DEAD_TREE_COUNT) return;
@@ -281,7 +282,7 @@ function seedZborovAmbientDeadTrees(world: SimWorld): void {
 
   const selected: GridPos[] = [];
   for (const candidate of candidates.sort((a, b) => b.score - a.score)) {
-    if (selected.some((spot) => Math.hypot(spot.x - candidate.x, spot.y - candidate.y) < 5.1)) continue;
+    if (selected.some((spot) => dhypot(spot.x - candidate.x, spot.y - candidate.y) < 5.1)) continue;
     if (!trySpawnZborovDeadTree(
       world,
       candidate.x,

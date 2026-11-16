@@ -2,6 +2,7 @@
  * Path following, terrain speed, stuck detection and recovery.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { MAP, SIM } from '../../config';
 import {
@@ -62,7 +63,7 @@ export function movementSystem(world: SimWorld): void {
     const py = Position.y[eid];
     const dx = waypoint.x - px;
     const dy = waypoint.y - py;
-    const dist = Math.hypot(dx, dy);
+    const dist = dhypot(dx, dy);
     const speedCap = world.formationSpeedCaps.get(eid);
     const baseSpeed = speedCap === undefined
       ? Speed.value[eid]
@@ -97,7 +98,7 @@ export function movementSystem(world: SimWorld): void {
 function stepBackToTileCentre(world: SimWorld, eid: number, path: GridPos[]): void {
   const cx = Math.round(Position.x[eid]);
   const cy = Math.round(Position.y[eid]);
-  if (Math.hypot(cx - Position.x[eid], cy - Position.y[eid]) <= PATH_WAYPOINT_TOLERANCE) return;
+  if (dhypot(cx - Position.x[eid], cy - Position.y[eid]) <= PATH_WAYPOINT_TOLERANCE) return;
   if (path[0].x === cx && path[0].y === cy) return;
   if (!canUnitOccupyMovementTarget(world, eid, cx, cy)) return;
   // Only when the centre really has a clear run to the waypoint; otherwise
@@ -111,7 +112,7 @@ function stepBackToTileCentre(world: SimWorld, eid: number, path: GridPos[]): vo
 function isSegmentPassable(world: SimWorld, eid: number, x: number, y: number, to: GridPos): boolean {
   const dx = to.x - x;
   const dy = to.y - y;
-  const len = Math.hypot(dx, dy);
+  const len = dhypot(dx, dy);
   if (len < 0.001) return true;
   const nx = dx / len;
   const ny = dy / len;
@@ -198,7 +199,7 @@ function tryMoveUnitStep(
   speed: number,
   waypoint: GridPos
 ): boolean {
-  const len = Math.hypot(dirX, dirY);
+  const len = dhypot(dirX, dirY);
   if (len < 0.001 || stepDist <= 0) return false;
   const nx = dirX / len;
   const ny = dirY / len;
@@ -224,11 +225,11 @@ function updateMovementStuckState(world: SimWorld, eid: number, path: GridPos[])
     return;
   }
 
-  const dist = Math.hypot(Position.x[eid] - waypoint.x, Position.y[eid] - waypoint.y);
+  const dist = dhypot(Position.x[eid] - waypoint.x, Position.y[eid] - waypoint.y);
   let state = world.movementStuck.get(eid);
   const waypointChanged =
     !state ||
-    Math.hypot(state.waypointX - waypoint.x, state.waypointY - waypoint.y) > 0.05;
+    dhypot(state.waypointX - waypoint.x, state.waypointY - waypoint.y) > 0.05;
   if (waypointChanged) {
     state = {
       lastDist: dist,
@@ -268,7 +269,7 @@ function updateMovementStuckState(world: SimWorld, eid: number, path: GridPos[])
     world.movementStuck.delete(eid);
     return;
   }
-  state.lastDist = Math.hypot(Position.x[eid] - nextWaypoint.x, Position.y[eid] - nextWaypoint.y);
+  state.lastDist = dhypot(Position.x[eid] - nextWaypoint.x, Position.y[eid] - nextWaypoint.y);
   state.waypointX = nextWaypoint.x;
   state.waypointY = nextWaypoint.y;
 }
@@ -315,8 +316,8 @@ function repathAroundStuckDestination(
         candidates.push({
           tile: { x, y },
           score:
-            Math.hypot(Position.x[eid] - x, Position.y[eid] - y) +
-            Math.hypot(destination.x - x, destination.y - y) * 0.5 +
+            dhypot(Position.x[eid] - x, Position.y[eid] - y) +
+            dhypot(destination.x - x, destination.y - y) * 0.5 +
             (crowd ? crowdPenaltyAt(world, crowd, x, y) : 0),
         });
       }
@@ -329,7 +330,7 @@ function repathAroundStuckDestination(
     if (nextPath === null) continue;
     if (nextPath.length === 0) {
       if (
-        Math.hypot(Position.x[eid] - destination.x, Position.y[eid] - destination.y) >
+        dhypot(Position.x[eid] - destination.x, Position.y[eid] - destination.y) >
         pathArrivalTolerance(world, eid, path)
       ) {
         continue;
@@ -351,7 +352,7 @@ function pathHasUsableFirstStep(world: SimWorld, eid: number, path: GridPos[]): 
   if (!first) return true;
   const dx = first.x - Position.x[eid];
   const dy = first.y - Position.y[eid];
-  const dist = Math.hypot(dx, dy);
+  const dist = dhypot(dx, dy);
   if (dist < 0.001) return true;
   const dirX = dx / dist;
   const dirY = dy / dist;

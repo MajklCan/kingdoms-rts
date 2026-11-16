@@ -2,6 +2,7 @@
  * AI unit queueing and building placement scoring.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../../config';
 import {
@@ -149,7 +150,7 @@ function aiBuildingPlacementScore(
   playerId: number,
   probe: ResourceProbe
 ): number {
-  const baseDist = Math.hypot(x - baseX, y - baseY);
+  const baseDist = dhypot(x - baseX, y - baseY);
   const spacingPenalty = aiOwnedBuildingSpacingPenalty(world, def, x, y, playerId);
   if (worksiteUsesResourceNodes(def)) {
     const radius = def.harvestRadius ?? 6;
@@ -255,7 +256,7 @@ function aiEnemyPoints(world: SimWorld, playerId: number): Array<{ x: number; y:
 /** Same test as hasEnemyEntityNear over a precomputed point list. */
 function hasPointNear(points: ReadonlyArray<{ x: number; y: number }>, x: number, y: number, radius: number): boolean {
   for (const p of points) {
-    if (Math.hypot(p.x - x, p.y - y) < radius) return true;
+    if (dhypot(p.x - x, p.y - y) < radius) return true;
   }
   return false;
 }

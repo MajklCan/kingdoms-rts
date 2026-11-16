@@ -6,6 +6,7 @@
  * here once it is built.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { Owner, Position, Resource, ResourceKindId, TownCenterTag } from '../components';
 import { compareDeterministicEids, sortedEids } from '../core/entities';
@@ -43,7 +44,7 @@ function bestWorksiteToHelp(world: SimWorld, playerId: number, eid: number): num
   for (const site of sortedEids(world, resourceWorksiteQuery(world.ecs))) {
     if (helpRefusal(world, site, playerId) !== null) continue;
     const room = worksiteHelperCapacity(world, site) - countWorksiteHelpers(world, site);
-    const dist = Math.hypot(Position.x[site] - Position.x[eid], Position.y[site] - Position.y[eid]);
+    const dist = dhypot(Position.x[site] - Position.x[eid], Position.y[site] - Position.y[eid]);
     if (room > bestRoom || (room === bestRoom && dist < bestDist)) {
       best = site;
       bestRoom = room;
@@ -67,7 +68,7 @@ function bestHandGatherNode(world: SimWorld, playerId: number): number | null {
       const game = isGameAnimal(world, node);
       const kind = Resource.kind[node];
       const tier = game ? 0 : kind === ResourceKindId.FOOD ? 1 : kind === ResourceKindId.WOOD ? 2 : 3;
-      return { node, tier, dist: Math.hypot(Position.x[node] - x, Position.y[node] - y) };
+      return { node, tier, dist: dhypot(Position.x[node] - x, Position.y[node] - y) };
     })
     .filter((c) => c.tier < 3 && c.dist <= AI_HAND_GATHER_RANGE)
     .sort((a, b) => a.tier - b.tier || a.dist - b.dist || compareDeterministicEids(world, a.node, b.node));

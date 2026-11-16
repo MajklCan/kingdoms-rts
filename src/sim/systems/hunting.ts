@@ -10,6 +10,7 @@
  * No animal AI beyond wandering: game never flees or fights back.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { MAP, SIM } from '../../config';
 import {
@@ -74,7 +75,7 @@ export function gameAnimalSystem(world: SimWorld): void {
     }
     const dx = GameAnimal.targetX[eid] - Position.x[eid];
     const dy = GameAnimal.targetY[eid] - Position.y[eid];
-    const dist = Math.hypot(dx, dy);
+    const dist = dhypot(dx, dy);
     const stepDist = speedForSpecies(GameAnimal.species[eid]) * dt;
     if (dist <= stepDist) {
       Position.x[eid] = GameAnimal.targetX[eid];
@@ -115,7 +116,7 @@ function isWalkable(world: SimWorld, x: number, y: number): boolean {
 }
 
 function isStraightWalkable(world: SimWorld, x0: number, y0: number, x1: number, y1: number): boolean {
-  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2);
+  const steps = Math.ceil(dhypot(x1 - x0, y1 - y0) * 2);
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
     if (!isWalkable(world, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
@@ -153,7 +154,7 @@ export function routeToNearestGame(
     .map((animal) => ({
       animal,
       carcass: GameAnimal.state[animal] === GameAnimalStateId.CARCASS ? 0 : 1,
-      dist: Math.hypot(Position.x[animal] - x, Position.y[animal] - y),
+      dist: dhypot(Position.x[animal] - x, Position.y[animal] - y),
     }))
     .filter((c) => c.dist <= radius)
     .sort((a, b) => a.carcass - b.carcass || a.dist - b.dist || compareDeterministicEids(world, a.animal, b.animal));
