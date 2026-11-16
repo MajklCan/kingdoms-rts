@@ -8,7 +8,6 @@ import {
   scrollGridFor,
   stepLevel,
   wheelDeltaPx,
-  wheelLevels,
 } from './zoom-levels';
 
 describe('zoom levels', () => {
@@ -66,47 +65,5 @@ describe('wheel', () => {
     expect(wheelDeltaPx(3, 1, 800)).toBe(48);
     expect(wheelDeltaPx(1, 2, 800)).toBe(800);
     expect(wheelDeltaPx(100, 0, 800)).toBe(100);
-  });
-
-  it('the first notch is one level whatever its size', () => {
-    expect(wheelLevels(0, -100)).toEqual({ levels: 1, rest: 0, notch: 100 });
-    expect(wheelLevels(0, 120)).toEqual({ levels: -1, rest: 0, notch: 120 });
-    expect(wheelLevels(0, 48)).toEqual({ levels: -1, rest: 0, notch: 48 });
-    // A 2x screen reports 200 px per notch.
-    expect(wheelLevels(0, -200)).toEqual({ levels: 1, rest: 0, notch: 200 });
-  });
-
-  it('merged notches move several levels, up to three', () => {
-    expect(wheelLevels(0, -300, 100)).toEqual({ levels: 3, rest: 0, notch: 100 });
-    expect(wheelLevels(0, 400, 200)).toEqual({ levels: -2, rest: 0, notch: 200 });
-    expect(wheelLevels(0, -900, 100).levels).toBe(3);
-    // 200 px notches stay one level each once learned.
-    expect(wheelLevels(0, -200, 200).levels).toBe(1);
-  });
-
-  it('the notch size learns the smallest discrete event', () => {
-    let notch = Infinity;
-    const levels: number[] = [];
-    for (const d of [-300, -100, -100, -200]) {
-      const r = wheelLevels(0, d, notch);
-      notch = r.notch;
-      levels.push(r.levels);
-    }
-    expect(levels).toEqual([1, 1, 1, 2]);
-    expect(notch).toBe(100);
-  });
-
-  it('small trackpad deltas accumulate to a level', () => {
-    let acc = 0;
-    let levels = 0;
-    for (let i = 0; i < 11; i++) {
-      const r = wheelLevels(acc, -10);
-      acc = r.rest;
-      levels += r.levels;
-    }
-    expect(levels).toBe(1);
-    expect(acc).toBeCloseTo(-10, 9);
-    // Reversing drops the carry.
-    expect(wheelLevels(-90, 5)).toEqual({ levels: 0, rest: 5, notch: Infinity });
   });
 });

@@ -2,33 +2,37 @@
  * Main camera: zoom (wheel, trackpad pinch, touch pinch, +/- keys), WASD and
  * finger panning, the map clamp, and "look at" helpers (tile, town centre).
  *
- * Zoom rests on the quarter-step levels of zoom-levels.ts and eases between
- * them (time based, so the same at 30 and 144 fps), always around the cursor
- * or pinch centre: the world point under it stays put. Pinches follow the
- * fingers continuously and settle on the nearest level when released. At
- * rest the scroll sits on the level's pixel grid so nothing shimmers.
+ * The mouse wheel drives a continuous zoom target (a fixed percentage per
+ * notch, smooth-zoom.ts) and the camera eases toward it every frame with
+ * frame-rate independent exponential smoothing, around the cursor: the world
+ * point under it stays put. Once the wheel is idle the zoom settles on the
+ * nearest quarter-step level of zoom-levels.ts when close, so the resting
+ * image is crisp. Keys and HUD buttons step between those levels through the
+ * same ease. Pinches follow the fingers and settle on release. At rest the
+ * scroll sits on the level's pixel grid so nothing shimmers.
+ * `prefers-reduced-motion` skips the easing.
  */
 
 import { hasComponent } from 'bitecs';
 import { Health, Owner, Position, TownCenterTag } from '@sim/components';
 import { buildingQuery, unitQuery } from '@sim/world';
 import { isTextEntryActive } from '../input/text-entry';
+import { reducedMotion } from '../effects/motion-prefs';
 import type { SceneContext } from '../scene-context';
+import { SETTLE_IDLE_MS, easeZoom, settleLevel, targetAfterNotches, wheelNotches } from './smooth-zoom';
 import {
   anchoredScroll,
   clampContinuousZoom,
-  easeOutCubic,
   nearestLevel,
   screenToWorld,
   scrollGridFor,
   stepLevel,
   wheelDeltaPx,
-  wheelLevels,
 } from './zoom-levels';
 
 export const INITIAL_ZOOM = 1.5;
-/** Ease between resting levels. */
-const ZOOM_ANIM_MS = 160;
+/** Longest frame step the zoom ease integrates (a stalled tab must not jump). */
+const MAX_FRAME_MS = 100;
 /** A trackpad pinch (ctrl + wheel) settles this long after its last event. */
 const PINCH_SETTLE_MS = 180;
 /** Trackpad pinch: zoom factor per wheel px. */
@@ -47,14 +51,13 @@ interface Anchor {
   wy: number;
 }
 
-interface ZoomAnim {
-  from: number;
-  to: number;
-  startMs: number;
+interface ZoomEase {
   anchor: Anchor;
   /** Screen px the anchor drifts by over the ease, so it ends on the level's grid (no snap jump). */
   shiftX: number;
   shiftY: number;
+  /** |ln(target / zoom)| when the ease began; the drift follows the progress through it. */
+  gap0: number;
 }
 
 export interface CameraBounds {
@@ -65,15 +68,18 @@ export interface CameraBounds {
 }
 
 export class CameraController {
-  /** Resting level the camera is at or easing toward. */
+  /** Zoom the camera is at or easing toward (fractional while the wheel is moving it). */
   targetZoom = INITIAL_ZOOM;
   private current = INITIAL_ZOOM;
-  private anim: ZoomAnim | null = null;
+  private ease: ZoomEase | null = null;
+  /** Wheel zoom waiting for the idle moment to settle on a level. */
+  private settleArmed = false;
+  private lastWheelAt = -Infinity;
+  private lastFrameMs = -1;
   /** A pinch (touch or trackpad) owns the zoom; settles on release. */
   private pinching = false;
   private trackpadPinchAt = -Infinity;
   private lastPinchAnchor: Anchor | null = null;
-  private wheelRest = 0;
   /** Smallest discrete wheel event seen (px): this mouse's notch. */
   private wheelNotch = Infinity;
   /** Finger pan or glide in progress: skip the grid snap until it stops. */
@@ -99,7 +105,7 @@ export class CameraController {
 
   /** True while the zoom is easing or a pinch is live. */
   get isZooming(): boolean {
-    return this.anim !== null || this.pinching;
+    return this.ease !== null || this.pinching;
   }
 
   /** Apply the initial zoom and hook the mouse wheel. */
@@ -121,10 +127,13 @@ export class CameraController {
       this.pinchTo(this.current * Math.exp(-px * PINCH_WHEEL_RATE), a.sx, a.sy, a.wx, a.wy);
       return;
     }
-    const { levels, rest, notch } = wheelLevels(this.wheelRest, px, this.wheelNotch);
-    this.wheelRest = rest;
+    const { notches, notch } = wheelNotches(px, this.wheelNotch);
     this.wheelNotch = notch;
-    if (levels !== 0) this.zoomStep(levels, sx, sy);
+    if (notches === 0) return;
+    this.pinching = false;
+    this.settleArmed = true;
+    this.lastWheelAt = this.now();
+    this.easeTo(targetAfterNotches(this.targetZoom, notches), this.anchorAt(sx, sy));
   }
 
   /** Move `steps` resting levels (+ = in), around a screen point (default: the centre). */
@@ -136,19 +145,27 @@ export class CameraController {
   zoomTo(level: number, sx?: number, sy?: number, immediate = false): void {
     const to = nearestLevel(level);
     this.pinching = false;
-    this.targetZoom = to;
+    this.settleArmed = false;
     const anchor = this.anchorAt(sx ?? this.camera.width / 2, sy ?? this.camera.height / 2);
+    this.easeTo(to, anchor, this.gridShift(to, anchor), immediate);
+  }
+
+  /**
+   * Retarget the zoom. Always from the live zoom, so reversing the wheel
+   * reverses at once: there is only the target, no queue of steps.
+   */
+  private easeTo(to: number, anchor: Anchor, shift = { x: 0, y: 0 }, immediate = false): void {
+    this.targetZoom = to;
     // A zoom re-places the view: drop the pan remainder of the old grid.
     this.restX = 0;
     this.restY = 0;
-    if (immediate || to === this.current) {
-      this.anim = null;
+    if (immediate || to === this.current || reducedMotion()) {
+      this.ease = null;
       this.applyZoomValue(to, anchor);
       this.settleScroll();
       return;
     }
-    const shift = this.gridShift(to, anchor);
-    this.anim = { from: this.current, to, startMs: this.now(), anchor, shiftX: shift.x, shiftY: shift.y };
+    this.ease = { anchor, shiftX: shift.x, shiftY: shift.y, gap0: Math.abs(Math.log(to / this.current)) };
   }
 
   /** Screen offset of the anchor once the scroll at `zoom` is rounded onto that level's grid. */
@@ -177,7 +194,8 @@ export class CameraController {
   // ── Pinch (touch two-finger, trackpad ctrl + wheel) ───────────────────────
 
   beginPinch(): void {
-    this.anim = null;
+    this.ease = null;
+    this.settleArmed = false;
     this.restX = 0;
     this.restY = 0;
     this.pinching = true;
@@ -206,9 +224,9 @@ export class CameraController {
   /** Drag the world by a screen delta (game canvas px), like a finger on a map. */
   panByScreen(dx: number, dy: number): void {
     // While a zoom eases, move its anchor with the finger instead (the ease owns the scroll).
-    if (this.anim) {
-      this.anim.anchor.sx += dx;
-      this.anim.anchor.sy += dy;
+    if (this.ease) {
+      this.ease.anchor.sx += dx;
+      this.ease.anchor.sy += dy;
       return;
     }
     const cam = this.camera;
@@ -256,17 +274,30 @@ export class CameraController {
       this.trackpadPinchAt = -Infinity;
       this.endPinch();
     }
-    const anim = this.anim;
-    if (anim) {
-      const t = (now - anim.startMs) / ZOOM_ANIM_MS;
-      const e = t >= 1 ? 1 : easeOutCubic(t);
-      const a = anim.anchor;
-      const anchor = { sx: a.sx + anim.shiftX * e, sy: a.sy + anim.shiftY * e, wx: a.wx, wy: a.wy };
-      if (t >= 1) this.anim = null;
-      this.applyZoomValue(t >= 1 ? anim.to : anim.from + (anim.to - anim.from) * e, anchor);
+    this.settleIdleWheel(now);
+    const dt = this.lastFrameMs < 0 ? 0 : Math.min(MAX_FRAME_MS, now - this.lastFrameMs);
+    this.lastFrameMs = now;
+    const ease = this.ease;
+    if (ease) {
+      const z = easeZoom(this.current, this.targetZoom, dt);
+      const done = z === this.targetZoom;
+      const progress = done || ease.gap0 <= 0 ? 1 : Math.max(0, 1 - Math.abs(Math.log(this.targetZoom / z)) / ease.gap0);
+      const a = ease.anchor;
+      if (done) this.ease = null;
+      this.applyZoomValue(z, { sx: a.sx + ease.shiftX * progress, sy: a.sy + ease.shiftY * progress, wx: a.wx, wy: a.wy });
     }
     this.clampToBounds();
     if (!this.isZooming && !this.moving) this.snapScroll();
+  }
+
+  /** Wheel idle: settle a close-enough zoom onto the nearest crisp level (same ease). */
+  private settleIdleWheel(now: number): void {
+    if (!this.settleArmed || now - this.lastWheelAt < SETTLE_IDLE_MS) return;
+    this.settleArmed = false;
+    const level = settleLevel(this.targetZoom);
+    if (level === null || level === this.targetZoom) return;
+    const anchor = this.ease?.anchor ?? this.anchorAt(this.camera.width / 2, this.camera.height / 2);
+    this.easeTo(level, anchor, this.gridShift(level, anchor));
   }
 
   private applyZoomValue(zoom: number, anchor: Anchor): void {
@@ -353,11 +384,6 @@ export class CameraController {
       const t = this.ctx.pickTile(wx, wy);
       return { x: t.tileX, y: t.tileY };
     });
-  }
-
-  /** Is the camera-world point inside the current viewport? */
-  isWorldPointInView(wx: number, wy: number): boolean {
-    return this.camera.worldView.contains(wx, wy);
   }
 
   /** Town centre, else the centroid of own units, else the spawn point. */
