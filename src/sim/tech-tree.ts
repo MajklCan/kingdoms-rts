@@ -74,14 +74,14 @@ export const TECH_TREE: TechDef[] = [
   {
     id: TechId.BARRACKS_PIKEMEN,
     name: 'Barracks',
-    description: 'Unlocks barracks to train pikemen and archers in numbers, and lifts the early limit on houses.',
+    description: 'Unlocks barracks and pikemen as the first military line, and lifts the early limit on houses.',
     cost: { food: 0, wood: 250, gold: 0, stone: 0 },
     path: 'military',
     icon: 'barracks',
     x: 9.5,
     y: 18,
     requires: [TechId.LUMBER_HUTS, TechId.STONE_MINES],
-    unlocks: ['Barracks', 'Unlimited Houses', 'Palisade Walls'],
+    unlocks: ['Barracks', 'Unlimited Houses', 'Pikemen', 'Palisade Walls'],
   },
   {
     id: TechId.ARCHERS,
@@ -148,7 +148,7 @@ export const TECH_TREE: TechDef[] = [
     id: TechId.CASTLE_AGE,
     name: 'Castle Age',
     description: 'Advance into Castle Age and unlock gold mining, stables, and scout cavalry.',
-    cost: { food: 0, wood: 450, gold: 0, stone: 300 },
+    cost: { food: 0, wood: 750, gold: 0, stone: 500 },
     path: 'age',
     icon: 'castle',
     x: 49.5,
@@ -288,6 +288,30 @@ export function techStatus(
   return techPrereqsMet(world, playerId, tech) ? 'available' : 'locked';
 }
 
+/** One way to unlock a tech: the research it needs, each marked done or not. */
+export type TechPrereqPath = Array<{ id: TechIdValue; done: boolean }>;
+
+/**
+ * The ways `techId` can be unlocked: one path per `requiresAny` group (each
+ * with the `requires` list in front), or a single path of `requires`.
+ * Empty when the tech needs no earlier research.
+ */
+export function techPrereqPaths(
+  world: TechStateWorld,
+  playerId: number,
+  techId: TechIdValue
+): TechPrereqPath[] {
+  const tech = techDef(techId);
+  if (!tech) return [];
+  const mark = (ids: TechIdValue[]): TechPrereqPath =>
+    ids.map((id) => ({ id, done: hasTech(world, playerId, id) }));
+  const base = tech.requires ?? [];
+  if (tech.requiresAny && tech.requiresAny.length > 0) {
+    return tech.requiresAny.map((group) => mark([...base, ...group]));
+  }
+  return base.length > 0 ? [mark(base)] : [];
+}
+
 export function isBuildingUnlocked(
   world: TechStateWorld,
   playerId: number,
@@ -335,8 +359,7 @@ export function isUnitUnlocked(
     case UnitDefId.VILLAGER:
       return true;
     case UnitDefId.SPEARMAN:
-      // Trained at the town center from the start; the Barracks tech adds barracks.
-      return true;
+      return hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);
     case UnitDefId.ARCHER:
       return hasTech(world, playerId, TechId.ARCHERS);
     case UnitDefId.SCOUT_CAVALRY:

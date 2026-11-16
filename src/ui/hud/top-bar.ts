@@ -17,6 +17,8 @@ import { attachTip } from './tooltip';
 export interface TopBarHandlers {
   onObjectives: () => void;
   onTech: () => void;
+  /** Age plaque: the Technology panel on the next age. */
+  onAge: () => void;
   onPause: () => void;
   onMenu: () => void;
 }
@@ -45,12 +47,16 @@ interface Refs {
   pause: HTMLButtonElement;
   objectives: HTMLButtonElement;
   tech: HTMLButtonElement;
+  techBadge: HTMLElement;
 }
 
 let refs: Refs | null = null;
 const lastRes: Partial<Record<ResourceKey, number>> = {};
 /** Age index last seen; the banner drops when it goes up mid-match. */
 let lastAge = -1;
+/** Research you can start now, and how many of those the player has seen in the panel. */
+let techReady = 0;
+let techReadySeen = 0;
 
 function barButton(id: string, iconName: IconName, label: string, onclick: () => void, extra: Record<string, string> = {}): HTMLButtonElement {
   const btn = h('button', { type: 'button', class: 'icon-btn', id, 'aria-label': label, onclick, ...extra }, icon(iconName));
@@ -98,19 +104,31 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const ageWrap = h('div', { class: 'age-progress bar', 'aria-hidden': 'true' }, ageBar);
   const plaque = h(
     'div',
-    { class: 'age-plaque', tabindex: '0' },
+    { class: 'age-plaque', tabindex: '0', role: 'button', 'aria-label': 'Age: open the next age in Technology' },
     icon('crown', 'age-crown'),
     h('span', { class: 'age-text' }, ageName, ageNext),
     ageWrap
   );
+  plaque.addEventListener('click', handlers.onAge);
+  plaque.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    ev.preventDefault();
+    handlers.onAge();
+  });
   attachTip(plaque, () => ({
     title: ageName.textContent ?? '',
-    body: ageNext.textContent ? `Advancing: ${ageNext.textContent}` : 'Select your Town Center to advance to the next age.',
+    body: ageNext.textContent
+      ? `Advancing: ${ageNext.textContent}`
+      : 'Advance at your Town Center. Each age first needs one research path from the Technology tree.',
+    hint: 'Click to see what the next age needs.',
   }));
 
   const clock = h('span', { class: 'clock-val num', id: 'match-clock' }, '0:00');
   const objectives = barButton('btn-objectives', 'objectives', 'Objectives', handlers.onObjectives, { 'aria-expanded': 'false', 'aria-keyshortcuts': 'O' });
   const tech = barButton('btn-tech', 'tech', 'Technology tree', handlers.onTech, { 'aria-expanded': 'false', 'aria-keyshortcuts': 'K' });
+  const techBadge = h('span', { class: 'tech-badge num', 'aria-hidden': 'true' });
+  techBadge.hidden = true;
+  tech.append(techBadge);
   const speed = h(
     'button',
     { type: 'button', class: 'icon-btn has-label', id: 'speed-toggle', 'aria-label': 'Game speed', 'aria-pressed': 'false', 'aria-keyshortcuts': 'X' },
@@ -121,7 +139,12 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const menu = barButton('btn-menu', 'menu', 'Game menu', handlers.onMenu, { 'aria-haspopup': 'dialog', 'aria-keyshortcuts': 'Escape F10' });
 
   attachTip(objectives, () => ({ title: 'Objectives', hotkey: 'O', body: 'Mission briefing and goals.' }));
-  attachTip(tech, () => ({ title: 'Technology', hotkey: 'K', body: 'Research upgrades and unlock new buildings.' }));
+  attachTip(tech, () => ({
+    title: 'Technology',
+    hotkey: 'K',
+    body: 'Research upgrades, unlock new buildings, and open the way to the next age.',
+    meta: techReady > 0 ? `${techReady} research ${techReady === 1 ? 'is' : 'are'} ready to start` : undefined,
+  }));
   attachTip(speed, () => ({ title: 'Game speed', hotkey: 'X', body: 'Toggle between normal and double speed.' }));
   attachTip(pause, () => ({ title: 'Pause', hotkey: 'P', body: 'Freeze the battle. Not available in multiplayer.' }));
   attachTip(menu, () => ({ title: 'Game menu', hotkey: 'Esc', body: 'Save, load, settings and quit.' }));
@@ -133,7 +156,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     h('div', { class: 'topbar-buttons' }, objectives, tech, speed, pause, menu)
   );
 
-  refs = { res, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech };
+  refs = { res, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech, techBadge };
   return h('header', { class: 'topbar', id: 'resource-bar' }, strip, plaque, right);
 }
 
@@ -193,10 +216,30 @@ export function updateTopBar(scene: GameScene): void {
   setAttr(refs.pause, 'aria-pressed', String(paused));
   refs.pause.disabled = scene.isMultiplayer();
 
+  updateTechButton(scene, me);
+
   const hasMission = scene.getCampaignMission() !== null;
   refs.objectives.classList.toggle('is-unavailable', !hasMission);
   refs.objectives.tabIndex = hasMission ? 0 : -1;
   setAttr(refs.objectives, 'aria-hidden', String(!hasMission));
+}
+
+/**
+ * Technology button: a badge with the research you can start now, and a
+ * pulse while some of it is new since you last opened the panel.
+ */
+function updateTechButton(scene: GameScene, me: number): void {
+  if (!refs) return;
+  const ready = scene.getTechTree(me).filter((n) => n.status === 'available' && n.affordable).length;
+  if (ready < techReadySeen) techReadySeen = ready;
+  if (ready === techReady && refs.techBadge.dataset.seen === String(techReadySeen)) return;
+  techReady = ready;
+  refs.techBadge.dataset.seen = String(techReadySeen);
+  setText(refs.techBadge, ready > 0 ? String(ready) : '');
+  refs.techBadge.hidden = ready <= 0;
+  refs.tech.classList.toggle('has-ready', ready > 0);
+  refs.tech.classList.toggle('is-new', ready > techReadySeen);
+  setAttr(refs.tech, 'aria-label', ready > 0 ? `Technology tree, ${ready} research ready` : 'Technology tree');
 }
 
 function restartAnimation(el: HTMLElement, className: string): void {
@@ -219,9 +262,18 @@ export function flashPopulation(): void {
 export function setPanelExpanded(which: 'objectives' | 'tech', open: boolean): void {
   if (!refs) return;
   setAttr(which === 'tech' ? refs.tech : refs.objectives, 'aria-expanded', String(open));
+  if (which === 'tech' && open) {
+    // Seen: stop the pulse until more research becomes ready.
+    techReadySeen = techReady;
+    refs.tech.classList.remove('is-new');
+    refs.techBadge.dataset.seen = String(techReadySeen);
+  }
 }
 
 export function resetTopBar(): void {
   for (const key of RESOURCE_KEYS) delete lastRes[key];
   lastAge = -1;
+  techReady = 0;
+  techReadySeen = 0;
+  if (refs) refs.techBadge.dataset.seen = '';
 }

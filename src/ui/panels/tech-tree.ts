@@ -6,6 +6,7 @@
  */
 
 import type { GameScene } from '../../render/game-scene';
+import { AgeId } from '../../sim/defs';
 import { TechId, type TechIdValue } from '../../sim/tech-tree';
 import { hasOpenLayer } from '../a11y/layers';
 import { appState } from '../app-state';
@@ -51,6 +52,9 @@ let modal: Modal | null = null;
 let board: HTMLElement | null = null;
 let fit: HTMLElement | null = null;
 let lastSig = '';
+/** Tech the panel was opened for (locked age button, age plaque): it and its missing research are marked. */
+let goalId: TechIdValue | null = null;
+let goalNote: HTMLElement | null = null;
 
 function point(node: { x: number; y: number }): { x: number; y: number } {
   return { x: LEFT_PAD + node.x * X_SCALE, y: TOP_PAD + node.y * Y_SCALE };
@@ -94,7 +98,10 @@ function ensureModal(): Modal {
     title: 'Technology',
     className: 'modal-tech',
     onOpen: () => setPanelExpanded('tech', true),
-    onClose: () => setPanelExpanded('tech', false),
+    onClose: () => {
+      goalId = null;
+      setPanelExpanded('tech', false);
+    },
   });
   board = h('div', { class: 'tech-board', id: 'tech-tree-board' });
   fit = h('div', { class: 'tech-fit' }, board);
@@ -103,8 +110,10 @@ function ensureModal(): Modal {
     { class: 'tech-legend', 'aria-hidden': 'true' },
     ...(['military', 'economy', 'food', 'housing', 'castle', 'gunpowder'] as const).map((b) => h('span', { class: `legend-item ${b}` }, h('i'), b))
   );
+  goalNote = h('p', { class: 'tech-goal', role: 'status' });
+  goalNote.hidden = true;
   modal.body.append(fit);
-  modal.foot.append(legend);
+  modal.foot.append(goalNote, legend);
   board.addEventListener('click', (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-tech-id]');
     const scene = getScene();
@@ -135,7 +144,7 @@ export function renderTechTree(scene: GameScene): void {
   const nodes = scene.getTechTree(playerId);
   const bank = scene.getResources(playerId) as unknown as Record<ResourceKey, number>;
   const sig =
-    `${playerId}|` +
+    `${playerId}|${goalId ?? ''}|` +
     nodes.map((n) => `${n.id}:${n.status}:${n.affordable ? 1 : 0}:${Math.floor(n.progressFrac * 100)}`).join('|') +
     `|${RESOURCE_KEYS.map((k) => Math.floor(bank[k] ?? 0)).join(',')}`;
   if (sig === lastSig) return;
@@ -144,6 +153,9 @@ export function renderTechTree(scene: GameScene): void {
   const focusedId = (document.activeElement as HTMLElement | null)?.dataset?.techId;
   const byId = new Map<string, TechNode>();
   for (const n of nodes) byId.set(n.id, n);
+  const goal = goalId ? byId.get(goalId) : undefined;
+  const pathIds = goal ? goalPathIds(goal, byId) : new Set<string>();
+  renderGoalNote(goal, byId);
   const links: string[] = [];
   const ex = NODE_W / 2;
   const ey = NODE_H / 2;
@@ -176,8 +188,10 @@ export function renderTechTree(scene: GameScene): void {
       const progress = n.status === 'researching' ? `<span class="tech-progress"><i style="--p:${n.progressFrac.toFixed(3)}"></i></span>` : '';
       const statusIcon = n.status === 'researched' ? iconHtml('check', 'tech-status-icon') : n.status === 'locked' ? iconHtml('lock', 'tech-status-icon') : '';
       const usable = n.status === 'available' && n.affordable;
-      return `<button type="button" class="tech-node ${n.path} is-${n.status}${n.status === 'available' && !n.affordable ? ' is-short' : ''}" data-tech-id="${n.id}" aria-disabled="${!usable}"
-        aria-label="${n.name}. ${statusLabel(n)}." style="left:${p.x}rem;top:${p.y}rem">
+      const mark = goal?.id === n.id ? ' is-goal' : pathIds.has(n.id) ? ' is-path' : '';
+      const markLabel = mark === ' is-goal' ? ' Your goal.' : mark ? ` Needed for ${goal?.name}.` : '';
+      return `<button type="button" class="tech-node ${n.path} is-${n.status}${n.status === 'available' && !n.affordable ? ' is-short' : ''}${mark}" data-tech-id="${n.id}" aria-disabled="${!usable}"
+        aria-label="${n.name}. ${statusLabel(n)}.${markLabel}" style="left:${p.x}rem;top:${p.y}rem">
         <span class="tech-medal">${iconHtml(ic, 'tech-icon')}</span>
         <span class="tech-copy"><span class="tech-name">${n.name}</span><span class="tech-cost">${costHtml(n.cost, bank)}</span></span>
         <span class="tech-status">${statusIcon}${statusLabel(n)}</span>${progress}
@@ -209,17 +223,60 @@ export function renderTechTree(scene: GameScene): void {
   if (focusedId) board.querySelector<HTMLElement>(`[data-tech-id="${focusedId}"]`)?.focus({ preventScroll: true });
 }
 
-export function openTechTree(): void {
+/** Unresearched research on any path to `goal` (one level: what it requires). */
+function goalPathIds(goal: TechNode, byId: Map<string, TechNode>): Set<string> {
+  const ids = new Set<string>();
+  for (const id of [...goal.requires, ...goal.requiresAny.flat()]) {
+    if (byId.get(id)?.status !== 'researched') ids.add(id);
+  }
+  return ids;
+}
+
+/** "Castle Age needs one path: Barracks ✓ then Archers, or Lumber Crews then Mining Crews." */
+function renderGoalNote(goal: TechNode | undefined, byId: Map<string, TechNode>): void {
+  if (!goalNote) return;
+  if (!goal || goal.status !== 'locked') {
+    goalNote.hidden = !goal;
+    goalNote.textContent = goal ? `${goal.name}: ${statusLabel(goal).toLowerCase()}. Advance it at the Town Center.` : '';
+    return;
+  }
+  const name = (id: TechIdValue): string => {
+    const n = byId.get(id);
+    return n ? `${n.name}${n.status === 'researched' ? ' ✓' : ''}` : id;
+  };
+  const paths = goal.requiresAny.length > 0
+    ? goal.requiresAny.map((group) => [...goal.requires, ...group].map(name).join(' then '))
+    : [goal.requires.map(name).join(' then ')];
+  goalNote.hidden = false;
+  goalNote.textContent = `${goal.name} needs ${paths.length > 1 ? 'one research path' : 'this research'} first: ${paths.join(', or ')}.`;
+}
+
+/**
+ * Open the panel. With `goal`, that tech and the research it still needs
+ * are marked, and focus lands on the first research you can start for it.
+ */
+export function openTechTree(goal?: TechIdValue): void {
   const scene = getScene();
   if (!scene) return;
   const m = ensureModal();
-  if (m.isOpen()) return;
-  m.open();
+  goalId = goal ?? null;
+  if (!m.isOpen()) m.open();
   lastSig = '';
   renderTechTree(scene);
   requestAnimationFrame(fitBoard);
-  const first = board?.querySelector<HTMLElement>('.tech-node.is-available, .tech-node');
+  const first =
+    board?.querySelector<HTMLElement>('.tech-node.is-path.is-available, .tech-node.is-goal.is-available') ??
+    board?.querySelector<HTMLElement>('.tech-node.is-available, .tech-node');
   first?.focus({ preventScroll: true });
+}
+
+/** Open the panel on the next age: what it costs and the research it needs. */
+export function openTechTreeForNextAge(): void {
+  const scene = getScene();
+  if (!scene) return;
+  const age = scene.getAge(scene.getPerspectivePlayerId()).current;
+  const goal = age === AgeId.DARK ? TechId.CASTLE_AGE : age === AgeId.CASTLE ? TechId.GUNPOWDER_AGE : undefined;
+  openTechTree(goal);
 }
 
 export function toggleTechTree(): void {

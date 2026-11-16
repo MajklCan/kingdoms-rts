@@ -215,9 +215,7 @@ function issueProductionRallyOrder(
   unitEid: number
 ): void {
   if (!hasComponent(world.ecs, Building, producerEid)) return;
-  // Soldiers from a town center (Dark Age pikemen) join the army rally too.
-  const defId = Building.defId[producerEid];
-  if (!isArmyProducerDefId(defId) && defId !== BuildingDefId.TOWN_CENTER) return;
+  if (!isArmyProducerDefId(Building.defId[producerEid])) return;
   const playerId = Owner.player[producerEid];
   const rally = world.armyRallyPoints[playerId];
   if (!rally) return;

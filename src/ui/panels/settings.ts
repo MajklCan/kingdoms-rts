@@ -80,7 +80,6 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['B then L / C / G', 'Lumber hut / stone quarry / gold mine'],
       ['B then R / T / F / Y', 'Barracks / stable / foundry / tower'],
       ['Q / E', 'Train / advance or secondary'],
-      ['T', 'Pikeman from the town center'],
       ['G', 'Town center villager rally point'],
       ['Shift+click', 'Queue five units'],
     ],

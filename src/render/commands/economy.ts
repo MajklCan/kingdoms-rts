@@ -7,7 +7,7 @@ import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import { Building, Owner, ResourceKindId } from '@sim/components';
 import { AgeId, BuildingDefId, UNIT_TABLE, getUnitDef, type CostTuple } from '@sim/defs';
-import { TechId, type TechIdValue } from '@sim/tech-tree';
+import { TechId, techDef, techPrereqPaths, type TechIdValue } from '@sim/tech-tree';
 import { buildingQuery, type SimWorld } from '@sim/world';
 
 export interface Cost {
@@ -113,4 +113,22 @@ export function nextAgeTechId(world: SimWorld, playerId: number): TechIdValue | 
   if (current === AgeId.DARK) return TechId.CASTLE_AGE;
   if (current === AgeId.CASTLE) return TechId.GUNPOWDER_AGE;
   return null;
+}
+
+/**
+ * The research still standing between the player and `techId`, as text:
+ * "Barracks ✓ then Archers, or Lumber Crews then Mining Crews". Paths that
+ * only need research already done are left out. Null when nothing is missing.
+ */
+export function missingResearchText(world: SimWorld, playerId: number, techId: TechIdValue): string | null {
+  const paths = techPrereqPaths(world, playerId, techId).filter((path) => path.some((step) => !step.done));
+  if (paths.length === 0) return null;
+  return paths
+    .map((path) =>
+      path
+        // Research every path shares and the player already has is noise here.
+        .filter((step) => !(step.done && paths.every((p) => p.some((s) => s.id === step.id))))
+        .map((step) => `${techDef(step.id)?.name ?? step.id}${step.done ? ' ✓' : ''}`)
+        .join(' then '))
+    .join(', or ');
 }

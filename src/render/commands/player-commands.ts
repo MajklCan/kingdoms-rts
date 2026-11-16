@@ -54,6 +54,7 @@ import {
 import {
   affordableCountForCost,
   canAffordCost,
+  missingResearchText,
   nextAgeTechId,
   populationRoomForUnitCount,
 } from './economy';
@@ -246,8 +247,6 @@ export class PlayerCommands {
         if (!quiet) this.fail({ reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` });
         return false;
       }
-      // E with the town center selected stays "advance age"; its pikemen have T.
-      if (slot > 0 && Building.defId[eid] === BuildingDefId.TOWN_CENTER) return false;
       const idStr = trainIds[slot];
       if (!idStr) {
         if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
@@ -266,15 +265,6 @@ export class PlayerCommands {
     }
     if (!quiet) this.fail({ reason: 'unavailable', text: 'Select a building that trains units first' });
     return false;
-  }
-
-  /** T: a pikeman from the selected town center. */
-  trainSpearmanAtTownCenter(): void {
-    if (this.selectedTownCenters().length === 0) {
-      this.fail({ reason: 'unavailable', text: 'Select your town center to train pikemen' });
-      return;
-    }
-    this.trainAtSelectedProducer(UnitDefId.SPEARMAN);
   }
 
   /** E: second train slot if the selection has one, else advance age. */
@@ -390,7 +380,12 @@ export class PlayerCommands {
     if (status === 'locked') {
       const text = world.campaign?.lockedTechs.includes(techId)
         ? `${tech.name} is locked for this mission`
-        : `${tech.name} needs earlier research first`;
+        : (() => {
+            const missing = missingResearchText(world, playerId, techId);
+            return missing
+              ? `${tech.name} needs research first: ${missing}. Open Technology (K)`
+              : `${tech.name} needs earlier research first`;
+          })();
       this.fail({ reason: 'unavailable', text });
       return;
     }

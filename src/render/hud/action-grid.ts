@@ -24,7 +24,7 @@ import {
   WorksiteWorker,
 } from '@sim/components';
 import { AgeId, BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getAgeDef } from '@sim/defs';
-import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus } from '@sim/tech-tree';
+import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
 import {
   getBuildingBuildTicks,
   getBuildingCost,
@@ -41,6 +41,7 @@ import {
   formatCost,
   formatTrainTime,
   hasPopulationRoomForUnit,
+  missingResearchText,
   nextAgeTechId,
   type Cost,
 } from '../commands/economy';
@@ -67,6 +68,11 @@ export interface ActionGridAction {
   queue?: number;
   active?: boolean;
   disabledReason?: string;
+  /**
+   * Locked behind research: clicking opens the Technology panel on this tech
+   * (its missing research marked) instead of only refusing.
+   */
+  researchGoal?: TechIdValue;
 }
 
 /** Build buttons in grid order: [action id, mode, hotkey, glyph, HUD icon]. */
@@ -313,6 +319,7 @@ export class ActionGrid {
       if (nextAgeTech && nextAgeDef) {
         const available = status === 'available';
         const affordable = canAfford(nextAgeTech.cost);
+        const missingResearch = status === 'locked' && ageTechId ? missingResearchText(world, playerId, ageTechId) : null;
         actions.push({
           id: 'advance-age',
           label: nextAgeDef.name,
@@ -324,17 +331,16 @@ export class ActionGrid {
           meta: 'Research',
           disabledReason: available
             ? (affordable ? undefined : `Needs ${formatCost(nextAgeTech.cost)}`)
-            : 'Locked',
+            : missingResearch
+              ? `Research one path in Technology first: ${missingResearch}. This button opens it.`
+              : 'Locked',
+          researchGoal: missingResearch && ageTechId ? ageTechId : undefined,
         });
       }
     }
 
     if (selectedWorksiteEids.length > 0) addWorksiteWorkerAction();
-    else if (hasTc) {
-      addTrainAction(UnitDefId.VILLAGER, 'Q', '🧑');
-      // Dark Age pikemen; with a barracks also selected its own button covers them.
-      if (!selectedProducerDefs.has(BuildingDefId.BARRACKS)) addTrainAction(UnitDefId.SPEARMAN, 'T', '♜');
-    }
+    else if (hasTc) addTrainAction(UnitDefId.VILLAGER, 'Q', '🧑');
     if (hasTc && selectedWorksiteEids.length === 0) addVillagerRallyActions();
     if (selectedProducerDefs.has(BuildingDefId.BARRACKS)) {
       addTrainAction(UnitDefId.SPEARMAN, 'Q', '♜');

@@ -56,13 +56,9 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
     }
   });
   // Before the build letters, which clear awaitingBuildKind: after B, G is a
-  // gold mine and T a stable; on their own they are the town center's rally
-  // and pikeman (P is pause).
+  // gold mine; on its own it is the town center's villager rally.
   onHotkey('keydown-G', () => {
     if (!placement.awaitingBuildKind) placement.startVillagerRallyMode();
-  });
-  onHotkey('keydown-T', () => {
-    if (!placement.awaitingBuildKind) commands.trainSpearmanAtTownCenter();
   });
   for (const [key, mode, message] of BUILD_KEYS) {
     onHotkey(`keydown-${key}`, () => {

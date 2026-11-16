@@ -100,8 +100,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x2e86de,
     isDropOff: true,
     dropOffMask: 0b1111,
-    // Pikemen from the start: a Dark Age defence before any barracks.
-    trains: ['VILLAGER', 'SPEARMAN'],
+    trains: ['VILLAGER'],
   },
   {
     id: 'HOUSE',
@@ -421,7 +420,7 @@ export interface AgeDef {
 
 export const AGE_TABLE: AgeDef[] = [
   { id: AgeId.DARK, name: 'Dark Age', advanceCost: { food: 0, wood: 0, gold: 0, stone: 0 }, advanceTicks: 0 },
-  { id: AgeId.CASTLE, name: 'Castle Age', advanceCost: { food: 0, wood: 450, gold: 0, stone: 300 }, advanceTicks: Math.round(SIM.TICK_HZ * 40) },
+  { id: AgeId.CASTLE, name: 'Castle Age', advanceCost: { food: 0, wood: 750, gold: 0, stone: 500 }, advanceTicks: Math.round(SIM.TICK_HZ * 40) },
   { id: AgeId.GUNPOWDER, name: 'Gunpowder Age', advanceCost: { food: 0, wood: 1400, gold: 1200, stone: 1000 }, advanceTicks: Math.round(SIM.TICK_HZ * 50) },
   { id: AgeId.TOTAL_WAR, name: 'Total War Age', advanceCost: { food: 1600, wood: 1800, gold: 1800, stone: 1400 }, advanceTicks: Math.round(SIM.TICK_HZ * 65) },
 ];

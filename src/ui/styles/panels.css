@@ -422,8 +422,39 @@
 }
 
 .modal-tech .modal-foot {
+  flex-wrap: wrap;
   justify-content: center;
   margin-top: 0.6rem;
+}
+
+/* Goal line (opened from the age button or plaque): what the goal still needs. */
+.tech-goal {
+  flex: 1 0 100%;
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--red-600);
+}
+
+.tech-goal[hidden] {
+  display: none;
+}
+
+/* The goal and the research on its paths: an outline, readable on any branch colour. */
+.tech-node.is-goal {
+  outline: 0.3rem solid var(--red-600);
+  outline-offset: 0.2rem;
+}
+
+.tech-node.is-path {
+  outline: 0.25rem dashed var(--red-600);
+  outline-offset: 0.2rem;
+}
+
+.tech-node.is-locked.is-goal,
+.tech-node.is-locked.is-path {
+  filter: grayscale(0.35);
+  opacity: 0.92;
 }
 
 .tech-fit {

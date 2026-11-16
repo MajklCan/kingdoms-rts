@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hasComponent } from 'bitecs';
-import { Building, Gatherer, GathererStateId, Owner, Position, Resource, ResourceKindId, SpearmanTag, UnitKind, WorksiteWorker } from './components';
+import { Building, Gatherer, GathererStateId, Owner, Position, Resource, ResourceKindId, UnitKind, WorksiteWorker } from './components';
 import { BuildingDefId, UnitDefId } from './defs';
 import { TechId } from './tech-tree';
 import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
@@ -11,7 +11,6 @@ import {
   createSimWorld,
   findBuildingAt,
   findResourceAt,
-  gathererQuery,
   housingAtMaximum,
   pendingPopCapGain,
   POP_CAP_HARD_LIMIT,
@@ -280,7 +279,7 @@ describe('houses under construction and the population maximum', () => {
   });
 });
 
-describe('Dark Age pikemen and building sight', () => {
+describe('Start, town center units and building sight', () => {
   it('each side starts with the town center and a single scout rider', () => {
     const world = createSimWorld(710);
     for (const playerId of [P1, AI_PLAYER_ID]) {
@@ -291,12 +290,13 @@ describe('Dark Age pikemen and building sight', () => {
     }
   });
 
-  it('the town center trains pikemen from the start', () => {
+  it('the town center trains villagers only; pikemen come from the barracks', () => {
     const world = newWorld(708);
-    const pikeman = trainAtTownCenter(world, P1, UnitDefId.SPEARMAN);
-    expect(hasComponent(world.ecs, SpearmanTag, pikeman)).toBe(true);
-    expect(hasComponent(world.ecs, UnitKind, pikeman)).toBe(true);
-    expect(gathererQuery(world.ecs).includes(pikeman)).toBe(false);
+    const tc = townCenterOf(world, P1);
+    world.resources[P1].set([1000, 1000, 0, 0]);
+    world.inputs.push({ type: 'trainUnit', atEid: tc, defId: UnitDefId.SPEARMAN, playerId: P1 });
+    step(world);
+    expect(world.productionQueues.get(tc) ?? []).toEqual([]);
   });
 
   it('refuses a building where the player cannot see, allows one in sight', () => {

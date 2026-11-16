@@ -13,6 +13,7 @@ import { missingResources, parseCost, parseMeta, type ResourceKey } from '../for
 import { actionDescription, actionIcon, actionKeyHint, eraIcon } from '../icons/catalog';
 import { icon, setIcon } from '../icons/icon';
 import { reportFailure } from '../game-bridge';
+import { openTechTree } from '../panels/tech-tree';
 import { attachTip, refreshTip, type TipContent } from './tooltip';
 
 type Action = ReturnType<GameScene['getAvailableActions']>[number];
@@ -70,6 +71,11 @@ function onCellClick(ev: MouseEvent, index: number): void {
   }
   const action = actionAt(index);
   if (!action) return;
+  if (!action.enabled && action.researchGoal) {
+    // Locked behind research: show where that research is, not just a refusal.
+    openTechTree(action.researchGoal);
+    return;
+  }
   if (!action.enabled) {
     // Same typed path as a refused hotkey: error sound, alert, and the
     // missing resources flash in the top bar.

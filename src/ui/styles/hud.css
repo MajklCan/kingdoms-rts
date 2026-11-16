@@ -684,3 +684,53 @@
     border-image-source: var(--tex-btn-danger);
   }
 }
+
+/* ---- Technology button: research ready ------------------------------------ */
+/* The age plaque opens the next age in the Technology panel. */
+.age-plaque {
+  cursor: pointer;
+}
+
+.age-plaque:focus-visible {
+  outline: calc(2 * var(--px)) solid var(--gold-200);
+  outline-offset: calc(2 * var(--px));
+}
+
+.tech-badge {
+  position: absolute;
+  top: calc(-3 * var(--px));
+  right: calc(-3 * var(--px));
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.2rem;
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-on-gold);
+  background: var(--gold-300);
+  border: var(--px) solid var(--wood-950);
+  pointer-events: none;
+}
+
+.icon-btn.has-ready {
+  color: var(--gold-100);
+}
+
+.icon-btn.is-new .tech-badge {
+  animation: tech-ready-pulse 1.1s steps(2, jump-none) infinite alternate;
+}
+
+@keyframes tech-ready-pulse {
+  from { background: var(--gold-300); color: var(--text-on-gold); }
+  to { background: var(--red-500); color: var(--gold-100); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.is-new .tech-badge {
+    animation: none;
+    background: var(--red-500);
+    color: var(--gold-100);
+  }
+}

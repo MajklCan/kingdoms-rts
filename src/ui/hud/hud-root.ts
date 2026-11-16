@@ -15,7 +15,7 @@ import { getScene } from '../game-bridge';
 import { icon } from '../icons/icon';
 import { openPauseMenu } from '../panels/pause-menu';
 import { toggleObjectives } from '../panels/objectives';
-import { toggleTechTree } from '../panels/tech-tree';
+import { openTechTreeForNextAge, toggleTechTree } from '../panels/tech-tree';
 import { buildFullscreenButton } from '../touch/fullscreen';
 import { buildPlacementBar, buildTouchBar } from '../touch/touch-bar';
 import { buildAgeBanner } from './age-banner';
@@ -34,6 +34,7 @@ export function buildHud(): HTMLElement {
   const top = buildTopBar({
     onObjectives: () => toggleObjectives(),
     onTech: () => toggleTechTree(),
+    onAge: () => openTechTreeForNextAge(),
     onPause: () => togglePause(),
     onMenu: () => openPauseMenu(),
   });
