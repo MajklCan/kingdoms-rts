@@ -23,6 +23,7 @@ Stack: **Phaser 4 beta** (rendering only) + **bitECS 0.3.40** (sim) + **TypeScri
 | `npx vite-node scripts/sim/ai-vs-ai.ts -- ...` | Headless AI vs AI batch; `scripts/sim/analyze.ts` summarises it |
 | `npx vite-node scripts/sim/matchups.ts` | Equal-cost unit fights, win and cost-efficiency matrix |
 | `node scripts/sim/batch.mjs <name> <procs> <script> ...` | Shard any of the above over processes |
+| `npx vite-node scripts/sim/replay-desync.ts -- a.json b.json` | Replay the desync reports players download on a desync; prints the checkpoint each client drifted at |
 | `MP_SOAK=2 npm test` | Adds the long lockstep soak to the test run |
 
 TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUncheckedSideEffectImports`. Don't silence them.

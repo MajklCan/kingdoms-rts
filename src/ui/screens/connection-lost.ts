@@ -26,7 +26,7 @@ const COPY: Record<LostState, { title: string; body: string }> = {
   },
   desync: {
     title: 'The chronicles diverged',
-    body: 'The two games no longer agree on what happened, so the match was stopped.',
+    body: 'The two games no longer agree on what happened, so the match was stopped. A desync report was saved to your downloads: please send it to the developers.',
   },
 };
 

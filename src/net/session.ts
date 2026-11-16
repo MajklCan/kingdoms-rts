@@ -20,6 +20,7 @@ import {
   type SimWorld,
 } from '@sim/world';
 import { ChecksumLedger, type ChecksumComparison } from './checksum-ledger';
+import { MatchRecorder, type DesyncReport } from './desync-report';
 import {
   decodeInputFromWire,
   encodeInputForWire,
@@ -158,6 +159,7 @@ export class MultiplayerSession {
   private lastStalled = false;
   private stalledSinceMs = 0;
   private lastStallLogAtMs = 0;
+  private recorder: MatchRecorder | null = null;
 
   constructor(
     private readonly transport: Transport,
@@ -259,6 +261,7 @@ export class MultiplayerSession {
     for (const ready of readyTicks) {
       this.guardLockstepWorld(this.world, ready.tick);
       for (const input of ready.inputs) this.world.inputs.push(decodeInputFromWire(this.world, input));
+      this.recorder?.recordTick(ready.tick, ready.inputs);
       step(this.world);
       this.lastStepAtMs = nowMs();
       this.cb.onTickStepped?.(this.world, ready.tick);
@@ -287,6 +290,13 @@ export class MultiplayerSession {
 
   recordClientEvent(event: string, data?: Record<string, unknown>): void {
     this.recordEvent(`client-${event}`, data);
+  }
+
+  /** Everything needed to replay this match offline (see desync-report.ts);
+   *  null before a match starts. */
+  desyncReport(): DesyncReport | null {
+    if (!this.recorder) return null;
+    return this.recorder.report({ room: this.room, localPlayerId: this.localPlayerId, events: this.eventLog.slice() });
   }
 
   debugSnapshot(): MultiplayerSessionDebugSnapshot {
@@ -351,6 +361,7 @@ export class MultiplayerSession {
     this.lastSentChecksum = { playerId: this.localPlayerId, tick, hash };
     this.recordEvent('checksum-sent', { tick, hash, sentChecksums: this.sentChecksums });
     this.transport.send({ t: 'checksum', tick, hash });
+    this.recorder?.recordChecksum(tick, hash);
     for (const comparison of this.checksums.recordLocal(tick, hash)) this.onChecksumComparison(comparison);
   }
 
@@ -363,6 +374,9 @@ export class MultiplayerSession {
       peerHash: c.peerHash,
     });
     if (!c.match) {
+      if (this.recorder && !this.recorder.mismatch) {
+        this.recorder.mismatch = { tick: c.tick, localHash: c.localHash, peerHash: c.peerHash, peerId: c.peerId };
+      }
       // eslint-disable-next-line no-console
       console.warn('[Kingdoms MP] desync', this.debugSnapshot());
       this.cb.onDesync?.(c.tick, c.localHash, c.peerHash, c.peerId);
@@ -451,6 +465,7 @@ export class MultiplayerSession {
     this.world = world;
 
     const peerIds = players.map((p) => p.playerId).filter((id) => id !== this.localPlayerId);
+    this.recorder = new MatchRecorder(seed, players);
     this.lockstep = new Lockstep(this.localPlayerId, peerIds, this.options.inputDelay ?? DEFAULT_INPUT_DELAY);
     this.sendAccumMs = 0;
     this.checksums.clear();
