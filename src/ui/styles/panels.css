@@ -124,25 +124,28 @@
   color: var(--gold-300);
 }
 
-.pause-item:hover:not([disabled]) {
+.pause-item:hover:not([disabled], [aria-disabled='true']) {
   border-image-source: var(--tex-banner-hover);
 }
 
-.pause-item:active:not([disabled]) {
+.pause-item:active:not([disabled], [aria-disabled='true']) {
   border-image-source: var(--tex-banner-pressed);
 }
 
-.pause-item:active:not([disabled]) > * {
+.pause-item:active:not([disabled], [aria-disabled='true']) > * {
   transform: translateY(calc(2 * var(--px)));
 }
 
-.pause-item[disabled] {
+/* aria-disabled: unavailable but still focusable, so it can say why. */
+.pause-item[disabled],
+.pause-item[aria-disabled='true'] {
   cursor: var(--cur-forbidden);
   color: #b9b0a0;
   border-image-source: var(--tex-banner-disabled);
 }
 
-.pause-item[disabled] .icon {
+.pause-item[disabled] .icon,
+.pause-item[aria-disabled='true'] .icon {
   color: #9c9384;
 }
 
