@@ -13,7 +13,12 @@ import { MapFeatureKind, type MapFeatureKindValue } from '@sim/map-gen';
 import type { Facing } from './facing';
 import { buildDarkTcVoxels } from '../voxel/models/dark-tc';
 import { buildDarkHouseVoxels } from '../voxel/models/dark-house';
-import { buildDarkFarmVoxels } from '../voxel/models/dark-farm';
+import {
+  buildDarkFarmSiteVoxels,
+  buildDarkFarmVoxels,
+  DARK_FARM_SITE_BOUNDS,
+  DARK_FARM_SITE_STAGES,
+} from '../voxel/models/dark-farm';
 import { buildDarkBarracksVoxels } from '../voxel/models/dark-barracks';
 import { buildDarkArcheryRangeVoxels } from '../voxel/models/dark-archery-range';
 import { buildDarkStableVoxels } from '../voxel/models/dark-stable';
@@ -103,6 +108,8 @@ export const VOXEL_KEYS = {
   DEFENSIVE_TOWER_PREFIX: 'voxel-dark-defensive-tower-p',
   HOUSE: 'voxel-dark-house',
   FARM: 'voxel-dark-farm',
+  /** + stage 0..DARK_FARM_SITE_STAGES-1: the farm under construction. */
+  FARM_SITE_PREFIX: 'voxel-dark-farm-site-',
   MILL: 'voxel-dark-mill',
   BARRACKS: 'voxel-dark-barracks',
   ARCHERY_RANGE: 'voxel-dark-archery-range',
@@ -287,6 +294,12 @@ const WALL_BOUNDS: BakeBounds = { minX: -1, maxX: 17, minY: -1, maxY: 17, minZ: 
 export const VOXEL_SHARED_BAKES: readonly VoxelStaticBake[] = [
   { key: VOXEL_KEYS.HOUSE, build: buildDarkHouseVoxels, voxelW: 4 },
   { key: VOXEL_KEYS.FARM, build: buildDarkFarmVoxels, voxelW: 4 },
+  ...Array.from({ length: DARK_FARM_SITE_STAGES }, (_, stage): VoxelStaticBake => ({
+    key: VOXEL_KEYS.FARM_SITE_PREFIX + stage,
+    build: () => buildDarkFarmSiteVoxels(stage),
+    voxelW: 4,
+    bounds: DARK_FARM_SITE_BOUNDS,
+  })),
   { key: VOXEL_KEYS.MILL, build: buildDarkMillVoxels, voxelW: 4 },
   { key: VOXEL_KEYS.BARRACKS, build: buildDarkBarracksVoxels, voxelW: 4 },
   { key: VOXEL_KEYS.ARCHERY_RANGE, build: buildDarkArcheryRangeVoxels, voxelW: 4 },
@@ -307,13 +320,28 @@ export const VOXEL_SHARED_BAKES: readonly VoxelStaticBake[] = [
   { key: VOXEL_KEYS.BERRY, build: buildBerryVoxels, voxelW: 4 },
 ];
 
-/** Texture key + originY for a building in a given age. Null for unknown defs. */
+/** True when the voxel art has its own look for this building under
+ *  construction; the others show their finished model as a ghost. */
+export function voxelHasConstructionLook(defId: number): boolean {
+  return defId === BuildingDefId.FARM;
+}
+
+/**
+ * Texture key + originY for a building in a given age. Null for unknown defs.
+ * `construction` (progress 0..1) picks a construction stage where the
+ * building has one ({@link voxelHasConstructionLook}).
+ */
 export function voxelBuildingSprite(
   defId: number,
   age: number,
   playerId: number,
-  variant?: string
+  variant?: string,
+  construction?: number
 ): { key: string; originY: number } | null {
+  if (construction !== undefined && defId === BuildingDefId.FARM) {
+    const stage = Math.min(DARK_FARM_SITE_STAGES - 1, Math.max(0, Math.floor(construction * DARK_FARM_SITE_STAGES)));
+    return { key: VOXEL_KEYS.FARM_SITE_PREFIX + stage, originY: 0.59 };
+  }
   switch (defId) {
     case BuildingDefId.TOWN_CENTER:
       if (age >= AgeId.GUNPOWDER) {

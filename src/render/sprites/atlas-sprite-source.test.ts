@@ -34,6 +34,27 @@ describe('AtlasSpriteSource (shipped manifest)', () => {
     expect(site?.teamMask).toBeUndefined();
   });
 
+  it('a farm under construction is a plot being laid out, not the timber scaffold', () => {
+    const site = (construction: number) =>
+      source.building({ defId: BuildingDefId.FARM, age: AgeId.DARK, playerId: 1, construction });
+    expect(site(0)?.frame).toBe('construction_farm_0');
+    expect(site(0.5)?.frame).toBe('construction_farm_3');
+    expect(site(0.95)?.frame).toBe('construction_farm_5');
+    // Six looks over the build, each with its ground shadow, none team-tinted.
+    const frames = [0, 0.1, 0.28, 0.46, 0.64, 0.82].map((p) => site(p));
+    expect(new Set(frames.map((ref) => ref?.frame)).size).toBe(6);
+    for (const ref of frames) {
+      expect(ref?.shadow?.frame).toBe(`${ref?.frame}__shadow`);
+      expect(ref?.teamMask).toBeUndefined();
+    }
+    // Same frame size and anchor as the finished farm: nothing jumps on completion.
+    const done = source.building({ defId: BuildingDefId.FARM, age: AgeId.DARK, playerId: 1, farmStage: 'sown' });
+    expect([site(0.95)?.originX, site(0.95)?.originY]).toEqual([done?.originX, done?.originY]);
+    // Other 2x2 buildings keep the generic scaffold.
+    expect(source.building({ defId: BuildingDefId.MILL, age: AgeId.DARK, playerId: 1, construction: 0.5 })?.frame)
+      .toBe('construction_2x2_1');
+  });
+
   it('maps Total War to the gunpowder look', () => {
     expect(source.building({ defId: BuildingDefId.HOUSE, age: AgeId.TOTAL_WAR, playerId: 1 })?.frame)
       .toBe(source.building({ defId: BuildingDefId.HOUSE, age: AgeId.GUNPOWDER, playerId: 1 })?.frame);

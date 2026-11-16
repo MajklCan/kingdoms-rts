@@ -20,6 +20,7 @@ import type {
 } from '../world';
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
+import { armSavedBuildings } from './migrate-building-combat';
 import { migrateSaveV3ToV4 } from './migrate-tech-rings';
 
 export const SAVE_VERSION = 4;
@@ -242,7 +243,8 @@ export function sanitizeSavedMatchStats(raw: unknown, players: number): PlayerMa
  * statistics; nothing in it lets us reconstruct them, so they start at zero
  * (peak population at the population saved). v1 and v2 predate the stored map
  * seed; it is derived from the map bytes instead (stable for that save).
- * v1-v3 predate the tech rings (save/migrate-tech-rings.ts).
+ * v1-v3 predate the tech rings (save/migrate-tech-rings.ts). Finished armed
+ * buildings saved without combat data get it (save/migrate-building-combat.ts).
  * Returns null for unknown versions.
  */
 export function migrateSavedGame(
@@ -250,14 +252,14 @@ export function migrateSavedGame(
 ): SavedGame | null {
   if (save.version === 4) {
     const players = Array.isArray(save.resources) ? save.resources.length : 0;
-    return {
+    return armSavedBuildings({
       ...save,
       matchStats: sanitizeSavedMatchStats(save.matchStats, players),
       mapSeed: typeof save.mapSeed === 'number' ? normalizeMapSeed(save.mapSeed) : seedFromMap(save),
-    };
+    });
   }
   const v3 = migrateToV3(save);
-  return v3 ? migrateSaveV3ToV4(v3) : null;
+  return v3 ? armSavedBuildings(migrateSaveV3ToV4(v3)) : null;
 }
 
 function migrateToV3(save: SavedGameV1 | SavedGameV2 | SavedGameV3): SavedGameV3 | null {

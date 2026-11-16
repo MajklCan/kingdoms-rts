@@ -240,6 +240,10 @@ function selectionStats(world: SimWorld, kind: SelectionKind, e0: number): strin
       stats += '  Food drop-off +50%';
     } else if (def.trains.length > 0) {
       stats += '  Producer';
+    }
+    // Armed buildings (tower, town center) show what they shoot with.
+    if (hasComponent(ecs, Combat, e0)) {
+      stats += `  Atk ${Combat.atk[e0]}  Rng ${formatRange(Combat.range[e0])}`;
     } else if (def.combat) {
       stats += `  Atk ${def.combat.atk}  Rng ${formatRange(def.combat.range)}`;
     }
