@@ -288,6 +288,10 @@ export class GameScene extends Phaser.Scene {
       ctx.accumulatorMs = ctx.multiplayer.interpolationMs();
       return;
     }
+    // Paused: hold the accumulator. Letting it run made the interpolation
+    // alpha sweep 0..1 every 50 ms, so units twitched between their last two
+    // tick positions for as long as the game stayed paused.
+    if (this.world.paused) return;
     ctx.accumulatorMs += delta * ctx.gameSpeed;
     let safety = 0;
     while (ctx.accumulatorMs >= SIM.TICK_MS && safety++ < MAX_STEPS_PER_FRAME) {
