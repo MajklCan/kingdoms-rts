@@ -217,9 +217,9 @@ export class UiApi {
     this.deps.camera.panToTile(x, y);
   }
 
-  /** Move / attack-move the selection to a tile, with an order marker. */
-  issueMapOrder(kind: MapOrderKind, x: number, y: number): boolean {
-    return this.deps.pointer.issueMapOrder(kind, Math.round(x), Math.round(y));
+  /** Move / attack-move the selection to a tile, with an order marker; `queue` = behind the current order. */
+  issueMapOrder(kind: MapOrderKind, x: number, y: number, queue = false): boolean {
+    return this.deps.pointer.issueMapOrder(kind, Math.round(x), Math.round(y), queue);
   }
 
   /** A UI control refused an action (disabled button): sound + typed alert. */

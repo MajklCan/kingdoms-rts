@@ -95,6 +95,14 @@ function forgetEntity(world: SimWorld, eid: number): void {
     // The rally keeps its point and kind; new villagers take the nearest node.
     if (rally.targetEid === eid) world.villagerRallies.set(tcEid, { ...rally, targetEid: -1 });
   }
+  world.orderQueues.delete(eid);
+  for (const [unit, queue] of world.orderQueues) {
+    // A queued attack or gather on a removed entity has nothing left to do.
+    if (!queue.some((order) => 'targetEid' in order && order.targetEid === eid)) continue;
+    const kept = queue.filter((order) => !('targetEid' in order) || order.targetEid !== eid);
+    if (kept.length > 0) world.orderQueues.set(unit, kept);
+    else world.orderQueues.delete(unit);
+  }
   for (const [attacker, windup] of world.cannonWindups) {
     if (windup.targetEid === eid) world.cannonWindups.delete(attacker);
   }
