@@ -29,7 +29,7 @@ import {
   getWorksiteWorkerSlots,
   worksiteUsesResourceNodes,
 } from '../systems/worksites';
-import { aiRequiredWaveSize } from './attack';
+import { AI_ARMY_POP_RESERVE_MAX, aiRequiredWaveSize } from './attack';
 import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
 import { aiPlaceBuilding, aiQueueUnit } from './placement';
 import {
@@ -67,8 +67,6 @@ export const AI_PRODUCER_QUEUE_TARGET = 2;
 const AI_STONE_FLOAT = 900;
 const AI_GOLD_FLOAT = 1500;
 const AI_FARMS_BEFORE_CARPENTRY = 6;
-/** Most population places the AI keeps free of workers for its army. */
-const AI_ARMY_POP_RESERVE_MAX = 24;
 
 export function aiIsArmyProducerDef(defId: number): boolean {
   return defId === BuildingDefId.BARRACKS ||
