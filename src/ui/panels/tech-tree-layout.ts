@@ -9,8 +9,9 @@
  *
  * Nothing here knows a research by name. A seal's place follows from its
  * path (which ray), its ring (which band) and its parents (its order inside
- * the band; a parent on another path becomes a curved cross link). A band
- * is as wide as its fullest path needs. Names and costs sit beside the
+ * the band; branches after the same parent share a level and fan out across
+ * the ray; a parent on another path becomes a curved cross link). A band is
+ * as wide as its deepest path needs. Names and costs sit beside the
  * seals where they collide with nothing.
  *
  * All lengths are in rem.
@@ -109,6 +110,8 @@ const EMBLEM_R = 5.2;
 export const SEAL_R = 2.3;
 /** Room one seal takes along its ray: the seal and the air around it. */
 const SLOT = 6.4;
+/** Centre to centre of two branches that share a level, across the ray. */
+const FORK_SPREAD = 7.4;
 /** Beyond the outer ring: the path banners, then a margin. */
 const BANNER_REACH = 2.9;
 const MARGIN = 7.2;
@@ -124,8 +127,12 @@ const GATE_R = 0.75;
 export const RING_LABEL: Readonly<{ w: number; h: number; inset: number }> = { w: 12.5, h: 2.2, inset: 1.9 };
 export const BANNER: Readonly<{ w: number; h: number }> = { w: 7, h: 2 };
 
-/** Paths the chart knows take the rays in this order (arms next to mines, which it borrows from); others follow. */
-const PATH_ORDER = ['mines', 'arms', 'timber', 'walls', 'land'];
+/**
+ * Paths the chart knows take the rays in this order; others follow. Arms,
+ * the path that branches, sits on a lower ray, away from the ring name
+ * plates at the top.
+ */
+const PATH_ORDER = ['timber', 'walls', 'land', 'arms', 'mines'];
 /** Angle of the first ray in degrees, anticlockwise from east; the rest follow evenly. */
 const FIRST_RAY = -18;
 
@@ -160,15 +167,24 @@ function ladderAngle(rays: ReadonlyMap<string, number>): number {
   return best;
 }
 
-/** Seals of one path in one ring, parents before children. */
-function orderInBand(group: readonly LayoutInput[]): LayoutInput[] {
+/**
+ * Seals of one path in one ring as levels along the ray: a research sits one
+ * level out from its deepest parent in the band. Researches that share a
+ * level (two branches after the same parent) fan out across the ray.
+ */
+function levelsInBand(group: readonly LayoutInput[]): LayoutInput[][] {
   const depth = (node: LayoutInput, seen = new Set<string>()): number => {
     if (seen.has(node.id)) return 0;
     seen.add(node.id);
     const inside = node.parents.map((id) => group.find((n) => n.id === id)).filter((n): n is LayoutInput => !!n);
     return inside.reduce((max, parent) => Math.max(max, depth(parent, seen) + 1), 0);
   };
-  return [...group].sort((a, b) => depth(a) - depth(b));
+  const levels: LayoutInput[][] = [];
+  for (const node of group) {
+    const d = depth(node);
+    (levels[d] ??= []).push(node);
+  }
+  return levels.filter((level) => level && level.length > 0);
 }
 
 function intersects(a: Box, b: Box): boolean {
@@ -295,7 +311,7 @@ function trimmed(points: readonly Point[], startGap: number, endGap: number): Po
 export function layoutTechTree(nodes: readonly LayoutInput[]): TechLayout {
   const rays = assignRays(nodes);
   const lastRing = nodes.reduce((max, n) => Math.max(max, n.ring), 1);
-  const group = (path: string, ring: number): LayoutInput[] => orderInBand(nodes.filter((n) => n.path === path && n.ring === ring));
+  const group = (path: string, ring: number): LayoutInput[][] => levelsInBand(nodes.filter((n) => n.path === path && n.ring === ring));
 
   // A band is as wide as its fullest path needs.
   const edges = [CENTRE_R];
@@ -315,7 +331,14 @@ export function layoutTechTree(nodes: readonly LayoutInput[]): TechLayout {
       const seals = group(path, ring);
       const inner = edges[ring - 1]!;
       const width = edges[ring]! - inner;
-      seals.forEach((node, i) => polar.set(node.id, { r: inner + ((i + 0.5) / seals.length) * width, deg }));
+      seals.forEach((level, i) => {
+        const r = inner + ((i + 0.5) / seals.length) * width;
+        // Branches share the level and fan out across the ray.
+        level.forEach((node, k) => {
+          const across = (k - (level.length - 1) / 2) * FORK_SPREAD;
+          polar.set(node.id, { r, deg: deg + (across / r) * (180 / Math.PI) });
+        });
+      });
     }
   }
   const spot = new Map<string, Point>();
@@ -351,9 +374,13 @@ export function layoutTechTree(nodes: readonly LayoutInput[]): TechLayout {
   const gates: PlacedGate[] = [];
   for (let ring = 1; ring < lastRing; ring++) {
     for (const [path, deg] of rays) {
-      if (group(path, ring).length === 0) continue;
+      const levels = group(path, ring);
+      if (levels.length === 0) continue;
       const r = edges[ring]!;
-      gates.push({ ring, path, ...at(mid, r, deg + (GATE_OFFSET / r) * (180 / Math.PI)) });
+      // Beside the ray, or on it where the path's last level here branches
+      // (the branches stand where the gate would).
+      const forked = levels[levels.length - 1]!.length > 1;
+      gates.push({ ring, path, ...at(mid, r, deg + (forked ? 0 : (GATE_OFFSET / r) * (180 / Math.PI))) });
     }
   }
 

@@ -17,5 +17,12 @@ export type {
   TileTypeValue,
 } from './maps/types';
 export { getElevation, getTile } from './maps/terrain';
-export { MAP_DEFS, generateMap, isNightMap, normalizeMapId } from './maps/generate';
+export {
+  MAP_DEFS,
+  SKIRMISH_MAP_DEFS,
+  generateMap,
+  isNightMap,
+  normalizeMapId,
+  normalizeSkirmishMapId,
+} from './maps/generate';
 export { isZborovMudPatch } from './maps/zborov';

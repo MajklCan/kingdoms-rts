@@ -73,16 +73,22 @@ describe('ring chart markup', () => {
     expect(counterText(fixtureTree(['mining_crews', 'mills', 'gold_mines', 'farms']).rings)).toBe('All rings open');
   });
 
-  it('draws the Cavalry to Gold Mine cross link and lights it once Gold Mine is done', () => {
-    expect(render([], RICH)).toContain('class="tech-link mines is-cross"');
-    expect(render(['mining_crews', 'mills', 'gold_mines'], RICH)).toContain('class="tech-link mines is-cross is-done"');
+  it('offers Archers and Cavalry side by side after Barracks, with no link across paths', () => {
+    const before = render([], RICH);
+    expect(seal(before, 'archers')).toContain('Locked. Needs Barracks.');
+    expect(seal(before, 'knights')).toContain('Locked. Needs Barracks.');
+    expect(before).not.toContain('is-cross');
+    const after = render(['barracks_pikemen'], RICH);
+    expect(seal(after, 'archers')).toContain('is-available is-ready');
+    expect(seal(after, 'knights')).toContain('is-available is-ready');
+    expect(seal(after, 'knights')).toContain('aria-label="Cavalry. Arms path, ring I.');
   });
 
   it('marks a research goal and the research on the way to it', () => {
-    const html = render(['barracks_pikemen'], RICH, 'knights');
-    expect(seal(html, 'knights')).toContain('is-goal');
-    expect(seal(html, 'knights')).toContain('Your goal.');
-    for (const id of ['archers', 'mining_crews', 'gold_mines']) expect(seal(html, id)).toContain('is-path');
+    const html = render(['barracks_pikemen'], RICH, 'foundry');
+    expect(seal(html, 'foundry')).toContain('is-goal');
+    expect(seal(html, 'foundry')).toContain('Your goal.');
+    for (const id of ['mining_crews', 'gold_mines']) expect(seal(html, id)).toContain('is-path');
     expect(seal(html, 'lumber_crews')).not.toContain('is-path');
   });
 

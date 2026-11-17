@@ -7,7 +7,7 @@
  */
 
 import { AgeId, AGE_TABLE, type AgeIdValue } from '../../sim/defs';
-import { MAP_DEFS, isNightMap, normalizeMapId, type MapIdValue } from '../../sim/map-gen';
+import { SKIRMISH_MAP_DEFS, isNightMap, normalizeSkirmishMapId, type MapIdValue } from '../../sim/map-gen';
 import { normalizeAiDifficulty, type AiDifficulty } from '../../sim/world';
 import { h, plainDashes, readStorage, writeStorage } from '../dom';
 import { icon } from '../icons/icon';
@@ -37,7 +37,7 @@ export function startingAgeNote(age: AgeIdValue): string {
 }
 
 export function parseStartingMap(value: string | undefined): MapIdValue {
-  return normalizeMapId(value);
+  return normalizeSkirmishMapId(value);
 }
 
 export function parseAiDifficulty(value: string | undefined): AiDifficulty {
@@ -97,7 +97,7 @@ export function bindSkirmishSetup(): void {
 
   const mapList = h('div', { class: 'map-list', role: 'radiogroup', 'aria-label': 'Map' });
   const thumbs: Array<{ canvas: HTMLCanvasElement; id: MapIdValue; night: boolean }> = [];
-  for (const map of MAP_DEFS) {
+  for (const map of SKIRMISH_MAP_DEFS) {
     const thumb = h('canvas', { class: 'map-thumb', 'aria-hidden': 'true' });
     thumbs.push({ canvas: thumb, id: map.id, night: map.night === true });
     mapList.append(

@@ -106,7 +106,7 @@ describe('technology tree', () => {
     expect(rows).toEqual([
       ['barracks_pikemen', 'arms', 1, '', 250, 0, 0],
       ['archers', 'arms', 1, 'barracks_pikemen', 300, 200, 0],
-      ['knights', 'arms', 2, 'archers+gold_mines', 400, 300, 0],
+      ['knights', 'arms', 1, 'barracks_pikemen', 300, 200, 0],
       ['lumber_crews', 'timber', 1, '', 250, 0, 0],
       ['housing_i', 'timber', 1, 'lumber_crews', 250, 150, 0],
       ['housing_ii', 'timber', 2, 'housing_i', 600, 400, 0],
@@ -172,15 +172,15 @@ describe('technology tree', () => {
     expect(castle.ages[2].current).toBe(AgeId.CASTLE);
     expect(Array.from(castle.resources[1])).toEqual([600, 1800, 0, 1600]);
     expect(castle.researchedTechs[1]).toEqual(createStartingTechSetForAge(AgeId.CASTLE));
-    expect(castle.researchedTechs[1].size).toBe(8);
+    expect(castle.researchedTechs[1].size).toBe(9);
     expect([...castle.researchedTechs[1]].every((id) => ringOf(id) === 1)).toBe(true);
     expect(castle.researchedTechs[0].size).toBe(0);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.DEFENSIVE_TOWER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.MILL)).toBe(true);
-    // Gold mines, stables and stone walls are ring II research now.
+    // Stables are ring I (the second branch after Barracks); gold mines and stone walls are ring II.
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.STABLE)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.GOLD_MINE)).toBe(false);
-    expect(isBuildingUnlocked(castle, 1, BuildingDefId.STABLE)).toBe(false);
     expect(techStatus(castle, 1, TechId.GOLD_MINES)).toBe('available');
     expect(techStatus(castle, 1, TechId.FOUNDRY)).toBe('locked');
 
