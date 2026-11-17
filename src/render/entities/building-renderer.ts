@@ -29,7 +29,7 @@ import {
   getWorksiteWorkerSlots,
   isBuildingFootprintVisibleTo,
 } from '@sim/world';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import type { ScreenPos } from '../iso';
 import { FOG_DIM_TINT } from '../overlays/fog-style';
 import { PartAnimator } from '../effects/part-animator';
@@ -502,13 +502,13 @@ export class BuildingRenderer {
       const defId = Building.defId[eid];
       if (defId !== BuildingDefId.WALL && defId !== BuildingDefId.DEFENSIVE_TOWER) continue;
       if (Health.hp[eid] <= 0 || !this.ctx.isEntityVisible(eid)) continue;
-      this.wallTiles.add(tileIndex(Position.x[eid], Position.y[eid]));
+      this.wallTiles.add(tileIndex(this.ctx.world.map.width, Position.x[eid], Position.y[eid]));
     }
     const vis = getPlayerVisibility(world, this.ctx.perspectivePlayerId);
     for (const snap of vis?.lastSeenBuildings.values() ?? []) {
       if (snap.defId !== BuildingDefId.WALL && snap.defId !== BuildingDefId.DEFENSIVE_TOWER) continue;
       if (!this.isRememberedShown(snap.defId, snap.x, snap.y)) continue;
-      this.wallTiles.add(tileIndex(snap.x, snap.y));
+      this.wallTiles.add(tileIndex(this.ctx.world.map.width, snap.x, snap.y));
     }
   }
 
@@ -519,7 +519,7 @@ export class BuildingRenderer {
   /** 1 = +x, 2 = +y, 4 = -x, 8 = -y neighbour is a wall or tower. */
   private maskAt(x: number, y: number): number {
     const has = (tx: number, ty: number): boolean =>
-      tx >= 0 && ty >= 0 && tx < MAP.WIDTH && ty < MAP.HEIGHT && this.wallTiles.has(tileIndex(tx, ty));
+      tx >= 0 && ty >= 0 && tx < this.ctx.world.map.width && ty < this.ctx.world.map.height && this.wallTiles.has(tileIndex(this.ctx.world.map.width, tx, ty));
     return (has(x + 1, y) ? 1 : 0) | (has(x, y + 1) ? 2 : 0) | (has(x - 1, y) ? 4 : 0) |
       (has(x, y - 1) ? 8 : 0);
   }
@@ -534,8 +534,8 @@ function isGhostFoundation(ref: SpriteRef, defId: number): boolean {
   return ref.source === 'voxel' && !voxelHasConstructionLook(defId);
 }
 
-function tileIndex(x: number, y: number): number {
-  return Math.round(y) * MAP.WIDTH + Math.round(x);
+function tileIndex(width: number, x: number, y: number): number {
+  return Math.round(y) * width + Math.round(x);
 }
 
 /**

@@ -3,7 +3,6 @@
  */
 
 import { addComponent, hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import { Building, DeadTag, Health, Owner, type ResourceKind } from '../components';
 import { type BuildingDef, BuildingDefId, canAfford, getBuildingDef, spend } from '../defs';
 import { isBuildingUnlocked } from '../tech-tree';
@@ -59,7 +58,7 @@ export function applyPlaceBuilding(
   if (!def) return;
   // Tiles only: a fractional spot indexes no grid row (a peer could crash us).
   if (!Number.isInteger(x) || !Number.isInteger(y)) return;
-  if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return;
+  if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) return;
   if (defId === BuildingDefId.WALL) {
     // A one-tile line: same tier cost, hp and unit check as a dragged line.
     applyPlaceWallLine(world, playerId, x, y, x, y, builderEids);
@@ -133,7 +132,7 @@ export function canPlaceBuildingAt(
     for (let dx = 0; dx < fw; dx++) {
       const tx = x0 + dx;
       const ty = y0 + dy;
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
+      if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return false;
       if (world.map.walkability[ty][tx] !== 0) return false;
       if (probe ? probe.hasResourceAt(tx, ty, 0.6) : findResourceAt(world, tx, ty, 0.6) !== null) return false;
       if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;

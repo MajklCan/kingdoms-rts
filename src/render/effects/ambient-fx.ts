@@ -16,7 +16,8 @@
  * With prefers-reduced-motion only the static touches remain (glints, mist).
  */
 
-import { ISO, MAP } from '../../config';
+import { ISO } from '../../config';
+import type { MapSize } from '@sim/core/map-size';
 import { TileType } from '@sim/map-gen';
 import type { ResourceRenderer } from '../entities/resource-renderer';
 import { clamp01, type FxHost } from './fx-host';
@@ -203,7 +204,7 @@ export class AmbientFx {
       const y = v.top - padY / 2 + d.oy;
       d.img.setPosition(x, y);
       // Shadows and mist only fall on the map: fade them as they slide off it.
-      d.img.setAlpha(d.alpha * onMapFraction(x, y, d.img.displayWidth * 0.36, d.img.displayHeight * 0.3));
+      d.img.setAlpha(d.alpha * onMapFraction(this.host.ctx.world.map, x, y, d.img.displayWidth * 0.36, d.img.displayHeight * 0.3));
       if (d.img.visible !== visible && items === this.clouds) d.img.setVisible(visible);
     }
   }
@@ -397,8 +398,9 @@ export class AmbientFx {
   private isTile(x: number, y: number, kinds: ReadonlySet<number>): boolean {
     const ctx = this.host.ctx;
     const t = ctx.pickTile(x + ctx.layers.root.x, y + ctx.layers.root.y);
-    if (t.tx < 0 || t.ty < 0 || t.tx >= MAP.WIDTH || t.ty >= MAP.HEIGHT) return false;
-    if (!kinds.has(ctx.world.map.tiles[t.ty * MAP.WIDTH + t.tx])) return false;
+    const map = ctx.world.map;
+    if (t.tx < 0 || t.ty < 0 || t.tx >= map.width || t.ty >= map.height) return false;
+    if (!kinds.has(map.tiles[t.ty * map.width + t.tx])) return false;
     return ctx.isTileVisible(t.tx, t.ty);
   }
 }
@@ -413,7 +415,7 @@ const CLOUD_ALPHA = 0.085;
  * over the map diamond, from a 5 x 3 sample grid, squared so a cloud fades
  * well before its edge reaches the void.
  */
-function onMapFraction(x: number, y: number, rx: number, ry: number): number {
+function onMapFraction(map: MapSize, x: number, y: number, rx: number, ry: number): number {
   let inside = 0;
   let total = 0;
   const hw = ISO.TILE_W / 2;
@@ -426,7 +428,7 @@ function onMapFraction(x: number, y: number, rx: number, ry: number): number {
       const tx = (px / hw + py / hh) / 2;
       const ty = (py / hh - px / hw) / 2;
       total++;
-      if (tx >= -0.5 && ty >= -0.5 && tx <= MAP.WIDTH - 0.5 && ty <= MAP.HEIGHT - 0.5) inside++;
+      if (tx >= -0.5 && ty >= -0.5 && tx <= map.width - 0.5 && ty <= map.height - 0.5) inside++;
     }
   }
   const f = inside / total;

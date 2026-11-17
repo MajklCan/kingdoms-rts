@@ -11,29 +11,30 @@
  */
 
 import { dhypot } from './dmath';
-import { MAP } from '../../config';
 import { Position, Resource, type ResourceKind } from '../components';
 import { resourceQuery } from './queries';
 import type { SimWorld } from './types';
 
-const CELLS = MAP.WIDTH * MAP.HEIGHT;
-
 /** Per-tile linked lists of eids (head per cell, next per entry). */
 class TileBuckets {
-  readonly head = new Int32Array(CELLS).fill(-1);
+  readonly head: Int32Array;
   readonly next: number[] = [];
   readonly eids: number[] = [];
   /** Nodes whose position rounds off the map: always checked. */
   readonly outside: number[] = [];
 
+  constructor(readonly width: number, readonly height: number) {
+    this.head = new Int32Array(width * height).fill(-1);
+  }
+
   add(eid: number): void {
     const tx = Math.round(Position.x[eid]);
     const ty = Math.round(Position.y[eid]);
-    if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) {
+    if (tx < 0 || ty < 0 || tx >= this.width || ty >= this.height) {
       this.outside.push(eid);
       return;
     }
-    const cell = ty * MAP.WIDTH + tx;
+    const cell = ty * this.width + tx;
     this.eids.push(eid);
     this.next.push(this.head[cell]);
     this.head[cell] = this.eids.length - 1;
@@ -41,18 +42,19 @@ class TileBuckets {
 }
 
 export class ResourceProbe {
-  private readonly all = new TileBuckets();
+  private readonly all: TileBuckets;
   /** Kind -> nodes with amount left. */
   private readonly byKind = new Map<number, TileBuckets>();
 
   constructor(world: SimWorld) {
+    this.all = new TileBuckets(world.map.width, world.map.height);
     for (const eid of resourceQuery(world.ecs)) {
       this.all.add(eid);
       if (Resource.amount[eid] <= 0) continue;
       const kind = Resource.kind[eid];
       let buckets = this.byKind.get(kind);
       if (!buckets) {
-        buckets = new TileBuckets();
+        buckets = new TileBuckets(world.map.width, world.map.height);
         this.byKind.set(kind, buckets);
       }
       buckets.add(eid);
@@ -69,9 +71,9 @@ export class ResourceProbe {
     const reach = Math.ceil(radius) + 1;
     const cx = Math.round(x);
     const cy = Math.round(y);
-    for (let ty = Math.max(0, cy - reach); ty <= Math.min(MAP.HEIGHT - 1, cy + reach); ty++) {
-      for (let tx = Math.max(0, cx - reach); tx <= Math.min(MAP.WIDTH - 1, cx + reach); tx++) {
-        for (let i = b.head[ty * MAP.WIDTH + tx]; i >= 0; i = b.next[i]) {
+    for (let ty = Math.max(0, cy - reach); ty <= Math.min(b.height - 1, cy + reach); ty++) {
+      for (let tx = Math.max(0, cx - reach); tx <= Math.min(b.width - 1, cx + reach); tx++) {
+        for (let i = b.head[ty * b.width + tx]; i >= 0; i = b.next[i]) {
           const eid = b.eids[i];
           if (dhypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
         }
@@ -102,10 +104,10 @@ export class ResourceProbe {
     const cx = Math.round(x);
     const cy = Math.round(y);
     const cell = (tx: number, ty: number): void => {
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return;
-      for (let i = b.head[ty * MAP.WIDTH + tx]; i >= 0; i = b.next[i]) consider(b.eids[i]);
+      if (tx < 0 || ty < 0 || tx >= b.width || ty >= b.height) return;
+      for (let i = b.head[ty * b.width + tx]; i >= 0; i = b.next[i]) consider(b.eids[i]);
     };
-    const maxRing = Math.max(MAP.WIDTH, MAP.HEIGHT) + Math.abs(cx) + Math.abs(cy);
+    const maxRing = Math.max(b.width, b.height) + Math.abs(cx) + Math.abs(cy);
     for (let k = 0; k <= maxRing && k - 1 < best; k++) {
       if (k === 0) {
         cell(cx, cy);

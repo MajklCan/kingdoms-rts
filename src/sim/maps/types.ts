@@ -61,6 +61,10 @@ export interface MapDef {
 }
 
 export interface MapData {
+  /** Size in tiles. Standard maps are MAP.WIDTH x MAP.HEIGHT; large maps are
+   *  bigger. Every index into tiles/elevation is y * width + x. */
+  width: number;
+  height: number;
   /** tiles[y][x] - TileType. */
   tiles: Uint8Array;
   /** elevation[y][x] - 0..7. */

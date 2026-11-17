@@ -313,7 +313,7 @@ export class BuildPlacement {
 
   /** Army rally pick: set the point (when inside the map) and leave the mode. */
   rallyAt(tx: number, ty: number): boolean {
-    if (!isInsideMap(tx, ty)) {
+    if (!isInsideMap(this.ctx.world, tx, ty)) {
       setLastEvent(`rally outside map (${tx},${ty})`);
       return true;
     }
@@ -331,7 +331,7 @@ export class BuildPlacement {
   villagerRallyAt(tx: number, ty: number, wx?: number, wy?: number): boolean {
     this.villagerRallyMode = false;
     this.clear();
-    if (!isInsideMap(tx, ty)) {
+    if (!isInsideMap(this.ctx.world, tx, ty)) {
       this.commands.fail({ reason: 'unavailable', text: 'Pick a spot on the map' });
       return true;
     }
@@ -400,13 +400,13 @@ export class BuildPlacement {
   handlePointerUp(tx: number, ty: number): boolean {
     if (this.mode !== 'WALL' || !this.wallStart || !this.wallDragArmed) return false;
     this.wallDragArmed = false;
-    if (!isInsideMap(tx, ty) || (tx === this.wallStart.x && ty === this.wallStart.y)) return false;
+    if (!isInsideMap(this.ctx.world, tx, ty) || (tx === this.wallStart.x && ty === this.wallStart.y)) return false;
     return this.handleWallClick(tx, ty);
   }
 
   /** WALL mode: the first click anchors the line, the second (or a drag release) sends it. */
   private handleWallClick(tx: number, ty: number): boolean {
-    if (!isInsideMap(tx, ty)) return true;
+    if (!isInsideMap(this.ctx.world, tx, ty)) return true;
     if (!this.wallsUnlocked()) return true;
     if (!this.wallStart) {
       this.wallStart = { x: tx, y: ty };
@@ -467,8 +467,8 @@ export class BuildPlacement {
 
   /** Put the ghost (or the wall line's end) on a tile; a drag calls this every move. */
   setTouchGhost(tx: number, ty: number, wallStart?: Tile): void {
-    if (this.mode === 'none' || !isInsideMap(tx, ty)) return;
-    if (this.mode === 'WALL' && wallStart && isInsideMap(wallStart.x, wallStart.y)) this.wallStart = { ...wallStart };
+    if (this.mode === 'none' || !isInsideMap(this.ctx.world, tx, ty)) return;
+    if (this.mode === 'WALL' && wallStart && isInsideMap(this.ctx.world, wallStart.x, wallStart.y)) this.wallStart = { ...wallStart };
     else if (this.mode === 'WALL' && !this.wallStart) this.wallStart = { x: tx, y: ty };
     this.touchTile = { x: tx, y: ty };
   }
@@ -527,7 +527,7 @@ export class BuildPlacement {
   private viewCentreTile(): Tile | null {
     const view = this.ctx.scene.cameras.main.worldView;
     const { tx, ty } = this.ctx.pickTile(view.centerX, view.centerY);
-    return isInsideMap(tx, ty) ? { x: tx, y: ty } : null;
+    return isInsideMap(this.ctx.world, tx, ty) ? { x: tx, y: ty } : null;
   }
 
   // ── Drawing ───────────────────────────────────────────────────────────────
@@ -550,7 +550,7 @@ export class BuildPlacement {
       if (this.confirmFlow) return;
       const pointer = this.ctx.scene.input.activePointer;
       const { tx, ty } = this.ctx.pointerTile(pointer);
-      if (isInsideMap(tx, ty)) {
+      if (isInsideMap(this.ctx.world, tx, ty)) {
         const onResource = this.villagerRallyResourceAt(tx, ty, pointer.worldX, pointer.worldY) !== null;
         const walkable = world.map.walkability[ty][tx] === 0;
         this.drawRallyMarker({ x: tx, y: ty }, onResource || walkable ? 0xfeca57 : 0xff4757, 0.95, this.flags);
@@ -561,7 +561,7 @@ export class BuildPlacement {
     if (this.armyRallyMode) {
       if (this.confirmFlow) return;
       const { tx, ty } = this.ctx.pointerTile(this.ctx.scene.input.activePointer);
-      if (isInsideMap(tx, ty)) {
+      if (isInsideMap(this.ctx.world, tx, ty)) {
         const valid = world.map.walkability[ty][tx] === 0;
         this.drawRallyMarker({ x: tx, y: ty }, valid ? 0xfbc36b : 0xff4757, 0.95);
       }
@@ -569,7 +569,7 @@ export class BuildPlacement {
     }
     if (this.mode === 'none') return;
     const tile = this.ghostTile();
-    if (!tile || !isInsideMap(tile.x, tile.y)) return;
+    if (!tile || !isInsideMap(this.ctx.world, tile.x, tile.y)) return;
     const { x: tx, y: ty } = tile;
     if (this.mode === 'WALL' && this.wallStart) {
       this.drawWallLineGhost(this.wallStart, { x: tx, y: ty });

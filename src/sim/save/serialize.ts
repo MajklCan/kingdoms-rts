@@ -3,7 +3,6 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import {
   ArcherTag,
   AttackMoveGoal,
@@ -211,8 +210,8 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     paused: world.paused,
     aiDifficulty: world.aiDifficulty,
     map: {
-      width: MAP.WIDTH,
-      height: MAP.HEIGHT,
+      width: world.map.width,
+      height: world.map.height,
       tiles: Array.from(world.map.tiles),
       elevation: Array.from(world.map.elevation),
       bridgePositions: world.map.bridgePositions.map((p) => ({ ...p })),

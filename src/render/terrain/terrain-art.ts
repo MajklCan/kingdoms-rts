@@ -6,7 +6,7 @@
  */
 
 import { TileType, type MapData } from '@sim/map-gen';
-import { MAP } from '../../config';
+import type { MapSize } from '@sim/core/map-size';
 import { valueNoise } from '../tile-hash';
 
 /**
@@ -78,17 +78,17 @@ const MEADOW_CELL = 5;
 
 /** Terrain asset name for every tile of the map, row-major. */
 export function terrainNames(map: MapData, seed: number): string[] {
-  const names = new Array<string>(MAP.WIDTH * MAP.HEIGHT);
-  for (let y = 0; y < MAP.HEIGHT; y++) {
-    for (let x = 0; x < MAP.WIDTH; x++) {
-      const tile = map.tiles[y * MAP.WIDTH + x];
+  const names = new Array<string>(map.width * map.height);
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const tile = map.tiles[y * map.width + x];
       let name = TILE_TERRAIN[tile] ?? 'grass';
       if (tile === TileType.GRASS && valueNoise(x, y, MEADOW_CELL, seed) > MEADOW_THRESHOLD) {
         name = 'meadow';
       } else if (tile === TileType.BRIDGE) {
         name = bridgeName(map, x, y);
       }
-      names[y * MAP.WIDTH + x] = name;
+      names[y * map.width + x] = name;
     }
   }
   return names;
@@ -97,8 +97,8 @@ export function terrainNames(map: MapData, seed: number): string[] {
 /** Planks run across the direction of travel: the axis whose neighbours are not water. */
 function bridgeName(map: MapData, x: number, y: number): string {
   const open = (tx: number, ty: number): number => {
-    if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return 0;
-    const t = map.tiles[ty * MAP.WIDTH + tx];
+    if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return 0;
+    const t = map.tiles[ty * map.width + tx];
     return t === TileType.WATER || t === TileType.WATER_SHALLOW ? 0 : 1;
   };
   const alongX = open(x - 1, y) + open(x + 1, y);
@@ -131,8 +131,13 @@ const EDGES: ReadonlyArray<readonly [number, number, string]> = [
  * Neighbour terrains that bleed into tile (x, y), lowest priority first (so
  * higher ones are mixed in last), with the masks for each.
  */
-export function tileTransitions(names: readonly string[], x: number, y: number): TileTransition[] {
-  const self = nameAt(names, x, y);
+export function tileTransitions(
+  size: MapSize,
+  names: readonly string[],
+  x: number,
+  y: number
+): TileTransition[] {
+  const self = nameAt(size, names, x, y);
   if (!self || isBridge(self)) return [];
   const own = TRANSITION_PRIORITY[self] ?? 0;
   const byNeighbour = new Map<string, string[]>();
@@ -140,15 +145,15 @@ export function tileTransitions(names: readonly string[], x: number, y: number):
     n !== null && n !== self && !isBridge(n) && (TRANSITION_PRIORITY[n] ?? 0) > own;
   const variant = (x * 7 + y * 13) % 3;
   for (const [dx, dy, key] of EDGES) {
-    const n = nameAt(names, x + dx, y + dy);
+    const n = nameAt(size, names, x + dx, y + dy);
     if (!bleeds(n)) continue;
     push(byNeighbour, n, `edge_${key}.${variant}`);
   }
   for (const dx of [1, -1]) {
     for (const dy of [1, -1]) {
-      const n = nameAt(names, x + dx, y + dy);
+      const n = nameAt(size, names, x + dx, y + dy);
       if (!bleeds(n)) continue;
-      if (nameAt(names, x + dx, y) === n || nameAt(names, x, y + dy) === n) continue;
+      if (nameAt(size, names, x + dx, y) === n || nameAt(size, names, x, y + dy) === n) continue;
       push(byNeighbour, n, `corner_${dx > 0 ? 'px' : 'mx'}_${dy > 0 ? 'py' : 'my'}`);
     }
   }
@@ -161,9 +166,9 @@ function isBridge(name: string): boolean {
   return name === 'bridge_x' || name === 'bridge_y';
 }
 
-function nameAt(names: readonly string[], x: number, y: number): string | null {
-  if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return null;
-  return names[y * MAP.WIDTH + x] ?? null;
+function nameAt(size: MapSize, names: readonly string[], x: number, y: number): string | null {
+  if (x < 0 || y < 0 || x >= size.width || y >= size.height) return null;
+  return names[y * size.width + x] ?? null;
 }
 
 function push(map: Map<string, string[]>, key: string, value: string): void {

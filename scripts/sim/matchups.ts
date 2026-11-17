@@ -10,7 +10,6 @@
  * per own value lost), row unit against column unit.
  */
 
-import { MAP } from '../../src/config';
 import { UNIT_TABLE, UnitDefId } from '@sim/defs';
 import { Health, Owner } from '@sim/components';
 import {
@@ -47,7 +46,7 @@ function arena(seed: number): SimWorld {
   world.paused = false;
   const buildings = new Set(buildingQuery(world.ecs));
   for (const eid of [...positionQuery(world.ecs)]) if (!buildings.has(eid)) removeSimEntity(world, eid);
-  for (let y = 12; y < MAP.HEIGHT - 12; y++) for (let x = 12; x < MAP.WIDTH - 12; x++) world.grid[y][x] = 0;
+  for (let y = 12; y < world.map.height - 12; y++) for (let x = 12; x < world.map.width - 12; x++) world.grid[y][x] = 0;
   return world;
 }
 

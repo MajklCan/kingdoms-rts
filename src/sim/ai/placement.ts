@@ -4,7 +4,6 @@
 
 import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import {
   Building,
   Health,
@@ -125,7 +124,7 @@ function aiFindBuildingSpot(
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
         const x = cx + dx;
         const y = cy + dy;
-        if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
+        if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) continue;
         if (!canPlaceBuildingAt(world, def, x, y, probe)) continue;
         if (actuator.isSpotClaimed(defId, x, y)) continue;
         if (hasPointNear(enemies, x, y, 8)) continue;

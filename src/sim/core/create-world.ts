@@ -4,7 +4,6 @@
 
 import { dhypot } from './dmath';
 import { createWorld } from 'bitecs';
-import { MAP } from '../../config';
 import { type ResourceKind, ResourceKindId } from '../components';
 import { AgeId, type AgeIdValue } from '../defs';
 import { MapId, TileType, generateMap, isNightMap } from '../map-gen';
@@ -48,6 +47,7 @@ import {
   planDeposits,
 } from './deposit-sites';
 import { findSpawnSpot } from './grid';
+import { scaleByMapArea } from './map-size';
 import { createMatchStats, resetMatchStats } from './match-stats';
 import { normalizeMapSeed } from './map-seed';
 import { findBuildingAt, findResourceAt, hasMapFeatureAt } from './lookup';
@@ -205,7 +205,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     orderQueues: new Map(),
     ages,
     researchedTechs,
-    visibility: createVisibilityStates(),
+    visibility: createVisibilityStates(mapData.width, mapData.height),
     revealedMapPlayers: Array.from({ length: MAX_PLAYERS }, () => false),
     night: options.night ?? isNightMap(selectedMapId),
     outcome: { state: 'playing' },
@@ -230,9 +230,9 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   const canPlaceResourceAt = (x: number, y: number): boolean => {
     const tx = Math.round(x);
     const ty = Math.round(y);
-    if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
+    if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return false;
     if (mapData.walkability[ty][tx] !== 0) return false;
-    if (!isResourceTerrainTile(mapData.tiles[ty * MAP.WIDTH + tx])) return false;
+    if (!isResourceTerrainTile(mapData.tiles[ty * world.map.width + tx])) return false;
     if (hasMapFeatureAt(world, tx, ty, 0.6)) return false;
     if (findResourceAt(world, tx, ty, 0.6) !== null) return false;
     if (findBuildingAt(world, tx, ty, 0.9) !== null) return false;
@@ -240,8 +240,8 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   };
 
   const nearestResourceTile = (x: number, y: number, maxR: number): GridPos | null => {
-    const cx = Math.max(0, Math.min(MAP.WIDTH - 1, Math.round(x)));
-    const cy = Math.max(0, Math.min(MAP.HEIGHT - 1, Math.round(y)));
+    const cx = Math.max(0, Math.min(world.map.width - 1, Math.round(x)));
+    const cy = Math.max(0, Math.min(world.map.height - 1, Math.round(y)));
     for (let r = 0; r <= maxR; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -273,7 +273,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     if (!spot) return;
     spawnResource(world, kind, spot.x, spot.y, amt);
 
-    const mirror = { x: MAP.WIDTH - 1 - spot.x, y: MAP.HEIGHT - 1 - spot.y };
+    const mirror = { x: world.map.width - 1 - spot.x, y: world.map.height - 1 - spot.y };
     if (mirror.x !== spot.x || mirror.y !== spot.y) {
       if (canPlaceResourceAt(mirror.x, mirror.y)) {
         spawnResource(world, kind, mirror.x, mirror.y, amt);
@@ -411,12 +411,13 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   // Every deposit below goes down together with its point mirror through the
   // middle between the towns, so both sides always get the same land.
   const depositPlan = planDeposits(
+    world.map,
     p1,
     p2,
     canPlaceResourceAt,
     // The border forest has its own mine clearings out on the wings.
     selectedMapId === MapId.BOHEMIAN_BORDER_FOREST
-      ? { x: Math.round(MAP.WIDTH * 0.22), y: Math.round(MAP.HEIGHT * 0.22) }
+      ? { x: Math.round(world.map.width * 0.22), y: Math.round(world.map.height * 0.22) }
       : undefined
   );
   const spawnDepositPair = (kind: ResourceKind, x: number, y: number, amt: number) => {
@@ -447,20 +448,20 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   if (mirroredSnowSkirmish) {
     // Krkonoše keeps its authored mines along the passes.
     const authored: Array<[ResourceKind, number, number, number]> = [
-      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.42), Math.round(MAP.HEIGHT * 0.46), CENTER_GOLD_AMOUNT],
-      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.35), Math.round(MAP.HEIGHT * 0.57), FLANK_GOLD_AMOUNT],
-      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.20), Math.round(MAP.HEIGHT * 0.37), FLANK_GOLD_AMOUNT],
-      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.45), Math.round(MAP.HEIGHT * 0.59), CENTER_STONE_AMOUNT],
-      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.28), Math.round(MAP.HEIGHT * 0.52), FLANK_STONE_AMOUNT],
-      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.16), Math.round(MAP.HEIGHT * 0.57), FLANK_STONE_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(world.map.width * 0.42), Math.round(world.map.height * 0.46), CENTER_GOLD_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(world.map.width * 0.35), Math.round(world.map.height * 0.57), FLANK_GOLD_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(world.map.width * 0.20), Math.round(world.map.height * 0.37), FLANK_GOLD_AMOUNT],
+      [ResourceKindId.STONE, Math.round(world.map.width * 0.45), Math.round(world.map.height * 0.59), CENTER_STONE_AMOUNT],
+      [ResourceKindId.STONE, Math.round(world.map.width * 0.28), Math.round(world.map.height * 0.52), FLANK_STONE_AMOUNT],
+      [ResourceKindId.STONE, Math.round(world.map.width * 0.16), Math.round(world.map.height * 0.57), FLANK_STONE_AMOUNT],
     ];
     for (const [kind, x, y, amount] of authored) {
       spawnDepositPair(kind, x, y, amount);
     }
   } else if (floodedBasinSkirmish) {
     // The basin's two forward fields, one on each side of the middle.
-    const mx = Math.floor(MAP.WIDTH / 2);
-    const my = Math.floor(MAP.HEIGHT / 2);
+    const mx = Math.floor(world.map.width / 2);
+    const my = Math.floor(world.map.height / 2);
     const forward: Array<[ResourceKind, number, number, number]> = [
       [ResourceKindId.GOLD, mx - 2, my - 5, CENTER_GOLD_AMOUNT],
       [ResourceKindId.GOLD, mx - 1, my - 6, CENTER_GOLD_AMOUNT],
@@ -485,28 +486,30 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   }
 
   // Real tree resources on generated forest terrain, plus scattered singletons.
+  // Counts grow with the map's area; a standard map gets exactly the base counts.
+  const scatter = (count: number) => scaleByMapArea(world.map, count);
   seedInitialForestTrees(world, mirroredSnowSkirmish);
   if (!mirroredSnowSkirmish) {
-    for (let i = 0; i < INITIAL_SCATTERED_TREE_COUNT; i++) {
-      const x = Math.floor(rng.next() * MAP.WIDTH);
-      const y = Math.floor(rng.next() * MAP.HEIGHT);
+    for (let i = 0; i < scatter(INITIAL_SCATTERED_TREE_COUNT); i++) {
+      const x = Math.floor(rng.next() * world.map.width);
+      const y = Math.floor(rng.next() * world.map.height);
       safeSpawnResource(ResourceKindId.WOOD, x, y, 80);
     }
-    for (let i = 0; i < INITIAL_EDGE_TREE_COUNT; i++) {
+    for (let i = 0; i < scatter(INITIAL_EDGE_TREE_COUNT); i++) {
       const spot = randomEdgeTile(world);
       safeSpawnResource(ResourceKindId.WOOD, spot.x, spot.y, 80);
     }
     // A few extra gold/stone outcrops, each with a twin on the other side.
     // The rng draws are the same as before this was mirrored (every second
     // draw is unused), so trees and berries keep their places.
-    for (let i = 0; i < 8; i++) {
-      const x = Math.floor(rng.next() * MAP.WIDTH);
-      const y = Math.floor(rng.next() * MAP.HEIGHT);
+    for (let i = 0; i < scatter(8); i++) {
+      const x = Math.floor(rng.next() * world.map.width);
+      const y = Math.floor(rng.next() * world.map.height);
       if (i % 2 === 0) spawnDepositPair(ResourceKindId.GOLD, x, y, SCATTERED_GOLD_AMOUNT);
     }
-    for (let i = 0; i < 6; i++) {
-      const x = Math.floor(rng.next() * MAP.WIDTH);
-      const y = Math.floor(rng.next() * MAP.HEIGHT);
+    for (let i = 0; i < scatter(6); i++) {
+      const x = Math.floor(rng.next() * world.map.width);
+      const y = Math.floor(rng.next() * world.map.height);
       if (i % 2 === 0) spawnDepositPair(ResourceKindId.STONE, x, y, SCATTERED_STONE_AMOUNT);
     }
   }
@@ -514,9 +517,9 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   // Lone berry bushes away from both bases. The only rng draws added for
   // berries, deliberately last in world creation, so map, forests and every
   // other resource spawn exactly where they did before.
-  for (let i = 0; i < SCATTERED_BERRY_BUSH_COUNT; i++) {
-    const x = Math.floor(rng.next() * MAP.WIDTH);
-    const y = Math.floor(rng.next() * MAP.HEIGHT);
+  for (let i = 0; i < scatter(SCATTERED_BERRY_BUSH_COUNT); i++) {
+    const x = Math.floor(rng.next() * world.map.width);
+    const y = Math.floor(rng.next() * world.map.height);
     const spot = resolveResourceSpawn(x, y);
     if (!spot) continue;
     // Checked on the resolved tile (and its mirror), so no base gets a bonus bush.
@@ -526,7 +529,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
       );
     if (!awayFromBases(spot)) continue;
     if (mirroredSnowSkirmish) {
-      if (!awayFromBases({ x: MAP.WIDTH - 1 - spot.x, y: MAP.HEIGHT - 1 - spot.y })) continue;
+      if (!awayFromBases({ x: world.map.width - 1 - spot.x, y: world.map.height - 1 - spot.y })) continue;
       safeSpawnMirroredResource(ResourceKindId.FOOD, spot.x, spot.y, BERRY_BUSH_AMOUNT);
     } else {
       spawnResource(world, ResourceKindId.FOOD, spot.x, spot.y, BERRY_BUSH_AMOUNT);
@@ -560,23 +563,23 @@ const STARTER_VILLAGER_OFFSETS: ReadonlyArray<readonly [number, number]> = [
 
 function seedInitialForestTrees(world: SimWorld, mirrored = false): void {
   const canSeedForestTile = (x: number, y: number): boolean => {
-    const tile = world.map.tiles[y * MAP.WIDTH + x];
+    const tile = world.map.tiles[y * world.map.width + x];
     return tile === TileType.FOREST || tile === TileType.SNOW_FOREST;
   };
 
   if (mirrored) {
     const seen = new Set<number>();
-    for (let y = 0; y < MAP.HEIGHT; y++) {
-      for (let x = 0; x < MAP.WIDTH; x++) {
-        const idx = y * MAP.WIDTH + x;
+    for (let y = 0; y < world.map.height; y++) {
+      for (let x = 0; x < world.map.width; x++) {
+        const idx = y * world.map.width + x;
         if (seen.has(idx) || !canSeedForestTile(x, y)) continue;
-        const mx = MAP.WIDTH - 1 - x;
-        const my = MAP.HEIGHT - 1 - y;
-        const mirrorIdx = my * MAP.WIDTH + mx;
+        const mx = world.map.width - 1 - x;
+        const my = world.map.height - 1 - y;
+        const mirrorIdx = my * world.map.width + mx;
         seen.add(idx);
         seen.add(mirrorIdx);
         if (!canSeedForestTile(mx, my)) continue;
-        const edgeBonus = Math.max(edgeProximity01(x, y), edgeProximity01(mx, my))
+        const edgeBonus = Math.max(edgeProximity01(world, x, y), edgeProximity01(world, mx, my))
           * FOREST_EDGE_INITIAL_TREE_BONUS;
         if (world.rng.next() > FOREST_TILE_INITIAL_TREE_CHANCE + edgeBonus) continue;
         trySpawnTreeAt(world, x, y, TREE_RESOURCE_AMOUNT, TREE_REGEN_BUILDING_CLEARANCE);
@@ -588,10 +591,10 @@ function seedInitialForestTrees(world: SimWorld, mirrored = false): void {
     return;
   }
 
-  for (let y = 0; y < MAP.HEIGHT; y++) {
-    for (let x = 0; x < MAP.WIDTH; x++) {
+  for (let y = 0; y < world.map.height; y++) {
+    for (let x = 0; x < world.map.width; x++) {
       if (!canSeedForestTile(x, y)) continue;
-      const edgeBonus = edgeProximity01(x, y) * FOREST_EDGE_INITIAL_TREE_BONUS;
+      const edgeBonus = edgeProximity01(world, x, y) * FOREST_EDGE_INITIAL_TREE_BONUS;
       if (world.rng.next() > FOREST_TILE_INITIAL_TREE_CHANCE + edgeBonus) continue;
       trySpawnTreeAt(world, x, y, TREE_RESOURCE_AMOUNT, TREE_REGEN_BUILDING_CLEARANCE);
     }
@@ -601,8 +604,8 @@ function seedInitialForestTrees(world: SimWorld, mirrored = false): void {
 function randomEdgeTile(world: SimWorld): GridPos {
   const side = world.rng.int(4);
   const depth = world.rng.int(TREE_EDGE_BAND_TILES);
-  if (side === 0) return { x: depth, y: world.rng.int(MAP.HEIGHT) };
-  if (side === 1) return { x: MAP.WIDTH - 1 - depth, y: world.rng.int(MAP.HEIGHT) };
-  if (side === 2) return { x: world.rng.int(MAP.WIDTH), y: depth };
-  return { x: world.rng.int(MAP.WIDTH), y: MAP.HEIGHT - 1 - depth };
+  if (side === 0) return { x: depth, y: world.rng.int(world.map.height) };
+  if (side === 1) return { x: world.map.width - 1 - depth, y: world.rng.int(world.map.height) };
+  if (side === 2) return { x: world.rng.int(world.map.width), y: depth };
+  return { x: world.rng.int(world.map.width), y: world.map.height - 1 - depth };
 }

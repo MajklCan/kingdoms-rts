@@ -14,9 +14,9 @@
  * Pure geometry over a "can a deposit stand here" test; no rng.
  */
 
-import { MAP } from '../../config';
 import type { GridPos } from '../pathfinding';
 import { dhypot } from './dmath';
+import type { MapSize } from './map-size';
 
 /** Stone per node: stone is the scarce resource, so its fields are the big ones. */
 export const HOME_STONE_NODES = 4;
@@ -65,13 +65,14 @@ export interface DepositPlan {
 
 export type CanPlace = (x: number, y: number) => boolean;
 
+
 /** Point mirror of a tile through the middle between the towns. */
 export function mirrorThrough(mid: { x: number; y: number }, p: GridPos): GridPos {
   return { x: Math.round(2 * mid.x - p.x), y: Math.round(2 * mid.y - p.y) };
 }
 
-function inMap(p: GridPos): boolean {
-  return p.x >= EDGE_MARGIN && p.y >= EDGE_MARGIN && p.x < MAP.WIDTH - EDGE_MARGIN && p.y < MAP.HEIGHT - EDGE_MARGIN;
+function inMap(size: MapSize, p: GridPos): boolean {
+  return p.x >= EDGE_MARGIN && p.y >= EDGE_MARGIN && p.x < size.width - EDGE_MARGIN && p.y < size.height - EDGE_MARGIN;
 }
 
 function freeTiles(p: GridPos, canPlace: CanPlace): number {
@@ -85,9 +86,9 @@ function freeTiles(p: GridPos, canPlace: CanPlace): number {
 }
 
 /** A site works when it and its mirror are inside the map with room for a field. */
-function pairRoom(mid: { x: number; y: number }, p: GridPos, canPlace: CanPlace): number {
+function pairRoom(size: MapSize, mid: { x: number; y: number }, p: GridPos, canPlace: CanPlace): number {
   const twin = mirrorThrough(mid, p);
-  if (!inMap(p) || !inMap(twin)) return 0;
+  if (!inMap(size, p) || !inMap(size, twin)) return 0;
   return Math.min(freeTiles(p, canPlace), freeTiles(twin, canPlace));
 }
 
@@ -95,7 +96,13 @@ function pairRoom(mid: { x: number; y: number }, p: GridPos, canPlace: CanPlace)
  * Plan the shared deposits for two town centers. `flankOverride` pins the
  * wing field to an authored spot (a map with its own mine clearings).
  */
-export function planDeposits(p1: GridPos, p2: GridPos, canPlace: CanPlace, flankOverride?: GridPos): DepositPlan {
+export function planDeposits(
+  size: MapSize,
+  p1: GridPos,
+  p2: GridPos,
+  canPlace: CanPlace,
+  flankOverride?: GridPos
+): DepositPlan {
   const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
   const length = dhypot(p2.x - p1.x, p2.y - p1.y) || 1;
   const toward = { x: (p2.x - p1.x) / length, y: (p2.y - p1.y) / length };
@@ -112,7 +119,7 @@ export function planDeposits(p1: GridPos, p2: GridPos, canPlace: CanPlace, flank
     let best = 0;
     for (const sign of [1, -1]) {
       const spot = at(p1, sign * distance, -NATURAL_SETBACK);
-      const room = pairRoom(mid, spot, canPlace);
+      const room = pairRoom(size, mid, spot, canPlace);
       if (room > best) {
         best = room;
         natural = spot;
@@ -123,7 +130,7 @@ export function planDeposits(p1: GridPos, p2: GridPos, canPlace: CanPlace, flank
   }
 
   const midTile = { x: Math.round(mid.x), y: Math.round(mid.y) };
-  const center = pairRoom(mid, midTile, canPlace) >= SITE_MIN_FREE_TILES ? midTile : null;
+  const center = pairRoom(size, mid, midTile, canPlace) >= SITE_MIN_FREE_TILES ? midTile : null;
 
   const flanks: GridPos[] = [];
   if (flankOverride) {
@@ -134,7 +141,7 @@ export function planDeposits(p1: GridPos, p2: GridPos, canPlace: CanPlace, flank
     const wing = (from: number, to: number): GridPos | null => {
       for (let d = from; d >= to; d--) {
         const spot = at(mid, d, 0);
-        if (pairRoom(mid, spot, canPlace) >= SITE_MIN_FREE_TILES) return spot;
+        if (pairRoom(size, mid, spot, canPlace) >= SITE_MIN_FREE_TILES) return spot;
       }
       return null;
     };
@@ -146,7 +153,7 @@ export function planDeposits(p1: GridPos, p2: GridPos, canPlace: CanPlace, flank
       for (let d = 4; d <= FLANK_DISTANCE + 8; d++) {
         if (Math.abs(d - outerDistance) < 5) continue;
         const spot = at(mid, d, 0);
-        if (pairRoom(mid, spot, canPlace) >= SITE_MIN_FREE_TILES) {
+        if (pairRoom(size, mid, spot, canPlace) >= SITE_MIN_FREE_TILES) {
           flanks.push(spot);
           break;
         }

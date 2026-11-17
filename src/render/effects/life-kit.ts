@@ -8,7 +8,6 @@
  * the cursor.
  */
 
-import { MAP } from '../../config';
 import { Position } from '@sim/components';
 import { unitQuery } from '@sim/world';
 import type { FxHost } from './fx-host';
@@ -128,9 +127,9 @@ export class UnitPresence {
     for (const eid of unitQuery(ctx.world.ecs)) {
       const x = Math.round(Position.x[eid]);
       const y = Math.round(Position.y[eid]);
-      if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
+      if (x < 0 || y < 0 || x >= this.host.ctx.world.map.width || y >= this.host.ctx.world.map.height) continue;
       if (!ctx.isTileVisible(x, y)) continue;
-      this.tiles.add(y * MAP.WIDTH + x);
+      this.tiles.add(y * this.host.ctx.world.map.width + x);
     }
   }
 
@@ -143,10 +142,10 @@ export class UnitPresence {
     let bestD = Infinity;
     for (let dy = -r; dy <= r; dy++) {
       const y = cy + dy;
-      if (y < 0 || y >= MAP.HEIGHT) continue;
+      if (y < 0 || y >= this.host.ctx.world.map.height) continue;
       for (let dx = -r; dx <= r; dx++) {
         const x = cx + dx;
-        if (x < 0 || x >= MAP.WIDTH || !this.tiles.has(y * MAP.WIDTH + x)) continue;
+        if (x < 0 || x >= this.host.ctx.world.map.width || !this.tiles.has(y * this.host.ctx.world.map.width + x)) continue;
         const d = dx * dx + dy * dy;
         if (d < bestD) {
           bestD = d;
@@ -167,15 +166,15 @@ export class UnitPresence {
 export function tileAt(host: FxHost, x: number, y: number): number {
   const tx = Math.round(x);
   const ty = Math.round(y);
-  if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return -1;
-  return host.ctx.world.map.tiles[ty * MAP.WIDTH + tx];
+  if (tx < 0 || ty < 0 || tx >= host.ctx.world.map.width || ty >= host.ctx.world.map.height) return -1;
+  return host.ctx.world.map.tiles[ty * host.ctx.world.map.width + tx];
 }
 
 /** Open, visible ground (no building, tree or rock on it). */
 export function isOpenVisible(host: FxHost, x: number, y: number): boolean {
   const tx = Math.round(x);
   const ty = Math.round(y);
-  if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
+  if (tx < 0 || ty < 0 || tx >= host.ctx.world.map.width || ty >= host.ctx.world.map.height) return false;
   if (host.ctx.world.map.walkability[ty]?.[tx] !== 0) return false;
   return host.ctx.isTileVisible(tx, ty);
 }
@@ -189,7 +188,7 @@ export function randomViewTile(host: FxHost, rng: LifeRng, inset = 0.08): { x: n
   const ly = v.top + h * rng.range(inset, 1 - inset);
   const root = host.ctx.layers.root;
   const t = host.ctx.pickTile(lx + root.x, ly + root.y);
-  if (t.tx < 0 || t.ty < 0 || t.tx >= MAP.WIDTH || t.ty >= MAP.HEIGHT) return null;
+  if (t.tx < 0 || t.ty < 0 || t.tx >= host.ctx.world.map.width || t.ty >= host.ctx.world.map.height) return null;
   return { x: t.tx, y: t.ty };
 }
 

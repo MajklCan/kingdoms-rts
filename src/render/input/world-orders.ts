@@ -114,7 +114,7 @@ export class WorldOrders {
    */
   issueMapOrder(kind: MapOrderKind, tx: number, ty: number, queue = false): boolean {
     const { commands, audio } = this.deps;
-    if (!isInsideMap(tx, ty)) return false;
+    if (!isInsideMap(this.ctx.world, tx, ty)) return false;
     if (commands.selectedCommandableCount() === 0) return false;
     if (queue && this.refuseQueued()) return true;
     if (kind === 'attackMove') {
@@ -145,7 +145,7 @@ export class WorldOrders {
     const world = this.ctx.world;
     const { commands, audio } = this.deps;
     const { tx, ty, tileX, tileY } = this.ctx.pickTile(wx, wy);
-    if (!isInsideMap(tx, ty)) return;
+    if (!isInsideMap(this.ctx.world, tx, ty)) return;
     const hasUnits = commands.selectedCommandableCount() > 0;
     const targetEid = this.pickEntity(wx, wy, tileX, tileY);
     if (
