@@ -56,6 +56,8 @@ export interface MapDef {
   description: string;
   /** Played at night unless the match setup says otherwise. */
   night?: boolean;
+  /** Built for a campaign mission: not offered in skirmish setup. */
+  campaignOnly?: boolean;
 }
 
 export interface MapData {

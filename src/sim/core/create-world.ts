@@ -22,22 +22,35 @@ import {
   FORMATION_MODE_DEFAULT,
   LOCAL_GOLD_DEPOSIT_AMOUNT,
   LOCAL_PLAYER_ID,
-  LOCAL_STONE_DEPOSIT_AMOUNT,
   MAX_PLAYERS,
   TREE_EDGE_BAND_TILES,
   TREE_REGEN_BUILDING_CLEARANCE,
   TREE_RESOURCE_AMOUNT,
 } from './constants';
+import {
+  CENTER_GOLD_AMOUNT,
+  CENTER_GOLD_HALF_OFFSETS,
+  CENTER_STONE_AMOUNT,
+  CENTER_STONE_HALF_OFFSETS,
+  FLANK_GOLD_AMOUNT,
+  FLANK_STONE_AMOUNT,
+  HOME_STONE_AMOUNT,
+  HOME_STONE_NODES,
+  NATURAL_GOLD_AMOUNT,
+  NATURAL_STONE_AMOUNT,
+  SCATTERED_GOLD_AMOUNT,
+  SCATTERED_STONE_AMOUNT,
+  SITE_GOLD_OFFSETS,
+  SITE_STONE_OFFSETS,
+  mirrorThrough,
+  planDeposits,
+} from './deposit-sites';
 import { findSpawnSpot } from './grid';
 import { createMatchStats, resetMatchStats } from './match-stats';
 import { normalizeMapSeed } from './map-seed';
 import { findBuildingAt, findResourceAt, hasMapFeatureAt } from './lookup';
 import type { AgeState, CreateSimWorldOptions, PopState, SimWorld } from './types';
 
-const CENTER_GOLD_DEPOSIT_AMOUNT = 850;
-const CENTER_STONE_DEPOSIT_AMOUNT = 750;
-const SCATTERED_GOLD_DEPOSIT_AMOUNT = 500;
-const SCATTERED_STONE_DEPOSIT_AMOUNT = 450;
 const STARTING_RESOURCE_BANKS: Record<AgeIdValue, Readonly<Record<ResourceKind, number>>> = {
   [AgeId.DARK]: {
     [ResourceKindId.FOOD]: 0,
@@ -314,12 +327,12 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
         LOCAL_GOLD_DEPOSIT_AMOUNT
       );
     }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < HOME_STONE_NODES; i++) {
       safeSpawnMirroredResource(
         ResourceKindId.STONE,
         p1x - 4 - i,
         p1y + 3 + (i % 2),
-        LOCAL_STONE_DEPOSIT_AMOUNT
+        HOME_STONE_AMOUNT
       );
     }
   } else {
@@ -342,12 +355,12 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
         LOCAL_GOLD_DEPOSIT_AMOUNT
       );
     }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < HOME_STONE_NODES; i++) {
       safeSpawnResource(
         ResourceKindId.STONE,
         p1x - 4 - i,
         p1y + 3 + (i % 2),
-        LOCAL_STONE_DEPOSIT_AMOUNT
+        HOME_STONE_AMOUNT
       );
     }
   }
@@ -381,68 +394,90 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
         LOCAL_GOLD_DEPOSIT_AMOUNT
       );
     }
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < HOME_STONE_NODES; i++) {
       safeSpawnResource(
         ResourceKindId.STONE,
         p2x + 4 + i,
         p2y - 3 - (i % 2),
-        LOCAL_STONE_DEPOSIT_AMOUNT
+        HOME_STONE_AMOUNT
       );
     }
   }
 
-  if (mirroredSnowSkirmish) {
-    const mirroredExpansionResources: Array<[ResourceKind, number, number, number]> = [
-      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.42), Math.round(MAP.HEIGHT * 0.46), CENTER_GOLD_DEPOSIT_AMOUNT],
-      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.35), Math.round(MAP.HEIGHT * 0.57), SCATTERED_GOLD_DEPOSIT_AMOUNT],
-      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.20), Math.round(MAP.HEIGHT * 0.37), SCATTERED_GOLD_DEPOSIT_AMOUNT],
-      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.45), Math.round(MAP.HEIGHT * 0.59), CENTER_STONE_DEPOSIT_AMOUNT],
-      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.28), Math.round(MAP.HEIGHT * 0.52), SCATTERED_STONE_DEPOSIT_AMOUNT],
-      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.16), Math.round(MAP.HEIGHT * 0.57), SCATTERED_STONE_DEPOSIT_AMOUNT],
-    ];
-    for (const [kind, x, y, amount] of mirroredExpansionResources) {
-      safeSpawnMirroredResource(kind, x, y, amount);
+  // ── Shared deposits: natural expansions, the contested centre and wings ──
+  // Every deposit below goes down together with its point mirror through the
+  // middle between the towns, so both sides always get the same land.
+  const depositPlan = planDeposits(
+    p1,
+    p2,
+    canPlaceResourceAt,
+    // The border forest has its own mine clearings out on the wings.
+    selectedMapId === MapId.BOHEMIAN_BORDER_FOREST
+      ? { x: Math.round(MAP.WIDTH * 0.22), y: Math.round(MAP.HEIGHT * 0.22) }
+      : undefined
+  );
+  const spawnDepositPair = (kind: ResourceKind, x: number, y: number, amt: number) => {
+    const spot = resolveResourceSpawn(x, y);
+    if (!spot) return;
+    spawnResource(world, kind, spot.x, spot.y, amt);
+    const mirror = mirrorThrough(depositPlan.mid, spot);
+    if (mirror.x === spot.x && mirror.y === spot.y) return;
+    const twin = resolveResourceSpawn(mirror.x, mirror.y);
+    if (twin) spawnResource(world, kind, twin.x, twin.y, amt);
+  };
+  const spawnSitePair = (site: GridPos, stoneNodes: number, stoneAmt: number, goldNodes: number, goldAmt: number) => {
+    for (const [dx, dy] of SITE_STONE_OFFSETS.slice(0, stoneNodes)) {
+      spawnDepositPair(ResourceKindId.STONE, site.x + dx, site.y + dy, stoneAmt);
     }
-  } else {
-    // Map-wide resource scatter - gives the bigger 64×64 playfield enough
-    // ambient resources that expanding feels rewarding. Deterministic via rng.
+    for (const [dx, dy] of SITE_GOLD_OFFSETS.slice(0, goldNodes)) {
+      spawnDepositPair(ResourceKindId.GOLD, site.x + dx, site.y + dy, goldAmt);
+    }
+  };
+
+  if (depositPlan.natural) {
+    spawnSitePair(depositPlan.natural, 3, NATURAL_STONE_AMOUNT, 3, NATURAL_GOLD_AMOUNT);
+  }
+  for (const flank of depositPlan.flanks) {
+    spawnSitePair(flank, 3, FLANK_STONE_AMOUNT, 2, FLANK_GOLD_AMOUNT);
+  }
+
+  if (mirroredSnowSkirmish) {
+    // Krkonoše keeps its authored mines along the passes.
+    const authored: Array<[ResourceKind, number, number, number]> = [
+      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.42), Math.round(MAP.HEIGHT * 0.46), CENTER_GOLD_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.35), Math.round(MAP.HEIGHT * 0.57), FLANK_GOLD_AMOUNT],
+      [ResourceKindId.GOLD, Math.round(MAP.WIDTH * 0.20), Math.round(MAP.HEIGHT * 0.37), FLANK_GOLD_AMOUNT],
+      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.45), Math.round(MAP.HEIGHT * 0.59), CENTER_STONE_AMOUNT],
+      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.28), Math.round(MAP.HEIGHT * 0.52), FLANK_STONE_AMOUNT],
+      [ResourceKindId.STONE, Math.round(MAP.WIDTH * 0.16), Math.round(MAP.HEIGHT * 0.57), FLANK_STONE_AMOUNT],
+    ];
+    for (const [kind, x, y, amount] of authored) {
+      spawnDepositPair(kind, x, y, amount);
+    }
+  } else if (floodedBasinSkirmish) {
+    // The basin's two forward fields, one on each side of the middle.
     const mx = Math.floor(MAP.WIDTH / 2);
     const my = Math.floor(MAP.HEIGHT / 2);
-    if (floodedBasinSkirmish) {
-      const basinCenterResources: Array<[ResourceKind, number, number, number]> = [
-        [ResourceKindId.GOLD, mx - 2, my - 5, CENTER_GOLD_DEPOSIT_AMOUNT],
-        [ResourceKindId.GOLD, mx - 1, my - 6, CENTER_GOLD_DEPOSIT_AMOUNT],
-        [ResourceKindId.STONE, mx + 1, my - 5, CENTER_STONE_DEPOSIT_AMOUNT],
-        [ResourceKindId.STONE, mx + 2, my - 6, CENTER_STONE_DEPOSIT_AMOUNT],
-        [ResourceKindId.GOLD, mx - 2, my + 5, CENTER_GOLD_DEPOSIT_AMOUNT],
-        [ResourceKindId.GOLD, mx - 1, my + 6, CENTER_GOLD_DEPOSIT_AMOUNT],
-        [ResourceKindId.STONE, mx + 1, my + 5, CENTER_STONE_DEPOSIT_AMOUNT],
-        [ResourceKindId.STONE, mx + 2, my + 6, CENTER_STONE_DEPOSIT_AMOUNT],
-      ];
-      for (const [kind, x, y, amount] of basinCenterResources) {
-        safeSpawnResource(kind, x, y, amount);
-      }
-    } else {
-      // Contested centre gold/stone - worth crossing the river for.
-      safeSpawnResource(ResourceKindId.GOLD, mx - 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.GOLD, mx, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.GOLD, mx + 1, my, CENTER_GOLD_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.STONE, mx - 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.STONE, mx, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
-      safeSpawnResource(ResourceKindId.STONE, mx + 1, my + 2, CENTER_STONE_DEPOSIT_AMOUNT);
+    const forward: Array<[ResourceKind, number, number, number]> = [
+      [ResourceKindId.GOLD, mx - 2, my - 5, CENTER_GOLD_AMOUNT],
+      [ResourceKindId.GOLD, mx - 1, my - 6, CENTER_GOLD_AMOUNT],
+      [ResourceKindId.STONE, mx + 1, my - 5, CENTER_STONE_AMOUNT],
+      [ResourceKindId.STONE, mx + 2, my - 6, CENTER_STONE_AMOUNT],
+      [ResourceKindId.GOLD, mx - 2, my + 5, CENTER_GOLD_AMOUNT],
+      [ResourceKindId.GOLD, mx - 1, my + 6, CENTER_GOLD_AMOUNT],
+      [ResourceKindId.STONE, mx + 1, my + 5, CENTER_STONE_AMOUNT],
+      [ResourceKindId.STONE, mx + 2, my + 6, CENTER_STONE_AMOUNT],
+    ];
+    for (const [kind, x, y, amount] of forward) {
+      safeSpawnResource(kind, x, y, amount);
     }
-
-    if (selectedMapId === MapId.BOHEMIAN_BORDER_FOREST) {
-      const nwX = Math.round(MAP.WIDTH * 0.22);
-      const nwY = Math.round(MAP.HEIGHT * 0.22);
-      const seX = Math.round(MAP.WIDTH * 0.78);
-      const seY = Math.round(MAP.HEIGHT * 0.78);
-      for (let i = 0; i < 3; i++) {
-        safeSpawnResource(ResourceKindId.GOLD, nwX - 2 + i, nwY - 1, SCATTERED_GOLD_DEPOSIT_AMOUNT);
-        safeSpawnResource(ResourceKindId.STONE, nwX + 1 + i, nwY + 2, SCATTERED_STONE_DEPOSIT_AMOUNT);
-        safeSpawnResource(ResourceKindId.GOLD, seX + 2 - i, seY + 1, SCATTERED_GOLD_DEPOSIT_AMOUNT);
-        safeSpawnResource(ResourceKindId.STONE, seX - 1 - i, seY - 2, SCATTERED_STONE_DEPOSIT_AMOUNT);
-      }
+  } else if (depositPlan.center) {
+    // The contested centre: a row of gold through the middle, stone on both sides.
+    for (const [dx, dy] of CENTER_GOLD_HALF_OFFSETS) {
+      spawnDepositPair(ResourceKindId.GOLD, depositPlan.center.x + dx, depositPlan.center.y + dy, CENTER_GOLD_AMOUNT);
+    }
+    for (const [dx, dy] of CENTER_STONE_HALF_OFFSETS) {
+      spawnDepositPair(ResourceKindId.STONE, depositPlan.center.x + dx, depositPlan.center.y + dy, CENTER_STONE_AMOUNT);
     }
   }
 
@@ -458,16 +493,18 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
       const spot = randomEdgeTile(world);
       safeSpawnResource(ResourceKindId.WOOD, spot.x, spot.y, 80);
     }
-    // A few extra gold/stone outcrops far from spawns.
+    // A few extra gold/stone outcrops, each with a twin on the other side.
+    // The rng draws are the same as before this was mirrored (every second
+    // draw is unused), so trees and berries keep their places.
     for (let i = 0; i < 8; i++) {
       const x = Math.floor(rng.next() * MAP.WIDTH);
       const y = Math.floor(rng.next() * MAP.HEIGHT);
-      safeSpawnResource(ResourceKindId.GOLD, x, y, SCATTERED_GOLD_DEPOSIT_AMOUNT);
+      if (i % 2 === 0) spawnDepositPair(ResourceKindId.GOLD, x, y, SCATTERED_GOLD_AMOUNT);
     }
     for (let i = 0; i < 6; i++) {
       const x = Math.floor(rng.next() * MAP.WIDTH);
       const y = Math.floor(rng.next() * MAP.HEIGHT);
-      safeSpawnResource(ResourceKindId.STONE, x, y, SCATTERED_STONE_DEPOSIT_AMOUNT);
+      if (i % 2 === 0) spawnDepositPair(ResourceKindId.STONE, x, y, SCATTERED_STONE_AMOUNT);
     }
   }
 
