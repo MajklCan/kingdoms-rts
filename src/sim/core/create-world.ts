@@ -6,7 +6,7 @@ import { createWorld } from 'bitecs';
 import { MAP } from '../../config';
 import { type ResourceKind, ResourceKindId } from '../components';
 import { AgeId, type AgeIdValue } from '../defs';
-import { MapId, TileType, generateMap } from '../map-gen';
+import { MapId, TileType, generateMap, isNightMap } from '../map-gen';
 import { type GridPos, Pathfinder } from '../pathfinding';
 import { Rng } from '../rng';
 import { type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
@@ -191,6 +191,7 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
     researchedTechs,
     visibility: createVisibilityStates(),
     revealedMapPlayers: Array.from({ length: MAX_PLAYERS }, () => false),
+    night: options.night ?? isNightMap(selectedMapId),
     outcome: { state: 'playing' },
     campaign: null,
     combatEvents: [],

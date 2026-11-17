@@ -112,6 +112,8 @@ export {
 export { createLateGameTestWorld } from './factories/late-game';
 export { playerFormationFacing, playerFormationMode } from './input/formation';
 export {
+  DAY_SIGHT,
+  NIGHT_SIGHT,
   createVisibilityState,
   createVisibilityStates,
   getPlayerVisibility,
@@ -120,6 +122,7 @@ export {
   isEntityVisibleTo,
   isTileExploredBy,
   isTileVisibleTo,
+  lineOfSightRadius,
   revealMapForPlayer,
   tileVisibilityIndex,
   updatePlayerVisibility,

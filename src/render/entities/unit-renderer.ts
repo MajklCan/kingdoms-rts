@@ -40,7 +40,7 @@ export interface UnitDeath {
   deathFrames?: { refs: SpriteRef[]; frameMs: number };
 }
 
-interface UnitBody {
+export interface UnitBody {
   x: number;
   feet: number;
   top: number;
@@ -176,6 +176,14 @@ export class UnitRenderer {
     const body = this.bodies.get(eid);
     if (!body) return null;
     return { x0: body.x - body.halfW, y0: body.top - UNIT_PICK_PAD, x1: body.x + body.halfW, y1: body.feet + UNIT_PICK_FEET_PAD };
+  }
+
+  /** Every unit drawn this frame: its body box, owner and facing (torches by night). */
+  forEachDrawn(visit: (eid: number, body: Readonly<UnitBody>, owner: number, facing: Facing) => void): void {
+    for (const [eid, body] of this.bodies) {
+      const m = this.meta.get(eid);
+      if (m) visit(eid, body, m.owner, m.facing);
+    }
   }
 
   /** Current (interpolated) on-screen anchor of a unit (effects attach here). */

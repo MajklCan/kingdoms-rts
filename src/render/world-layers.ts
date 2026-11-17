@@ -12,6 +12,8 @@
  *   fog       fog of war over the ground (explored dim + unexplored black)
  *   entities  buildings / units / resources / map features, painter-sorted;
  *             fogged-but-explored ones are tinted instead of covered
+ *   night     night matches only: the darkness that torchlight opens, then
+ *             the torch halos (NightRenderer); empty by day
  *   overlay   UI that must read above the art: front half of selection
  *             rings, health / progress bars, worker dots, the ghost building
  *   effects   projectiles, particles and other VFX (EffectsLayer)
@@ -32,6 +34,7 @@ export interface WorldLayers {
   ground: Phaser.GameObjects.Container;
   fog: Phaser.GameObjects.Container;
   entities: EntityLayer;
+  night: Phaser.GameObjects.Container;
   overlay: Phaser.GameObjects.Container;
   effects: Phaser.GameObjects.Container;
 }
@@ -53,9 +56,10 @@ export function createWorldLayers(scene: Phaser.Scene): WorldLayers {
   const ground = child();
   const fog = child();
   const entities = new EntityLayer(child());
+  const night = child();
   const overlay = child();
   const effects = child();
-  return { root, terrain, decor, shadows, groundFx, ground, fog, entities, overlay, effects };
+  return { root, terrain, decor, shadows, groundFx, ground, fog, entities, night, overlay, effects };
 }
 
 /** Add a fresh Graphics object to a layer (later additions draw on top). */

@@ -362,6 +362,9 @@ export interface SimWorld {
   visibility: PlayerVisibility[];
   /** Cheat/debug map reveal flags by player. When true, fog stays fully cleared. */
   revealedMapPlayers: boolean[];
+  /** Night match: everyone sees only as far as their torches reach
+   *  (visibility.ts). Fixed for the whole match. */
+  night: boolean;
   /** Match outcome - set by winConditionSystem. */
   outcome: MatchOutcome;
   /** Active campaign mission state. Null in skirmish mode. */
@@ -411,4 +414,6 @@ export interface CreateSimWorldOptions {
   mapId?: MapIdValue;
   aiDifficulty?: AiDifficulty;
   campaignMissionId?: CampaignMissionIdValue;
+  /** Play at night (torchlight sight). Defaults to the map's own time of day. */
+  night?: boolean;
 }

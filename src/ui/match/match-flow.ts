@@ -62,12 +62,13 @@ async function launch(kind: MatchKind, title: string, subtitle: string, task: ()
   }
 }
 
-export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty): void {
+export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty, night?: boolean): void {
   const map = MAP_DEFS.find((m) => m.id === mapId);
   const ageName = AGE_TABLE.find((a) => a.id === age)?.name ?? 'Dark Age';
   const diff = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-  void launch('skirmish', map?.name ?? 'Skirmish', `${ageName} · ${diff} AI`, () => {
-    getScene()?.startNewGame(age, mapId, difficulty);
+  const atNight = night ?? map?.night === true;
+  void launch('skirmish', map?.name ?? 'Skirmish', `${ageName} · ${diff} AI${atNight ? ' · Night' : ''}`, () => {
+    getScene()?.startNewGame(age, mapId, difficulty, atNight);
   });
 }
 
