@@ -17,6 +17,7 @@
 import type { GridPos } from '../pathfinding';
 import { dhypot } from './dmath';
 import type { MapSize } from './map-size';
+import type { MapDeposit } from '../maps/types';
 
 /** Stone per node: stone is the scarce resource, so its fields are the big ones. */
 export const HOME_STONE_NODES = 4;
@@ -29,6 +30,21 @@ export const FLANK_STONE_AMOUNT = 800;
 export const FLANK_GOLD_AMOUNT = 700;
 export const SCATTERED_STONE_AMOUNT = 600;
 export const SCATTERED_GOLD_AMOUNT = 500;
+
+/** Amount per node of an authored deposit on a large map, by its tier. */
+export function authoredDepositAmount(deposit: MapDeposit): number {
+  const gold = deposit.kind === 'gold';
+  switch (deposit.tier) {
+    case 'center':
+      return gold ? CENTER_GOLD_AMOUNT : CENTER_STONE_AMOUNT;
+    case 'flank':
+      return gold ? FLANK_GOLD_AMOUNT : FLANK_STONE_AMOUNT;
+    case 'natural':
+      return gold ? NATURAL_GOLD_AMOUNT : NATURAL_STONE_AMOUNT;
+    default:
+      return gold ? SCATTERED_GOLD_AMOUNT : SCATTERED_STONE_AMOUNT;
+  }
+}
 
 /** Tiles from a town center to its natural expansion. */
 const NATURAL_DISTANCE = 12;

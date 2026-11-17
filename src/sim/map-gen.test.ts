@@ -93,9 +93,10 @@ describe('map bridges', () => {
       for (const eid of resourceQuery(world.ecs)) {
         const x = Math.round(Position.x[eid]);
         const y = Math.round(Position.y[eid]);
-        expect(world.map.tiles[y * MAP.WIDTH + x]).not.toBe(TileType.BRIDGE);
-        expect(world.map.tiles[y * MAP.WIDTH + x]).not.toBe(TileType.MUD);
-        expect(isWater(world.map.tiles[y * MAP.WIDTH + x])).toBe(false);
+        const tile = world.map.tiles[y * world.map.width + x];
+        expect(tile).not.toBe(TileType.BRIDGE);
+        expect(tile).not.toBe(TileType.MUD);
+        expect(isWater(tile)).toBe(false);
         expect(world.map.features.some((feature) => feature.x === x && feature.y === y)).toBe(false);
       }
     }
@@ -117,7 +118,7 @@ describe('map bridges', () => {
       expect(map.spawns[2]).toBeDefined();
       for (const spawn of [map.spawns[1], map.spawns[2]]) {
         expect(map.walkability[spawn.y][spawn.x]).toBe(0);
-        const tile = map.tiles[spawn.y * MAP.WIDTH + spawn.x];
+        const tile = map.tiles[spawn.y * map.width + spawn.x];
         expect(
           tile === TileType.GRASS
           || tile === TileType.DIRT
@@ -352,7 +353,8 @@ describe('map bridges', () => {
 
     for (const [i, def] of MAP_DEFS.entries()) {
       const map = generateMap(new Rng(500 + i), def.id);
-      if (def.id !== MapId.ORE_MOUNTAIN_PASS) {
+      // Rock towers belong to the Ore Mountains and to the large maps.
+      if (def.id !== MapId.ORE_MOUNTAIN_PASS && !def.large) {
         expect(map.features.some((feature) => feature.kind === MapFeatureKind.ROCK_SPIRE)).toBe(false);
       }
       if (def.id !== MapId.MACHOVO_JEZERO && def.id !== MapId.SUDOMER_PONDS) {

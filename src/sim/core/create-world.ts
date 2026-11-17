@@ -29,6 +29,7 @@ import {
   TREE_RESOURCE_AMOUNT,
 } from './constants';
 import {
+  authoredDepositAmount,
   CENTER_GOLD_AMOUNT,
   CENTER_GOLD_HALF_OFFSETS,
   CENTER_STONE_AMOUNT,
@@ -441,11 +442,20 @@ export function createSimWorld(seed: number, options: CreateSimWorldOptions = {}
   if (depositPlan.natural) {
     spawnSitePair(depositPlan.natural, 3, NATURAL_STONE_AMOUNT, 3, NATURAL_GOLD_AMOUNT);
   }
-  for (const flank of depositPlan.flanks) {
-    spawnSitePair(flank, 3, FLANK_STONE_AMOUNT, 2, FLANK_GOLD_AMOUNT);
+  // Large maps author their contested fields; they keep only the natural site.
+  const authoredDeposits = mapData.deposits;
+  if (!authoredDeposits) {
+    for (const flank of depositPlan.flanks) {
+      spawnSitePair(flank, 3, FLANK_STONE_AMOUNT, 2, FLANK_GOLD_AMOUNT);
+    }
   }
 
-  if (mirroredSnowSkirmish) {
+  if (authoredDeposits) {
+    for (const deposit of authoredDeposits) {
+      const kind = deposit.kind === 'gold' ? ResourceKindId.GOLD : ResourceKindId.STONE;
+      spawnDepositPair(kind, deposit.x, deposit.y, authoredDepositAmount(deposit));
+    }
+  } else if (mirroredSnowSkirmish) {
     // Krkonoše keeps its authored mines along the passes.
     const authored: Array<[ResourceKind, number, number, number]> = [
       [ResourceKindId.GOLD, Math.round(world.map.width * 0.42), Math.round(world.map.height * 0.46), CENTER_GOLD_AMOUNT],

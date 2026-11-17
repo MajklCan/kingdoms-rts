@@ -12,11 +12,14 @@ export const SIM = {
 } as const;
 
 export const MAP = {
-  /** Grid width in tiles. 64×64 gives a 4096-tile playfield, ~2-3× the
-   *  visible canvas — players need WASD pan + minimap. */
+  /** Grid width of a standard map in tiles. 64×64 gives a 4096-tile
+   *  playfield, ~2-3× the visible canvas, so players need WASD pan + minimap.
+   *  A map's real size is world.map.width/height. */
   WIDTH: 64,
-  /** Grid height in tiles. */
+  /** Grid height of a standard map in tiles. */
   HEIGHT: 64,
+  /** Edge of a large skirmish map: 112×112 is about 3× the standard area. */
+  LARGE_SIZE: 112,
 } as const;
 
 export const ISO = {
