@@ -11,6 +11,7 @@
  *   AmbientFx   clouds, flocks, butterflies, weather, glints
  *   LifeFx      perched birds, leaves, wildlife, village life, voxel smoke
  *   CommandFx   red pulse on the enemy you ordered to attack
+ *   OrderQueueFx  numbered waypoints of the selected units' queued orders
  *
  * Plus the team-colour silhouettes of units hidden behind trees/buildings.
  *
@@ -34,6 +35,7 @@ import type { FxHost } from './fx-host';
 import { FxParticles } from './fx-particles';
 import { ensureFxTextures } from './fx-textures';
 import { LifeFx } from './life-fx';
+import { OrderQueueFx } from './order-queue-fx';
 import { reducedMotion } from './motion-prefs';
 import { RemainsFx } from './remains-fx';
 
@@ -58,6 +60,7 @@ export class WorldFx implements FxHost {
   private readonly ambient: AmbientFx;
   private readonly life: LifeFx;
   private readonly commands: CommandFx;
+  private readonly orderQueue: OrderQueueFx;
   private shakeUntil = 0;
   private shakeLevel = 0;
   private needsReset = true;
@@ -75,6 +78,7 @@ export class WorldFx implements FxHost {
     this.economy = new EconomyFx(this, deps.units);
     this.ambient = new AmbientFx(this, deps.resources);
     this.commands = new CommandFx(this, deps.units);
+    this.orderQueue = new OrderQueueFx(this, deps.units);
     deps.units.setOcclusion(new UnitOcclusion(ctx, {
       buildingViews: () => deps.buildings.liveViews(),
       treeViewAt: (x, y) => deps.resources.treeViewAt(x, y),
@@ -109,6 +113,7 @@ export class WorldFx implements FxHost {
     this.ambient.update(dt);
     this.life.update(dt);
     this.commands.update();
+    this.orderQueue.update();
     this.fx.update(dt);
   }
 
@@ -122,6 +127,7 @@ export class WorldFx implements FxHost {
     this.ambient.clear();
     this.life.clear();
     this.commands.clear();
+    this.orderQueue.clear();
     this.needsReset = true;
   }
 

@@ -53,6 +53,23 @@ fieldset.setup-col {
   min-width: 0;
 }
 
+/* Two short choices side by side (AI difficulty and time of day). */
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 0.9rem;
+  align-items: end;
+}
+
+.field-row .seg {
+  flex-wrap: nowrap;
+}
+
+.field-row .seg span {
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+}
+
 fieldset legend.field-label {
   padding: 0;
   margin-bottom: 0.35rem;
@@ -155,6 +172,21 @@ fieldset legend.field-label {
   font-size: var(--fs-md);
   letter-spacing: 0.04em;
   color: var(--ink-900);
+}
+
+/* "Night" on a map that is played by torchlight. */
+.map-option-tag {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  font-family: var(--font-ui);
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  color: #e6ecff;
+  background: #2a3566;
+  border: var(--px) solid #131a3a;
 }
 
 .map-option-desc {

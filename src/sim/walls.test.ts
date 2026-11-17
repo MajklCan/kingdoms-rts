@@ -209,7 +209,7 @@ describe('walls', () => {
     // An era alone changes nothing: walls follow their research.
     world.ages[P1].current = AgeId.CASTLE;
     expect(getBuildingCost(world, P1, BuildingDefId.WALL)).toEqual(PALISADE.cost);
-    for (const techId of [TechId.WATCHTOWERS, TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.COMMANDER]) {
+    for (const techId of [TechId.WATCHTOWERS, TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.COMMANDER, TechId.KNIGHTS]) {
       world.researchedTechs[P1].add(techId);
     }
     world.inputs.push({ type: 'researchTech', playerId: P1, techId: TechId.STONE_WALLS });

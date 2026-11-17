@@ -10,7 +10,7 @@ import type { SimWorld } from '../core/types';
 import { canBuild } from '../systems/builders';
 import { helpRefusal, joinWorksite, leaveWorksite } from '../systems/worksite-helpers';
 import { ownedCommandableEids } from './apply-input';
-import { clearCombatOrders, clearFormationSpeedCap } from './unit-orders';
+import { clearCombatOrders, clearFormationSpeedCap, clearOrderQueue } from './unit-orders';
 
 /**
  * Send `eids` (the player's free villagers among them, in NetId order) to
@@ -32,6 +32,8 @@ export function applyAssignWorksiteCommand(
     leaveWorksite(world, eid);
     clearCombatOrders(world, eid);
     clearFormationSpeedCap(world, eid);
+    // An order that replaces what the villager is doing also drops his queue.
+    clearOrderQueue(world, eid);
     joinWorksite(world, eid, siteEid);
   }
 }

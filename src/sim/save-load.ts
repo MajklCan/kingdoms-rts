@@ -25,6 +25,7 @@ export type {
   SavedGameV4,
   SavedGameV4Roles,
   SavedGameV5,
+  SavedGameV6,
   SavedMapV1,
   SavedVisibilityV1,
 } from './save/schema';

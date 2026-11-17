@@ -17,6 +17,7 @@ import {
   applyGatherCommand,
   clearCombatOrders,
   clearFormationSpeedCap,
+  clearOrderQueue,
   clearWorkOrders,
 } from '../input/unit-orders';
 import { applyResearchTech } from '../systems/tech-rings';
@@ -49,12 +50,15 @@ export const directAiActuator: AiActuator = {
   move(world, eid, to) {
     if (!isMovableEntity(world, eid)) return;
     if (!pathTo(world, eid, to.x, to.y)) return;
+    // The computer player never queues orders; one it gives replaces any.
+    clearOrderQueue(world, eid);
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
   },
   attackMove(world, eid, to) {
     if (!isMovableEntity(world, eid)) return false;
     if (!pathTo(world, eid, to.x, to.y)) return false;
+    clearOrderQueue(world, eid);
     AttackTarget.targetEid[eid] = -1;
     AttackTarget.retainGoal[eid] = 0;
     if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
@@ -68,6 +72,7 @@ export const directAiActuator: AiActuator = {
   },
   attack(world, eid, target, inRange) {
     if (!inRange && !(isMovableEntity(world, eid) && pathToAttackTarget(world, eid, target))) return;
+    clearOrderQueue(world, eid);
     AttackTarget.targetEid[eid] = target;
     AttackTarget.retainGoal[eid] = 1;
     if (hasComponent(world.ecs, AttackMoveGoal, eid)) AttackMoveGoal.active[eid] = 0;

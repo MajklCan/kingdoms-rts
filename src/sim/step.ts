@@ -15,6 +15,7 @@ import { forestRegrowthSystem } from './systems/forest-regrowth';
 import { gatheringSystem } from './systems/gathering';
 import { gameAnimalSystem } from './systems/hunting';
 import { movementSystem } from './systems/movement';
+import { orderQueueSystem } from './systems/order-queue';
 import { productionSystem } from './systems/production';
 import { cannonImpactSystem, projectileImpactSystem } from './systems/projectiles';
 import { resourceDepletionSystem } from './systems/resource-depletion';
@@ -48,6 +49,9 @@ export function step(world: SimWorld): void {
     applyInput(world, input);
   }
   world.inputs.length = 0;
+
+  // 02 - Shift-queued orders: a unit that finished its order starts the next.
+  orderQueueSystem(world);
 
   // 10 - AI brain tick (player 2 only for now). Throttled inside.
   aiSystem(world);

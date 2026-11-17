@@ -31,6 +31,7 @@ export const MapId = {
   KRKONOSE_WINTER_CROWN: 'krkonose_winter_crown',
   ZBOROV_LINES: 'zborov_lines',
   FLOODED_BASIN: 'flooded_basin',
+  BLANIK_NIGHT_WATCH: 'blanik_night_watch',
 } as const;
 
 export type MapIdValue = (typeof MapId)[keyof typeof MapId];
@@ -53,6 +54,10 @@ export interface MapDef {
   id: MapIdValue;
   name: string;
   description: string;
+  /** Played at night unless the match setup says otherwise. */
+  night?: boolean;
+  /** Built for a campaign mission: not offered in skirmish setup. */
+  campaignOnly?: boolean;
 }
 
 export interface MapData {

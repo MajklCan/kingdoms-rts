@@ -147,8 +147,17 @@ export const DropOffMask = {
 
 /** Maximum capacity a single villager can carry per trip. */
 export const VILLAGER_CARRY_CAPACITY = 10;
-/** Cooldown ticks between gather increments. At 20 Hz, 4 ticks = 0.2 s / unit. */
+/** Cooldown ticks between gather increments: one unit every cooldown + 1
+ *  ticks, so 5 ticks (0.25 s) per unit at 20 Hz. */
 export const VILLAGER_GATHER_COOLDOWN = 4;
+/** Stone is cut at half that pace: one unit every 10 ticks (0.5 s). Deposits
+ *  keep their size, so a quarry both pays out and runs dry half as fast. */
+export const STONE_GATHER_COOLDOWN = 9;
+
+/** Cooldown between gather increments for a resource kind. */
+export function gatherCooldownForKind(kind: number): number {
+  return kind === ResourceKindId.STONE ? STONE_GATHER_COOLDOWN : VILLAGER_GATHER_COOLDOWN;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Phase 6 - Buildings + production

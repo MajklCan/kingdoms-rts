@@ -37,4 +37,6 @@ export const FORMATION_MODE_LINE = 1;
 export const FORMATION_MODE_DEFAULT = FORMATION_MODE_FREE;
 export const FORMATION_FACING_DEFAULT = 0;
 export const ATTACK_RANGE_TOLERANCE = 0.5;
+/** Orders one unit can have waiting behind its current one (Shift + order). */
+export const ORDER_QUEUE_MAX = 8;
 export const AI_PLAYER_ID = 2;

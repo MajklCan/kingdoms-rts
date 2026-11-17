@@ -119,6 +119,28 @@ describe('huntable game', () => {
     expect(Gatherer.state[hunter]).not.toBe(GathererStateId.IDLE);
   });
 
+  it('a Shift-queued hunt starts after the queued move and kills the deer', () => {
+    const world = quietWorld();
+    const [deer] = deerNearBase(world, 1);
+    const [hunter] = villagersNear(world, tcOf(world, P1), 1);
+    const waypoint = { x: Math.round(Position.x[hunter]), y: Math.round(Position.y[hunter]) + 1 };
+    world.inputs.push(
+      { type: 'cmdMove', playerId: P1, eids: [hunter], to: waypoint, queue: true },
+      { type: 'cmdGather', playerId: P1, eids: [hunter], targetEid: deer, queue: true }
+    );
+    stepN(world, 1);
+    expect(world.orderQueues.get(hunter)).toEqual([{ kind: 'gather', targetEid: deer }]);
+
+    let killed = false;
+    for (let i = 0; i < 2400 && !killed; i++) {
+      stepN(world, 1);
+      killed = hasComponent(world.ecs, GameAnimal, deer) && GameAnimal.state[deer] === GameAnimalStateId.CARCASS;
+    }
+    expect(killed).toBe(true);
+    expect(world.orderQueues.has(hunter)).toBe(false);
+    expect(Gatherer.targetEid[hunter]).toBe(deer);
+  });
+
   it('a hunt survives a save round trip with identical checksums', async () => {
     const { serializeSimWorld } = await import('../save/serialize');
     const { loadSimWorldSnapshot } = await import('../save/load');

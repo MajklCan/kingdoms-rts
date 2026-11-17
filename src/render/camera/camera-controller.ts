@@ -38,7 +38,7 @@ const PINCH_SETTLE_MS = 180;
 /** Trackpad pinch: zoom factor per wheel px. */
 const PINCH_WHEEL_RATE = 0.01;
 /** WASD pan speed in px per frame. */
-const PAN_SPEED = 6;
+const PAN_SPEED = 8;
 
 type PanKeys = Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
 

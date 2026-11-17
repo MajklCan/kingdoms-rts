@@ -319,6 +319,50 @@
   text-align: left;
 }
 
+/* Mouse layout: a resource well never squeezes under its content (the
+   numbers used to spill over the frame). The side columns grow to their
+   content instead, so a long resource strip nudges the age plaque off
+   centre rather than overflowing. Touch keeps its own layout (touch.css). */
+html:not([data-input="touch"]) .topbar {
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+}
+
+html:not([data-input="touch"]) .res-chip {
+  flex: none;
+}
+
+/* Narrow window: tighter wells, the plaque follows the strip, and the
+   buttons always keep their place (the strip is what gets clipped last). */
+@media (max-width: 1300px) {
+  html:not([data-input="touch"]) .topbar {
+    grid-template-columns: minmax(0, max-content) auto minmax(max-content, 1fr);
+    gap: 0.5rem;
+  }
+
+  html:not([data-input="touch"]) .res-strip {
+    overflow: hidden;
+  }
+
+  html:not([data-input="touch"]) .res-chip {
+    min-width: 0;
+    gap: 0.25rem;
+    padding: 0 0.4rem 0 0.3rem;
+  }
+
+  html:not([data-input="touch"]) .age-plaque {
+    min-width: 0;
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+}
+
+@media (max-width: 1160px) {
+  html:not([data-input="touch"]) .clock,
+  html:not([data-input="touch"]) .res-workers-icon {
+    display: none;
+  }
+}
+
 /* ---- Age-up banner ---------------------------------------------------------- */
 .age-banner {
   position: absolute;

@@ -176,6 +176,88 @@ describe('villager builders', () => {
     ticksToComplete(world, siteB, HOUSE.buildTimeTicks + 800);
   });
 
+  it('Shift-placing a row: the first site is built at once, the queued ones follow in order', () => {
+    const world = quietWorld();
+    const tc = tcOf(world, P1);
+    const start = findSpawnSpot(world, Position.x[tc] - 3, Position.y[tc] + 2, 5)!;
+    const villager = spawnVillager(world, start.x, start.y, P1, 0);
+    const sites: number[] = [];
+    /** The free house spot nearest to (or farthest from) the villager. */
+    const spotBy = (nearest: boolean) => {
+      const spots: Array<{ x: number; y: number }> = [];
+      for (let skip = 0; skip < 12; skip++) {
+        try {
+          spots.push(houseSpot(world, P1, skip));
+        } catch {
+          break;
+        }
+      }
+      const dist = (s: { x: number; y: number }) => Math.hypot(s.x - Position.x[villager], s.y - Position.y[villager]);
+      return spots.sort((p, q) => (nearest ? dist(p) - dist(q) : dist(q) - dist(p)))[0];
+    };
+    const place = (nearest: boolean, queue: boolean) => {
+      const spot = spotBy(nearest);
+      world.inputs.push({
+        type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: spot.x, y: spot.y, playerId: P1, eids: [villager],
+        ...(queue ? { queue: true } : {}),
+      });
+      step(world);
+      const site = buildingQuery(world.ecs).find(
+        (eid) => hasComponent(world.ecs, ConstructionSite, eid) && Owner.player[eid] === P1 && !sites.includes(eid)
+      )!;
+      expect(site).toBeDefined();
+      sites.push(site);
+    };
+    // The second site is a farther one, the third the nearest free spot: the
+    // queue, not the nearest-site chain, decides what comes next.
+    place(true, false);
+    place(false, true);
+    place(true, true);
+    const [a, b, c] = sites;
+    const fromA = (site: number) => Math.hypot(Position.x[site] - Position.x[a], Position.y[site] - Position.y[a]);
+    expect(fromA(c)).toBeLessThan(fromA(b));
+    expect(BuildOrder.targetEid[villager]).toBe(a);
+    expect(world.orderQueues.get(villager)).toEqual([
+      { kind: 'build', targetEid: b },
+      { kind: 'build', targetEid: c },
+    ]);
+
+    const done: number[] = [];
+    for (let i = 0; i < HOUSE.buildTimeTicks * 3 + 1500 && done.length < 3; i++) {
+      step(world);
+      for (const site of sites) {
+        if (!done.includes(site) && !hasComponent(world.ecs, ConstructionSite, site)) done.push(site);
+      }
+    }
+    expect(done).toEqual([a, b, c]);
+    expect(world.orderQueues.has(villager)).toBe(false);
+  });
+
+  it('Shift on a foundation queues the build; a site finished meanwhile is skipped', () => {
+    const world = quietWorld();
+    const first = houseSpot(world);
+    const siteA = spawnFoundation(world, BuildingDefId.HOUSE, first.x, first.y, P1);
+    const [builder] = buildersAt(world, siteA, 1);
+    const second = houseSpot(world);
+    const siteB = spawnFoundation(world, BuildingDefId.HOUSE, second.x, second.y, P1);
+    const third = houseSpot(world);
+    const siteC = spawnFoundation(world, BuildingDefId.HOUSE, third.x, third.y, P1);
+    world.inputs.push(
+      { type: 'cmdBuild', playerId: P1, eids: [builder], targetEid: siteB, queue: true },
+      { type: 'cmdBuild', playerId: P1, eids: [builder], targetEid: siteC, queue: true }
+    );
+    step(world);
+    expect(BuildOrder.targetEid[builder]).toBe(siteA);
+    expect(world.orderQueues.get(builder)?.map((order) => order.kind)).toEqual(['build', 'build']);
+    // Someone else finishes B first: the builder goes from A straight to C.
+    buildersAt(world, siteB, 3);
+    ticksToComplete(world, siteB, HOUSE.buildTimeTicks + 200);
+    ticksToComplete(world, siteA, HOUSE.buildTimeTicks + 200);
+    step(world);
+    expect(BuildOrder.targetEid[builder]).toBe(siteC);
+    expect(world.orderQueues.has(builder)).toBe(false);
+  });
+
   it('a move or gather order takes a builder off the job', () => {
     const world = quietWorld();
     const spot = houseSpot(world);

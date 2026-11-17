@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../config';
 import { Position, Resource, ResourceKindId } from './components';
+import { CENTER_GOLD_AMOUNT, CENTER_STONE_AMOUNT } from './core/deposit-sites';
 import { MAP_DEFS, MapFeatureKind, MapId, generateMap, TileType } from './map-gen';
 import { Rng } from './rng';
 import { createSimWorld, resourceQuery, type SimWorld } from './world';
@@ -300,8 +301,8 @@ describe('map bridges', () => {
     const world = createSimWorld(703, { mapId: MapId.FLOODED_BASIN });
     const centralResources = resourceQuery(world.ecs)
       .filter((eid) =>
-        (Resource.kind[eid] === ResourceKindId.GOLD && Resource.amount[eid] === 850)
-        || (Resource.kind[eid] === ResourceKindId.STONE && Resource.amount[eid] === 750)
+        (Resource.kind[eid] === ResourceKindId.GOLD && Resource.amount[eid] === CENTER_GOLD_AMOUNT)
+        || (Resource.kind[eid] === ResourceKindId.STONE && Resource.amount[eid] === CENTER_STONE_AMOUNT)
       )
       .map((eid) => [
         Resource.kind[eid],

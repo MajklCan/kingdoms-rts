@@ -30,7 +30,9 @@ export const HERDS_PER_SIDE = 3;
 export const HERD_MIN_SPAWN_DISTANCE = 15;
 /** A herd and its mirror stay this far apart, so the middle gets no double herd. */
 const HERD_MIN_MIRROR_DISTANCE = 10;
-const HERD_PLACEMENT_ATTEMPTS = 10;
+/** Tries per herd. The mirrored stone and gold fields leave fewer open
+ *  spots on some maps (the flooded basin), so a herd gets many tries. */
+const HERD_PLACEMENT_ATTEMPTS = 40;
 /** Member offsets from the herd centre; a herd uses the first `size`. */
 const HERD_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],

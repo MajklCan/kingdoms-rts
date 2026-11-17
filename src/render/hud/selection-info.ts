@@ -250,6 +250,10 @@ function selectionStats(world: SimWorld, kind: SelectionKind, e0: number): strin
       stats += '  Food drop-off +50%';
     } else if (def.trains.length > 0) {
       stats += '  Producer';
+    }
+    // Armed buildings (tower, town center) show what they shoot with.
+    if (hasComponent(ecs, Combat, e0)) {
+      stats += `  Atk ${Combat.atk[e0]}  Rng ${formatRange(Combat.range[e0])}`;
     } else if (def.combat) {
       stats += `  Atk ${def.combat.atk}  Rng ${formatRange(def.combat.range)}`;
     }
@@ -263,15 +267,19 @@ function selectionStats(world: SimWorld, kind: SelectionKind, e0: number): strin
   return '';
 }
 
-/** Status line for the first selected gatherer / producer (or the MP stall). */
+/**
+ * Lockstep waits a few milliseconds for the next turn all the time, many
+ * times a second (even for our own, not yet due); a status line for each of
+ * those flickered "waiting for P1 / P2". Only a felt wait is worth showing:
+ * the sim has not moved for this long and a peer's turn is what it lacks.
+ */
+export const STALL_HINT_DELAY_MS = 750;
+
+/** Status line for the first selected gatherer / producer (or a felt MP stall). */
 export function getStatusInfo(ctx: SceneContext): { text: string; progressFrac: number | null } {
   const mpSession = ctx.multiplayer;
-  if (mpSession?.stalled) {
-    const mp = mpSession.debugSnapshot();
-    const missing = mp.lockstep?.missingPlayers ?? [];
-    const suffix = missing.length > 0 ? ` P${missing.join(',P')}` : ' peer';
-    return { text: `waiting for${suffix}`, progressFrac: null };
-  }
+  const waitingFor = mpSession && mpSession.msSinceLastStep() >= STALL_HINT_DELAY_MS ? mpSession.waitingForPeers() : [];
+  if (waitingFor.length > 0) return { text: `waiting for P${waitingFor.join(', P')}`, progressFrac: null };
   const world = ctx.world;
   for (const eid of selectedQuery(world.ecs)) {
     const villagerText = villagerStatusText(world, eid);

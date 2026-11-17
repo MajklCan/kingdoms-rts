@@ -288,6 +288,27 @@ export class MultiplayerSession {
     return this.lockstep?.isStalled() ?? false;
   }
 
+  /**
+   * Wall-clock time since the sim last advanced, while playing; 0 otherwise.
+   * `stalled` cannot tell a felt wait: in steady play the exec clock catches
+   * up with the newest turn every frame, so the next tick always lacks a
+   * packet (often our own, not yet due) and `stalled` reads true nearly all
+   * the time.
+   */
+  msSinceLastStep(now = nowMs()): number {
+    if (this.state !== 'playing' || this.lastStepAtMs <= 0) return 0;
+    return Math.max(0, now - this.lastStepAtMs);
+  }
+
+  /**
+   * Peers whose turn the next tick still lacks. Never the local player: our
+   * own turns go out on our own clock.
+   */
+  waitingForPeers(): number[] {
+    const missing = this.lockstep?.debugSnapshot(1).missingPlayers ?? [];
+    return missing.filter((id) => id !== this.localPlayerId);
+  }
+
   recordClientEvent(event: string, data?: Record<string, unknown>): void {
     this.recordEvent(`client-${event}`, data);
   }

@@ -13,6 +13,13 @@
  *         advance (`ages[].progress`).
  *   v5  the tech rings + the optional entity fields, and the Commander
  *       research granted wherever the Barracks research is done
+ *   v6  + night (night match) and orderQueues (Shift-queued orders), both
+ *       optional; Cavalry moved into ring I (granted where a realm would
+ *       otherwise lose its open ring II, save/migrate-tech-rings.ts)
+ *
+ * Finished armed buildings saved without combat data (town centers from
+ * before they could shoot) get it on every load, whatever the version
+ * (save/migrate-building-combat.ts).
  */
 
 import type { MapFeature } from '../map-gen';
@@ -24,12 +31,14 @@ import type {
   LastSeenBuilding,
   MatchOutcome,
   PlayerMatchStats,
+  QueuedOrder,
 } from '../world';
 import type { GridPos } from '../pathfinding';
 import type { TechIdValue } from '../tech-tree';
-import { migrateSaveV3ToV4, migrateSaveV4ToV5 } from './migrate-tech-rings';
+import { armSavedBuildings } from './migrate-building-combat';
+import { migrateSaveV3ToV4, migrateSaveV4ToV5, migrateSaveV5ToV6 } from './migrate-tech-rings';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const LATE_GAME_TEST_SAVE_ID = 'late-game-test';
 
 export interface SavedMapV1 {
@@ -127,6 +136,8 @@ export interface SavedGameV1 {
   /** v1-v3 hold the age-era research ids (castle_age, lumber_huts, ...). */
   researchedTechs?: string[][];
   revealedMapPlayers?: boolean[];
+  /** Night match (absent in older saves: day). */
+  night?: boolean;
   humanPlayers?: number[];
   formationModes?: number[];
   formationFacings?: number[];
@@ -137,6 +148,8 @@ export interface SavedGameV1 {
   /** Town center villager rallies (absent in older saves: none set). */
   villagerRallies?: Array<{ eid: number; x: number; y: number; targetEid: number; kind: number }>;
   paths: Array<{ eid: number; waypoints: GridPos[] }>;
+  /** Shift-queued orders per unit, next first (absent in older saves: none queued). */
+  orderQueues?: Array<{ eid: number; orders: QueuedOrder[] }>;
   movementStuck?: Array<{ eid: number; lastDist: number; waypointX: number; waypointY: number; noProgressTicks: number; cooldownTicks: number; attempts: number }>;
   formationSpeedCaps?: Array<{ eid: number; speedCap: number }>;
   cannonWindups?: Array<{ attackerEid: number; targetEid: number; ticksRemaining: number }>;
@@ -181,8 +194,13 @@ export interface SavedGameV5 extends Omit<SavedGameV4, 'version'> {
   version: 5;
 }
 
+/** v6: the v5 shape; `night` and `orderQueues` (optional on every version) are written. */
+export interface SavedGameV6 extends Omit<SavedGameV5, 'version'> {
+  version: 6;
+}
+
 /** The current save format. */
-export type SavedGame = SavedGameV5;
+export type SavedGame = SavedGameV6;
 
 export interface SavedAiPlayerStateV1 {
   plan: AiPlayerState['plan'];
@@ -271,19 +289,28 @@ export function sanitizeSavedMatchStats(raw: unknown, players: number): PlayerMa
  * statistics; nothing in it lets us reconstruct them, so they start at zero
  * (peak population at the population saved). v1 and v2 predate the stored map
  * seed; it is derived from the map bytes instead (stable for that save).
- * v1-v3 predate the tech rings (save/migrate-tech-rings.ts).
+ * v1-v3 predate the tech rings (save/migrate-tech-rings.ts). Finished armed
+ * buildings saved without combat data get it (save/migrate-building-combat.ts).
  * Returns null for unknown versions.
  */
-export type AnySavedGame = SavedGameV1 | SavedGameV2 | SavedGameV3 | SavedGameV4 | SavedGameV4Roles | SavedGameV5;
+export type AnySavedGame =
+  | SavedGameV1
+  | SavedGameV2
+  | SavedGameV3
+  | SavedGameV4
+  | SavedGameV4Roles
+  | SavedGameV5
+  | SavedGameV6;
 
 export function migrateSavedGame(save: AnySavedGame): SavedGame | null {
-  if (save.version === 5) return sanitizeCurrent(save);
+  if (save.version === 6) return sanitizeCurrent(save);
+  if (save.version === 5) return sanitizeCurrent(migrateSaveV5ToV6(save));
   if (save.version === 4) {
     const rings = isRolesSaveV4(save) ? migrateSaveV3ToV4({ ...save, version: 3 }) : save;
-    return sanitizeCurrent(migrateSaveV4ToV5(rings));
+    return sanitizeCurrent(migrateSaveV5ToV6(migrateSaveV4ToV5(rings)));
   }
   const v3 = migrateToV3(save);
-  return v3 ? migrateSaveV4ToV5(migrateSaveV3ToV4(v3)) : null;
+  return v3 ? sanitizeCurrent(migrateSaveV5ToV6(migrateSaveV4ToV5(migrateSaveV3ToV4(v3)))) : null;
 }
 
 /** The roles v4 still has the age advance on every age (`progress`, -1 = none). */
@@ -291,13 +318,13 @@ function isRolesSaveV4(save: SavedGameV4 | SavedGameV4Roles): save is SavedGameV
   return Array.isArray(save.ages) && save.ages.some((age) => typeof (age as { progress?: unknown }).progress === 'number');
 }
 
-function sanitizeCurrent(save: SavedGameV5): SavedGame {
+function sanitizeCurrent(save: SavedGameV6): SavedGame {
   const players = Array.isArray(save.resources) ? save.resources.length : 0;
-  return {
+  return armSavedBuildings({
     ...save,
     matchStats: sanitizeSavedMatchStats(save.matchStats, players),
     mapSeed: typeof save.mapSeed === 'number' ? normalizeMapSeed(save.mapSeed) : seedFromMap(save),
-  };
+  });
 }
 
 function migrateToV3(save: SavedGameV1 | SavedGameV2 | SavedGameV3): SavedGameV3 | null {

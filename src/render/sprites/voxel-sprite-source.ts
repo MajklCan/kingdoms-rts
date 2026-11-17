@@ -53,7 +53,7 @@ export class VoxelSpriteSource implements SpriteSource {
 
   building(query: BuildingSpriteQuery): SpriteRef | null {
     const variant = query.wallMask === undefined ? undefined : wallAxisForMask(query.wallMask);
-    const sprite = voxelBuildingSprite(query.defId, query.age, query.playerId, variant);
+    const sprite = voxelBuildingSprite(query.defId, query.age, query.playerId, variant, query.construction);
     return sprite ? this.ref(sprite.key, sprite.originY, 1) : null;
   }
 

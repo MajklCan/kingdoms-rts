@@ -190,6 +190,7 @@ export function checksumWorld(world: SimWorld): number {
   h.u32(humanPlayers.length);
   for (const playerId of humanPlayers) h.u32(playerId);
   h.str(world.aiDifficulty);
+  h.bit(world.night);
   h.str(world.outcome.state);
   if (world.outcome.state === 'victory') {
     h.u32(world.outcome.winnerPlayerId);
@@ -401,6 +402,24 @@ export function checksumWorld(world: SimWorld): number {
   hashEntityMap(h, world.formationSpeedCaps, canon, (speedCap) => {
     h.f32(speedCap);
   });
+  // Shift-queued orders. Mixed in only when some exist, so a match that never
+  // queues an order hashes exactly as it did before queues existed.
+  if (world.orderQueues.size > 0) {
+    h.u32(0x0bd3);
+    hashEntityMap(h, world.orderQueues, canon, (queue) => {
+      h.u32(queue.length);
+      for (const order of queue) {
+        h.str(order.kind);
+        if (!('targetEid' in order)) {
+          h.f32(order.x);
+          h.f32(order.y);
+          h.f32(order.speedCap);
+        } else {
+          h.u32(canon(order.targetEid));
+        }
+      }
+    });
+  }
   hashEntityMap(h, world.cannonWindups, canon, (windup) => {
     h.u32(canon(windup.targetEid));
     h.u32(windup.ticksRemaining);

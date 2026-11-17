@@ -83,6 +83,7 @@ import { PointerController } from './input/pointer-controller';
 import { TouchController } from './input/touch-controller';
 import { createInspectionSheet, requestedInspectionSheet } from './inspection/inspection-sheets';
 import { FogRenderer } from './overlays/fog-renderer';
+import { NightRenderer } from './overlays/night-renderer';
 import { StatusOverlay } from './overlays/status-overlay';
 import { BuildPlacement } from './placement/build-placement';
 import { SceneContext } from './scene-context';
@@ -110,6 +111,7 @@ export class GameScene extends Phaser.Scene {
   private huntableGame!: GameRenderer;
   private status!: StatusOverlay;
   private fog!: FogRenderer;
+  private night!: NightRenderer;
   private effects!: EffectsLayer;
   private combat!: CombatFeedback;
   private worldFx!: WorldFx;
@@ -193,6 +195,7 @@ export class GameScene extends Phaser.Scene {
       effects: this.effects,
     });
     this.worldFx = new WorldFx(this.ctx, { units: this.units, buildings: this.buildings, resources: this.resources, combat: this.combat, audio: this.audio });
+    this.night = new NightRenderer(this.ctx, { units: this.units, buildings: this.buildings, fx: this.worldFx.fx });
     this.actions = new ActionGrid(this.ctx, this.commands, this.placement);
     this.cheats = this.createCheats();
 
@@ -285,6 +288,7 @@ export class GameScene extends Phaser.Scene {
       this.status.drawAttackHover(ctx.pointerTile(pointer));
     }
     this.fog.draw();
+    this.night.draw(delta);
     this.layers.entities.sort();
     this.fps = this.game.loop.actualFps;
   }
@@ -400,11 +404,13 @@ export class GameScene extends Phaser.Scene {
   startNewGame(
     startingAge: AgeIdValue = AgeId.DARK,
     mapId?: MapIdValue,
-    aiDifficulty: AiDifficulty = 'medium'
+    aiDifficulty: AiDifficulty = 'medium',
+    /** Night match; undefined = the map's own time of day. */
+    night?: boolean
   ): void {
     const age = getAgeDef(startingAge) ?? getAgeDef(AgeId.DARK);
-    this.ctx.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty });
-    this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI`);
+    this.ctx.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty, night });
+    this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI${this.world.night ? ' - night' : ''}`);
   }
 
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
@@ -628,7 +634,7 @@ export class GameScene extends Phaser.Scene {
       spawnEffect: (id, tileX, tileY, params) =>
         this.effects.spawn(id, { x: tileX, y: tileY }, { params }) !== null,
       shake: (intensity, durationMs) => this.effects.shake(intensity, durationMs),
-      startSkirmish: (mapId, age) => this.startNewGame(age as AgeIdValue | undefined, mapId as MapIdValue),
+      startSkirmish: (mapId, age, night) => this.startNewGame(age as AgeIdValue | undefined, mapId as MapIdValue, 'medium', night),
       startCampaign: (missionId) => this.startCampaignMission(missionId as CampaignMissionIdValue),
       loadLateGame: () => this.loadLateGameTestSave(),
       setZoom: (zoom) => this.camera.zoomTo(zoom, undefined, undefined, true),
@@ -667,6 +673,7 @@ export class GameScene extends Phaser.Scene {
     this.placement.reset();
     this.effects.clear();
     this.worldFx.clear();
+    this.night.clear();
     this.status.clear();
     this.alerts.clear();
     this.uiApi?.reset();

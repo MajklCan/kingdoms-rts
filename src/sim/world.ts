@@ -27,13 +27,15 @@ export type {
   PlayerMatchStats,
   PlayerVisibility,
   PopState,
+  QueuedOrder,
   SimInput,
   SimWorld,
   SoundCue,
   SoundCueKind,
   VillagerRally,
 } from './core/types';
-export { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
+export { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, ORDER_QUEUE_MAX, POP_CAP_HARD_LIMIT } from './core/constants';
+export { orderQueueRefusalForAll, type OrderQueueRefusal } from './input/order-queue';
 export { addSimEntity, entityForNetId, netIdForEntity, removeSimEntity } from './core/entities';
 export {
   buildingQuery,
@@ -112,6 +114,8 @@ export {
 export { createLateGameTestWorld } from './factories/late-game';
 export { playerFormationFacing, playerFormationMode } from './input/formation';
 export {
+  DAY_SIGHT,
+  NIGHT_SIGHT,
   createVisibilityState,
   createVisibilityStates,
   getPlayerVisibility,
@@ -120,6 +124,7 @@ export {
   isEntityVisibleTo,
   isTileExploredBy,
   isTileVisibleTo,
+  lineOfSightRadius,
   revealMapForPlayer,
   tileVisibilityIndex,
   updatePlayerVisibility,

@@ -19,7 +19,7 @@ import {
   type ResourceKind,
   ResourceWorksite,
   VILLAGER_CARRY_CAPACITY,
-  VILLAGER_GATHER_COOLDOWN,
+  gatherCooldownForKind,
   VillagerJobId,
   VillagerTag,
 } from '../components';
@@ -114,7 +114,7 @@ function gatheringWalkingTo(world: SimWorld, eid: number): void {
     // Arrived at the resource node. Keep this tight so harvesting animations
     // visually connect with the trunk / rock / bush rather than swinging at air.
     Gatherer.state[eid] = GathererStateId.GATHERING;
-    Gatherer.cooldown[eid] = huntArrivalCooldown(world, eid, target, VILLAGER_GATHER_COOLDOWN);
+    Gatherer.cooldown[eid] = huntArrivalCooldown(world, eid, target, gatherCooldownForKind(Resource.kind[target]));
     world.paths.delete(eid);
     noteHandWork(world, eid, target);
     return;
@@ -165,7 +165,7 @@ function gatheringActive(world: SimWorld, eid: number): void {
   }
   ResourceCarry.amount[eid] += 1;
   Resource.amount[target] -= 1;
-  Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
+  Gatherer.cooldown[eid] = gatherCooldownForKind(kind);
   pushSoundCue(world, gatherCueForKind(kind), Position.x[eid], Position.y[eid], Owner.player[eid]);
 
   // An emptied node stays until resourceDepletionSystem removes it later this
@@ -227,7 +227,7 @@ export function startGatheringResource(world: SimWorld, eid: number, target: num
   const isClose =
     dhypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) <=
     RESOURCE_GATHER_DISTANCE;
-  Gatherer.cooldown[eid] = isClose ? huntArrivalCooldown(world, eid, target, VILLAGER_GATHER_COOLDOWN) : 0;
+  Gatherer.cooldown[eid] = isClose ? huntArrivalCooldown(world, eid, target, gatherCooldownForKind(Resource.kind[target])) : 0;
   Gatherer.state[eid] = isClose ? GathererStateId.GATHERING : GathererStateId.WALKING_TO;
   noteHandWork(world, eid, target);
   return true;

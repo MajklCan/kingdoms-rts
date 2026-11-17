@@ -16,6 +16,7 @@ import { selectedQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnFoundation } from '../factories/buildings';
 import { markWorksiteWorkersDead, worksiteUsesResourceNodes } from '../systems/worksites';
+import { queueBuildOrders } from './order-queue';
 import { applyBuildCommand } from './unit-orders';
 import { applyPlaceWallLine } from './walls';
 
@@ -51,7 +52,8 @@ export function applyPlaceBuilding(
   x: number,
   y: number,
   playerId: number,
-  builderEids: number[] = []
+  builderEids: number[] = [],
+  queue = false
 ): void {
   const def = getBuildingDef(defId);
   if (!def) return;
@@ -74,7 +76,9 @@ export function applyPlaceBuilding(
 
   spend(bank, def.cost);
   const siteEid = spawnFoundation(world, defId, x, y, playerId);
-  applyBuildCommand(world, playerId, builderEids, siteEid);
+  // A Shift-placed row: the builders take it after what they are doing.
+  if (queue) queueBuildOrders(world, playerId, builderEids, siteEid);
+  else applyBuildCommand(world, playerId, builderEids, siteEid);
 }
 
 /**

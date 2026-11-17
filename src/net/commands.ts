@@ -35,19 +35,20 @@ type WireCommandType = Exclude<
   | 'removeSelectedBuildings'
 >;
 
-type FieldKind = 'int' | 'optInt' | 'num' | 'string' | 'eids' | 'optEids' | 'point';
+type FieldKind = 'int' | 'optInt' | 'optBool' | 'num' | 'string' | 'eids' | 'optEids' | 'point';
 
 /** Field schema per wire-safe command (playerId is checked separately). A new
  *  SimInput command type must be added here before it can be sent. */
 const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
-  cmdMove: { eids: 'eids', to: 'point' },
-  cmdGather: { eids: 'eids', targetEid: 'int' },
-  cmdBuild: { eids: 'eids', targetEid: 'int' },
+  // `queue` (Shift + order) is optional: packets without it are plain orders.
+  cmdMove: { eids: 'eids', to: 'point', queue: 'optBool' },
+  cmdGather: { eids: 'eids', targetEid: 'int', queue: 'optBool' },
+  cmdBuild: { eids: 'eids', targetEid: 'int', queue: 'optBool' },
   cmdAssignWorksite: { eids: 'eids', targetEid: 'int' },
   cmdStop: { eids: 'eids' },
   cmdToggleStance: { eids: 'eids' },
-  cmdAttack: { eids: 'eids', targetEid: 'int' },
-  cmdAttackMove: { eids: 'eids', to: 'point' },
+  cmdAttack: { eids: 'eids', targetEid: 'int', queue: 'optBool' },
+  cmdAttackMove: { eids: 'eids', to: 'point', queue: 'optBool' },
   cmdRemoveBuildings: { eids: 'eids' },
   cmdSetStance: { eids: 'eids', stance: 'int' },
   cmdSetFormationMode: { eids: 'eids', mode: 'int' },
@@ -57,7 +58,7 @@ const WIRE_COMMANDS: Record<WireCommandType, Record<string, FieldKind>> = {
   setArmyRallyPoint: { x: 'num', y: 'num' },
   setVillagerRally: { atEid: 'int', x: 'int', y: 'int', targetEid: 'optInt' },
   clearVillagerRally: { atEid: 'int' },
-  placeBuilding: { defId: 'int', x: 'int', y: 'int', eids: 'optEids' },
+  placeBuilding: { defId: 'int', x: 'int', y: 'int', eids: 'optEids', queue: 'optBool' },
   placeWallLine: { x0: 'int', y0: 'int', x1: 'int', y1: 'int', eids: 'optEids' },
   trainUnit: { atEid: 'int', defId: 'int', count: 'optInt' },
   cancelProduction: { atEid: 'int', slot: 'optInt' },
@@ -82,6 +83,8 @@ function fieldOk(kind: FieldKind, value: unknown): boolean {
       return Number.isInteger(value);
     case 'optInt':
       return value === undefined || Number.isInteger(value);
+    case 'optBool':
+      return value === undefined || typeof value === 'boolean';
     case 'num':
       return typeof value === 'number' && Number.isFinite(value);
     case 'string':

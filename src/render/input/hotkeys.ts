@@ -24,7 +24,10 @@ export interface HotkeyDeps {
   buildHotkey(key: string): boolean;
 }
 
-/** B + key: [key, mode, prompt]. */
+/**
+ * B + key (or the key alone while the build buttons show): [key, mode, prompt].
+ * W, A, S and D are left out: they pan the camera.
+ */
 const BUILD_KEYS: Array<[string, Exclude<BuildMode, 'none'>, string]> = [
   ['M', 'FARM', 'build FARM - left-click to place'],
   ['I', 'MILL', 'build MILL - left-click to place'],
@@ -32,11 +35,11 @@ const BUILD_KEYS: Array<[string, Exclude<BuildMode, 'none'>, string]> = [
   ['G', 'GOLD_MINE', 'build GOLD MINE - left-click near gold'],
   ['C', 'STONE_QUARRY', 'build STONE QUARRY - left-click near stone'],
   ['R', 'BARRACKS', 'build BARRACKS - left-click to place'],
-  ['A', 'ARCHERY_RANGE', 'build ARCHERY RANGE - left-click to place'],
+  ['N', 'ARCHERY_RANGE', 'build ARCHERY RANGE - left-click to place'],
   ['T', 'STABLE', 'build STABLE - left-click to place'],
   ['F', 'FOUNDRY', 'build FOUNDRY - left-click to place'],
   ['Y', 'DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - left-click to place'],
-  ['W', 'WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
+  ['Z', 'WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
 ];
 
 export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {

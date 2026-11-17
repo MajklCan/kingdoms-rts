@@ -13,7 +13,7 @@ import type { AiDifficulty, SimWorld } from '../../sim/world';
 import { appState, setPhase, type MatchKind } from '../app-state';
 import { endMatch, getScene } from '../game-bridge';
 import { enterMenu, leaveMenu, type MenuScreenId } from '../screens/menu-shell';
-import { runLoading, type LoadingKind } from '../screens/loading';
+import { isLoading, runLoading, type LoadingKind } from '../screens/loading';
 import { beginAutosaveSession, discardAutosave, endAutosaveSession } from '../saves/autosave';
 import { autosaveTitle } from '../saves/autosave-meta';
 import type { AutosaveRecord } from '../saves/autosave-store';
@@ -47,7 +47,17 @@ interface LaunchSpec {
   task: () => void;
 }
 
+/**
+ * Repeats the launch of the running match with everything it was started
+ * with (null: nothing to repeat). Every start function below goes through
+ * launch(), whose spec's `task` closure holds that function's arguments, so
+ * a new argument is repeated too without touching this.
+ */
+let relaunch: (() => void) | null = null;
+
 async function launch(spec: LaunchSpec): Promise<void> {
+  // A multiplayer match cannot be repeated alone: the rival plays on.
+  relaunch = spec.kind === 'multiplayer' ? null : () => void launch(spec);
   leaveMenu();
   const ok = await runLoading({
     title: spec.title,
@@ -60,6 +70,7 @@ async function launch(spec: LaunchSpec): Promise<void> {
     },
   });
   if (!ok) {
+    relaunch = null;
     appState.matchKind = null;
     setPhase('menu');
     enterMenu('root');
@@ -70,19 +81,20 @@ function missionMapId(missionId: string | null): MapIdValue | null {
   return CAMPAIGN_MISSIONS.find((m) => m.id === missionId)?.mapId ?? null;
 }
 
-export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty): void {
+export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty, night?: boolean): void {
   const map = MAP_DEFS.find((m) => m.id === mapId);
   const ageName = AGE_TABLE.find((a) => a.id === age)?.name ?? 'Dark Age';
   const diff = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+  const atNight = night ?? map?.night === true;
   void launch({
     kind: 'skirmish',
     title: map?.name ?? 'Skirmish',
-    subtitle: `${ageName} · ${diff} AI`,
+    subtitle: `${ageName} · ${diff} AI${atNight ? ' · Night' : ''}`,
     mapId,
     task: () => {
       const scene = getScene();
       if (!scene) return;
-      scene.startNewGame(age, mapId, difficulty);
+      scene.startNewGame(age, mapId, difficulty, atNight);
       beginAutosaveSession(scene, { mapName: map?.name ?? null });
     },
   });
@@ -177,12 +189,34 @@ export function startMultiplayerMatch(world: SimWorld, localPlayerId: number): v
   });
 }
 
+/** True when the running match can be started again (not in multiplayer). */
+export function canRestartMatch(): boolean {
+  return relaunch !== null;
+}
+
+/**
+ * Start the running match again from its beginning: a skirmish on the same
+ * map, starting age and AI (new seed), a campaign mission from its briefing,
+ * a loaded save from that save. False when there is nothing to repeat.
+ */
+export function restartMatch(): boolean {
+  const again = relaunch;
+  if (!again || isLoading()) return false;
+  // The old match stops autosaving; the new one opens its own session.
+  endAutosaveSession();
+  // A new match starts at normal speed, like one started from the menu.
+  getScene()?.setGameSpeed(1);
+  again();
+  return true;
+}
+
 /** Leave the running match and return to the title screens, in every mode
  *  and without a reload: the scene tears the match down (a multiplayer
  *  session is left properly, so the relay tells the rival) and idles. */
 export function quitToMenu(screen: MenuScreenId = 'root'): void {
   for (const fn of endListeners) fn();
   endAutosaveSession();
+  relaunch = null;
   endMatch();
   appState.mpSession = null;
   appState.matchKind = null;

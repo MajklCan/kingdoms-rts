@@ -74,21 +74,24 @@ export function isSelectionRelativeInput(input: SimInput): input is SelectionRel
 export function toSelfDescribingInput(world: SimWorld, playerId: number, input: SimInput): SimInput {
   if (!isSelectionRelativeInput(input)) return input;
   const eids = selectedCommandableEids(world, playerId);
+  // The Shift-queue flag travels only when set, so an order without it is
+  // the same packet it always was.
+  const queue = 'queue' in input && input.queue === true ? { queue: true } : {};
   switch (input.type) {
     case 'moveSelected':
-      return { type: 'cmdMove', playerId, eids, to: { ...input.to } };
+      return { type: 'cmdMove', playerId, eids, to: { ...input.to }, ...queue };
     case 'attackSelected':
-      return { type: 'cmdAttack', playerId, eids, targetEid: input.targetEid };
+      return { type: 'cmdAttack', playerId, eids, targetEid: input.targetEid, ...queue };
     case 'gatherSelected':
-      return { type: 'cmdGather', playerId, eids, targetEid: input.targetEid };
+      return { type: 'cmdGather', playerId, eids, targetEid: input.targetEid, ...queue };
     case 'buildSelected':
-      return { type: 'cmdBuild', playerId, eids, targetEid: input.targetEid };
+      return { type: 'cmdBuild', playerId, eids, targetEid: input.targetEid, ...queue };
     case 'assignWorksiteSelected':
       return { type: 'cmdAssignWorksite', playerId, eids, targetEid: input.targetEid };
     case 'stopSelected':
       return { type: 'cmdStop', playerId, eids };
     case 'attackMoveSelected':
-      return { type: 'cmdAttackMove', playerId, eids, to: { ...input.to } };
+      return { type: 'cmdAttackMove', playerId, eids, to: { ...input.to }, ...queue };
     case 'toggleSelectedUnitStance':
       return { type: 'cmdToggleStance', playerId, eids };
     case 'setSelectedUnitStance':

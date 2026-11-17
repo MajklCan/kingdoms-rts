@@ -86,6 +86,25 @@ export const BuildingDefId = {
 export type BuildingDefIdValue =
   (typeof BuildingDefId)[keyof typeof BuildingDefId];
 
+/** The defensive tower's arrow fire. */
+const TOWER_COMBAT = {
+  atk: 10,
+  range: 7,
+  attackSpeedTicks: Math.round(SIM.TICK_HZ * 1.35),
+  aggroRadius: 8,
+} as const;
+
+/** How much further than a tower the town center shoots, in tiles. */
+export const TOWN_CENTER_RANGE_BONUS = 2;
+
+/** The town center defends itself with the tower's arrows (same damage and
+ *  rate of fire), from further out. Its sight (visibility.ts) covers the range. */
+const TOWN_CENTER_COMBAT = {
+  ...TOWER_COMBAT,
+  range: TOWER_COMBAT.range + TOWN_CENTER_RANGE_BONUS,
+  aggroRadius: TOWER_COMBAT.aggroRadius + TOWN_CENTER_RANGE_BONUS,
+} as const;
+
 export const BUILDING_TABLE: BuildingDef[] = [
   {
     id: 'TOWN_CENTER',
@@ -101,6 +120,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     isDropOff: true,
     dropOffMask: 0b1111,
     trains: ['VILLAGER'],
+    combat: { ...TOWN_CENTER_COMBAT },
   },
   {
     id: 'HOUSE',
@@ -245,12 +265,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     isDropOff: false,
     dropOffMask: 0,
     trains: [],
-    combat: {
-      atk: 10,
-      range: 7,
-      attackSpeedTicks: Math.round(SIM.TICK_HZ * 1.35),
-      aggroRadius: 8,
-    },
+    combat: { ...TOWER_COMBAT },
   },
   {
     id: 'FOUNDRY',
@@ -354,7 +369,8 @@ export const UNIT_TABLE: UnitDef[] = [
     id: 'SCOUT_CAVALRY',
     name: 'Scout Cavalry',
     hp: 60,
-    cost: { food: 80, wood: 0, gold: 40, stone: 0 },
+    // No gold: riders are a ring I unit now, and gold mines open in ring II.
+    cost: { food: 80, wood: 40, gold: 0, stone: 0 },
     trainTimeTicks: Math.round(SIM.TICK_HZ * 28),
     popCost: 1,
     trainAt: 'STABLE',

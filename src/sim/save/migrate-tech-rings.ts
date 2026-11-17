@@ -20,12 +20,13 @@ import {
   TechId,
   type TechIdValue,
   createStartingTechSetForAge,
+  isRingOpen,
   isTechId,
   openRing,
   ringEra,
   techIdsInRing,
 } from '../tech-tree';
-import type { SavedCampaignV1, SavedCampaignV4, SavedGameV3, SavedGameV4, SavedGameV5 } from './schema';
+import type { SavedCampaignV1, SavedCampaignV4, SavedGameV3, SavedGameV4, SavedGameV5, SavedGameV6 } from './schema';
 
 /** What advancing into each age cost before the rings ([food, wood, gold, stone]). */
 const LEGACY_ADVANCE_COST: Record<number, readonly [number, number, number, number]> = {
@@ -116,4 +117,29 @@ export function migrateSaveV4ToV5(save: SavedGameV4): SavedGameV5 {
     ids.includes(TechId.BARRACKS_PIKEMEN) && !ids.includes(TechId.COMMANDER) ? [...ids, TechId.COMMANDER] : ids.slice()
   );
   return { ...save, version: 5, researchedTechs };
+}
+
+/**
+ * Save v5 -> v6: Cavalry moved from ring II into ring I, as a branch after
+ * Barracks, so the arms path is complete in ring I only with it. A realm
+ * whose ring II was open (its era says so) and that would lose it for want of
+ * Cavalry alone gets the research, as the Commander was granted in v5. The
+ * night flag and Shift-queued orders are new optional fields: absent means a
+ * day match and nothing queued.
+ */
+export function migrateSaveV5ToV6(save: SavedGameV5): SavedGameV6 {
+  const researched = (save.researchedTechs ?? []).map((ids) => new Set<TechIdValue>(ids));
+  const ringWorld = {
+    researchedTechs: researched,
+    ages: (save.ages ?? []).map((age) => ({ current: age.current })),
+    campaign: save.campaign ? { lockedTechs: save.campaign.lockedTechs ?? [] } : null,
+  };
+  researched.forEach((techs, playerId) => {
+    if (playerId === 0 || techs.has(TechId.KNIGHTS) || !techs.has(TechId.ARCHERS)) return;
+    if ((ringWorld.ages[playerId]?.current ?? AgeId.DARK) < ringEra(2)) return;
+    if (isRingOpen(ringWorld, playerId, 2)) return;
+    techs.add(TechId.KNIGHTS);
+    if (!isRingOpen(ringWorld, playerId, 2)) techs.delete(TechId.KNIGHTS);
+  });
+  return { ...save, version: 6, researchedTechs: researched.map((set) => [...set]) };
 }

@@ -34,6 +34,7 @@ import {
   applyFormationSpeedCap,
   clearCombatOrders,
   clearFormationSpeedCap,
+  clearOrderQueue,
   clearWorkOrders,
   setUnitHoldAnchor,
 } from './unit-orders';
@@ -70,6 +71,8 @@ export function applyReformFormationCommand(world: SimWorld, playerId: number, e
   const ordered: number[] = [];
   for (const { eid, dest } of formationDestinations(world, units, center, mode, facing)) {
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
+    // Re-forming replaces the unit's current order, so its queue goes too.
+    clearOrderQueue(world, eid);
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
     setUnitHoldAnchor(world, eid, dest.x, dest.y);

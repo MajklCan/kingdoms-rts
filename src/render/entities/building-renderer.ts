@@ -35,7 +35,8 @@ import { FOG_DIM_TINT } from '../overlays/fog-style';
 import { PartAnimator } from '../effects/part-animator';
 import type { StatusOverlay } from '../overlays/status-overlay';
 import type { SceneContext } from '../scene-context';
-import type { FarmStage, SpriteSource } from '../sprites/sprite-source';
+import type { FarmStage, SpriteRef, SpriteSource } from '../sprites/sprite-source';
+import { voxelHasConstructionLook } from '../sprites/voxel-models';
 import { tileHash } from '../tile-hash';
 import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, spriteAnchorPoint } from '../world-projection';
@@ -170,7 +171,7 @@ export class BuildingRenderer {
       const view = this.live.show(eid, ref, p.x, p.y);
       view.clearTint();
       view.setFlash(this.flash.colorFor(eid, Health.hp[eid]));
-      view.setAlpha(isFoundation && ref.source === 'voxel' ? 0.5 : 1.0);
+      view.setAlpha(isFoundation && isGhostFoundation(ref, defId) ? 0.5 : 1.0);
       view.setDepth(buildingDepth(def, c));
       this.parts.show(eid, view, ref, null);
       const topY = p.y - ref.top;
@@ -258,7 +259,7 @@ export class BuildingRenderer {
       const p = spriteAnchorPoint(ref.anchor, c, def.footprint.w, def.footprint.h);
       const view = this.remembered.show(snap.eid, ref, p.x, p.y);
       view.setDepth(buildingDepth(def, c) - 0.5);
-      view.setAlpha(snap.isFoundation && ref.source === 'voxel' ? 0.4 : 1);
+      view.setAlpha(snap.isFoundation && isGhostFoundation(ref, snap.defId) ? 0.4 : 1);
       view.setTint(FOG_DIM_TINT);
       this.rememberedParts.show(snap.eid, view, ref, FOG_DIM_TINT, true);
     }
@@ -522,6 +523,15 @@ export class BuildingRenderer {
     return (has(x + 1, y) ? 1 : 0) | (has(x, y + 1) ? 2 : 0) | (has(x - 1, y) ? 4 : 0) |
       (has(x, y - 1) ? 8 : 0);
   }
+}
+
+/**
+ * Voxel fallback art has no construction stages for most buildings: a
+ * foundation shows the finished model, faded. A building with its own
+ * construction look (the farm's staked-out plot) is drawn solid.
+ */
+function isGhostFoundation(ref: SpriteRef, defId: number): boolean {
+  return ref.source === 'voxel' && !voxelHasConstructionLook(defId);
 }
 
 function tileIndex(x: number, y: number): number {
