@@ -28,7 +28,7 @@ export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-stable': { icon: 'b-stable', description: 'Trains fast scout cavalry for raids and reconnaissance.', keyHint: BUILD_HINT('T') },
   'build-foundry': { icon: 'b-foundry', description: 'Casts gunpowder weapons: gunmen, field cannon and later artillery.', keyHint: BUILD_HINT('F') },
   'build-defensive-tower': { icon: 'b-defensive-tower', description: 'Stone tower that shoots at enemies in range.', keyHint: BUILD_HINT('Y') },
-  'build-wall': { icon: 'b-wall', description: 'Wall line: drag from the start tile to the end tile, or click both. Cost is per tile. Palisade now, stone in the Castle Age, brick with gunpowder.', keyHint: BUILD_HINT('Z') },
+  'build-wall': { icon: 'b-wall', description: 'Wall line: drag from the start tile to the end tile, or click both. Cost is per tile. Palisade at first, stone after the Stone Walls research, brick after Brick Walls.', keyHint: BUILD_HINT('Z') },
   'advance-age': { icon: 'c-advance-age', description: 'Advance your realm to the next age, unlocking new buildings, units and research.' },
   'set-army-rally': { icon: 'c-rally', description: 'Pick a gathering point for newly trained soldiers.' },
   'set-villager-rally': { icon: 'c-rally', description: 'Pick where new villagers from this town center go: tap a tree, bush or rock to gather it, or the ground to walk there. Right click also sets it.' },
@@ -54,6 +54,7 @@ export const UNIT_ICON_BY_DEF: Record<number, IconName> = {
   6: 'u-cannon',
   7: 'machine-gun',
   8: 'mortar',
+  9: 'u-commander',
 };
 
 export const UNIT_COPY_BY_DEF: Record<number, string> = {
@@ -66,6 +67,7 @@ export const UNIT_COPY_BY_DEF: Record<number, string> = {
   6: 'Field cannon. Smashes buildings and packed formations from range.',
   7: 'Deploys before firing, then shreds infantry in its arc.',
   8: 'Indirect artillery that lobs shells over cover and walls.',
+  9: 'A hard veteran with the strength of four pikemen. One per realm. If he falls, train another.',
 };
 
 export const BUILDING_ICON_BY_DEF: Record<number, IconName> = {
@@ -89,6 +91,7 @@ export const SELECTION_ICON: Record<string, IconName> = {
   villager: 'u-villager',
   archer: 'u-archer',
   spearman: 'u-spearman',
+  commander: 'u-commander',
   scoutCavalry: 'u-cavalry',
   gunman: 'u-gunman',
   cannon: 'u-cannon',
@@ -111,19 +114,30 @@ export const SELECTION_ICON: Record<string, IconName> = {
   none: 'shield',
 };
 
-/** Tech node `icon` keys from src/sim/tech-tree.ts. */
+/**
+ * Research icons by tech id (a tech node's `icon` equals its id). Research
+ * that unlocks a building wears that building's symbol; the rest have a
+ * symbol of their own (scripts/ui/icons_tech.py).
+ */
 export const TECH_ICON: Record<string, IconName> = {
-  lumber: 'b-lumber-camp',
-  stone: 'b-stone-quarry',
-  barracks: 'b-barracks',
-  archer: 'u-archer',
-  house: 'b-house',
-  axe: 'tech-axe',
-  pick: 'tech-pick',
-  castle: 'tech-castle',
-  mill: 'b-mill',
-  farm: 'b-farm',
-  gunpowder: 'tech-gunpowder',
+  barracks_pikemen: 'b-barracks',
+  archers: 'tech-bow',
+  commander: 'tech-banner',
+  knights: 'b-stable',
+  lumber_crews: 'tech-lumber',
+  housing_i: 'tech-carpentry',
+  housing_ii: 'tech-burgher',
+  mining_crews: 'tech-mining',
+  gold_mines: 'b-gold-mine',
+  foundry: 'b-foundry',
+  houfnice: 'tech-houfnice',
+  palisades: 'tech-palisade',
+  watchtowers: 'b-defensive-tower',
+  stone_walls: 'b-wall',
+  brick_walls: 'tech-brick',
+  mills: 'b-mill',
+  farms: 'tech-plough',
+  farms_ii: 'tech-fields',
 };
 
 /** Resource keys as the HUD names them, to their sheet icons. */

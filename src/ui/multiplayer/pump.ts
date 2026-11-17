@@ -5,19 +5,24 @@
  */
 
 import { SIM } from '../../config';
+import type { DesyncReport } from '../../net/desync-report';
 import type { MultiplayerSessionDebugSnapshot } from '../../net/session';
 import type { SimInput } from '../../sim/world';
 import { appState } from '../app-state';
+import { lastDesyncReport } from './desync-download';
 
 type MultiplayerDebugApi = {
   snapshot(): MultiplayerSessionDebugSnapshot | null;
   send(input: SimInput): void;
+  /** Replay data for this match (or the last desynced one). */
+  report(): DesyncReport | null;
 };
 
 export function installMultiplayerDebugApi(): void {
   (window as typeof window & { __MP__?: MultiplayerDebugApi }).__MP__ = {
     snapshot: () => appState.mpSession?.debugSnapshot() ?? null,
     send: (input) => appState.mpSession?.sendCommand(input),
+    report: () => appState.mpSession?.desyncReport() ?? lastDesyncReport(),
   };
   // eslint-disable-next-line no-console
   console.log('[Kingdoms] window.__MP__ ready. Try: __MP__.snapshot()');

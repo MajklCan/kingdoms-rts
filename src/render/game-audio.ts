@@ -21,6 +21,7 @@ import {
   ResourceWorksite,
   ScoutCavalryTag,
   SpearmanTag,
+  CommanderTag,
   TownCenterTag,
   UnitKind,
   VillagerTag,
@@ -83,7 +84,7 @@ export class GameAudio {
     this.manager.setWorldSilenced(false);
     this.manager.setGamePaused(false);
     this.manager.setAmbience(NATURE_AMBIENCE, 3);
-    this.manager.playPeaceMusic({ fadeOut: 2.5, delay: 1 });
+    this.manager.playPeaceMusic({ fadeOut: 2.5, delay: 0.5 });
   }
 
   /** Back to the title screens: world audio off, menu music. */
@@ -296,7 +297,7 @@ export class GameAudio {
     if (hasComponent(ecs, VillagerTag, eid)) {
       return this.isFarmWorker(eid) ? 'villager_female' : 'villager_male';
     }
-    if (hasComponent(ecs, SpearmanTag, eid)) return 'soldier_1';
+    if (hasComponent(ecs, SpearmanTag, eid) || hasComponent(ecs, CommanderTag, eid)) return 'soldier_1';
     if (hasComponent(ecs, ArcherTag, eid)) return 'soldier_2';
     if (hasComponent(ecs, ScoutCavalryTag, eid)) return 'soldier_3';
     if (hasComponent(ecs, GunmanTag, eid)) return 'soldier_1';

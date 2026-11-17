@@ -35,6 +35,8 @@ function quietWorld(seed: number, startingAge: number = AgeId.DARK): SimWorld {
   const world = createSimWorld(seed, { startingAge: startingAge as never });
   world.paused = false;
   world.aiPlayers[AI_PLAYER_ID] = null;
+  // Room to train: the starting army and villagers fill the town center's cap.
+  world.population[1].cap += 5;
   return world;
 }
 

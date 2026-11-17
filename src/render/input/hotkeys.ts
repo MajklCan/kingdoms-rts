@@ -1,8 +1,8 @@
 /**
- * Keyboard shortcuts. While the build buttons show (nothing or a villager
- * selected) a building's letter starts placing it, as its button does; B
- * then a letter works with any selection. Otherwise the same letters are
- * commands (H = hold position, G = villager rally).
+ * Keyboard shortcuts. While the build buttons show (a villager selected:
+ * buildings need a builder) a building's letter starts placing it, as its
+ * button does; B then a letter does the same. Otherwise the same letters are
+ * commands (H = hold position, G = villager rally, R = train the Commander).
  * Shortcuts are ignored while a DOM text field has focus.
  */
 
@@ -52,6 +52,11 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   };
 
   onHotkey('keydown-B', () => {
+    const noBuilder = commands.builderFailure();
+    if (noBuilder) {
+      commands.fail(noBuilder);
+      return;
+    }
     placement.awaitBuildKind();
     setLastEvent('build: M farm · I mill · L wood · C stone · other buildings unlock through research');
   });
@@ -68,10 +73,14 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-G', () => {
     if (!placement.awaitingBuildKind && !deps.buildHotkey('G')) placement.startVillagerRallyMode();
   });
+  // Same reason: R is the barracks while building, else it trains the Commander.
+  onHotkey('keydown-R', () => {
+    if (!placement.awaitingBuildKind && !deps.buildHotkey('R')) commands.trainHotkey(2, true);
+  });
   for (const [key, mode, message] of BUILD_KEYS) {
     onHotkey(`keydown-${key}`, () => {
       if (placement.awaitingBuildKind) placement.startBuildMode(mode, message);
-      else if (key !== 'G') deps.buildHotkey(key);
+      else if (key !== 'G' && key !== 'R') deps.buildHotkey(key);
     });
   }
   onHotkey('keydown-ESC', () => {

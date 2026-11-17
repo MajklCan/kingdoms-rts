@@ -129,6 +129,9 @@ describe('enemy AI', () => {
     const world = createSimWorld(201);
     world.paused = false;
     world.resources[AI_PLAYER_ID][0] = 200;
+    // The AI first tops up its free builders (one villager at the town center),
+    // which takes the last place under the starting cap.
+    world.population[AI_PLAYER_ID].cap += 5;
     const spot = findOpenTile(world);
     const lumber = spawnCompletedBuilding(
       world,
@@ -333,7 +336,7 @@ describe('enemy AI', () => {
   it('uses barracks and stable for a mixed army', () => {
     const world = createSimWorld(202);
     world.paused = false;
-    world.ages[AI_PLAYER_ID] = { current: AgeId.CASTLE, progress: -1, totalTicks: 0 };
+    world.ages[AI_PLAYER_ID] = { current: AgeId.CASTLE };
     world.resources[AI_PLAYER_ID].set([1000, 1000, 1000, 1000]);
     world.population[AI_PLAYER_ID].cap = 40;
     const spot = findOpenTile(world);

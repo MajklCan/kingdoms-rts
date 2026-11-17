@@ -172,7 +172,7 @@ function orderFromEvent(ev: PointerEvent): void {
   const t = tileFromEvent(ev);
   if (!scene || !t) return;
   if (t.x < 0 || t.y < 0 || t.x > mapN - 1 || t.y > mapN - 1) return;
-  issueMapOrder(scene, attackKeyHeld || ev.altKey ? 'attackMove' : 'move', t.x, t.y);
+  issueMapOrder(scene, attackKeyHeld || ev.altKey ? 'attackMove' : 'move', t.x, t.y, ev.shiftKey);
 }
 
 function bakeTerrain(tiles: Uint8Array, w: number, hgt: number): void {

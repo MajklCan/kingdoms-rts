@@ -10,6 +10,7 @@
  */
 
 import { queueUnitManifest } from './unit-manifest';
+import { versioned } from '../asset-version';
 
 export const SPRITE_ASSET_BASE = 'assets/sprites/';
 export const SPRITE_MANIFEST_KEY = 'sprite-manifest';
@@ -233,13 +234,13 @@ export function queueSpriteManifest(load: Phaser.Loader.LoaderPlugin): void {
       for (const atlas of manifest.atlases) {
         load.atlas(
           atlasTextureKey(atlas.key),
-          SPRITE_ASSET_BASE + atlas.image,
-          SPRITE_ASSET_BASE + atlas.json
+          versioned(SPRITE_ASSET_BASE + atlas.image),
+          versioned(SPRITE_ASSET_BASE + atlas.json)
         );
       }
     }
   );
-  load.json(SPRITE_MANIFEST_KEY, SPRITE_ASSET_BASE + SPRITE_MANIFEST_FILE);
+  load.json(SPRITE_MANIFEST_KEY, versioned(SPRITE_ASSET_BASE + SPRITE_MANIFEST_FILE));
 }
 
 /** The parsed manifest from the JSON cache (empty when it never loaded). */

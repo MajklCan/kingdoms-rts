@@ -3,6 +3,7 @@ import { MAP } from '../../config';
 import { Position, Resource, ResourceKindId, type ResourceKind } from '../components';
 import { BUILDING_TABLE } from '../defs';
 import { canPlaceBuildingAt } from '../input/buildings';
+import { dhypot } from './dmath';
 import { MapId } from '../map-gen';
 import { createSimWorld, resourceQuery } from '../world';
 import { findNearestResource, findResourceAt } from './lookup';
@@ -28,7 +29,7 @@ describe('ResourceProbe', () => {
           }
           for (const kind of KINDS) {
             const target = findNearestResource(world, x, y, kind, 6);
-            const want = target === null ? null : Math.hypot(Position.x[target] - x, Position.y[target] - y);
+            const want = target === null ? null : dhypot(Position.x[target] - x, Position.y[target] - y);
             expect(probe.nearestDistance(x, y, kind, 6)).toBe(want);
           }
           for (const def of BUILDING_TABLE) {

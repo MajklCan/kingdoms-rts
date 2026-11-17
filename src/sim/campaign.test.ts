@@ -23,7 +23,7 @@ import {
 import { AgeId, BuildingDefId, UNIT_TABLE, UnitDefId } from './defs';
 import { CampaignMissionId } from './campaign';
 import { TileType } from './map-gen';
-import { TechId, techStatus } from './tech-tree';
+import { TechId, createStartingTechSetForAge, openRing, techIdsInRing, techStatus } from './tech-tree';
 import {
   AI_PLAYER_ID,
   LOCAL_PLAYER_ID,
@@ -46,7 +46,8 @@ describe('campaign missions', () => {
     expect(world.campaign?.missionId).toBe(CampaignMissionId.SIEGE_OF_BRNO);
     expect(world.ages[LOCAL_PLAYER_ID].current).toBe(AgeId.DARK);
     expect(world.ages[AI_PLAYER_ID].current).toBe(AgeId.CASTLE);
-    expect(world.campaign?.lockedTechs).toContain(TechId.GUNPOWDER_AGE);
+    expect(world.campaign?.lockedTechs).toEqual(techIdsInRing(3));
+    expect(openRing(world, AI_PLAYER_ID)).toBe(2);
 
     const playerBuildings = buildingQuery(world.ecs)
       .filter((eid) => Owner.player[eid] === LOCAL_PLAYER_ID && Health.hp[eid] > 0);
@@ -127,25 +128,24 @@ describe('campaign missions', () => {
     }
   });
 
-  it('blocks Gunpowder Age research in Siege of Brno', () => {
+  it('keeps ring III (the Gunpowder Age) shut in Siege of Brno', () => {
     const world = createCampaignWorld(701, CampaignMissionId.SIEGE_OF_BRNO);
     world.paused = false;
-    world.ages[LOCAL_PLAYER_ID].current = AgeId.CASTLE;
+    world.researchedTechs[LOCAL_PLAYER_ID] = createStartingTechSetForAge(AgeId.CASTLE);
     world.researchedTechs[LOCAL_PLAYER_ID].add(TechId.GOLD_MINES);
     world.researchedTechs[LOCAL_PLAYER_ID].add(TechId.KNIGHTS);
     world.researchedTechs[LOCAL_PLAYER_ID].add(TechId.FARMS);
     world.resources[LOCAL_PLAYER_ID].set([9999, 9999, 9999, 9999]);
+    step(world);
+    expect(world.ages[LOCAL_PLAYER_ID].current).toBe(AgeId.CASTLE);
 
-    expect(techStatus(world, LOCAL_PLAYER_ID, TechId.GUNPOWDER_AGE)).toBe('locked');
-    world.inputs.push({
-      type: 'researchTech',
-      playerId: LOCAL_PLAYER_ID,
-      techId: TechId.GUNPOWDER_AGE,
-    });
+    expect(techStatus(world, LOCAL_PLAYER_ID, TechId.FOUNDRY)).toBe('locked');
+    world.inputs.push({ type: 'researchTech', playerId: LOCAL_PLAYER_ID, techId: TechId.FOUNDRY });
     step(world);
 
+    expect(world.researchedTechs[LOCAL_PLAYER_ID].has(TechId.FOUNDRY)).toBe(false);
     expect(world.ages[LOCAL_PLAYER_ID].current).toBe(AgeId.CASTLE);
-    expect(world.ages[LOCAL_PLAYER_ID].progress).toBe(-1);
+    expect(Array.from(world.resources[LOCAL_PLAYER_ID])).toEqual([9999, 9999, 9999, 9999]);
   });
 
   it('tracks the outer camp side objectives', () => {

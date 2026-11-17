@@ -228,7 +228,7 @@ describe('multiplayer hardening: hostile commands', () => {
     ];
     for (const input of hostile) injectCommand(client, input);
     // Claiming player 1's seat is refused before it reaches the wire.
-    expect(injectCommand(client, { type: 'advanceAge', playerId: 1 })).toBe(false);
+    expect(injectCommand(client, { type: 'researchTech', playerId: 1, techId: 'barracks_pikemen' })).toBe(false);
     expect(injectCommand(client, { type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: 10.5, y: 10, playerId: 2 })).toBe(false);
     void ctx;
   }

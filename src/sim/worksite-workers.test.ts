@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { staffFoundations } from './testing/staff-foundations';
 import { addComponent, hasComponent, removeEntity } from 'bitecs';
 import { BUILDING_TABLE, BuildingDefId, UnitDefId } from './defs';
 import {
@@ -128,6 +129,9 @@ describe('resource worksite workers', () => {
     const world = createSimWorld(42);
     world.paused = false;
     world.resources[1].set([0, 2000, 0, 1000]);
+    // Room for the 2 extra workers: the rider, the starter villagers and the
+    // free first worker already take 4 of the 5 starting places.
+    world.population[1].cap += 5;
 
     const spawn = world.map.spawns[1];
     const siteEid = spawnFoundation(
@@ -137,6 +141,7 @@ describe('resource worksite workers', () => {
       spawn.y - 1,
       1
     );
+    staffFoundations(world, 1);
 
     stepN(world, BUILDING_TABLE[BuildingDefId.LUMBER_CAMP].buildTimeTicks);
 

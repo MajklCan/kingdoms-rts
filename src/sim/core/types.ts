@@ -17,8 +17,14 @@ export type SimInput =
   //    over the wire - a peer has no idea what the sender had selected. The
   //    network layer must translate these into their self-describing `cmd*`
   //    equivalents (which carry an explicit playerId + eid list) before sending.
-  | { type: 'moveSelected'; to: GridPos }
-  | { type: 'gatherSelected'; targetEid: number }
+  //    `queue` (Shift held): append the order to the units' order queue
+  //    instead of replacing what they are doing (input/order-queue.ts).
+  | { type: 'moveSelected'; to: GridPos; queue?: boolean }
+  | { type: 'gatherSelected'; targetEid: number; queue?: boolean }
+  /** Send the selected villagers to build (or help build) own foundation `targetEid`. */
+  | { type: 'buildSelected'; targetEid: number; queue?: boolean }
+  /** Send the selected free villagers to help at own completed worksite `targetEid`. */
+  | { type: 'assignWorksiteSelected'; targetEid: number }
   | { type: 'stopSelected' }
   | { type: 'toggleSelectedUnitStance' }
   | { type: 'setSelectedUnitStance'; stance: UnitStanceValue }
@@ -26,17 +32,19 @@ export type SimInput =
   | { type: 'adjustFormationMode'; delta: number }
   | { type: 'rotateSelectedFormation'; delta: number }
   | { type: 'reformSelectedFormation' }
-  | { type: 'attackSelected'; targetEid: number }
-  | { type: 'attackMoveSelected'; to: GridPos }
+  | { type: 'attackSelected'; targetEid: number; queue?: boolean }
+  | { type: 'attackMoveSelected'; to: GridPos; queue?: boolean }
   // ── Self-describing commands. Inside the sim these eids are local raw bitECS
   //    ids. MultiplayerSession converts them to deterministic NetIds before
   //    putting commands on the wire, then decodes them back before applyInput().
-  | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos }
-  | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number }
+  | { type: 'cmdMove'; playerId: number; eids: number[]; to: GridPos; queue?: boolean }
+  | { type: 'cmdGather'; playerId: number; eids: number[]; targetEid: number; queue?: boolean }
+  | { type: 'cmdBuild'; playerId: number; eids: number[]; targetEid: number; queue?: boolean }
+  | { type: 'cmdAssignWorksite'; playerId: number; eids: number[]; targetEid: number }
   | { type: 'cmdStop'; playerId: number; eids: number[] }
   | { type: 'cmdToggleStance'; playerId: number; eids: number[] }
-  | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number }
-  | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos }
+  | { type: 'cmdAttack'; playerId: number; eids: number[]; targetEid: number; queue?: boolean }
+  | { type: 'cmdAttackMove'; playerId: number; eids: number[]; to: GridPos; queue?: boolean }
   | { type: 'cmdRemoveBuildings'; playerId: number; eids: number[] }
   | { type: 'cmdSetStance'; playerId: number; eids: number[]; stance: UnitStanceValue }
   | { type: 'cmdSetFormationMode'; playerId: number; eids: number[]; mode: number }
@@ -49,24 +57,39 @@ export type SimInput =
   | { type: 'setVillagerRally'; playerId: number; atEid: number; x: number; y: number; targetEid?: number }
   /** Back to automatic work for the town center's new villagers. */
   | { type: 'clearVillagerRally'; playerId: number; atEid: number }
-  | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number }
+  /** `eids`: villagers sent to build it. A foundation without builders just waits.
+   *  `queue` (Shift-placed row): the builders take it after what they are doing. */
+  | { type: 'placeBuilding'; defId: number; x: number; y: number; playerId: number; eids?: number[]; queue?: boolean }
   /** Wall foundations along the 4-connected line (x0, y0) -> (x1, y1), integer tiles. */
-  | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number }
+  | { type: 'placeWallLine'; playerId: number; x0: number; y0: number; x1: number; y1: number; eids?: number[] }
   | { type: 'removeSelectedBuildings'; playerId: number }
   | { type: 'trainUnit'; atEid: number; defId: number; count?: number; playerId?: number }
   /** Cancel queue entry `slot` (0 = the one training now). Without a slot the
    *  most recently queued entry is cancelled. The cost is refunded either way. */
   | { type: 'cancelProduction'; atEid: number; playerId?: number; slot?: number }
-  | { type: 'advanceAge'; playerId: number }
   | { type: 'researchTech'; playerId: number; techId: TechIdValue };
 
-/** Per-player age progression state. */
+/**
+ * An order waiting behind what a unit is doing now (Shift + order). The unit
+ * starts it when its current order is finished (systems/order-queue.ts).
+ *
+ * A group move is resolved into each unit's own destination when it is
+ * queued (its formation slot), so every unit carries a plain tile; `speedCap`
+ * is the group's pace for a slot formation (0 = the unit's own speed).
+ * `targetEid` is a raw eid like every other entity reference in the world;
+ * entries naming a removed entity are dropped (core/entities.ts). A `build`
+ * names an own foundation (a Shift-placed row of buildings).
+ */
+export type QueuedOrder =
+  | { kind: 'move' | 'attackMove'; x: number; y: number; speedCap: number }
+  | { kind: 'attack' | 'gather' | 'build'; targetEid: number };
+
+/**
+ * A player's era (AgeId): the highest tech ring it has opened, minus one.
+ * Written only when a ring opens (systems/tech-rings.ts); drives building looks.
+ */
 export interface AgeState {
   current: number;
-  /** Ticks of progress on advance to next age. -1 = not advancing. */
-  progress: number;
-  /** Cached totalTicks for the in-flight advance. 0 when idle. */
-  totalTicks: number;
 }
 
 /** Outcome of the match - set by winConditionSystem when one player loses or wins. */
@@ -335,7 +358,12 @@ export interface SimWorld {
    * human player's new villagers pick work on their own (villager-assign.ts).
    */
   villagerRallies: Map<number, VillagerRally>;
-  /** Per-player age progression. ages[playerId] = AgeState. */
+  /**
+   * Unit eid -> its Shift-queued orders, next one first. Never holds an
+   * empty list (the entry is deleted instead), so equal states hash equal.
+   */
+  orderQueues: Map<number, QueuedOrder[]>;
+  /** Per-player era. ages[playerId] = AgeState. */
   ages: AgeState[];
   /** Per-player researched technologies. */
   researchedTechs: Array<Set<TechIdValue>>;
@@ -343,6 +371,9 @@ export interface SimWorld {
   visibility: PlayerVisibility[];
   /** Cheat/debug map reveal flags by player. When true, fog stays fully cleared. */
   revealedMapPlayers: boolean[];
+  /** Night match: everyone sees only as far as their torches reach
+   *  (visibility.ts). Fixed for the whole match. */
+  night: boolean;
   /** Match outcome - set by winConditionSystem. */
   outcome: MatchOutcome;
   /** Active campaign mission state. Null in skirmish mode. */
@@ -392,4 +423,8 @@ export interface CreateSimWorldOptions {
   mapId?: MapIdValue;
   aiDifficulty?: AiDifficulty;
   campaignMissionId?: CampaignMissionIdValue;
+  /** Skirmish gives each player starter villagers; missions set up their own units. */
+  starterVillagers?: boolean;
+  /** Play at night (torchlight sight). Defaults to the map's own time of day. */
+  night?: boolean;
 }

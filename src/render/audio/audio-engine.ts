@@ -132,6 +132,21 @@ export class AudioEngine {
     return this.ctx.state === 'running';
   }
 
+  /**
+   * Resume the context from inside a user gesture. Resolves once it runs, or
+   * after a short timeout when the browser keeps it locked (never hangs).
+   */
+  async resume(timeoutMs = 800): Promise<boolean> {
+    this.suspendedForHidden = false;
+    if (this.running) return true;
+    try {
+      await Promise.race([this.ctx.resume(), new Promise((r) => setTimeout(r, timeoutMs))]);
+    } catch {
+      /* stays locked; callers check running */
+    }
+    return this.running;
+  }
+
   /** Mix gain x the player's channel volume for one bus. */
   setBusLevel(bus: BusId, userVolume: number): void {
     this.buses[bus].level.gain.setTargetAtTime(BUS_GAIN[bus] * userVolume, this.now(), 0.05);

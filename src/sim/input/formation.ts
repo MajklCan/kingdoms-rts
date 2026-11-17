@@ -2,12 +2,14 @@
  * Formation shapes, facing and slot assignment for group orders.
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import {
   ArcherTag,
   MachineGunTag,
   Position,
   ScoutCavalryTag,
+  CommanderTag,
   SpearmanTag,
   Speed,
   UnitStance,
@@ -32,6 +34,7 @@ import {
   applyFormationSpeedCap,
   clearCombatOrders,
   clearFormationSpeedCap,
+  clearOrderQueue,
   clearWorkOrders,
   setUnitHoldAnchor,
 } from './unit-orders';
@@ -68,6 +71,8 @@ export function applyReformFormationCommand(world: SimWorld, playerId: number, e
   const ordered: number[] = [];
   for (const { eid, dest } of formationDestinations(world, units, center, mode, facing)) {
     if (!pathTo(world, eid, dest.x, dest.y)) continue;
+    // Re-forming replaces the unit's current order, so its queue goes too.
+    clearOrderQueue(world, eid);
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
     setUnitHoldAnchor(world, eid, dest.x, dest.y);
@@ -130,7 +135,7 @@ export function formationDestinations(
 
   let dirX = facing?.x ?? (to.x - center.x);
   let dirY = facing?.y ?? (to.y - center.y);
-  const dirLen = Math.hypot(dirX, dirY);
+  const dirLen = dhypot(dirX, dirY);
   if (dirLen < 0.001) {
     const defaultFacing = formationFacingVector(FORMATION_FACING_DEFAULT);
     dirX = defaultFacing.x;
@@ -197,8 +202,8 @@ function normalizeFormationFacing(facing: number): number {
 function formationFacingVector(facing: number): { x: number; y: number } {
   const angle = Math.PI / 2 + normalizeFormationFacing(facing) * (Math.PI * 2 / FORMATION_FACING_STEPS);
   return {
-    x: Math.cos(angle),
-    y: Math.sin(angle),
+    x: dcos(angle),
+    y: dsin(angle),
   };
 }
 
@@ -227,7 +232,7 @@ function formationSpacing(mode: number): number {
 
 function formationRank(world: SimWorld, eid: number): number {
   if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return 0;
-  if (hasComponent(world.ecs, SpearmanTag, eid)) return 1;
+  if (hasComponent(world.ecs, SpearmanTag, eid) || hasComponent(world.ecs, CommanderTag, eid)) return 1;
   if (hasComponent(world.ecs, VillagerTag, eid)) return 2;
   if (hasComponent(world.ecs, ArcherTag, eid)) return 3;
   if (hasComponent(world.ecs, MachineGunTag, eid)) return 4;

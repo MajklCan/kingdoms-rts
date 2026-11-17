@@ -2,9 +2,11 @@
  * Walkability grid occupancy and building footprint geometry.
  */
 
+import { dhypot } from './dmath';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../../config';
-import { Building, Gatherer, Position, WorksiteWorker } from '../components';
+import { Building, Gatherer, Position } from '../components';
+import { worksiteOf } from './worksite-membership';
 import { BUILDING_TABLE, type BuildingDef, BuildingDefId } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { isTileInMap } from '../systems/visibility';
@@ -22,14 +24,14 @@ export function distToBuildingEdge(
   buildingEid: number
 ): number {
   if (!hasComponent(world.ecs, Building, buildingEid)) {
-    return Math.hypot(
+    return dhypot(
       fromX - Position.x[buildingEid],
       fromY - Position.y[buildingEid]
     );
   }
   const def = BUILDING_TABLE[Building.defId[buildingEid]];
   if (!def) {
-    return Math.hypot(
+    return dhypot(
       fromX - Position.x[buildingEid],
       fromY - Position.y[buildingEid]
     );
@@ -42,7 +44,7 @@ export function distToBuildingEdge(
   const maxY = y0 + def.footprint.h - 0.5;
   const dx = fromX < minX ? minX - fromX : fromX > maxX ? fromX - maxX : 0;
   const dy = fromY < minY ? minY - fromY : fromY > maxY ? fromY - maxY : 0;
-  return Math.hypot(dx, dy);
+  return dhypot(dx, dy);
 }
 
 /** Find a walkable tile near (cx, cy) for spawning units. Searches outward
@@ -119,9 +121,8 @@ export function canUnitSqueezeAlongDiagonalPath(
 
 export function canUnitOccupyMovementTarget(world: SimWorld, eid: number, x: number, y: number): boolean {
   if (canUnitOccupy(world, x, y)) return true;
-  if (!hasComponent(world.ecs, WorksiteWorker, eid)) return false;
-  const siteEid = WorksiteWorker.siteEid[eid];
-  if (!hasComponent(world.ecs, Building, siteEid)) return false;
+  const siteEid = worksiteOf(world, eid);
+  if (siteEid < 0 || !hasComponent(world.ecs, Building, siteEid)) return false;
   if (Building.defId[siteEid] !== BuildingDefId.FARM) return false;
   if (Gatherer.targetEid[eid] !== siteEid) return false;
   return distToBuildingEdge(world, x, y, siteEid) <= FARM_WORK_EDGE_DISTANCE;

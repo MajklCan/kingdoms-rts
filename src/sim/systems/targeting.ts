@@ -2,6 +2,7 @@
  * Automatic target acquisition and stance rules.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import {
   AttackMoveGoal,
@@ -27,6 +28,8 @@ import { isEntityVisibleTo } from './visibility';
 
 const HOLD_POSITION_MELEE_LEASH_TILES = 1.6;
 const HOLD_POSITION_MELEE_LEASH_BUFFER = 0.3;
+/** An attack-move ends once the unit is this close to its goal with nothing to fight. */
+export const ATTACK_MOVE_ARRIVAL_RADIUS = 0.6;
 
 interface TargetScore {
   priority: number;
@@ -119,7 +122,7 @@ function compareTargetScore(a: TargetScore, b: TargetScore): number {
 export function distanceToAttackTarget(world: SimWorld, attacker: number, target: number): number {
   return hasComponent(world.ecs, Building, target)
     ? distToBuildingEdge(world, Position.x[attacker], Position.y[attacker], target)
-    : Math.hypot(
+    : dhypot(
         Position.x[attacker] - Position.x[target],
         Position.y[attacker] - Position.y[target]
       );
@@ -161,7 +164,7 @@ function isHoldPositionTargetAllowed(world: SimWorld, eid: number, target: numbe
 export function canHoldPositionMoveToTarget(world: SimWorld, eid: number, target: number): boolean {
   if (!isMeleeHoldPositionUnit(world, eid)) return false;
   if (!isHoldPositionTargetAllowed(world, eid, target)) return false;
-  const distanceFromAnchor = Math.hypot(
+  const distanceFromAnchor = dhypot(
     Position.x[eid] - UnitStance.anchorX[eid],
     Position.y[eid] - UnitStance.anchorY[eid]
   );
@@ -266,7 +269,7 @@ export function targetingSystem(world: SimWorld): void {
       const gx = AttackMoveGoal.x[eid];
       const gy = AttackMoveGoal.y[eid];
       const arrived =
-        Math.hypot(Position.x[eid] - gx, Position.y[eid] - gy) < 0.6;
+        dhypot(Position.x[eid] - gx, Position.y[eid] - gy) < ATTACK_MOVE_ARRIVAL_RADIUS;
       if (arrived) {
         AttackMoveGoal.active[eid] = 0;
       } else if (!world.paths.has(eid)) {

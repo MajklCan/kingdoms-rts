@@ -122,3 +122,82 @@ describe('UnitAtlasSource', () => {
     expect(source.coveredUnitDefIds.sort()).toEqual([UnitDefId.VILLAGER, UnitDefId.GUNMAN].sort());
   });
 });
+
+describe('villager role looks', () => {
+  const RAW_LOOKS = {
+    ...RAW,
+    units: {
+      ...RAW.units,
+      'villager-lumberjack': {
+        defIds: ['VILLAGER'],
+        look: 'lumberjack',
+        size: [104, 82],
+        anchor: [52, 62],
+        height: 37,
+        anims: {
+          idle: { frames: 4, ms: 260 },
+          move: { frames: 8, stride: 0.7 },
+          chop: { frames: 6, ms: 110, hit: 3 },
+          harvest: { alias: 'chop' },
+        },
+      },
+      'villager-farmer': {
+        defIds: ['VILLAGER'],
+        look: 'farmer',
+        size: [100, 80],
+        anchor: [50, 60],
+        anims: { idle: { frames: 4, ms: 260 } },
+      },
+    },
+  };
+  const { manifest, problems } = parseUnitManifest(RAW_LOOKS);
+  // the farmer look is listed but none of its frames are in the atlas
+  const lookup = (frame: string): string | null => (frame.startsWith('villager-farmer/') ? null : 'tex');
+  const source = new UnitAtlasSource(manifest, lookup, [0x111111, 0x2e86de]);
+  const q = { unitDefId: UnitDefId.VILLAGER, playerId: 1, facing: 'E' as const, frame: 1 };
+
+  it('parses looks without letting them claim the unit def', () => {
+    expect(problems).toEqual([]);
+    expect(manifest.units.find((u) => u.name === 'villager-lumberjack')?.look).toBe('lumberjack');
+    expect(manifest.units.find((u) => u.name === 'villager')?.look).toBeUndefined();
+    expect(source.unitArt(UnitDefId.VILLAGER)?.height).toBe(37);
+    expect(source.looksOf(UnitDefId.VILLAGER)).toEqual(['lumberjack']);
+  });
+
+  it('draws the look with its own origin for the anims it has', () => {
+    const ref = source.unit({ ...q, anim: 'move', look: 'lumberjack' });
+    expect(ref?.frame).toBe('villager-lumberjack/move/0/1');
+    expect(ref?.originX).toBe(0.5);
+    expect(ref?.originY).toBeCloseTo(62 / 82);
+    expect(ref?.teamMask?.frame).toBe('villager-lumberjack/move/0/1/m');
+    expect(source.unit({ ...q, anim: 'harvest', look: 'lumberjack' })?.frame).toBe('villager-lumberjack/chop/0/1');
+  });
+
+  it('falls back to the default villager art for missing anims, looks and frames', () => {
+    // anim the look does not have: the default art, not the look's idle
+    expect(source.unit({ ...q, anim: 'death', look: 'lumberjack' })?.frame).toBe('villager/death/0/1');
+    // look with no frames in the atlas
+    expect(source.unit({ ...q, anim: 'move', look: 'farmer' })?.frame).toBe('villager/move/0/1');
+    // unknown look and no look
+    expect(source.unit({ ...q, anim: 'move', look: 'astronaut' })?.frame).toBe('villager/move/0/1');
+    expect(source.unit({ ...q, anim: 'move' })?.frame).toBe('villager/move/0/1');
+  });
+
+  it('keeps refs of different looks apart in the cache', () => {
+    const a = source.unit({ ...q, anim: 'idle', look: 'lumberjack' });
+    const b = source.unit({ ...q, anim: 'idle' });
+    expect(a).not.toBe(b);
+    expect(source.unit({ ...q, anim: 'idle', look: 'lumberjack' })).toBe(a);
+  });
+
+  it('ignores a look whose unit has no default art', () => {
+    const only = parseUnitManifest({
+      atlases: RAW.atlases,
+      units: { 'villager-farmer': RAW_LOOKS.units['villager-farmer'] },
+    }).manifest;
+    const lone = new UnitAtlasSource(only, () => 'tex', [0, 0]);
+    expect(lone.isEmpty).toBe(true);
+    expect(lone.unit({ ...q, anim: 'idle', look: 'farmer' })).toBeNull();
+  });
+});
+

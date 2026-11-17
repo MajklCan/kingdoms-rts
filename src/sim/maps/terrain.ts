@@ -2,6 +2,7 @@
  * Shared terrain primitives: noise, painting, carving, features, spawns and walkability.
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import { MAP } from '../../config';
 import {
   type MapData,
@@ -56,7 +57,7 @@ export function ellipseDistance(
 ): number {
   const nx = (x - cx) / Math.max(1, rx);
   const ny = (y - cy) / Math.max(1, ry);
-  return Math.hypot(nx, ny);
+  return dhypot(nx, ny);
 }
 
 export function mapIndex(x: number, y: number): number {
@@ -101,7 +102,7 @@ export function pointSegmentDistance(
   const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / len2));
   const cx = ax + vx * t;
   const cy = ay + vy * t;
-  return Math.hypot(px - cx, py - cy);
+  return dhypot(px - cx, py - cy);
 }
 
 export function carveDryRoad(
@@ -138,7 +139,7 @@ export function addDryIsland(map: MapData, cx: number, cy: number, radius: numbe
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
       if (!inBounds(x, y)) continue;
-      const d = Math.hypot(x - cx, y - cy);
+      const d = dhypot(x - cx, y - cy);
       if (d > radius) continue;
       const idx = mapIndex(x, y);
       map.elevation[idx] = d < radius * 0.6 ? 3 : 2;
@@ -159,9 +160,9 @@ export function addForestBlob(
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
       if (!inBounds(x, y)) continue;
-      const d = Math.hypot(x - cx, y - cy);
+      const d = dhypot(x - cx, y - cy);
       const edge = effectiveRadius
-        * (1 + Math.sin((x + cx) * 0.34) * 0.04 + Math.cos((y - cy) * 0.31) * 0.04);
+        * (1 + dsin((x + cx) * 0.34) * 0.04 + dcos((y - cy) * 0.31) * 0.04);
       if (d > edge) continue;
       const idx = mapIndex(x, y);
       const tile = map.tiles[idx];
@@ -192,8 +193,8 @@ export function carveForestClearing(
       const nx = (x - cx) / rx;
       const ny = (y - cy) / ry;
       const boundary = nx * nx + ny * ny
-        + Math.sin((x + cx) * 0.27) * 0.045
-        + Math.cos((y - cy) * 0.31) * 0.045;
+        + dsin((x + cx) * 0.27) * 0.045
+        + dcos((y - cy) * 0.31) * 0.045;
       if (boundary > 1) continue;
       const idx = mapIndex(x, y);
       map.tiles[idx] = TileType.GRASS;
@@ -206,7 +207,7 @@ export function addStonePocket(map: MapData, cx: number, cy: number, radius: num
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
       if (!inBounds(x, y)) continue;
-      const d = Math.hypot(x - cx, y - cy);
+      const d = dhypot(x - cx, y - cy);
       if (d > radius) continue;
       const idx = mapIndex(x, y);
       if (map.tiles[idx] === TileType.DIRT) continue;
@@ -262,7 +263,7 @@ function addRockSpireFeature(
         forRockSpireFootprint(x, y, size, (tx, ty) => {
           const idx = mapIndex(tx, ty);
           map.tiles[idx] = TileType.STONE;
-          const centerBoost = Math.hypot(tx - (x + (size - 1) / 2), ty - (y + (size - 1) / 2)) < size * 0.36;
+          const centerBoost = dhypot(tx - (x + (size - 1) / 2), ty - (y + (size - 1) / 2)) < size * 0.36;
           map.elevation[idx] = clampElevation(Math.max(map.elevation[idx], centerBoost ? 7 : 6));
         });
         map.features.push({ kind: MapFeatureKind.ROCK_SPIRE, x, y, size });
@@ -345,7 +346,7 @@ function canPlaceLindenTree(map: MapData, x: number, y: number): boolean {
   const tile = map.tiles[mapIndex(x, y)];
   if (tile !== TileType.FOREST && tile !== TileType.GRASS) return false;
   for (const feature of map.features) {
-    if (Math.hypot(feature.x - x, feature.y - y) < 4) return false;
+    if (dhypot(feature.x - x, feature.y - y) < 4) return false;
   }
   return true;
 }
@@ -359,7 +360,7 @@ export function clearSpawnPatch(
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
       if (!inBounds(x, y)) continue;
-      if (Math.hypot(x - cx, y - cy) > radius) continue;
+      if (dhypot(x - cx, y - cy) > radius) continue;
       const idx = mapIndex(x, y);
       map.tiles[idx] = Math.abs(x - cx) + Math.abs(y - cy) <= 1 ? TileType.DIRT : TileType.GRASS;
       map.elevation[idx] = 3;

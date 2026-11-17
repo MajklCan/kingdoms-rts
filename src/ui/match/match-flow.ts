@@ -2,6 +2,7 @@
  * Match lifecycle: every way into a match (skirmish, campaign mission,
  * loaded save, multiplayer) goes through the loading screen, and every way
  * out returns to the title screens. HUD trackers reset on each new match.
+ * Single-player matches also open an autosave session (src/ui/saves).
  */
 
 import { CAMPAIGN_MISSIONS, type CampaignMissionIdValue } from '../../sim/campaign';
@@ -12,7 +13,10 @@ import type { AiDifficulty, SimWorld } from '../../sim/world';
 import { appState, setPhase, type MatchKind } from '../app-state';
 import { endMatch, getScene } from '../game-bridge';
 import { enterMenu, leaveMenu, type MenuScreenId } from '../screens/menu-shell';
-import { runLoading } from '../screens/loading';
+import { isLoading, runLoading, type LoadingKind } from '../screens/loading';
+import { beginAutosaveSession, discardAutosave, endAutosaveSession } from '../saves/autosave';
+import { autosaveTitle } from '../saves/autosave-meta';
+import type { AutosaveRecord } from '../saves/autosave-store';
 
 type MatchListener = (kind: MatchKind) => void;
 const startListeners = new Set<MatchListener>();
@@ -33,64 +37,177 @@ function beginMatch(kind: MatchKind): void {
   for (const fn of startListeners) fn(kind);
 }
 
-async function launch(kind: MatchKind, title: string, subtitle: string, task: () => void, minMs?: number): Promise<void> {
+interface LaunchSpec {
+  kind: MatchKind;
+  /** Eyebrow on the loading screen (a resumed autosave says "Continue"). */
+  loadingKind?: LoadingKind;
+  title: string;
+  subtitle: string;
+  mapId?: MapIdValue | null;
+  task: () => void;
+}
+
+/**
+ * Repeats the launch of the running match with everything it was started
+ * with (null: nothing to repeat). Every start function below goes through
+ * launch(), whose spec's `task` closure holds that function's arguments, so
+ * a new argument is repeated too without touching this.
+ */
+let relaunch: (() => void) | null = null;
+
+async function launch(spec: LaunchSpec): Promise<void> {
+  // A multiplayer match cannot be repeated alone: the rival plays on.
+  relaunch = spec.kind === 'multiplayer' ? null : () => void launch(spec);
   leaveMenu();
   const ok = await runLoading({
-    title,
-    subtitle,
-    minMs,
+    title: spec.title,
+    subtitle: spec.subtitle,
+    kind: spec.loadingKind ?? spec.kind,
+    mapId: spec.mapId ?? null,
     task: () => {
-      beginMatch(kind);
-      task();
+      beginMatch(spec.kind);
+      spec.task();
     },
   });
   if (!ok) {
+    relaunch = null;
     appState.matchKind = null;
     setPhase('menu');
     enterMenu('root');
   }
 }
 
-export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty): void {
+function missionMapId(missionId: string | null): MapIdValue | null {
+  return CAMPAIGN_MISSIONS.find((m) => m.id === missionId)?.mapId ?? null;
+}
+
+export function startSkirmish(age: AgeIdValue, mapId: MapIdValue, difficulty: AiDifficulty, night?: boolean): void {
   const map = MAP_DEFS.find((m) => m.id === mapId);
   const ageName = AGE_TABLE.find((a) => a.id === age)?.name ?? 'Dark Age';
   const diff = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-  void launch('skirmish', map?.name ?? 'Skirmish', `${ageName} · ${diff} AI`, () => {
-    getScene()?.startNewGame(age, mapId, difficulty);
+  const atNight = night ?? map?.night === true;
+  void launch({
+    kind: 'skirmish',
+    title: map?.name ?? 'Skirmish',
+    subtitle: `${ageName} · ${diff} AI${atNight ? ' · Night' : ''}`,
+    mapId,
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.startNewGame(age, mapId, difficulty, atNight);
+      beginAutosaveSession(scene, { mapName: map?.name ?? null });
+    },
   });
 }
 
 export function startCampaign(missionId: CampaignMissionIdValue): void {
   const mission = CAMPAIGN_MISSIONS.find((m) => m.id === missionId);
-  void launch('campaign', mission?.name ?? 'Campaign', mission?.description ?? '', () => {
-    getScene()?.startCampaignMission(missionId);
+  void launch({
+    kind: 'campaign',
+    title: mission?.name ?? 'Campaign',
+    subtitle: mission?.description ?? '',
+    mapId: mission?.mapId ?? null,
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.startCampaignMission(missionId);
+      beginAutosaveSession(scene, { mapName: null });
+    },
   });
 }
 
 export function loadSnapshot(snapshot: SavedGame, label: string): void {
-  void launch('loaded', label, 'Restoring a saved chronicle', () => {
-    getScene()?.loadSaveSnapshot(snapshot, label);
+  void launch({
+    kind: 'loaded',
+    title: label,
+    subtitle: '',
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.loadSaveSnapshot(snapshot, label);
+      beginAutosaveSession(scene, { mapName: null });
+    },
+  });
+}
+
+/**
+ * "Continue": rebuild the match from the autosave slot. It comes back paused
+ * (a campaign mission behind its briefing, a skirmish under the Paused
+ * banner) so the player gets their bearings first. A save that fails while
+ * loading is dropped and the player lands back on the menu.
+ */
+export function continueAutosave(record: AutosaveRecord): void {
+  const { meta, snapshot } = record;
+  const title = autosaveTitle(meta);
+  void launch({
+    kind: meta.mode,
+    loadingKind: 'continue',
+    title,
+    subtitle: meta.mode === 'campaign' ? 'Campaign' : 'Skirmish',
+    mapId: meta.mode === 'campaign' ? missionMapId(meta.missionId) : (MAP_DEFS.find((m) => m.name === meta.mapName)?.id ?? null),
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      try {
+        scene.loadSaveSnapshot(snapshot, title);
+      } catch (err) {
+        discardAutosave();
+        endMatch(scene); // swap the half-loaded world for an idle one
+        throw err;
+      }
+      scene.setGameSpeed(meta.gameSpeed);
+      scene.setPaused(true);
+      beginAutosaveSession(scene, { mapName: meta.mapName }, true);
+    },
   });
 }
 
 export function loadLateGameTest(): void {
-  void launch('loaded', 'Late Game Test', 'Developer fixture', () => {
-    getScene()?.loadLateGameTestSave();
+  void launch({
+    kind: 'loaded',
+    title: 'Late Game Test',
+    subtitle: 'Developer fixture',
+    task: () => {
+      const scene = getScene();
+      if (!scene) return;
+      scene.loadLateGameTestSave();
+      beginAutosaveSession(scene, { mapName: null });
+    },
   });
 }
 
 export function startMultiplayerMatch(world: SimWorld, localPlayerId: number): void {
   const session = appState.mpSession;
   if (!session) return;
-  void launch(
-    'multiplayer',
-    'Multiplayer',
-    `You command player ${localPlayerId}`,
-    () => {
+  void launch({
+    kind: 'multiplayer',
+    title: 'Multiplayer',
+    subtitle: `You command player ${localPlayerId}`,
+    task: () => {
       getScene()?.beginMultiplayerMatch(session, world, localPlayerId);
     },
-    450
-  );
+  });
+}
+
+/** True when the running match can be started again (not in multiplayer). */
+export function canRestartMatch(): boolean {
+  return relaunch !== null;
+}
+
+/**
+ * Start the running match again from its beginning: a skirmish on the same
+ * map, starting age and AI (new seed), a campaign mission from its briefing,
+ * a loaded save from that save. False when there is nothing to repeat.
+ */
+export function restartMatch(): boolean {
+  const again = relaunch;
+  if (!again || isLoading()) return false;
+  // The old match stops autosaving; the new one opens its own session.
+  endAutosaveSession();
+  // A new match starts at normal speed, like one started from the menu.
+  getScene()?.setGameSpeed(1);
+  again();
+  return true;
 }
 
 /** Leave the running match and return to the title screens, in every mode
@@ -98,6 +215,8 @@ export function startMultiplayerMatch(world: SimWorld, localPlayerId: number): v
  *  session is left properly, so the relay tells the rival) and idles. */
 export function quitToMenu(screen: MenuScreenId = 'root'): void {
   for (const fn of endListeners) fn();
+  endAutosaveSession();
+  relaunch = null;
   endMatch();
   appState.mpSession = null;
   appState.matchKind = null;

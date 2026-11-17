@@ -11,6 +11,7 @@ import {
   BuildOrder,
   CannonTag,
   Combat,
+  CommanderTag,
   Cooldown,
   Gatherer,
   GathererStateId,
@@ -150,6 +151,14 @@ const MORTAR_SPEC: MilitaryUnitSpec = {
   hp: 55, armor: 0, atk: 40, range: 10, attackSpeedTicks: 85, aggroRadius: 10,
 };
 
+/** A veteran in the front rank: about four pikemen of hit points and double the blow
+ *  but one blade, so a handful of pikemen still bring him down.
+ *  The one-alive cap lives in core/unit-limits.ts, not here. */
+const COMMANDER_SPEC: MilitaryUnitSpec = {
+  tag: CommanderTag, kind: UnitKindId.COMMANDER, speed: 2.1, popCost: 1,
+  hp: 200, armor: 1, atk: 10, range: 0.7, attackSpeedTicks: 22, aggroRadius: 6,
+};
+
 /** Trainable military units by UnitDefId (villager and legacy militia excluded). */
 const MILITARY_UNIT_SPECS: ReadonlyMap<number, MilitaryUnitSpec> = new Map([
   [UnitDefId.ARCHER, ARCHER_SPEC],
@@ -159,6 +168,7 @@ const MILITARY_UNIT_SPECS: ReadonlyMap<number, MilitaryUnitSpec> = new Map([
   [UnitDefId.CANNON, CANNON_SPEC],
   [UnitDefId.MACHINE_GUN, MACHINE_GUN_SPEC],
   [UnitDefId.MORTAR, MORTAR_SPEC],
+  [UnitDefId.COMMANDER, COMMANDER_SPEC],
 ]);
 
 /**
@@ -242,6 +252,11 @@ export function spawnArcher(world: SimWorld, x: number, y: number, playerId: num
 /** Spawn a Spearman at tile (x,y) owned by playerId. */
 export function spawnSpearman(world: SimWorld, x: number, y: number, playerId: number): number {
   return spawnMilitaryUnit(world, x, y, playerId, SPEARMAN_SPEC);
+}
+
+/** Spawn a Commander at tile (x,y) owned by playerId. */
+export function spawnCommander(world: SimWorld, x: number, y: number, playerId: number): number {
+  return spawnMilitaryUnit(world, x, y, playerId, COMMANDER_SPEC);
 }
 
 /** Spawn a Scout Cavalry at tile (x,y) owned by playerId. */

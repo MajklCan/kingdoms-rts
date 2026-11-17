@@ -19,9 +19,9 @@ import {
   getBuildingDef,
   getUnitDef,
 } from '../defs';
-import { TechId, hasTech, isUnitUnlocked } from '../tech-tree';
+import { TechId, hasTech, isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { POP_CAP_HARD_LIMIT } from '../core/constants';
-import { countPendingPopCap, countQueuedPopCost } from '../core/population';
+import { countPendingPopCap, countQueuedPopCost, remainingHouseAllowance } from '../core/population';
 import type { SimWorld } from '../core/types';
 import {
   countQueuedWorksiteWorkers,
@@ -63,6 +63,12 @@ interface AiEconomyTargets {
 }
 
 export const AI_PRODUCER_QUEUE_TARGET = 2;
+/** Banked stone / gold at which the AI stops adding quarries / gold mines. */
+const AI_STONE_FLOAT = 900;
+const AI_GOLD_FLOAT = 1500;
+const AI_FARMS_BEFORE_CARPENTRY = 6;
+/** Most population places the AI keeps free of workers for its army. */
+const AI_ARMY_POP_RESERVE_MAX = 24;
 
 export function aiIsArmyProducerDef(defId: number): boolean {
   return defId === BuildingDefId.BARRACKS ||
@@ -72,7 +78,6 @@ export function aiIsArmyProducerDef(defId: number): boolean {
 
 export function aiTrainableUnitsForProducer(world: SimWorld, playerId: number, producerEid: number): number[] {
   const defId = Building.defId[producerEid];
-  const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const candidates =
     defId === BuildingDefId.BARRACKS
       ? [UnitDefId.SPEARMAN, UnitDefId.ARCHER]
@@ -84,9 +89,7 @@ export function aiTrainableUnitsForProducer(world: SimWorld, playerId: number, p
   return candidates.filter((unitDefId) => {
     const unitDef = getUnitDef(unitDefId);
     if (!unitDef) return false;
-    if (!isUnitUnlocked(world, playerId, unitDefId)) return false;
-    if (unitDefId === UnitDefId.SCOUT_CAVALRY && age < AgeId.CASTLE) return false;
-    return true;
+    return isUnitUnlocked(world, playerId, unitDefId);
   });
 }
 
@@ -222,11 +225,7 @@ function aiHardEconomyTargets(
 ): AiEconomyTargets {
   const settings = aiSettings(world);
   const age = world.ages[playerId]?.current ?? AgeId.DARK;
-  const farmCap = age >= AgeId.GUNPOWDER
-    ? settings.maxFarmsGunpowder
-    : age >= AgeId.CASTLE
-      ? settings.maxFarmsCastle
-      : settings.maxFarmsDark;
+  const farmCap = aiFarmCap(world, playerId);
   const hasCompletedBarracks = aiCompletedBuildingCount(world, snapshot, BuildingDefId.BARRACKS) > 0;
   const currentFarms = countAiBuildings(snapshot, BuildingDefId.FARM);
   const currentLumber = countAiEffectiveEconomyBuildings(world, snapshot, BuildingDefId.LUMBER_CAMP);
@@ -257,26 +256,31 @@ function aiHardEconomyTargets(
   let farms = Math.max(currentFarms, supportProducers * 3);
   let lumber = Math.max(currentLumber, 3, supportProducers + 2, Math.ceil(farms / 4));
   // Units cost no stone, so the production bottleneck below never asks for a
-  // quarry; age-ups (300 and 1000 stone) and techs do. Follow the time-based
-  // quarry target while an age-up is still ahead.
+  // quarry; research does (150 to 800 stone each). Follow the time-based
+  // quarry target until the last ring is open.
   const stoneForAges = age < AgeId.GUNPOWDER
     ? aiDesiredStoneQuarryCount(world, playerId, snapshot)
     : settings.stoneQuarries;
-  let stone = Math.max(currentStone, 1, stoneForAges);
+  // A stone float (research is bought, nothing else costs stone) stops new quarries.
+  const stoneFloat = (world.resources[playerId]?.[ResourceKindId.STONE] ?? 0) >= AI_STONE_FLOAT;
+  let stone = stoneFloat ? Math.max(currentStone, 1) : Math.max(currentStone, 1, stoneForAges);
   let gold = currentGold;
-  if (age >= AgeId.CASTLE) {
+  if (isBuildingUnlocked(world, playerId, BuildingDefId.GOLD_MINE)) {
     gold = Math.max(gold, settings.goldMinesCastle);
   }
 
   if (macro.bottleneck === ResourceKindId.FOOD) farms += Math.max(2, macro.idleProducers * 2);
   else if (macro.bottleneck === ResourceKindId.WOOD) lumber += 2;
   else if (macro.bottleneck === ResourceKindId.STONE) stone += 1;
-  else if (macro.bottleneck === ResourceKindId.GOLD) gold += 1;
+  else if (macro.bottleneck === ResourceKindId.GOLD && isBuildingUnlocked(world, playerId, BuildingDefId.GOLD_MINE)) {
+    gold += 1;
+  }
 
   farms = Math.min(farmCap, farms);
   lumber = Math.min(settings.maxLumberCamps, lumber);
   stone = Math.min(settings.maxStoneQuarries, stone);
   gold = Math.min(settings.maxGoldMinesGunpowder, gold);
+  if ((world.resources[playerId]?.[ResourceKindId.GOLD] ?? 0) >= AI_GOLD_FLOAT) gold = Math.min(gold, Math.max(1, currentGold));
 
   return {
     farms,
@@ -287,7 +291,12 @@ function aiHardEconomyTargets(
   };
 }
 
-function aiDesiredFarmCount(world: SimWorld, playerId: number, snapshot: AiSnapshot): number {
+/**
+ * Most farms the AI keeps. Before Housing I the six early houses cap the
+ * town, so it holds at a few farms: the wood and the population go to Lumber
+ * Crews, Housing I and the first soldiers instead.
+ */
+function aiFarmCap(world: SimWorld, playerId: number): number {
   const settings = aiSettings(world);
   const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const cap = age >= AgeId.GUNPOWDER
@@ -295,6 +304,12 @@ function aiDesiredFarmCount(world: SimWorld, playerId: number, snapshot: AiSnaps
     : age >= AgeId.CASTLE
       ? settings.maxFarmsCastle
       : settings.maxFarmsDark;
+  return remainingHouseAllowance(world, playerId) !== null ? Math.min(cap, AI_FARMS_BEFORE_CARPENTRY) : cap;
+}
+
+function aiDesiredFarmCount(world: SimWorld, playerId: number, snapshot: AiSnapshot): number {
+  const settings = aiSettings(world);
+  const cap = aiFarmCap(world, playerId);
   const timeTarget = settings.baseFarms +
     Math.floor(aiElapsedMinutes(world) * settings.farmGrowthPerMinute);
   const mirrorTarget = Math.floor(
@@ -338,8 +353,11 @@ function aiDesiredStoneQuarryCount(world: SimWorld, playerId: number, snapshot: 
 }
 
 function aiDesiredGoldMineCount(world: SimWorld, playerId: number, snapshot: AiSnapshot): number {
-  if ((world.ages[playerId]?.current ?? AgeId.DARK) < AgeId.CASTLE) return 0;
+  if (!isBuildingUnlocked(world, playerId, BuildingDefId.GOLD_MINE)) return 0;
   const settings = aiSettings(world);
+  if ((world.resources[playerId]?.[ResourceKindId.GOLD] ?? 0) >= AI_GOLD_FLOAT) {
+    return Math.max(1, countAiBuildings(snapshot, BuildingDefId.GOLD_MINE));
+  }
   const age = world.ages[playerId]?.current ?? AgeId.DARK;
   const cap = age >= AgeId.GUNPOWDER
     ? settings.maxGoldMinesGunpowder
@@ -378,6 +396,7 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
   const tcX = Position.x[snapshot.tcEid];
   const tcY = Position.y[snapshot.tcEid];
   const hasBarracks = aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS);
+  const houseLimited = remainingHouseAllowance(world, playerId) !== null;
   const desiredFarms = aiDesiredFarmCount(world, playerId, snapshot);
   const desiredLumber = aiDesiredLumberCampCount(world, snapshot, desiredFarms);
   const desiredStone = aiDesiredStoneQuarryCount(world, playerId, snapshot);
@@ -385,6 +404,9 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
   const economyPlan = [
     { defId: BuildingDefId.FARM, target: 1, enabled: true },
     { defId: BuildingDefId.LUMBER_CAMP, target: 1, enabled: true },
+    { defId: BuildingDefId.LUMBER_CAMP, target: 2, enabled: houseLimited },
+    // Stone for Housing I: the six early houses cap the town until it.
+    { defId: BuildingDefId.STONE_QUARRY, target: 1, enabled: houseLimited },
     { defId: BuildingDefId.LUMBER_CAMP, target: Math.min(desiredLumber, 2), enabled: hasBarracks },
     { defId: BuildingDefId.STONE_QUARRY, target: Math.min(desiredStone, 1), enabled: hasBarracks },
     { defId: BuildingDefId.FARM, target: Math.min(desiredFarms, 3), enabled: hasBarracks },
@@ -400,6 +422,8 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
       currentCounts.set(item.defId, countAiEffectiveEconomyBuildings(world, snapshot, item.defId));
     }
   }
+  // A new worksite comes with a worker: none while the workforce is full.
+  const workforceFull = aiWorkforceFull(world, playerId, snapshot);
   let placementsRemaining = aiSettings(world).economyPlacementsPerThink;
   while (placementsRemaining > 0) {
     let placed = false;
@@ -407,6 +431,7 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
       if (!item.enabled) continue;
       const current = currentCounts.get(item.defId) ?? 0;
       if (current >= item.target) continue;
+      if (workforceFull && !aiPlacementAllowedWhenFull(world, playerId, snapshot, item.defId)) continue;
       if (!aiPlaceBuilding(world, item.defId, tcX, tcY, playerId)) continue;
       currentCounts.set(item.defId, current + 1);
       placementsRemaining--;
@@ -428,10 +453,13 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
   const targets = aiHardEconomyTargets(world, playerId, snapshot, macro);
   const hasBarracksTech = hasTech(world, playerId, TechId.BARRACKS_PIKEMEN);
   const hasBarracks = aiHasAnyBuilding(snapshot, BuildingDefId.BARRACKS);
+  const houseLimited = remainingHouseAllowance(world, playerId) !== null;
   const bottleneckDefId = aiBottleneckBuildingDef(macro.bottleneck);
   const adaptiveEconomyPlan = [
     { defId: BuildingDefId.FARM, target: 1, enabled: true },
     { defId: BuildingDefId.LUMBER_CAMP, target: Math.min(targets.lumber, 3), enabled: true },
+    // Stone for Housing I first: the six early houses cap the town until it.
+    { defId: BuildingDefId.STONE_QUARRY, target: 1, enabled: houseLimited },
     {
       defId: bottleneckDefId ?? BuildingDefId.FARM,
       target: bottleneckDefId === BuildingDefId.FARM
@@ -460,11 +488,14 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
     }
   }
 
+  // A new worksite comes with a worker: none while the workforce is full.
+  const workforceFull = aiWorkforceFull(world, playerId, snapshot);
   let placementsRemaining = aiSettings(world).economyPlacementsPerThink;
   const houseHeadroom = macro.popBlockedProducers > 0 ? 4 : 0;
-  // Before the Barracks tech the few early houses wait for the economy
-  // plan (first farm and lumber huts); afterwards housing comes first.
-  if (hasBarracksTech && aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom)) {
+  // While the early house limit holds (before Housing I) the few houses wait
+  // for the economy plan (first farm and lumber huts); afterwards housing
+  // comes first.
+  if (!houseLimited && aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom)) {
     placementsRemaining--;
   }
 
@@ -474,6 +505,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
       if (!item.enabled) continue;
       const current = currentCounts.get(item.defId) ?? 0;
       if (current >= item.target) continue;
+      if (workforceFull && !aiPlacementAllowedWhenFull(world, playerId, snapshot, item.defId)) continue;
       if (!aiPlaceBuilding(world, item.defId, tcX, tcY, playerId)) continue;
       currentCounts.set(item.defId, current + 1);
       placementsRemaining--;
@@ -483,7 +515,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
     if (!placed) break;
   }
 
-  if (!hasBarracksTech) aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom);
+  if (houseLimited) aiTryPlaceHouseIfNeeded(world, playerId, snapshot, tcX, tcY, houseHeadroom);
 
   aiTrainWorksiteWorkers(world, playerId, snapshot);
 }
@@ -514,8 +546,45 @@ function aiTryPlaceHouseIfNeeded(
   return false;
 }
 
+/** Workers alive or queued (everything but the army, queued soldiers included). */
+function aiWorkerCount(world: SimWorld, playerId: number, snapshot: AiSnapshot): number {
+  const pop = world.population[playerId];
+  return pop ? pop.current + countQueuedPopCost(world, playerId) - snapshot.myMilitary.length : 0;
+}
+
+/** Most workers the AI keeps, so its army keeps room under the population maximum. */
+function aiWorkerCap(world: SimWorld): number {
+  return POP_CAP_HARD_LIMIT - Math.min(aiSettings(world).maxWaveUnits, AI_ARMY_POP_RESERVE_MAX);
+}
+
+/** With the workforce full only mills (no workers) and the first gold mines go up. */
+function aiPlacementAllowedWhenFull(world: SimWorld, playerId: number, snapshot: AiSnapshot, defId: number): boolean {
+  if (defId === BuildingDefId.MILL) return true;
+  return defId === BuildingDefId.GOLD_MINE &&
+    countAiBuildings(snapshot, BuildingDefId.GOLD_MINE) < aiSettings(world).goldMinesCastle &&
+    isBuildingUnlocked(world, playerId, BuildingDefId.GOLD_MINE);
+}
+
+function aiWorkforceFull(world: SimWorld, playerId: number, snapshot: AiSnapshot): boolean {
+  return aiWorkerCount(world, playerId, snapshot) >= aiWorkerCap(world);
+}
+
 function aiTrainWorksiteWorkers(world: SimWorld, playerId: number, snapshot: AiSnapshot): void {
-  for (const siteEid of snapshot.myBuildings) {
+  // Before Housing I the population is capped by the six early houses:
+  // staff the quarries first, or the stone for Housing I never comes.
+  const firstQuarry = remainingHouseAllowance(world, playerId) !== null
+    ? snapshot.myBuildings.find((eid) => Building.defId[eid] === BuildingDefId.STONE_QUARRY && aiIsCompletedBuilding(world, eid))
+    : undefined;
+  const sites = firstQuarry === undefined
+    ? snapshot.myBuildings
+    : [firstQuarry, ...snapshot.myBuildings.filter((eid) => eid !== firstQuarry)];
+  // Keep room under the population maximum for an army: with the rings
+  // opening early, the castle-sized economy would otherwise fill all 75
+  // places with workers and the army could never mass.
+  let workers = aiWorkerCount(world, playerId, snapshot);
+  const workerCap = aiWorkerCap(world);
+  for (const siteEid of sites) {
+    if (workers >= workerCap) return;
     if (!aiIsCompletedBuilding(world, siteEid)) continue;
     if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) continue;
     const def = getBuildingDef(Building.defId[siteEid]);
@@ -525,9 +594,7 @@ function aiTrainWorksiteWorkers(world: SimWorld, playerId: number, snapshot: AiS
     const slots = getWorksiteWorkerSlots(world, siteEid);
     const desired = Math.min(slots, aiDesiredWorksiteWorkers(world, playerId, siteEid));
     const occupied = countWorksiteWorkers(world, siteEid) + countQueuedWorksiteWorkers(world, siteEid);
-    if (occupied < desired) {
-      aiQueueUnit(world, siteEid, UnitDefId.VILLAGER);
-    }
+    if (occupied < desired && aiQueueUnit(world, siteEid, UnitDefId.VILLAGER)) workers++;
   }
 }
 

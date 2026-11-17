@@ -136,9 +136,9 @@ export function panToTile(scene: GameScene, x: number, y: number): void {
   getUiApi(scene)?.panToTile(x, y);
 }
 
-/** Minimap right-click: move or attack-move the selection to a tile. */
-export function issueMapOrder(scene: GameScene, kind: MapOrderKind, x: number, y: number): boolean {
-  return getUiApi(scene)?.issueMapOrder(kind, x, y) ?? false;
+/** Minimap right-click: move or attack-move the selection to a tile (`queue`: Shift held, behind the current order). */
+export function issueMapOrder(scene: GameScene, kind: MapOrderKind, x: number, y: number, queue = false): boolean {
+  return getUiApi(scene)?.issueMapOrder(kind, x, y, queue) ?? false;
 }
 
 /** A disabled HUD control was used: error sound + typed alert (flashes missing resources). */

@@ -21,6 +21,7 @@ import { recordUnitTrained } from '../core/match-stats';
 import { findSpawnSpot } from '../core/grid';
 import { pathTo } from '../core/navigation';
 import { countQueuedPopCost, hasPopulationRoom } from '../core/population';
+import { unitLimitReached } from '../core/unit-limits';
 import { producerQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnMilitaryUnitByDefId, spawnVillager } from '../factories/units';
@@ -77,6 +78,7 @@ function applyTrainUnitOnce(world: SimWorld, atEid: number, defId: number): bool
 
   if (!producerDef.trains.includes(unitDef.id)) return false;
   if (!isUnitUnlocked(world, playerId, defId)) return false;
+  if (unitLimitReached(world, playerId, defId)) return false;
   if (!canAfford(bank, unitDef.cost)) return false;
 
   const pop = world.population[playerId];

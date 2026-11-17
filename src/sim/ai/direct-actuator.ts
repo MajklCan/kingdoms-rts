@@ -11,8 +11,16 @@ import { pushAiEvent } from '../core/events';
 import { pathTo, pathToAttackTarget } from '../core/navigation';
 import { spawnFoundation } from '../factories/buildings';
 import { isMovableEntity } from '../input/formation';
-import { clearCombatOrders, clearFormationSpeedCap, clearWorkOrders } from '../input/unit-orders';
-import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
+import { applyAssignWorksiteCommand } from '../input/worksite-orders';
+import {
+  applyBuildCommand,
+  applyGatherCommand,
+  clearCombatOrders,
+  clearFormationSpeedCap,
+  clearOrderQueue,
+  clearWorkOrders,
+} from '../input/unit-orders';
+import { applyResearchTech } from '../systems/tech-rings';
 import { type AiActuator, currentAiThinkScope } from './context';
 
 export const directAiActuator: AiActuator = {
@@ -39,22 +47,18 @@ export const directAiActuator: AiActuator = {
     applyResearchTech(world, playerId, techId);
     return hasTech(world, playerId, techId);
   },
-  advanceAge(world, playerId) {
-    const age = world.ages[playerId];
-    if (!age) return false;
-    const before = age.progress;
-    applyAdvanceAge(world, playerId);
-    return before < 0 && age.progress >= 0;
-  },
   move(world, eid, to) {
     if (!isMovableEntity(world, eid)) return;
     if (!pathTo(world, eid, to.x, to.y)) return;
+    // The computer player never queues orders; one it gives replaces any.
+    clearOrderQueue(world, eid);
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
   },
   attackMove(world, eid, to) {
     if (!isMovableEntity(world, eid)) return false;
     if (!pathTo(world, eid, to.x, to.y)) return false;
+    clearOrderQueue(world, eid);
     AttackTarget.targetEid[eid] = -1;
     AttackTarget.retainGoal[eid] = 0;
     if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
@@ -68,12 +72,22 @@ export const directAiActuator: AiActuator = {
   },
   attack(world, eid, target, inRange) {
     if (!inRange && !(isMovableEntity(world, eid) && pathToAttackTarget(world, eid, target))) return;
+    clearOrderQueue(world, eid);
     AttackTarget.targetEid[eid] = target;
     AttackTarget.retainGoal[eid] = 1;
     if (hasComponent(world.ecs, AttackMoveGoal, eid)) AttackMoveGoal.active[eid] = 0;
     if (inRange) world.paths.delete(eid);
     clearWorkOrders(world, eid);
     clearFormationSpeedCap(world, eid);
+  },
+  build(world, playerId, eids, siteEid) {
+    applyBuildCommand(world, playerId, eids, siteEid);
+  },
+  assignWorksite(world, playerId, eids, siteEid) {
+    applyAssignWorksiteCommand(world, playerId, eids, siteEid);
+  },
+  gather(world, playerId, eids, targetEid) {
+    applyGatherCommand(world, playerId, eids, targetEid);
   },
   event(world, playerId, message) {
     pushAiEvent(world, playerId, message);

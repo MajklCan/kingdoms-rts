@@ -7,10 +7,12 @@ import { DeadTag, Owner, TownCenterTag, WorksiteWorker } from '../components';
 import { LOCAL_PLAYER_ID } from '../core/constants';
 import { selectedQuery } from '../core/queries';
 import type { SimInput, SimWorld } from '../core/types';
-import { applyAdvanceAge, applyResearchTech } from '../systems/age-tech';
+import { applyResearchTech } from '../systems/tech-rings';
 import { applyCancelProduction, applyTrainUnit } from '../systems/production';
 import { applySetVillagerRally } from '../systems/villager-assign';
 import { applyPlaceWallLine } from './walls';
+import { queueAttackOrders, queueBuildOrders, queueGatherOrders, queueMoveOrders } from './order-queue';
+import { applyAssignWorksiteCommand } from './worksite-orders';
 import {
   applyPlaceBuilding,
   applyRemoveBuildingsCommand,
@@ -31,6 +33,8 @@ import {
   applyAttackMoveCommand,
   applyAttackMoveSelected,
   applyAttackSelected,
+  applyBuildCommand,
+  applyBuildSelected,
   applyGatherCommand,
   applyGatherSelected,
   applyMoveCommand,
@@ -47,10 +51,12 @@ import {
 export function applyInput(world: SimWorld, input: SimInput): void {
   switch (input.type) {
     case 'moveSelected':
-      applyMoveSelected(world, input.to);
+      if (input.queue) queueMoveOrders(world, LOCAL_PLAYER_ID, commandableSelection(world), input.to, 'move');
+      else applyMoveSelected(world, input.to);
       return;
     case 'gatherSelected':
-      applyGatherSelected(world, input.targetEid);
+      if (input.queue) queueGatherOrders(world, LOCAL_PLAYER_ID, commandableSelection(world), input.targetEid);
+      else applyGatherSelected(world, input.targetEid);
       return;
     case 'stopSelected':
       applyStopSelected(world);
@@ -74,16 +80,34 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       applyReformSelectedFormation(world);
       return;
     case 'attackSelected':
-      applyAttackSelected(world, input.targetEid);
+      if (input.queue) queueAttackOrders(world, LOCAL_PLAYER_ID, commandableSelection(world), input.targetEid);
+      else applyAttackSelected(world, input.targetEid);
       return;
     case 'attackMoveSelected':
-      applyAttackMoveSelected(world, input.to);
+      if (input.queue) queueMoveOrders(world, LOCAL_PLAYER_ID, commandableSelection(world), input.to, 'attackMove');
+      else applyAttackMoveSelected(world, input.to);
       return;
     case 'cmdMove':
-      applyMoveCommand(world, input.playerId, input.eids, input.to);
+      if (input.queue) queueMoveOrders(world, input.playerId, input.eids, input.to, 'move');
+      else applyMoveCommand(world, input.playerId, input.eids, input.to);
       return;
     case 'cmdGather':
-      applyGatherCommand(world, input.playerId, input.eids, input.targetEid);
+      if (input.queue) queueGatherOrders(world, input.playerId, input.eids, input.targetEid);
+      else applyGatherCommand(world, input.playerId, input.eids, input.targetEid);
+      return;
+    case 'buildSelected':
+      if (input.queue) queueBuildOrders(world, LOCAL_PLAYER_ID, commandableSelection(world), input.targetEid);
+      else applyBuildSelected(world, input.targetEid);
+      return;
+    case 'cmdBuild':
+      if (input.queue) queueBuildOrders(world, input.playerId, input.eids, input.targetEid);
+      else applyBuildCommand(world, input.playerId, input.eids, input.targetEid);
+      return;
+    case 'assignWorksiteSelected':
+      applyAssignWorksiteCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), input.targetEid);
+      return;
+    case 'cmdAssignWorksite':
+      applyAssignWorksiteCommand(world, input.playerId, input.eids, input.targetEid);
       return;
     case 'cmdStop':
       applyStopCommand(world, input.playerId, input.eids);
@@ -92,10 +116,12 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       applyToggleStanceCommand(world, input.playerId, input.eids);
       return;
     case 'cmdAttack':
-      applyAttackCommand(world, input.playerId, input.eids, input.targetEid);
+      if (input.queue) queueAttackOrders(world, input.playerId, input.eids, input.targetEid);
+      else applyAttackCommand(world, input.playerId, input.eids, input.targetEid);
       return;
     case 'cmdAttackMove':
-      applyAttackMoveCommand(world, input.playerId, input.eids, input.to);
+      if (input.queue) queueMoveOrders(world, input.playerId, input.eids, input.to, 'attackMove');
+      else applyAttackMoveCommand(world, input.playerId, input.eids, input.to);
       return;
     case 'setArmyRallyPoint':
       applySetArmyRallyPoint(world, input.playerId, input.x, input.y);
@@ -109,10 +135,10 @@ export function applyInput(world: SimWorld, input: SimInput): void {
       world.villagerRallies.delete(input.atEid);
       return;
     case 'placeBuilding':
-      applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId);
+      applyPlaceBuilding(world, input.defId, input.x, input.y, input.playerId, input.eids, input.queue === true);
       return;
     case 'placeWallLine':
-      applyPlaceWallLine(world, input.playerId, input.x0, input.y0, input.x1, input.y1);
+      applyPlaceWallLine(world, input.playerId, input.x0, input.y0, input.x1, input.y1, input.eids);
       return;
     case 'removeSelectedBuildings':
       applyRemoveSelectedBuildings(world, input.playerId);
@@ -142,9 +168,6 @@ export function applyInput(world: SimWorld, input: SimInput): void {
     case 'cancelProduction':
       if (input.playerId !== undefined && !ownsCommandTarget(world, input.playerId, input.atEid)) return;
       applyCancelProduction(world, input.atEid, input.slot);
-      return;
-    case 'advanceAge':
-      applyAdvanceAge(world, input.playerId);
       return;
     case 'researchTech':
       applyResearchTech(world, input.playerId, input.techId);

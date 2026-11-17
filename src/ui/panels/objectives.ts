@@ -7,7 +7,7 @@
 
 import type { GameScene } from '../../render/game-scene';
 import { CampaignMissionId } from '../../sim/campaign';
-import { TechId } from '../../sim/tech-tree';
+import { techIdsInRing } from '../../sim/tech-tree';
 import { hasOpenLayer } from '../a11y/layers';
 import { appState } from '../app-state';
 import { h, isTextEntryTarget, plainDashes } from '../dom';
@@ -26,8 +26,8 @@ const completed = new Set<string>();
 let wasPaused = false;
 
 export function missionNoteFor(mission: Mission): string {
-  return mission.lockedTechs.includes(TechId.GUNPOWDER_AGE)
-    ? 'Gunpowder Age is locked in this mission.'
+  return techIdsInRing(3).every((techId) => mission.lockedTechs.includes(techId))
+    ? 'Ring III (the Gunpowder Age) is closed in this mission.'
     : mission.id === CampaignMissionId.BATTLE_OF_BILA_HORA
       ? 'No town center. No economy. Victory requires destroying every enemy unit.'
       : mission.id === CampaignMissionId.BATTLE_OF_KUTNA_HORA

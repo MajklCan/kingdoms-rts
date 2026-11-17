@@ -10,6 +10,7 @@ import {
   BuildOrder,
   Building,
   CannonTag,
+  CommanderTag,
   Combat,
   ConstructionSite,
   Cooldown,
@@ -44,11 +45,15 @@ import {
   Velocity,
   VillagerTag,
   WorksiteWorker,
+  WorksiteHelper,
+  VillagerWork,
+  GameAnimal,
 } from '../components';
-import { AgeId } from '../defs';
 import {
   AI_PLAYER_ID,
   LOCAL_PLAYER_ID,
+  ORDER_QUEUE_MAX,
+  type QueuedOrder,
   type SimWorld,
   addSimEntity,
   createAiPlayerState,
@@ -59,15 +64,15 @@ import {
   updatePlayerVisibility,
 } from '../world';
 import { Pathfinder } from '../pathfinding';
-import { TECH_TREE, type TechIdValue, createStartingTechSetForAge } from '../tech-tree';
-import { type SavedEntityV1, type SavedGame, type SavedGameV1, type SavedGameV2, migrateSavedGame } from './schema';
+import { type TechIdValue, isTechId } from '../tech-tree';
+import { type AnySavedGame, type SavedEntityV1, type SavedGame, migrateSavedGame } from './schema';
 
 /** Ticks are never negative; a negative (or missing) saved tick means never. */
 function fromSavedTick(tick: number | null | undefined): number {
   return typeof tick === 'number' && Number.isFinite(tick) && tick >= 0 ? tick : -Infinity;
 }
 
-export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGameV2 | SavedGameV1): void {
+export function loadSimWorldSnapshot(world: SimWorld, saved: AnySavedGame): void {
   const snapshot = migrateSavedGame(saved);
   if (!snapshot) {
     throw new Error(`Unsupported save version ${String((saved as { version?: unknown }).version)}`);
@@ -100,6 +105,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
       .filter((playerId) => Number.isInteger(playerId) && playerId > 0)
   );
   world.aiDifficulty = normalizeAiDifficulty(snapshot.aiDifficulty);
+  world.night = snapshot.night === true;
   world.outcome = { ...snapshot.outcome };
   world.campaign = null;
   world.map = {
@@ -123,7 +129,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   }
   world.ages.length = 0;
   for (const age of snapshot.ages) {
-    world.ages.push({ ...age });
+    world.ages.push({ current: age.current });
   }
   world.aiPlayers.length = 0;
   for (let playerId = 0; playerId < snapshot.resources.length; playerId++) {
@@ -149,14 +155,8 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   }
   world.researchedTechs.length = 0;
   for (let playerId = 0; playerId < world.resources.length; playerId++) {
-    const saved = snapshot.researchedTechs?.[playerId];
-    if (Array.isArray(saved)) {
-      world.researchedTechs.push(
-        new Set(saved.filter((techId): techId is TechIdValue => isKnownTechId(techId)))
-      );
-    } else {
-      world.researchedTechs.push(fallbackTechSet(snapshot, playerId));
-    }
+    const saved = snapshot.researchedTechs[playerId] ?? [];
+    world.researchedTechs.push(new Set(saved.filter((techId): techId is TechIdValue => isTechId(techId))));
   }
   world.revealedMapPlayers.length = 0;
   for (let playerId = 0; playerId < world.resources.length; playerId++) {
@@ -212,7 +212,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
       name: snapshot.campaign.name,
       description: snapshot.campaign.description,
       briefing: snapshot.campaign.briefing,
-      lockedTechs: snapshot.campaign.lockedTechs.slice(),
+      lockedTechs: snapshot.campaign.lockedTechs.filter((techId) => isTechId(techId)),
       objectives: snapshot.campaign.objectives.map((objective) => ({ ...objective })),
       trackedObjectiveEids: Object.fromEntries(
         Object.entries(snapshot.campaign.trackedObjectiveEids)
@@ -282,6 +282,14 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
     });
   }
 
+  world.orderQueues.clear();
+  for (const saved of snapshot.orderQueues ?? []) {
+    const eid = eidMap.get(saved.eid);
+    if (eid === undefined) continue;
+    const orders = restoreQueuedOrders(saved.orders, eidMap);
+    if (orders.length > 0) world.orderQueues.set(eid, orders);
+  }
+
   world.formationSpeedCaps.clear();
   for (const saved of snapshot.formationSpeedCaps ?? []) {
     const eid = eidMap.get(saved.eid);
@@ -331,16 +339,6 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: SavedGame | SavedGa
   restoreVisibility(world, snapshot, eidMap);
 }
 
-const KNOWN_TECH_IDS = new Set<string>(TECH_TREE.map((tech) => tech.id));
-
-function isKnownTechId(techId: unknown): techId is TechIdValue {
-  return typeof techId === 'string' && KNOWN_TECH_IDS.has(techId);
-}
-
-function fallbackTechSet(snapshot: SavedGame, playerId: number): Set<TechIdValue> {
-  return createStartingTechSetForAge(snapshot.ages[playerId]?.current ?? AgeId.DARK);
-}
-
 function isSavedMilitaryEntity(saved: SavedEntityV1): boolean {
   return Boolean(
     saved.archer ||
@@ -349,7 +347,8 @@ function isSavedMilitaryEntity(saved: SavedEntityV1): boolean {
       saved.gunman ||
       saved.cannon ||
       saved.machineGun ||
-      saved.mortar
+      saved.mortar ||
+      saved.commander
   );
 }
 
@@ -391,6 +390,7 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
   if (saved.cannon) addComponent(ecs, CannonTag, eid);
   if (saved.machineGun) addComponent(ecs, MachineGunTag, eid);
   if (saved.mortar) addComponent(ecs, MortarTag, eid);
+  if (saved.commander) addComponent(ecs, CommanderTag, eid);
   if (saved.machineGunDeployment || saved.machineGun) {
     addComponent(ecs, MachineGunDeployment, eid);
     MachineGunDeployment.deployed[eid] = saved.machineGunDeployment?.deployed ?? 1;
@@ -455,6 +455,28 @@ function restoreEntityComponents(world: SimWorld, eid: number, saved: SavedEntit
   if (saved.worksiteWorker) {
     addComponent(ecs, WorksiteWorker, eid);
   }
+  if (saved.worksiteHelper) {
+    addComponent(ecs, WorksiteHelper, eid);
+    WorksiteHelper.extra[eid] = saved.worksiteHelper.extra;
+  }
+  if (saved.villagerWork) {
+    addComponent(ecs, VillagerWork, eid);
+    VillagerWork.job[eid] = saved.villagerWork.job;
+    VillagerWork.kind[eid] = saved.villagerWork.kind;
+    VillagerWork.siteNetId[eid] = saved.villagerWork.siteNetId;
+    VillagerWork.x[eid] = saved.villagerWork.x;
+    VillagerWork.y[eid] = saved.villagerWork.y;
+  }
+  if (saved.gameAnimal) {
+    addComponent(ecs, GameAnimal, eid);
+    GameAnimal.species[eid] = saved.gameAnimal.species;
+    GameAnimal.state[eid] = saved.gameAnimal.state;
+    GameAnimal.homeX[eid] = saved.gameAnimal.homeX;
+    GameAnimal.homeY[eid] = saved.gameAnimal.homeY;
+    GameAnimal.targetX[eid] = saved.gameAnimal.targetX;
+    GameAnimal.targetY[eid] = saved.gameAnimal.targetY;
+    GameAnimal.wait[eid] = saved.gameAnimal.wait;
+  }
   if (saved.health) {
     addComponent(ecs, Health, eid);
     Health.hp[eid] = saved.health.hp;
@@ -504,9 +526,38 @@ function restoreEntityReferences(
   if (saved.worksiteWorker) {
     WorksiteWorker.siteEid[eid] = remapEid(saved.worksiteWorker.siteEid, eidMap);
   }
+  if (saved.worksiteHelper) {
+    WorksiteHelper.siteEid[eid] = remapEid(saved.worksiteHelper.siteEid, eidMap);
+  }
   if (saved.attackTarget) {
     AttackTarget.targetEid[eid] = remapEid(saved.attackTarget.targetEid, eidMap);
   }
+}
+
+/**
+ * Queued orders of one unit with their targets remapped to this world's
+ * eids. Entries a (possibly hand-edited) file got wrong, or whose target is
+ * not in the save, are dropped.
+ */
+function restoreQueuedOrders(saved: unknown, eidMap: Map<number, number>): QueuedOrder[] {
+  const out: QueuedOrder[] = [];
+  if (!Array.isArray(saved)) return out;
+  for (const raw of saved as Array<Partial<Record<string, unknown>>>) {
+    if (out.length >= ORDER_QUEUE_MAX) break;
+    if (typeof raw !== 'object' || raw === null) continue;
+    if (raw.kind === 'move' || raw.kind === 'attackMove') {
+      if (!isFiniteNumber(raw.x) || !isFiniteNumber(raw.y)) continue;
+      out.push({ kind: raw.kind, x: raw.x, y: raw.y, speedCap: isFiniteNumber(raw.speedCap) ? raw.speedCap : 0 });
+    } else if (raw.kind === 'attack' || raw.kind === 'gather' || raw.kind === 'build') {
+      const targetEid = typeof raw.targetEid === 'number' ? eidMap.get(raw.targetEid) : undefined;
+      if (targetEid !== undefined) out.push({ kind: raw.kind, targetEid });
+    }
+  }
+  return out;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function remapEid(savedEid: number, eidMap: Map<number, number>): number {

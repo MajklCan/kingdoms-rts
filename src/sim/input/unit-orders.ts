@@ -28,7 +28,10 @@ import { findSpawnSpot } from '../core/grid';
 import { pathTo, pathToAttackTarget } from '../core/navigation';
 import type { SimWorld } from '../core/types';
 import { routeToNearestDropOff } from '../systems/dropoff';
-import { startGatheringResource } from '../systems/gathering';
+import { canBuild, isOpenFoundation } from '../systems/builders';
+import { noteHandWork, startGatheringResource } from '../systems/gathering';
+import { forgetWork } from '../systems/villager-work';
+import { leaveWorksite } from '../systems/worksite-helpers';
 import { isTargetInAttackRange } from '../systems/targeting';
 import { isEntityVisibleTo } from '../systems/visibility';
 import { commandableSelection, ownedCommandableEids } from './apply-input';
@@ -68,6 +71,12 @@ export function clearWorkOrders(world: SimWorld, eid: number): void {
   if (hasComponent(world.ecs, BuildOrder, eid)) {
     BuildOrder.targetEid[eid] = -1;
   }
+  leaveWorksite(world, eid);
+}
+
+/** Forget the orders a unit has waiting behind its current one (Shift queue). */
+export function clearOrderQueue(world: SimWorld, eid: number): void {
+  world.orderQueues.delete(eid);
 }
 
 export function clearFormationSpeedCap(world: SimWorld, eid: number): void {
@@ -100,44 +109,89 @@ export function applyAttackSelected(world: SimWorld, targetEid: number): void {
   applyAttackCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
 }
 
+/** May `playerId` order an attack on `targetEid` right now (alive, in sight)? */
+export function isAttackOrderTarget(world: SimWorld, playerId: number, targetEid: number): boolean {
+  if (!hasComponent(world.ecs, Health, targetEid)) return false;
+  if (Health.hp[targetEid] <= 0) return false;
+  return isEntityVisibleTo(world, playerId, targetEid);
+}
+
+/** Can `eid` be told to attack `targetEid` at all (armed, not its own side)? */
+export function canTakeAttackOrder(world: SimWorld, eid: number, targetEid: number): boolean {
+  if (!hasComponent(world.ecs, Combat, eid)) return false;
+  if (!hasComponent(world.ecs, AttackTarget, eid)) return false;
+  return Owner.player[eid] !== Owner.player[targetEid]; // no friendly fire
+}
+
+/**
+ * One unit's part of an attack order on a valid target (see
+ * {@link isAttackOrderTarget}). False when the unit cannot attack it or
+ * cannot get to it; its previous orders are then left alone.
+ */
+export function startAttackOrder(world: SimWorld, eid: number, targetEid: number): boolean {
+  if (!canTakeAttackOrder(world, eid, targetEid)) return false;
+  const inRange = isTargetInAttackRange(world, eid, targetEid);
+  const canReach =
+    inRange ||
+    (isMovableEntity(world, eid) &&
+      pathToAttackTarget(world, eid, targetEid));
+  if (!canReach) return false;
+
+  AttackTarget.targetEid[eid] = targetEid;
+  // retainGoal = 1 means "the user explicitly told me to attack THIS unit",
+  // which exempts the chase from the auto-aggro leash. The player gave a
+  // direct order; honour it until the target dies, the player issues a new
+  // order, or the target gets out of pathing range.
+  AttackTarget.retainGoal[eid] = 1;
+  if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
+    AttackMoveGoal.active[eid] = 0;
+  }
+  world.cannonWindups.delete(eid);
+  clearFormationSpeedCap(world, eid);
+  clearWorkOrders(world, eid);
+  forgetWork(world, eid);
+  if (inRange) world.paths.delete(eid);
+  return true;
+}
+
 export function applyAttackCommand(
   world: SimWorld,
   playerId: number,
   eids: number[],
   targetEid: number
 ): void {
-  if (!hasComponent(world.ecs, Health, targetEid)) return;
-  if (Health.hp[targetEid] <= 0) return;
-  if (!isEntityVisibleTo(world, playerId, targetEid)) return;
+  if (!isAttackOrderTarget(world, playerId, targetEid)) return;
   for (const eid of ownedCommandableEids(world, playerId, eids)) {
-    if (!hasComponent(world.ecs, Combat, eid)) continue;
-    if (!hasComponent(world.ecs, AttackTarget, eid)) continue;
-    if (Owner.player[eid] === Owner.player[targetEid]) continue; // no friendly fire
-    const inRange = isTargetInAttackRange(world, eid, targetEid);
-    const canReach =
-      inRange ||
-      (isMovableEntity(world, eid) &&
-        pathToAttackTarget(world, eid, targetEid));
-    if (!canReach) continue;
-
-    AttackTarget.targetEid[eid] = targetEid;
-    // retainGoal = 1 means "the user explicitly told me to attack THIS unit",
-    // which exempts the chase from the auto-aggro leash. The player gave a
-    // direct order; honour it until the target dies, the player issues a new
-    // order, or the target gets out of pathing range.
-    AttackTarget.retainGoal[eid] = 1;
-    if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-      AttackMoveGoal.active[eid] = 0;
-    }
-    world.cannonWindups.delete(eid);
-    clearFormationSpeedCap(world, eid);
-    clearWorkOrders(world, eid);
-    if (inRange) world.paths.delete(eid);
+    // An order that replaces what the unit is doing also drops its queue.
+    if (startAttackOrder(world, eid, targetEid)) clearOrderQueue(world, eid);
   }
 }
 
 export function applyAttackMoveSelected(world: SimWorld, to: GridPos): void {
   applyAttackMoveCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
+}
+
+/**
+ * One unit's part of an attack-move to `dest`. False when the unit is not
+ * armed or the destination cannot be reached.
+ */
+export function startAttackMoveOrder(world: SimWorld, eid: number, dest: GridPos): boolean {
+  if (!hasComponent(world.ecs, Combat, eid)) return false;
+  if (!pathTo(world, eid, dest.x, dest.y)) return false;
+  AttackTarget.targetEid[eid] = -1;
+  AttackTarget.retainGoal[eid] = 0;
+  world.cannonWindups.delete(eid);
+  // Store the real attack-move destination so the unit can resume walking
+  // toward it after killing whatever they engage along the way.
+  if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
+    AttackMoveGoal.active[eid] = 1;
+    AttackMoveGoal.x[eid] = dest.x;
+    AttackMoveGoal.y[eid] = dest.y;
+  }
+  setUnitHoldAnchor(world, eid, dest.x, dest.y);
+  clearWorkOrders(world, eid);
+  forgetWork(world, eid);
+  return true;
 }
 
 export function applyAttackMoveCommand(
@@ -157,19 +211,8 @@ export function applyAttackMoveCommand(
   for (const { eid, dest } of destinations) {
     if (!hasComponent(world.ecs, Combat, eid)) continue;
     if (!formationModeUsesSlots(mode)) clearFormationSpeedCap(world, eid);
-    if (!pathTo(world, eid, dest.x, dest.y)) continue;
-    AttackTarget.targetEid[eid] = -1;
-    AttackTarget.retainGoal[eid] = 0;
-    world.cannonWindups.delete(eid);
-    // Store the real attack-move destination so the unit can resume walking
-    // toward it after killing whatever they engage along the way.
-    if (hasComponent(world.ecs, AttackMoveGoal, eid)) {
-      AttackMoveGoal.active[eid] = 1;
-      AttackMoveGoal.x[eid] = dest.x;
-      AttackMoveGoal.y[eid] = dest.y;
-    }
-    setUnitHoldAnchor(world, eid, dest.x, dest.y);
-    clearWorkOrders(world, eid);
+    if (!startAttackMoveOrder(world, eid, dest)) continue;
+    clearOrderQueue(world, eid);
     ordered.push(eid);
   }
   if (formationModeUsesSlots(mode)) {
@@ -179,6 +222,17 @@ export function applyAttackMoveCommand(
 
 export function applyMoveSelected(world: SimWorld, to: GridPos): void {
   applyMoveCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), to);
+}
+
+/** One unit's part of a move to `dest`. False when it cannot be reached. */
+export function startMoveOrder(world: SimWorld, eid: number, dest: GridPos): boolean {
+  if (!pathTo(world, eid, dest.x, dest.y)) return false;
+  // Move overrides any combat, gather, or build state.
+  clearCombatOrders(world, eid);
+  clearWorkOrders(world, eid);
+  forgetWork(world, eid);
+  setUnitHoldAnchor(world, eid, dest.x, dest.y);
+  return true;
 }
 
 export function applyMoveCommand(
@@ -197,11 +251,8 @@ export function applyMoveCommand(
   const ordered: number[] = [];
   for (const { eid, dest } of destinations) {
     if (!formationModeUsesSlots(mode)) clearFormationSpeedCap(world, eid);
-    if (!pathTo(world, eid, dest.x, dest.y)) continue;
-    // Move overrides any combat, gather, or build state.
-    clearCombatOrders(world, eid);
-    clearWorkOrders(world, eid);
-    setUnitHoldAnchor(world, eid, dest.x, dest.y);
+    if (!startMoveOrder(world, eid, dest)) continue;
+    clearOrderQueue(world, eid);
     ordered.push(eid);
   }
   if (formationModeUsesSlots(mode)) {
@@ -225,31 +276,83 @@ export function applyGatherSelected(world: SimWorld, targetEid: number): void {
   applyGatherCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
 }
 
+/** A resource node that still has something to gather. */
+export function isGatherOrderTarget(world: SimWorld, targetEid: number): boolean {
+  return hasComponent(world.ecs, Resource, targetEid) && Resource.amount[targetEid] > 0;
+}
+
+/**
+ * One villager's part of a gather order on a valid node (see
+ * {@link isGatherOrderTarget}). False for a unit that cannot gather.
+ */
+export function startGatherOrder(world: SimWorld, eid: number, targetEid: number): boolean {
+  if (!hasComponent(world.ecs, Gatherer, eid)) return false;
+  const kind = Resource.kind[targetEid] as ResourceKind;
+  clearCombatOrders(world, eid);
+  if (hasComponent(world.ecs, BuildOrder, eid)) BuildOrder.targetEid[eid] = -1;
+  leaveWorksite(world, eid);
+  if (
+    ResourceCarry.amount[eid] > 0 &&
+    ResourceCarry.kind[eid] !== kind
+  ) {
+    // Force a drop-off run first; gathering system will route us to TC.
+    Gatherer.targetEid[eid] = targetEid;
+    Gatherer.state[eid] = GathererStateId.RETURNING;
+    Gatherer.cooldown[eid] = 0;
+    routeToNearestDropOff(world, eid);
+    noteHandWork(world, eid, targetEid);
+    return true;
+  }
+  startGatheringResource(world, eid, targetEid);
+  return true;
+}
+
 export function applyGatherCommand(
   world: SimWorld,
   playerId: number,
   eids: number[],
   targetEid: number
 ): void {
-  if (!hasComponent(world.ecs, Resource, targetEid)) return;
-  if (Resource.amount[targetEid] <= 0) return;
-
-  const kind = Resource.kind[targetEid] as ResourceKind;
+  if (!isGatherOrderTarget(world, targetEid)) return;
   for (const eid of ownedCommandableEids(world, playerId, eids)) {
-    if (!hasComponent(world.ecs, Gatherer, eid)) continue;
-    clearCombatOrders(world, eid);
-    if (
-      ResourceCarry.amount[eid] > 0 &&
-      ResourceCarry.kind[eid] !== kind
-    ) {
-      // Force a drop-off run first; gathering system will route us to TC.
-      Gatherer.targetEid[eid] = targetEid;
-      Gatherer.state[eid] = GathererStateId.RETURNING;
-      Gatherer.cooldown[eid] = 0;
-      routeToNearestDropOff(world, eid);
-      continue;
-    }
-    startGatheringResource(world, eid, targetEid);
+    if (startGatherOrder(world, eid, targetEid)) clearOrderQueue(world, eid);
+  }
+}
+
+export function applyBuildSelected(world: SimWorld, targetEid: number): void {
+  applyBuildCommand(world, LOCAL_PLAYER_ID, commandableSelection(world), targetEid);
+}
+
+/**
+ * One villager's part of a build order on own open foundation `targetEid`
+ * (the caller checked it). False for a unit that cannot build. The villager
+ * keeps his work memory: a builder goes back to it when nothing is left to
+ * build (systems/villager-work.ts).
+ */
+export function startBuildOrder(world: SimWorld, eid: number, targetEid: number): boolean {
+  if (!canBuild(world, eid)) return false;
+  clearCombatOrders(world, eid);
+  clearWorkOrders(world, eid);
+  world.paths.delete(eid);
+  BuildOrder.targetEid[eid] = targetEid;
+  return true;
+}
+
+/**
+ * Send `eids` (the player's free villagers among them) to work on own
+ * foundation `targetEid`. The builder system walks them there; a villager
+ * that cannot reach it drops the order on its own.
+ */
+export function applyBuildCommand(
+  world: SimWorld,
+  playerId: number,
+  eids: number[],
+  targetEid: number
+): void {
+  if (!isOpenFoundation(world, targetEid, playerId)) return;
+  for (const eid of ownedCommandableEids(world, playerId, eids)) {
+    // An order that replaces what the unit is doing also drops its queue.
+    if (startBuildOrder(world, eid, targetEid)) clearOrderQueue(world, eid);
   }
 }
 
@@ -260,9 +363,11 @@ export function applyStopSelected(world: SimWorld): void {
 export function applyStopCommand(world: SimWorld, playerId: number, eids: number[]): void {
   for (const eid of ownedCommandableEids(world, playerId, eids)) {
     world.paths.delete(eid);
+    clearOrderQueue(world, eid);
     clearFormationSpeedCap(world, eid);
     clearCombatOrders(world, eid);
     clearWorkOrders(world, eid);
+    forgetWork(world, eid);
     setUnitHoldAnchor(world, eid);
   }
 }

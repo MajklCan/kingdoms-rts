@@ -31,6 +31,7 @@ export function createCampaignWorld(
   const world = createSimWorld(seed, {
     startingAge: mission.startingAge,
     mapId: mission.mapId,
+    starterVillagers: false,
   });
 
   if (mission.id === CampaignMissionId.SIEGE_OF_BRNO) {

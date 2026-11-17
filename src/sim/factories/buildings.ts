@@ -76,6 +76,7 @@ export function spawnTownCenter(
   // Block the FULL TC footprint (3×3) - not just the centre - so units
   // can't walk underneath the visible building.
   markFootprintBlocked(world, x, y, tcDef.footprint.w, tcDef.footprint.h, true);
+  attachBuildingCombat(world, eid, tcDef);
   return eid;
 }
 

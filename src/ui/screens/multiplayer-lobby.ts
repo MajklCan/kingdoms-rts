@@ -11,6 +11,7 @@ import { appState } from '../app-state';
 import { h, readStorage, writeStorage } from '../dom';
 import { icon } from '../icons/icon';
 import { startMultiplayerMatch } from '../match/match-flow';
+import { saveDesyncReport } from '../multiplayer/desync-download';
 import { PLAYER_NAME_KEY, storedPlayerName } from './main-menu';
 import { backButton, registerMenuScreen } from './menu-shell';
 
@@ -193,6 +194,8 @@ export function bindMultiplayerLobby(): void {
       },
       onDesync: (tick, local, peer, peerId) => {
         setLastEvent(`DESYNC at tick ${tick}: local ${local.toString(16)} vs P${peerId} ${peer.toString(16)}`);
+        const report = appState.mpSession?.desyncReport();
+        if (report) saveDesyncReport(report);
       },
       onError: (message) => {
         setStatus(`Relay error: ${message}`, 'error');

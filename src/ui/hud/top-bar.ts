@@ -1,6 +1,7 @@
 /**
  * Top resource bar: food / wood / gold / stone / population on the left,
- * the age plaque (with advance progress) in the centre, and the match clock
+ * the age plaque (the era of the open tech ring, and the paths toward the
+ * next ring) in the centre, and the match clock
  * plus objectives, tech tree, speed, pause and menu buttons on the right.
  */
 
@@ -11,13 +12,14 @@ import { formatAmount, formatClock, RESOURCE_KEYS, type ResourceKey } from '../f
 import { RESOURCE_ICON } from '../icons/catalog';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
+import { RING_NUMERALS } from '../../sim/tech-tree';
 import { showAgeBanner } from './age-banner';
 import { attachTip } from './tooltip';
 
 export interface TopBarHandlers {
   onObjectives: () => void;
   onTech: () => void;
-  /** Age plaque: the Technology panel on the next age. */
+  /** Age plaque: the Technology panel on the next ring. */
   onAge: () => void;
   onPause: () => void;
   onMenu: () => void;
@@ -27,12 +29,13 @@ const RES_LABEL: Record<ResourceKey, string> = { food: 'Food', wood: 'Wood', gol
 const RES_TIP: Record<ResourceKey, string> = {
   food: 'Feeds new villagers and soldiers. Farms and mills keep it flowing.',
   wood: 'Timber for houses, worksites and bows. Cut by lumber huts.',
-  gold: 'Pays for soldiers, research and advancing the age. Mined from gold veins.',
-  stone: 'Needed for towers and the Castle Age. Cut by stone quarries.',
+  gold: 'Pays for gunmen, cannon and the late research. Mined at gold mines.',
+  stone: 'Needed for most research and for stone walls. Cut by stone quarries.',
 };
 
 interface Refs {
   res: Record<ResourceKey, HTMLElement>;
+  workers: Record<ResourceKey, HTMLElement>;
   resChip: Record<ResourceKey, HTMLElement>;
   pop: HTMLElement;
   popChip: HTMLElement;
@@ -55,6 +58,7 @@ const lastRes: Partial<Record<ResourceKey, number>> = {};
 /** Age index last seen; the banner drops when it goes up mid-match. */
 let lastAge = -1;
 /** Research you can start now, and how many of those the player has seen in the panel. */
+let plaqueTip = '';
 let techReady = 0;
 let techReadySeen = 0;
 
@@ -65,18 +69,28 @@ function barButton(id: string, iconName: IconName, label: string, onclick: () =>
 
 export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const res = {} as Record<ResourceKey, HTMLElement>;
+  const workers = {} as Record<ResourceKey, HTMLElement>;
   const resChip = {} as Record<ResourceKey, HTMLElement>;
   const strip = h('div', { class: 'res-strip', role: 'group', 'aria-label': 'Resources' });
   for (const key of RESOURCE_KEYS) {
     const val = h('span', { class: 'res-val num', id: `res-${key}` }, '0');
+    // Villagers on this resource: a small worker figure and a count.
+    const workerVal = h('span', { class: 'res-workers-val num' }, '0');
+    const workerTag = h('span', { class: 'res-workers', 'aria-hidden': 'true' }, icon('r-pop-s', 'res-workers-icon'), workerVal);
     const chip = h(
       'div',
       { class: 'res-chip', 'data-res': key, tabindex: '0', 'aria-label': `${RES_LABEL[key]}` },
       icon(RESOURCE_ICON[key], 'res-icon'),
-      val
+      val,
+      workerTag
     );
-    attachTip(chip, () => ({ title: RES_LABEL[key], body: RES_TIP[key] }));
+    attachTip(chip, () => ({
+      title: RES_LABEL[key],
+      body: RES_TIP[key],
+      meta: `${workerVal.textContent} villager${workerVal.textContent === '1' ? '' : 's'} working it`,
+    }));
     res[key] = val;
+    workers[key] = workerVal;
     resChip[key] = chip;
     strip.append(chip);
   }
@@ -104,10 +118,9 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   const ageWrap = h('div', { class: 'age-progress bar', 'aria-hidden': 'true' }, ageBar);
   const plaque = h(
     'div',
-    { class: 'age-plaque', tabindex: '0', role: 'button', 'aria-label': 'Age: open the next age in Technology' },
+    { class: 'age-plaque', tabindex: '0', role: 'button', 'aria-label': 'Age: open the next ring in Technology' },
     icon('crown', 'age-crown'),
-    h('span', { class: 'age-text' }, ageName, ageNext),
-    ageWrap
+    h('span', { class: 'age-text' }, ageName, ageNext, ageWrap)
   );
   plaque.addEventListener('click', handlers.onAge);
   plaque.addEventListener('keydown', (ev) => {
@@ -117,10 +130,8 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   });
   attachTip(plaque, () => ({
     title: ageName.textContent ?? '',
-    body: ageNext.textContent
-      ? `Advancing: ${ageNext.textContent}`
-      : 'Advance at your Town Center. Each age first needs one research path from the Technology tree.',
-    hint: 'Click to see what the next age needs.',
+    body: plaqueTip,
+    hint: 'Click to see the next ring in Technology.',
   }));
 
   const clock = h('span', { class: 'clock-val num', id: 'match-clock' }, '0:00');
@@ -142,7 +153,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
   attachTip(tech, () => ({
     title: 'Technology',
     hotkey: 'K',
-    body: 'Research upgrades, unlock new buildings, and open the way to the next age.',
+    body: 'Research unlocks buildings, units and upgrades. Completing two paths of a ring opens the next ring and its era.',
     meta: techReady > 0 ? `${techReady} research ${techReady === 1 ? 'is' : 'are'} ready to start` : undefined,
   }));
   attachTip(speed, () => ({ title: 'Game speed', hotkey: 'X', body: 'Toggle between normal and double speed.' }));
@@ -156,7 +167,7 @@ export function buildTopBar(handlers: TopBarHandlers): HTMLElement {
     h('div', { class: 'topbar-buttons' }, objectives, tech, speed, pause, menu)
   );
 
-  refs = { res, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech, techBadge };
+  refs = { res, workers, resChip, pop, popQueued, popRising, popChip, ageName, ageBar, ageWrap, ageNext, clock, speed, pause, objectives, tech, techBadge };
   return h('header', { class: 'topbar', id: 'resource-bar' }, strip, plaque, right);
 }
 
@@ -174,7 +185,7 @@ export function updateTopBar(scene: GameScene): void {
       const prev = lastRes[key];
       lastRes[key] = v;
       setText(refs.res[key], formatAmount(v));
-      refs.resChip[key].setAttribute('aria-label', `${RES_LABEL[key]} ${v}`);
+      refs.resChip[key].setAttribute('aria-label', `${RES_LABEL[key]} ${v}, ${refs.workers[key].textContent} working`);
       if (prev !== undefined && v > prev) {
         refs.resChip[key].classList.remove('is-gain');
         void refs.resChip[key].offsetWidth;
@@ -182,6 +193,16 @@ export function updateTopBar(scene: GameScene): void {
       }
     }
   }
+  const working = scene.getWorkerCounts(me);
+  for (const key of RESOURCE_KEYS) {
+    const n = working[key];
+    if (refs.workers[key].textContent !== String(n)) {
+      setText(refs.workers[key], String(n));
+      refs.workers[key].parentElement?.classList.toggle('is-none', n === 0);
+      refs.resChip[key].setAttribute('aria-label', `${RES_LABEL[key]} ${lastRes[key] ?? 0}, ${n} working`);
+    }
+  }
+
   const pop = scene.getPop(me);
   setText(refs.pop, `${pop.current}/${pop.cap}`);
   setText(refs.popRising, pop.rising > 0 ? `→${pop.cap + pop.rising}` : '');
@@ -201,10 +222,17 @@ export function updateTopBar(scene: GameScene): void {
   const age = scene.getAge(me);
   if (lastAge >= 0 && age.current > lastAge) showAgeBanner(age.name);
   lastAge = age.current;
+  const ring = RING_NUMERALS[age.ring];
+  const hasNext = age.nextName !== null;
   setText(refs.ageName, age.name);
-  setText(refs.ageNext, age.advancing && age.nextName ? `${age.nextName} ${Math.floor(age.progressFrac * 100)}%` : '');
-  refs.ageWrap.classList.toggle('is-active', age.advancing);
-  refs.ageBar.style.setProperty('--p', age.advancing ? age.progressFrac.toFixed(3) : '0');
+  setText(refs.ageNext, hasNext ? `Ring ${ring} · ${age.nextRingPaths} of ${age.nextRingNeed} paths` : `Ring ${ring}`);
+  refs.ageWrap.classList.toggle('is-active', hasNext);
+  refs.ageBar.style.setProperty('--p', hasNext ? age.progressFrac.toFixed(3) : '0');
+  plaqueTip = hasNext
+    ? `Ring ${ring} is open. The next ring (the ${age.nextName}) opens when ${age.nextRingNeed} paths are ` +
+      `complete in ring ${ring}: every research of that path in the ring done. ${age.nextRingPaths} of ` +
+      `${age.nextRingNeed} so far.`
+    : `Ring ${ring} is open: the last ring of the Technology tree.`;
 
   setText(refs.clock, formatClock(scene.getTick() / SIM.TICK_HZ));
 

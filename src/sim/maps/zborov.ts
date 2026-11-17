@@ -2,6 +2,7 @@
  * Zborov lines: WWI trench corridor.
  */
 
+import { dcos, dsin } from '../core/dmath';
 import {
   H,
   W,
@@ -17,7 +18,7 @@ import { type MapData, TileType } from './types';
 export function isZborovMudPatch(x: number, y: number): boolean {
   const broadPatch = valueNoise(x, y, 9, 29);
   const smallBreakup = valueNoise(x + 17, y - 11, 4, 83);
-  const shellScarring = Math.sin(x * 0.33 + y * 0.21) + Math.cos(x * 0.17 - y * 0.37);
+  const shellScarring = dsin(x * 0.33 + y * 0.21) + dcos(x * 0.17 - y * 0.37);
   return broadPatch * 0.58 + smallBreakup * 0.28 + shellScarring * 0.07 > 0.58;
 }
 

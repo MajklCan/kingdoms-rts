@@ -7,26 +7,39 @@
  * source is given, a translucent preview of the building itself on the
  * overlay layer (red-tinted where it cannot be placed).
  *
- * Mouse: the ghost follows the cursor and a click places. Touch (the
- * "confirm" flow): the ghost starts at the view centre, follows the finger
+ * Mouse: the ghost follows the cursor and a click places. A Shift+click
+ * places and keeps the same ghost armed for the next one (houses in a row)
+ * until one more cannot be started; walls have their own line placement.
+ * The selected villagers build the first of a row at once and the rest
+ * from their order queue, one after another.
+ * Touch (the "confirm" flow): the ghost starts at the view centre, follows the finger
  * while it drags, stays where it is released and only an on-screen Confirm
  * places it; a wall line is dragged from its start tile to its end tile.
  */
 
 import { ISO } from '../../config';
-import { Resource } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import { isBuildingUnlocked } from '@sim/tech-tree';
-import { findResourceAt, getBuildingCost, isPlacementInSight, wallLineTiles } from '@sim/world';
+import { Building, Owner, Resource } from '@sim/components';
+import {
+  buildingEraFor,
+  findBuildingAt,
+  findResourceAt,
+  getBuildingCost,
+  isPlacementInSight,
+  wallLineTiles,
+} from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import { ERROR as SFX_ERROR, PLACE_BUILDING } from '../audio/sound-map';
-import type { PlayerCommands } from '../commands/player-commands';
+import type { CommandFailure } from '../commands/feedback';
+import { NO_BUILDER_FAILURE, type PlayerCommands } from '../commands/player-commands';
 import { countOwnedArmyProducers } from '../commands/economy';
 import type { GameAudio } from '../game-audio';
 import type { SceneContext } from '../scene-context';
 import type { SpriteRef, SpriteSource } from '../sprites/sprite-source';
 import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, isInsideMap, spriteAnchorPoint } from '../world-projection';
+import { PlacementChain } from './placement-chain';
 import { hasNearbyResource, isBuildFootprintBlocked } from './placement-rules';
 
 const GHOST_ALPHA = 0.6;
@@ -100,6 +113,8 @@ export class BuildPlacement {
   /** Confirm flow: where the ghost (or the wall line's end) sits. */
   private touchTile: Tile | null = null;
   private lastValid = false;
+  /** Shift-placed buildings of this build mode (see placement-chain.ts). */
+  private readonly chain = new PlacementChain();
 
   constructor(
     private readonly ctx: SceneContext,
@@ -142,6 +157,13 @@ export class BuildPlacement {
     this.villagerRallyMode = false;
     this.wallStart = null;
     this.touchTile = null;
+    this.chain.reset();
+    const noBuilder = this.commands.builderFailure();
+    if (noBuilder) {
+      this.mode = 'none';
+      this.commands.fail(noBuilder);
+      return;
+    }
     if (!isBuildingUnlocked(this.ctx.world, this.ctx.perspectivePlayerId, defId)) {
       this.mode = 'none';
       setLastEvent(`${def?.name ?? mode} is locked`);
@@ -193,7 +215,59 @@ export class BuildPlacement {
     this.armyRallyMode = false;
     this.villagerRallyMode = false;
     this.awaitingBuildKind = false;
+    this.chain.reset();
     this.clear();
+  }
+
+  /**
+   * A left click is about to place the armed building at (tx, ty): refuse it
+   * here when the sim would. Returns true when the click was refused (the
+   * player has been told why). A bad spot keeps the mode armed so another
+   * tile can be tried; in a Shift-placement row, a building that can no
+   * longer be started at all (bank, house limit) ends the mode.
+   */
+  refuseClick(tx: number, ty: number): boolean {
+    if (this.mode === 'none') return false;
+    const defId = BUILD_MODE_TO_DEF[this.mode];
+    if (this.mode === 'WALL') {
+      const wallFailure = this.commands.placementFailure(defId, tx, ty);
+      if (wallFailure) this.commands.fail(wallFailure);
+      return wallFailure !== null;
+    }
+    const pending = this.pendingPlacements(defId);
+    if (this.chain.placed > 0) {
+      const stop = this.commands.nextPlacementFailure(defId, pending);
+      if (stop) {
+        this.commands.fail(stop);
+        this.reset();
+        return true;
+      }
+    }
+    const failure = this.placementFailureAt(defId, tx, ty, pending);
+    if (failure) this.commands.fail(failure);
+    return failure !== null;
+  }
+
+  /** {@link PlayerCommands.placementFailure}, also against placements still on their way to the sim. */
+  private placementFailureAt(defId: number, tx: number, ty: number, pending: number): CommandFailure | null {
+    const failure = this.commands.placementFailure(defId, tx, ty, pending);
+    if (failure) return failure;
+    const def = BUILDING_TABLE[defId];
+    if (def && this.chain.overlaps(def.footprint, tx, ty)) {
+      return { reason: 'placement', subject: def.name, detail: 'blocked' };
+    }
+    return null;
+  }
+
+  /** How many `defId` placements of this row the sim has not applied yet. */
+  private pendingPlacements(defId: number): number {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    this.chain.settle(world.tick, (p) => {
+      const eid = findBuildingAt(world, p.x, p.y, 0.01);
+      return eid !== null && Owner.player[eid] === playerId && Building.defId[eid] === p.defId;
+    });
+    return this.chain.pendingCount(defId);
   }
 
   /**
@@ -230,7 +304,7 @@ export class BuildPlacement {
       }
       if (pointer.leftButtonDown() && this.mode === 'WALL') return this.handleWallClick(tx, ty);
       if (pointer.leftButtonDown()) {
-        this.placeBuildingAt(tx, ty);
+        this.placeBuildingAt(tx, ty, isShiftClick(pointer));
         return true;
       }
     }
@@ -279,7 +353,12 @@ export class BuildPlacement {
     return this.ctx.isResourceExplored(eid) ? eid : null;
   }
 
-  private placeBuildingAt(tx: number, ty: number): void {
+  /**
+   * Send the placement. `keep` (Shift+click) leaves the same ghost armed for
+   * the next one; when one more cannot be started (bank, house limit) the
+   * player is told why and the mode ends, as after a plain click.
+   */
+  private placeBuildingAt(tx: number, ty: number, keep = false): void {
     if (this.mode === 'none' || this.mode === 'WALL') return;
     const playerId = this.ctx.perspectivePlayerId;
     const defId = BUILD_MODE_TO_DEF[this.mode];
@@ -289,10 +368,29 @@ export class BuildPlacement {
       this.reset();
       return;
     }
-    this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId });
+    const eids = this.commands.selectedBuilderEids();
+    if (eids.length === 0) {
+      this.commands.fail(NO_BUILDER_FAILURE);
+      this.reset();
+      return;
+    }
+    // Later buildings of a Shift-placed row wait in the builders' order
+    // queue: they finish one and walk on to the next.
+    const queue = this.chain.placed > 0 ? { queue: true } : {};
+    this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId, eids, ...queue });
     this.audio.playUi(PLACE_BUILDING);
     setLastEvent(`place ${this.mode} → (${tx},${ty})`);
-    this.reset();
+    const def = BUILDING_TABLE[defId];
+    if (!keep || !def) {
+      this.reset();
+      return;
+    }
+    this.chain.add({ defId, x: tx, y: ty, footprint: def.footprint, tick: this.ctx.world.tick });
+    const stop = this.commands.nextPlacementFailure(defId, this.pendingPlacements(defId));
+    if (stop) {
+      this.commands.fail(stop);
+      this.reset();
+    }
   }
 
   /**
@@ -330,7 +428,13 @@ export class BuildPlacement {
 
   private placeWallLine(from: Tile, to: Tile): void {
     const playerId = this.ctx.perspectivePlayerId;
-    this.commands.dispatch({ type: 'placeWallLine', playerId, x0: from.x, y0: from.y, x1: to.x, y1: to.y });
+    const eids = this.commands.selectedBuilderEids();
+    if (eids.length === 0) {
+      this.commands.fail(NO_BUILDER_FAILURE);
+      this.reset();
+      return;
+    }
+    this.commands.dispatch({ type: 'placeWallLine', playerId, x0: from.x, y0: from.y, x1: to.x, y1: to.y, eids });
     this.audio.playUi(PLACE_BUILDING);
     setLastEvent(`wall (${from.x},${from.y}) to (${to.x},${to.y})`);
     this.reset();
@@ -481,20 +585,23 @@ export class BuildPlacement {
     const h = (ISO.TILE_H / 2) * def.footprint.h;
 
     // Valid = unlocked, footprint free, affordable, and near its resource.
-    const tileBlocked = isBuildFootprintBlocked(world, def, tx, ty);
+    // Buildings Shift-placed a moment ago count as spent and standing.
+    const pending = this.pendingPlacements(defId);
+    const tileBlocked = isBuildFootprintBlocked(world, def, tx, ty) || this.chain.overlaps(def.footprint, tx, ty);
     const nearResource =
       def.harvestKind === undefined ||
       def.requiresNearbyResource === false ||
       hasNearbyResource(world, tx, ty, def.harvestKind, def.harvestRadius ?? 6);
     const bank = world.resources[playerId];
     const cost = getBuildingCost(world, playerId, defId);
+    const times = pending + 1;
     const canAffordBuild =
-      bank[0] >= cost.food &&
-      bank[1] >= cost.wood &&
-      bank[2] >= cost.gold &&
-      bank[3] >= cost.stone;
+      bank[0] >= cost.food * times &&
+      bank[1] >= cost.wood * times &&
+      bank[2] >= cost.gold * times &&
+      bank[3] >= cost.stone * times;
     const unlocked = isBuildingUnlocked(world, playerId, defId) &&
-      !(defId === BuildingDefId.HOUSE && this.commands.houseStartFailure() !== null) &&
+      !(defId === BuildingDefId.HOUSE && this.commands.houseStartFailure(pending) !== null) &&
       isPlacementInSight(world, playerId, def, tx, ty);
     const valid = unlocked && !tileBlocked && canAffordBuild && nearResource;
     this.lastValid = valid;
@@ -563,7 +670,8 @@ export class BuildPlacement {
     valid: boolean
   ): boolean {
     if (!this.sprites) return false;
-    const age = this.ctx.world.ages[playerId]?.current ?? 0;
+    // Walls preview their research tier, other buildings the owner's era.
+    const age = buildingEraFor(this.ctx.world, playerId, defId);
     const ref = this.sprites.building({ defId, age, playerId });
     if (!ref) return false;
     let sprite = this.ghostSprite;
@@ -597,4 +705,10 @@ export class BuildPlacement {
     g.fillStyle(color, alpha);
     g.fillTriangle(c.x + 1, c.y - 24, c.x + 17, c.y - 19, c.x + 1, c.y - 14);
   }
+}
+
+/** A mouse click with Shift held (touch pointers never reach placement clicks). */
+function isShiftClick(pointer: Phaser.Input.Pointer): boolean {
+  const event = pointer.event as MouseEvent | undefined;
+  return event?.shiftKey === true;
 }

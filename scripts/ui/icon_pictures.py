@@ -32,6 +32,7 @@ UNITS: dict[str, tuple[str, int, str, int, str]] = {
     'villager': ('units_villager', 0, 'idle', 0, 'body'),
     'militia': ('units_militia', 0, 'idle', 0, 'body'),
     'spearman': ('units_spearman', 0, 'idle', 0, 'body'),
+    'commander': ('units_commander', 0, 'idle', 0, 'body'),
     'archer': ('units_archer', 0, 'idle', 0, 'body'),
     'cavalry': ('units_cavalry', 7, 'idle', 0, 'whole'),
     'gunman': ('units_gunman', 0, 'idle', 0, 'body'),

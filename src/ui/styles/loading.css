@@ -1,162 +1,246 @@
-/* Loading screen between the title and a match. Covers the canvas while
-   the world is built so the player never sees a blank or half drawn frame:
-   the crest over the darkened map, the destination in blackletter, a
-   progress rod in an iron groove that follows the real start-up steps and
-   a tip pinned on a sealed parchment note. */
+/* Loading screen between the title and a match. It is the title's own
+   painted map, haze and glows (shared .menu-bg / .menu-haze / .menu-glow-*
+   rules), only darker, with one quiet line and a thin gold hairline at the
+   title's left margin. The hairline fills on the real start-up phases
+   (src/ui/screens/loading.ts). */
 
 .loading-screen {
   position: fixed;
   inset: 0;
   z-index: var(--z-loading);
-  display: grid;
-  place-items: center;
+  overflow: hidden;
+  overflow: clip;
   pointer-events: auto;
-  background: var(--wood-950);
-  animation: fade-in var(--dur-med) var(--ease-out);
+  background: #0a0d12;
+  color: var(--text);
 }
 
 .loading-screen.is-leaving {
   opacity: 0;
-  transition: opacity 260ms var(--ease-out);
+  transition: opacity 420ms var(--ease-out);
 }
 
+/* The drift transform is copied from the title on show, so the cut is a
+   dimming, not a new picture. */
 .loading-bg {
+  animation: loading-dim 450ms var(--ease-out) both;
+  filter: saturate(0.75) brightness(1);
+}
+
+@keyframes loading-dim {
+  from { filter: none; }
+  to { filter: saturate(0.75) brightness(1); }
+}
+
+.loading-glow {
+  animation: loading-flicker 3.4s ease-in-out infinite alternate;
+}
+
+@keyframes loading-flicker {
+  from { opacity: 0.7; }
+  to { opacity: 0.95; }
+}
+
+/* Lighter vignette than the title's, so the painted map still reads. */
+.loading-screen .menu-haze {
+  background: radial-gradient(130% 90% at 50% 46%, transparent 50%, rgba(5, 7, 10, 0.6) 100%);
+}
+
+/* A slow field of pale motes, standing in for the title's dust canvas. */
+.loading-motes {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(255, 232, 186, 0.7), transparent),
+    radial-gradient(1px 1px at 55% 70%, rgba(255, 232, 186, 0.6), transparent),
+    radial-gradient(2px 2px at 80% 25%, rgba(255, 232, 186, 0.5), transparent),
+    radial-gradient(1px 1px at 35% 85%, rgba(255, 232, 186, 0.6), transparent),
+    radial-gradient(1px 1px at 90% 60%, rgba(255, 232, 186, 0.5), transparent);
+  background-size: 23rem 17rem;
+  animation: loading-motes 60s linear infinite;
+}
+
+@keyframes loading-motes {
+  to { background-position: 23rem -17rem; }
+}
+
+/* Extra darkening, strongest bottom-left where the text sits. */
+.loading-scrim {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 55% at 50% 42%, rgba(201, 162, 39, 0.18), transparent 70%),
-    linear-gradient(180deg, rgba(15, 10, 6, 0.5), rgba(15, 10, 6, 0.92)),
-    url('/assets/ui/menu-bg.jpg') center / cover no-repeat;
-  filter: saturate(0.7) brightness(0.6);
+    radial-gradient(60% 40% at 0% 100%, rgba(5, 7, 10, 0.6), transparent 70%),
+    rgba(5, 7, 10, 0.18);
 }
 
-.loading-card {
-  position: relative;
-  width: min(34rem, calc(100% - 2rem));
+/* Same safe frame and margins as the title screen. */
+.loading-frame {
+  --m: 2.25rem;
+  position: absolute;
+  inset: 0;
+  width: min(100%, 177.78vh);
+  margin-inline: auto;
+  display: flex;
+  align-items: flex-end;
+  padding:
+    max(var(--m), env(safe-area-inset-top))
+    max(var(--m), env(safe-area-inset-right))
+    max(calc(var(--m) * 1.4), env(safe-area-inset-bottom))
+    max(var(--m), env(safe-area-inset-left));
+}
+
+.loading-foot {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  text-align: center;
-  color: var(--text);
+  gap: 0.6rem;
+  animation: loading-fade 450ms var(--ease-out) 120ms both;
 }
 
-.loading-crest {
-  width: 6rem;
-  height: auto;
-  filter: drop-shadow(0 0.4rem 1rem rgba(0, 0, 0, 0.7));
+/* Destination left, one line of lore right, both sitting on the rule. */
+.loading-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 0.6rem;
 }
 
-.loading-card .eyebrow {
-  color: var(--gold-300);
-  text-shadow: 0 var(--px) 0 #000;
+.loading-dest {
+  min-width: 0;
+}
+
+.loading-kicker,
+.loading-meta {
+  margin: 0;
+  font-family: "Jersey 25", var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.loading-kicker {
+  font-size: 1.25rem;
+  text-transform: uppercase;
+}
+
+.loading-meta {
+  min-height: 1.3em;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
 }
 
 .loading-title {
   margin: 0;
-  font-size: var(--fs-3xl);
-  line-height: 1;
-  color: var(--gold-200);
-  text-shadow: 0 calc(2 * var(--px)) 0 #000;
+  padding-bottom: 0.18em;
+  font-family: "Jacquard 24", var(--font-title);
+  font-size: clamp(2.75rem, 7vw, 5.25rem);
+  line-height: 1.05;
+  background: linear-gradient(180deg, #fff1bf 0%, #f0cf68 32%, #c9a227 54%, #8f6e16 76%, #e7cf7e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0.19rem 0 #3a2806);
 }
 
-.loading-sub {
-  margin: 0;
-  font-size: var(--fs-md);
+.loading-lore {
+  flex: 0 1 22rem;
+  margin: 0 0 0.3rem;
+  text-align: right;
+  font-family: var(--font-body);
   font-style: italic;
+  font-size: var(--fs-md);
+  line-height: 1.4;
   color: var(--text-muted);
-  min-height: 1.5em;
 }
 
-/* Progress: a gold rod in an iron groove with a glint running along it. */
-.loading-bar.bar {
-  width: min(24rem, 84%);
-  height: calc(8 * var(--px));
-  margin-top: 0.5rem;
-  background: #0c0805;
-  box-shadow:
-    0 0 0 var(--px) #6b6258,
-    0 0 0 calc(2 * var(--px)) #1a1410,
-    0 var(--px) 0 calc(2 * var(--px)) rgba(255, 240, 200, 0.2);
+@media (max-width: 760px) {
+  .loading-lore { display: none; }
 }
 
-.loading-bar.bar > i {
-  inset: var(--px);
-  width: calc(100% - 2 * var(--px));
-  transition: transform 260ms var(--ease-out);
-}
-
-.loading-bar.bar::after {
-  content: "";
-  position: absolute;
-  inset: var(--px);
-  background: linear-gradient(90deg, transparent 0 40%, rgba(255, 246, 210, 0.55) 50%, transparent 60% 100%) -100% 0 / 50% 100% no-repeat;
-  mix-blend-mode: screen;
-  animation: loading-glint 1.4s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes loading-glint {
-  to { background-position: 200% 0; }
+@keyframes loading-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .loading-status {
   margin: 0;
-  min-height: 1.4em;
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold-300);
+  /* One line reserved, so a longer label never moves the hairline. */
+  height: 1.4em;
+  line-height: 1.4;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  color: var(--parchment-200);
   text-shadow: 0 var(--px) 0 #000;
 }
 
-/* The tip: a torn parchment note with a wax seal (note slice 8). */
-.loading-note {
-  position: relative;
-  width: min(30rem, 100%);
-  margin-top: 1rem;
-  padding: 0.7rem 1.2rem 0.8rem 2.6rem;
+.loading-status.is-slow::after {
+  content: "";
+  display: inline-block;
+  width: 1.4em;
   text-align: left;
-  color: var(--ink-900);
-  border: var(--px) solid transparent;
-  border-image: var(--tex-note) 8 fill / calc(8 * var(--px)) / 0 repeat;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(0, 0, 0, 0.5));
-  transform: rotate(-0.6deg);
+  animation: loading-ellipsis 1.6s steps(4, end) infinite;
 }
 
-.loading-note-seal {
+@keyframes loading-ellipsis {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75%, 100% { content: "..."; }
+}
+
+.loading-status.is-error {
+  white-space: normal;
+  height: auto;
+  color: var(--danger);
+}
+
+.loading-rule {
+  position: relative;
+  height: 4px;
+  background: rgba(233, 227, 212, 0.14);
+}
+
+.loading-fill {
   position: absolute;
-  left: calc(-6 * var(--px));
-  top: calc(-6 * var(--px));
-  width: calc(18 * var(--px));
-  height: calc(18 * var(--px));
-  background: var(--tex-seal) 0 0 / 100% 100% no-repeat;
-  image-rendering: pixelated;
-}
-
-.loading-note-label {
-  display: block;
-  font-size: var(--fs-2xs);
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: #6c0f17;
-}
-
-.loading-tip {
-  margin: 0.15rem 0 0;
-  min-height: 2.8em;
-  font-size: var(--fs-md);
-  line-height: 1.4;
-  color: var(--ink-900);
+  inset: 0;
+  background: var(--gold-300);
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--rule-dur, 0.3s) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .loading-bar.bar::after {
+  .loading-bg,
+  .loading-foot {
     animation: none;
-    display: none;
+  }
+
+  .loading-glow {
+    animation: none;
+    opacity: 0.82;
+  }
+
+  .loading-motes {
+    animation: none;
+  }
+
+  .loading-screen.is-leaving,
+  .loading-fill {
+    transition-duration: 0.01ms;
+  }
+
+  .loading-status.is-slow::after {
+    animation: none;
+    content: "...";
+  }
+}
+
+@media (max-height: 560px), (orientation: portrait) and (max-width: 700px) {
+  .loading-frame {
+    --m: 1rem;
   }
 }

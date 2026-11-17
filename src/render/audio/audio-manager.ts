@@ -12,6 +12,7 @@
 //   audio-settings.ts  persisted volumes
 
 import { AudioEngine } from './audio-engine';
+import { versioned } from '../asset-version';
 import { AUDIO_CHANNELS, clamp, loadSettings, persistSettings, type AudioChannel, type AudioSettings } from './audio-settings';
 import { BarkArbiter } from './bark-arbiter';
 import {
@@ -50,6 +51,8 @@ export type BarkResult = 'played' | 'busy' | 'none';
 export interface MusicTransition {
   fadeOut: number;
   delay?: number;
+  /** Fade-in of the first song only (default: the program's own). */
+  fadeIn?: number;
 }
 
 export class AudioManager {
@@ -78,16 +81,16 @@ export class AudioManager {
   // decode our Opus-in-Ogg clips. mp3 decodes everywhere; ogg is the fallback.
 
   static queueLoad(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
-    for (const key of keys) load.audio(`sfx-${key}`, [`assets/audio/sfx/${key}.mp3`, `assets/audio/sfx/${key}.ogg`]);
+    for (const key of keys) load.audio(`sfx-${key}`, [versioned(`assets/audio/sfx/${key}.mp3`), versioned(`assets/audio/sfx/${key}.ogg`)]);
   }
 
   static queueLoadMusic(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
-    for (const key of keys) load.audio(`music-${key}`, [`assets/audio/music/${key}.mp3`, `assets/audio/music/${key}.ogg`]);
+    for (const key of keys) load.audio(`music-${key}`, [versioned(`assets/audio/music/${key}.mp3`), versioned(`assets/audio/music/${key}.ogg`)]);
   }
 
   static queueLoadVoices(load: Phaser.Loader.LoaderPlugin, keys: readonly string[]): void {
     for (const key of keys) {
-      load.audio(`voice-${key}`, [`assets/audio/voices/${key}.mp3`, `assets/audio/voices/${key}.ogg`]);
+      load.audio(`voice-${key}`, [versioned(`assets/audio/voices/${key}.mp3`), versioned(`assets/audio/voices/${key}.ogg`)]);
     }
   }
 
@@ -121,6 +124,11 @@ export class AudioManager {
   toggleMuted(): boolean {
     this.setMuted(!this.settings.muted);
     return this.settings.muted;
+  }
+
+  /** Unlock audio from a user gesture (the title gate). True once it runs. */
+  unlock(): Promise<boolean> {
+    return this.engine ? this.engine.resume() : Promise.resolve(false);
   }
 
   // --- Music + ambience ---

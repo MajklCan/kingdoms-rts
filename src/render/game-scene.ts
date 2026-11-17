@@ -58,6 +58,7 @@ import { registerProjectileEffects } from './effects/projectile-effects';
 import { WorldFx } from './effects/world-fx';
 import { BuildingRenderer } from './entities/building-renderer';
 import { Occupancy } from './entities/occupancy';
+import { GameRenderer } from './entities/game-renderer';
 import { ResourceRenderer } from './entities/resource-renderer';
 import { UnitRenderer } from './entities/unit-renderer';
 import { GameAudio } from './game-audio';
@@ -67,9 +68,12 @@ import {
   getAge,
   getCampaignMission,
   getPop,
+  getWorkerCounts,
   getResources,
+  getTechRings,
   getTechTree,
   type CampaignMissionInfo,
+  type TechRingsView,
   type TechTreeNode,
 } from './hud/player-queries';
 import { getSelectionInfo, getStatusInfo, type SelectionInfo } from './hud/selection-info';
@@ -79,6 +83,7 @@ import { PointerController } from './input/pointer-controller';
 import { TouchController } from './input/touch-controller';
 import { createInspectionSheet, requestedInspectionSheet } from './inspection/inspection-sheets';
 import { FogRenderer } from './overlays/fog-renderer';
+import { NightRenderer } from './overlays/night-renderer';
 import { StatusOverlay } from './overlays/status-overlay';
 import { BuildPlacement } from './placement/build-placement';
 import { SceneContext } from './scene-context';
@@ -103,8 +108,10 @@ export class GameScene extends Phaser.Scene {
   private buildings!: BuildingRenderer;
   private units!: UnitRenderer;
   private resources!: ResourceRenderer;
+  private huntableGame!: GameRenderer;
   private status!: StatusOverlay;
   private fog!: FogRenderer;
+  private night!: NightRenderer;
   private effects!: EffectsLayer;
   private combat!: CombatFeedback;
   private worldFx!: WorldFx;
@@ -155,8 +162,9 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.layers = createWorldLayers(this);
     this.ctx = new SceneContext(this, this.layers, createSimWorld(Date.now() & 0xffff));
+    // Menu music waits for the title gate (src/ui/screens/menu-gate.ts): the
+    // first gesture unlocks audio, plays the entry stinger and swells it in.
     this.audio = new GameAudio(this.ctx);
-    this.audio.manager.playMenuMusic();
 
     bakeVoxelTextures(this);
     this.sprites = createSpriteRegistry(this);
@@ -173,6 +181,7 @@ export class GameScene extends Phaser.Scene {
     this.placement = new BuildPlacement(this.ctx, this.commands, this.audio, this.sprites);
     this.units = new UnitRenderer(this.ctx, this.sprites);
     this.resources = new ResourceRenderer(this.ctx, this.sprites, this.occupancy);
+    this.huntableGame = new GameRenderer(this.ctx);
     this.fog = new FogRenderer(this.ctx, () => this.terrain.bounds);
     this.effects = new EffectsLayer(this.ctx);
     this.effects.setAnchorResolver((eid) => this.units.anchorOf(eid) ?? this.buildings.anchorOf(eid));
@@ -186,6 +195,7 @@ export class GameScene extends Phaser.Scene {
       effects: this.effects,
     });
     this.worldFx = new WorldFx(this.ctx, { units: this.units, buildings: this.buildings, resources: this.resources, combat: this.combat, audio: this.audio });
+    this.night = new NightRenderer(this.ctx, { units: this.units, buildings: this.buildings, fx: this.worldFx.fx });
     this.actions = new ActionGrid(this.ctx, this.commands, this.placement);
     this.cheats = this.createCheats();
 
@@ -260,6 +270,7 @@ export class GameScene extends Phaser.Scene {
     this.resources.drawMapFeatures();
     this.buildings.draw();
     this.resources.drawResources();
+    this.huntableGame.draw();
     this.status.begin();
     this.buildings.drawStatus(this.status);
     this.units.draw(this.status);
@@ -277,6 +288,7 @@ export class GameScene extends Phaser.Scene {
       this.status.drawAttackHover(ctx.pointerTile(pointer));
     }
     this.fog.draw();
+    this.night.draw(delta);
     this.layers.entities.sort();
     this.fps = this.game.loop.actualFps;
   }
@@ -289,6 +301,10 @@ export class GameScene extends Phaser.Scene {
       ctx.accumulatorMs = ctx.multiplayer.interpolationMs();
       return;
     }
+    // Paused: hold the accumulator. Letting it run made the interpolation
+    // alpha sweep 0..1 every 50 ms, so units twitched between their last two
+    // tick positions for as long as the game stayed paused.
+    if (this.world.paused) return;
     ctx.accumulatorMs += delta * ctx.gameSpeed;
     let safety = 0;
     while (ctx.accumulatorMs >= SIM.TICK_MS && safety++ < MAX_STEPS_PER_FRAME) {
@@ -388,11 +404,13 @@ export class GameScene extends Phaser.Scene {
   startNewGame(
     startingAge: AgeIdValue = AgeId.DARK,
     mapId?: MapIdValue,
-    aiDifficulty: AiDifficulty = 'medium'
+    aiDifficulty: AiDifficulty = 'medium',
+    /** Night match; undefined = the map's own time of day. */
+    night?: boolean
   ): void {
     const age = getAgeDef(startingAge) ?? getAgeDef(AgeId.DARK);
-    this.ctx.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty });
-    this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI`);
+    this.ctx.world = createSimWorld(Date.now() & 0xffff, { startingAge, mapId, aiDifficulty, night });
+    this.afterWorldLoaded(`started in ${age?.name ?? 'Dark Age'} - ${aiDifficulty} AI${this.world.night ? ' - night' : ''}`);
   }
 
   startCampaignMission(missionId: CampaignMissionIdValue = CampaignMissionId.SIEGE_OF_BRNO): void {
@@ -491,6 +509,11 @@ export class GameScene extends Phaser.Scene {
     return getResources(this.world, playerId);
   }
 
+  /** Villagers working each resource (resource bar). */
+  getWorkerCounts(playerId: number): ReturnType<typeof getWorkerCounts> {
+    return getWorkerCounts(this.world, playerId);
+  }
+
   getPop(playerId: number): { current: number; cap: number; queued: number; rising: number } {
     return getPop(this.world, playerId);
   }
@@ -501,6 +524,11 @@ export class GameScene extends Phaser.Scene {
 
   getTechTree(playerId = this.ctx.perspectivePlayerId): TechTreeNode[] {
     return getTechTree(this.world, playerId);
+  }
+
+  /** The tech rings: which is open and the paths maxed in each. */
+  getTechRings(playerId = this.ctx.perspectivePlayerId): TechRingsView {
+    return getTechRings(this.world, playerId);
   }
 
   researchTech(techId: TechIdValue, playerId = this.ctx.perspectivePlayerId): void {
@@ -606,7 +634,7 @@ export class GameScene extends Phaser.Scene {
       spawnEffect: (id, tileX, tileY, params) =>
         this.effects.spawn(id, { x: tileX, y: tileY }, { params }) !== null,
       shake: (intensity, durationMs) => this.effects.shake(intensity, durationMs),
-      startSkirmish: (mapId, age) => this.startNewGame(age as AgeIdValue | undefined, mapId as MapIdValue),
+      startSkirmish: (mapId, age, night) => this.startNewGame(age as AgeIdValue | undefined, mapId as MapIdValue, 'medium', night),
       startCampaign: (missionId) => this.startCampaignMission(missionId as CampaignMissionIdValue),
       loadLateGame: () => this.loadLateGameTestSave(),
       setZoom: (zoom) => this.camera.zoomTo(zoom, undefined, undefined, true),
@@ -645,12 +673,14 @@ export class GameScene extends Phaser.Scene {
     this.placement.reset();
     this.effects.clear();
     this.worldFx.clear();
+    this.night.clear();
     this.status.clear();
     this.alerts.clear();
     this.uiApi?.reset();
     this.buildings.clear();
     this.units.clear();
     this.resources.clear();
+    this.huntableGame.clear();
     this.refreshTerrain();
     this.installDebugWindowApi();
     this.camera.panToLocalTownCenter();

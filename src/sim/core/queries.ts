@@ -7,6 +7,7 @@ import {
   AttackTarget,
   Building,
   Combat,
+  CommanderTag,
   ConstructionSite,
   Cooldown,
   DeadTag,
@@ -24,7 +25,9 @@ import {
   TownCenterTag,
   UnitKind,
   Velocity,
+  WorksiteHelper,
   WorksiteWorker,
+  GameAnimal,
 } from '../components';
 
 export const positionQuery = defineQuery([Position]);
@@ -35,6 +38,8 @@ export const resourceQuery = defineQuery([Position, Resource]);
 export const dropOffQuery = defineQuery([Position, DropOff, Owner]);
 export const resourceWorksiteQuery = defineQuery([Position, ResourceWorksite, Owner, Building]);
 export const worksiteWorkerQuery = defineQuery([Position, WorksiteWorker, Gatherer, Owner]);
+export const worksiteHelperQuery = defineQuery([Position, WorksiteHelper, Gatherer, Owner]);
+export const gameAnimalQuery = defineQuery([Position, GameAnimal, Resource]);
 export const townCenterQuery = defineQuery([Position, TownCenterTag, Owner]);
 export const buildingQuery = defineQuery([Position, Building, Owner]);
 export const foundationQuery = defineQuery([
@@ -54,4 +59,5 @@ export const combatQuery = defineQuery([
 ]);
 export const damageableQuery = defineQuery([Position, Health, Owner]);
 export const unitQuery = defineQuery([Position, UnitKind, Owner, Health]);
+export const commanderQuery = defineQuery([CommanderTag, Owner]);
 export const deadQuery = defineQuery([DeadTag]);

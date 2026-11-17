@@ -10,6 +10,7 @@
  * so build a fresh one per batch.
  */
 
+import { dhypot } from './dmath';
 import { MAP } from '../../config';
 import { Position, Resource, type ResourceKind } from '../components';
 import { resourceQuery } from './queries';
@@ -62,7 +63,7 @@ export class ResourceProbe {
   hasResourceAt(x: number, y: number, radius: number): boolean {
     const b = this.all;
     for (const eid of b.outside) {
-      if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
+      if (dhypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
     }
     // A node closer than `radius` rounds to a tile at most ceil(radius) + 1 away.
     const reach = Math.ceil(radius) + 1;
@@ -72,7 +73,7 @@ export class ResourceProbe {
       for (let tx = Math.max(0, cx - reach); tx <= Math.min(MAP.WIDTH - 1, cx + reach); tx++) {
         for (let i = b.head[ty * MAP.WIDTH + tx]; i >= 0; i = b.next[i]) {
           const eid = b.eids[i];
-          if (Math.hypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
+          if (dhypot(Position.x[eid] - x, Position.y[eid] - y) < radius) return true;
         }
       }
     }
@@ -91,7 +92,7 @@ export class ResourceProbe {
     let best = maxRange;
     let found = false;
     const consider = (eid: number): void => {
-      const d = Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
+      const d = dhypot(Position.x[eid] - x, Position.y[eid] - y);
       if (d < best) {
         best = d;
         found = true;

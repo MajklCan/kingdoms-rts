@@ -23,14 +23,18 @@ export interface AiActuator {
   isSpotClaimed(defId: number, x: number, y: number): boolean;
   /** Research `techId`; true when it was (or will be) researched. */
   researchTech(world: SimWorld, playerId: number, techId: TechIdValue): boolean;
-  /** Start the next age; true when the advance started (or was ordered). */
-  advanceAge(world: SimWorld, playerId: number): boolean;
   /** Walk `eid` to `to`, dropping its fight and work. */
   move(world: SimWorld, eid: number, to: GridPos): void;
   /** Attack-move `eid` to `to`; false when it cannot get there. */
   attackMove(world: SimWorld, eid: number, to: GridPos): boolean;
   /** Attack `target` with `eid` (validated by the caller). */
   attack(world: SimWorld, eid: number, target: number, inRange: boolean): void;
+  /** Send villagers `eids` to work on own foundation `siteEid`. */
+  build(world: SimWorld, playerId: number, eids: number[], siteEid: number): void;
+  /** Send free villagers `eids` to help at own completed worksite `siteEid`. */
+  assignWorksite(world: SimWorld, playerId: number, eids: number[], siteEid: number): void;
+  /** Send villagers `eids` to gather or hunt resource node `targetEid`. */
+  gather(world: SimWorld, playerId: number, eids: number[], targetEid: number): void;
   /** Player-facing AI message (render only). */
   event(world: SimWorld, playerId: number, message: string): void;
 }
@@ -39,7 +43,7 @@ export interface AiThinkScope {
   playerId: number;
   difficulty: AiDifficulty;
   actuator: AiActuator;
-  /** Gold and stone held back for the next age-up; army training may not
+  /** Gold and stone held back for the next research; army training may not
    *  spend below it. Set by the brain each think. */
   reserve?: { gold: number; stone: number } | null;
 }

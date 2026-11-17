@@ -6,8 +6,15 @@
 import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import { Building, Owner, ResourceKindId } from '@sim/components';
-import { AgeId, BuildingDefId, UNIT_TABLE, getUnitDef, type CostTuple } from '@sim/defs';
-import { TechId, techDef, techPrereqPaths, type TechIdValue } from '@sim/tech-tree';
+import { BuildingDefId, UNIT_TABLE, getUnitDef, type CostTuple } from '@sim/defs';
+import {
+  BUILDING_UNLOCK_TECH,
+  UNIT_UNLOCK_TECH,
+  hasTech,
+  techDef,
+  techLockedReason,
+  type TechIdValue,
+} from '@sim/tech-tree';
 import { buildingQuery, type SimWorld } from '@sim/world';
 
 export interface Cost {
@@ -107,28 +114,34 @@ export function countOwnedArmyProducers(world: SimWorld, playerId: number): numb
   return count;
 }
 
-/** Tech that advances `playerId` to the next reachable age, or null at the cap. */
-export function nextAgeTechId(world: SimWorld, playerId: number): TechIdValue | null {
-  const current = world.ages[playerId]?.current ?? AgeId.DARK;
-  if (current === AgeId.DARK) return TechId.CASTLE_AGE;
-  if (current === AgeId.CASTLE) return TechId.GUNPOWDER_AGE;
-  return null;
+/**
+ * Why `techId` cannot be researched yet, as text ("Ring II opens when 2 paths
+ * are complete in ring I (1 of 2). Needs Archers"), or null when it can.
+ */
+export function missingResearchText(world: SimWorld, playerId: number, techId: TechIdValue): string | null {
+  return techLockedReason(world, playerId, techId) ?? null;
 }
 
 /**
- * The research still standing between the player and `techId`, as text:
- * "Barracks ✓ then Archers, or Lumber Crews then Mining Crews". Paths that
- * only need research already done are left out. Null when nothing is missing.
+ * Locked behind research: the research that unlocks building `defId` (or
+ * unit `unitDefId`) and what still stands before it, for a disabled button.
+ * Null when it is unlocked, or when its research is shut for this mission.
  */
-export function missingResearchText(world: SimWorld, playerId: number, techId: TechIdValue): string | null {
-  const paths = techPrereqPaths(world, playerId, techId).filter((path) => path.some((step) => !step.done));
-  if (paths.length === 0) return null;
-  return paths
-    .map((path) =>
-      path
-        // Research every path shares and the player already has is noise here.
-        .filter((step) => !(step.done && paths.every((p) => p.some((s) => s.id === step.id))))
-        .map((step) => `${techDef(step.id)?.name ?? step.id}${step.done ? ' ✓' : ''}`)
-        .join(' then '))
-    .join(', or ');
+export function unlockResearchFor(
+  world: SimWorld,
+  playerId: number,
+  kind: 'building' | 'unit',
+  defId: number
+): { techId: TechIdValue; text: string } | null {
+  const techId = kind === 'building' ? BUILDING_UNLOCK_TECH[defId] : UNIT_UNLOCK_TECH[defId];
+  if (!techId || hasTech(world, playerId, techId)) return null;
+  if (world.campaign?.lockedTechs.includes(techId)) return null;
+  const name = techDef(techId)?.name ?? techId;
+  const missing = techLockedReason(world, playerId, techId);
+  return {
+    techId,
+    text: missing
+      ? `Needs the ${name} research. ${missing}. Click to open it in Technology.`
+      : `Needs the ${name} research. Click to open it in Technology.`,
+  };
 }

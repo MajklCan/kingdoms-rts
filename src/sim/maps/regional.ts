@@ -1,7 +1,8 @@
 /**
- * Smaller hand-shaped skirmish maps (border forest, ore pass, Machovo jezero, Silesian marsh, flooded basin).
+ * Smaller hand-shaped skirmish maps (border forest, ore pass, Machovo jezero, Silesian marsh, flooded basin, Blaník night watch).
  */
 
+import { dcos, dhypot, dsin } from '../core/dmath';
 import type { Rng } from '../rng';
 import {
   H,
@@ -131,10 +132,10 @@ export function generateMachovoJezeroMap(): MapData {
       const idx = mapIndex(x, y);
       const nx = (x - cx) / rx;
       const ny = (y - cy) / ry;
-      const d = Math.hypot(nx, ny);
+      const d = dhypot(nx, ny);
       const shoreline = d
-        + Math.sin((x + y) * 0.12) * 0.035
-        + Math.cos((x - y) * 0.10) * 0.03;
+        + dsin((x + y) * 0.12) * 0.035
+        + dcos((x - y) * 0.10) * 0.03;
 
       if (shoreline <= 0.68) {
         map.elevation[idx] = 0;
@@ -187,7 +188,7 @@ export function generateSilesianMarshMap(rng: Rng): MapData {
   for (const channel of channels) {
     const phase = rng.next() * Math.PI * 2;
     for (let x = 0; x < W; x++) {
-      const centerY = Math.round(H * channel + Math.sin(x * 0.18 + phase) * 3);
+      const centerY = Math.round(H * channel + dsin(x * 0.18 + phase) * 3);
       for (let dy = -3; dy <= 3; dy++) {
         const y = centerY + dy;
         if (!inBounds(x, y)) continue;
@@ -230,9 +231,9 @@ export function generateFloodedBasinMap(): MapData {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const idx = mapIndex(x, y);
-      const d = Math.hypot(x - cx, y - cy);
+      const d = dhypot(x - cx, y - cy);
       if (d <= R) {
-        const crater = Math.sin(x * 0.45 + y * 0.31) + Math.cos(x * 0.21 - y * 0.6);
+        const crater = dsin(x * 0.45 + y * 0.31) + dcos(x * 0.21 - y * 0.6);
         if (crater > 1.55) {
           map.tiles[idx] = TileType.MUD;
           map.elevation[idx] = 2;
@@ -261,6 +262,73 @@ export function generateFloodedBasinMap(): MapData {
     { x: cx, y: cy + Math.round(R * 0.72) },
     { x: cx, y: cy - Math.round(R * 0.72) }
   );
+  refreshBridgePositions(map);
+  return map;
+}
+
+export function generateBlanikNightWatchMap(): MapData {
+  // The night map: Blaník, a wooded hill with a bare stone crown, in the
+  // middle; a home clearing in two opposite corners; a ring road around the
+  // hill; and woods that break the open ground into pockets a torch can
+  // hold. Point-mirrored through the centre, so both sides get the same land.
+  const map = createBaseMap(TileType.GRASS, 3);
+  const c = { x: Math.round(W * 0.5), y: Math.round(H * 0.5) };
+  const mirror = (p: { x: number; y: number }) => ({ x: W - 1 - p.x, y: H - 1 - p.y });
+  const at = (fx: number, fy: number) => ({ x: Math.round(W * fx), y: Math.round(H * fy) });
+  const p1 = at(0.19, 0.79);
+  const p2 = mirror(p1);
+  const mine1 = at(0.2, 0.22);
+  const mine2 = mirror(mine1);
+  const west = { x: c.x - 16, y: c.y };
+  const south = { x: c.x, y: c.y + 16 };
+  const east = mirror(west);
+  const north = mirror(south);
+
+  // Woods first: the hill's skirt, the dark corners, and copses on the plain.
+  addForestBlob(map, c.x, c.y, 12, 0.92);
+  for (const [fx, fy, radius, fullness] of [
+    [0.13, 0.13, 9, 0.9],
+    [0.5, 0.05, 6, 0.85],
+    [0.05, 0.5, 6, 0.85],
+    [0.34, 0.72, 3, 0.8],
+    [0.3, 0.4, 4, 0.8],
+    [0.38, 0.9, 4, 0.8],
+  ] as const) {
+    const a = at(fx, fy);
+    const b = mirror(a);
+    addForestBlob(map, a.x, a.y, radius, fullness);
+    addForestBlob(map, b.x, b.y, radius, fullness);
+  }
+
+  // The crown: bare rock two steps above the plain.
+  addStonePocket(map, c.x, c.y, 5);
+
+  for (const spawn of [p1, p2]) carveForestClearing(map, spawn.x, spawn.y, 8, 7);
+  for (const mine of [mine1, mine2]) {
+    carveForestClearing(map, mine.x, mine.y, 6, 5);
+    addStonePocket(map, mine.x, mine.y, 2);
+  }
+
+  // Ring road around the hill, spurs to both homes and mines, and a sunken
+  // trail up to the crown from the west and the east.
+  const roads: Array<[{ x: number; y: number }, { x: number; y: number }, number]> = [
+    [p1, west, 1.4],
+    [p1, south, 1.4],
+    [p2, east, 1.4],
+    [p2, north, 1.4],
+    [west, north, 1.2],
+    [south, east, 1.2],
+    [west, mine1, 1.1],
+    [east, mine2, 1.1],
+    [west, { x: c.x - 5, y: c.y }, 1],
+    [east, { x: c.x + 5, y: c.y }, 1],
+  ];
+  for (const [a, b, radius] of roads) carveDryRoad(map, a, b, radius);
+
+  clearSpawnPatch(map, p1.x, p1.y, 4);
+  clearSpawnPatch(map, p2.x, p2.y, 4);
+  rebuildWalkability(map);
+  setSpawns(map, p1, p2);
   refreshBridgePositions(map);
   return map;
 }

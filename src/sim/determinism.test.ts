@@ -239,6 +239,8 @@ describe('self-describing commands', () => {
   it('cmdMove only moves units the commanding player owns', () => {
     const world = createSimWorld(9);
     world.paused = false;
+    // No AI: it would send player 2's idle villager off to build.
+    world.humanPlayers = new Set([1, 2]);
     // Villagers (no auto-aggro) placed far apart so neither separation nor
     // combat confounds the ownership check.
     const spot = findOpenTile(world);

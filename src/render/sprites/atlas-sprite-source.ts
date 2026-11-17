@@ -62,7 +62,10 @@ export class AtlasSpriteSource implements SpriteSource {
       frame = this.art.stageFrame(asset.construction, query.construction);
       teamed = false;
     } else if (query.defId === BuildingDefId.FARM) {
-      frame = this.art.frame(assetId, query.farmStage ?? asset.default) ?? this.art.defaultFrame(assetId);
+      const stage = query.farmStage ?? asset.default;
+      frame = (query.hemp ? this.art.frame(assetId, `hemp_${stage}`) : null)
+        ?? this.art.frame(assetId, stage)
+        ?? this.art.defaultFrame(assetId);
     } else {
       const era = ERA_NAMES.get(query.age) ?? 'dark';
       frame = query.wallMask === undefined

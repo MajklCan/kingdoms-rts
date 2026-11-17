@@ -1,6 +1,6 @@
 /**
  * Title screen shell: the illuminated-manuscript backdrop (painted map,
- * haze, hearth glow, embers, gilded corners) plus a router that swaps the
+ * haze, hearth glow, embers) plus a router that swaps the
  * menu screens (root, skirmish, campaign, multiplayer) with a short
  * transition. Screens register themselves; the shell owns Escape-to-back.
  */
@@ -29,9 +29,6 @@ let root: HTMLElement | null = null;
 
 export function getMenuRoot(): HTMLElement {
   if (root) return root;
-  const corners = (['tl', 'tr', 'bl', 'br'] as const).map((pos) =>
-    h('div', { class: `menu-corner ${pos}`, 'aria-hidden': 'true' })
-  );
   stage = h('main', { class: 'menu-stage', id: 'menu-stage' });
   root = h(
     'div',
@@ -41,7 +38,6 @@ export function getMenuRoot(): HTMLElement {
     h('div', { class: 'menu-glow-hall', id: 'menu-glow-hall', 'aria-hidden': 'true' }),
     h('div', { class: 'menu-glow-core', id: 'menu-glow-core', 'aria-hidden': 'true' }),
     h('canvas', { class: 'menu-dust', id: 'menu-dust', 'aria-hidden': 'true' }),
-    ...corners,
     stage
   );
   return root;
@@ -67,6 +63,7 @@ export function showMenuScreen(id: MenuScreenId, focus = true): void {
     prev.el.classList.remove('is-entering');
   }
   next.el.hidden = false;
+  if (root) root.dataset.screen = id;
   next.el.classList.remove('is-entering');
   // Force a reflow so the entrance animation restarts each time.
   void next.el.offsetWidth;

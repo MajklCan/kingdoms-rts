@@ -7,7 +7,7 @@ import { Position } from '../components';
 import { AgeId, BuildingDefId, UnitDefId } from '../defs';
 import { CampaignMissionId, type CampaignObjectiveDef } from '../campaign';
 import type { GridPos } from '../pathfinding';
-import { TechId, createStartingTechSetForAge } from '../tech-tree';
+import { TechId, createStartingTechSetForAge, techIdsInRing } from '../tech-tree';
 import { createAiPlayerState } from '../ai/difficulty';
 import { AI_PLAYER_ID, LOCAL_PLAYER_ID, POP_CAP_HARD_LIMIT } from '../core/constants';
 import { applyStartingResources, createAgeState } from '../core/create-world';
@@ -32,12 +32,14 @@ export function configureSiegeOfBrno(
   world.ages[LOCAL_PLAYER_ID] = createAgeState(AgeId.DARK);
   world.ages[AI_PLAYER_ID] = createAgeState(AgeId.CASTLE);
   world.researchedTechs[LOCAL_PLAYER_ID] = createStartingTechSetForAge(AgeId.DARK);
+  // The city: ring I plus most of ring II (stone walls, gold, riders, farms),
+  // and Farming II as a scripted grant from the locked ring III.
   world.researchedTechs[AI_PLAYER_ID] = createStartingTechSetForAge(AgeId.CASTLE);
   world.researchedTechs[AI_PLAYER_ID].add(TechId.GOLD_MINES);
   world.researchedTechs[AI_PLAYER_ID].add(TechId.KNIGHTS);
+  world.researchedTechs[AI_PLAYER_ID].add(TechId.STONE_WALLS);
   world.researchedTechs[AI_PLAYER_ID].add(TechId.FARMS);
   world.researchedTechs[AI_PLAYER_ID].add(TechId.FARMS_II);
-  world.researchedTechs[AI_PLAYER_ID].add(TechId.MILLS);
   applyStartingResources(world.resources[LOCAL_PLAYER_ID], AgeId.DARK);
   world.resources[AI_PLAYER_ID].set([1600, 5200, 2400, 3200]);
   world.population[AI_PLAYER_ID].cap = POP_CAP_HARD_LIMIT;
@@ -61,7 +63,7 @@ export function configureSiegeOfBrno(
     name: 'Siege of Brno',
     description: '',
     briefing: '',
-    lockedTechs: [TechId.GUNPOWDER_AGE],
+    lockedTechs: techIdsInRing(3),
     objectives: [],
     trackedObjectiveEids,
     enemyAiMode: 'defensive',

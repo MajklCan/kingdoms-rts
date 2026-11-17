@@ -11,12 +11,14 @@ have no art yet and stay on the in-engine voxel bakes.
 
 | Path | What |
 | --- | --- |
-| `public/assets/sprites/units-<n>.png` + `.json` | Atlas pages (2048x2048, Phaser JSON hash, trimmed frames, NEAREST filtered) |
+| `public/assets/sprites/units-<n>.png` + `.json` | Atlas pages (2048 wide, Phaser JSON hash, trimmed frames, NEAREST filtered); every unit sits on one page, so a frame, its mask and its shadow share a texture |
 | `public/assets/sprites/units-manifest.json` | Per unit: def ids, frame size, feet anchor, head height, ring size, anims, muzzle points |
 | `public/assets/ui/portraits/units/<unit>.png` + `index.json` | 96x96 busts for the HUD; `index.json` maps `UnitDefId` names to files |
 | `art-source/blender/units/.cache/<unit>.npz` | Per-unit render cache keyed by a hash of the unit's sources (gitignored) |
 
-One page, about 2.7 MB, 3695 frames (3249 unique after dedupe).
+Two pages (2048x2048 each), about 4.3 MB, 6959 frames (5931 unique
+after dedupe). The villager role looks added about 1.1 MB to the former single
+2.7 MB page, the Commander (idle-smoke and idle-sit included) about 0.5 MB.
 
 ## Re-running
 
@@ -57,21 +59,90 @@ crew about 50 px.
 
 | Unit | `UnitDefId` | Anims (frames) |
 | --- | --- | --- |
-| villager | `VILLAGER` | idle 4, move 8, carry_wood / carry_food / carry_gold / carry_stone 8, chop 6, mine 6, build 6, farm 6, forage 4, death 4 |
+| villager (builder) | `VILLAGER` | idle 4, move 8, carry_wood / carry_food / carry_gold / carry_stone 8, chop 6, mine 6, build 6, farm 6, forage 4, death 4 |
+| villager-lumberjack | `VILLAGER` look `lumberjack` | idle, move, carry_wood, chop, death |
+| villager-farmer | `VILLAGER` look `farmer` | idle, move, carry_food, farm 8 (scythe mowing), water 8 (watering can), death |
+| villager-quarryman | `VILLAGER` look `quarryman` | idle, move, carry_stone, mine, death |
+| villager-gold-miner | `VILLAGER` look `gold-miner` | idle, move, carry_gold, mine, death |
 | militia | `MILITIA` (legacy) | idle 4, move 8, attack 6 (sword), death 4 |
 | spearman | `SPEARMAN` | idle 4, move 8, attack 6 (pike thrust), death 4 |
 | archer | `ARCHER` | idle 4, move 8, attack 6 (draw and loose), death 4 |
 | cavalry | `SCOUT_CAVALRY` | idle 4, move 6 (gallop), attack 6 (couched lance), death 4 |
 | gunman | `GUNMAN` | idle 4, move 8, attack 6 (fire and recoil), death 4 |
+| commander | `COMMANDER` | idle 4, move 8, attack 6 (sword cut), death 4, idle-smoke 24, idle-sit 12 |
 | cannon | `CANNON` | idle 2, move 6 (wheels spin), attack 8 (fire and push back), death 3 |
 
 Every anim has all 8 facings. Aliases in the manifest (`attack` -> `chop` for
 villagers, `carry` -> `carry_food`, ...) cover names older code asks for.
 
+## Commander idle gag
+
+The commander (`units_commander*.py`: plumed felt hat, blue cloak and tabard,
+grey moustache, arming sword) has two extra anims besides idle, move, attack
+and death. `idle-smoke` (24 frames, 250 ms) rolls a cigarette, lights it,
+smokes and blows a small smoke wisp; `idle-sit` (12 frames, 500 ms, shadow per
+frame) sits down, looks about and stands up. The sword is sheathed in both.
+
+They are picked render-side only (`src/render/entities/commander-idle.ts`,
+called from `UnitAnimator`): after 4 s with no order (not moving, no attack
+target, no blow in flight) a 22 s round plays smoke 12 s, idle 2 s, sit 6 s,
+idle 2 s, then repeats. Any order clears the idle timer, so the very next
+frame is plain idle or move art. The idle time is not sim state and uses no
+rng. If the atlas lacks an anim the unit simply plays idle, and with no atlas
+at all he borrows the pikeman voxel bake.
+
+## Villager roles
+
+Villagers wear the look of their job (`villagerRole` in
+`src/sim/core/villager-role.ts`). One shared body, one `Kit` per role in
+`scripts/blender/units_villager.py`: headwear, garment keys, gear (apron,
+belt tools, back items) and the tool on the shoulder in idle and move. The
+team tunic and skirt stay in the same place on every role.
+
+| Role | Look | Reads as |
+| --- | --- | --- |
+| builder | default `villager` art | wide rust beret, beard, rolled sleeves, leather apron, mallet on the shoulder, saw on the back |
+| lumberjack | `lumberjack` | moss wool cap on a fur brim, fur collar, bulkier, felling axe |
+| farmer | `farmer` | wide straw hat, light linen trousers, scythe on the shoulder, mows with it or waters with a can (picked per worker by NetId) |
+| quarryman | `quarryman` | grey visor cap, dusty sleeves and apron, beard, pick |
+| gold-miner | `gold-miner` | bare bearded face, small dark felt cap with a candle lamp, ochre smock over the blue tunic and skirt, pick, small ore sack |
+| miller | `farmer` | no art of its own (no mill crews today) |
+
+Worksite crews work in Gatherer state `BUILDING`, which used to map to the
+`build` anim. No role look has `build`, so `artFor` fell back to the builder's
+art (mallet) whenever a farm, camp or mine worker was at his site, whatever the
+facing. `pickVillagerAnim` (`src/render/entities/villager-anim.ts`) now gives a
+crew member his role's own work anim there (`roleWorkAnim`), and the animator
+times it by the look's art. `villager-role-art.test.ts` walks the shipped
+manifest and every role and worker state.
+
+The builder is the free villager and the villager's default art, so it has
+every anim. A crew is its own atlas unit named `villager-<role>` with
+`"look": "<role>"` in the manifest and only the anims its job plays (same
+`SPECS`, so frame counts and timing match the builder). A look never claims
+its `defIds`.
+
+At runtime `UnitRenderer` asks `villagerLook(world, eid)`
+(`src/render/sprites/villager-look.ts`, role -> look name) and passes it as
+`look` in the unit query. `UnitAtlasSource` draws the look only when it has
+that exact anim (or its own alias); otherwise, or when the look is missing
+from the manifest or atlas, it draws the default villager art, so a crew
+never blanks or plays another job's work. Death frames use the look the unit
+was last drawn with.
+
+To add a role: add a `Kit` and a `_role_unit(...)` entry in `ROLE_UNITS`,
+list `"villager-<role>": "units_villager:<role>"` in `UNITS` of
+`render_units.py`, map the sim role to the look in `villager-look.ts` and the
+inspection id in `src/render/inspection/villager-role-sheets.ts`, then
+`python3 scripts/blender/render_units.py --only villager-<role>`.
+
+Review: `?inspect=villager-<role>` (every facing at 2x) and
+`?inspect=villager-roles` (all roles, both teams, 1x and 2x).
+
 ## Frame names
 
 ```
-<unit>/<anim>/<facing>/<frame>      colour
+<unit>/<anim>/<facing>/<frame>      colour (<unit> = manifest key, e.g. villager-lumberjack)
 <unit>/<anim>/<facing>/<frame>/m    team mask
 <unit>/<anim>/<facing>/<frame>/s    shadow (frame 0 of the anim unless shadow = "frame")
 ```
@@ -109,7 +180,8 @@ line up with the colour frame through the atlas trim offsets.
 }
 ```
 
-The file and its atlases are optional. `parseUnitManifest()` drops invalid
+Role looks add `"look": "<role>"` to a unit entry with the same `defIds`
+(see Villager roles). The file and its atlases are optional. `parseUnitManifest()` drops invalid
 units with a console problem, and a unit counts as covered only when its
 `idle/1/0` frame is really in a loaded atlas.
 
@@ -146,6 +218,9 @@ Timing, all render side (the sim is never read back into):
 
 - Militia and spearman share the kettle hat and shield; only the weapon tells
   them apart.
+- Villager roles read mostly by headwear colour at 1x; the shouldered tools are
+  thin and the builder's saw only shows from behind. The HUD icon sheet
+  (`scripts/ui/gen_icons.py`) still draws the old villager until regenerated.
 - Static shadows per anim (only deaths have per-frame shadows), so a walking
   unit's shadow does not swing its legs.
 - Sprites are 1x pixel art with NEAREST filtering; at zoom 1.3 and 2.5 pixels

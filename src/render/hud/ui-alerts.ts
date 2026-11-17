@@ -13,7 +13,7 @@
  */
 
 import { BUILDING_TABLE, UNIT_TABLE, getAgeDef } from '@sim/defs';
-import { techDef } from '@sim/tech-tree';
+import { RING_NUMERALS, type TechRing, techDef } from '@sim/tech-tree';
 import { POP_CAP_HARD_LIMIT, pendingPopCapGain, type GameEvent } from '@sim/world';
 import { SIM } from '../../config';
 import type { CommandFeedback, CommandNotice, ResourceName } from '../commands/feedback';
@@ -165,8 +165,9 @@ export class UiAlertFeed {
       case 'ageAdvanced': {
         if (event.playerId !== me) return;
         const name = getAgeDef(event.ageId)?.name ?? 'a new age';
-        this.alert('age-up', `Your realm enters the ${name}`, event.tick);
-        this.message(`Advanced to the ${name}`, 'good', event.tick);
+        const ring = RING_NUMERALS[(event.ageId + 1) as TechRing] ?? '';
+        this.alert('age-up', `Ring ${ring} opens: your realm enters the ${name}`, event.tick);
+        this.message(`Ring ${ring} open: the ${name}`, 'good', event.tick);
         return;
       }
       case 'entityDestroyed': {

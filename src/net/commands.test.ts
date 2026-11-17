@@ -23,7 +23,7 @@ describe('sanitizeWireCommand', () => {
   it('keeps well-formed commands from their own player', () => {
     const move = { type: 'cmdMove', playerId: 2, eids: [4, 5], to: { x: 3, y: 4.5 } };
     expect(sanitizeWireCommand(2, move)).toEqual(move);
-    expect(sanitizeWireCommand(2, { type: 'advanceAge', playerId: 2 })).not.toBeNull();
+    expect(sanitizeWireCommand(2, { type: 'advanceAge', playerId: 2 })).toBeNull();
     expect(sanitizeWireCommand(2, { type: 'researchTech', playerId: 2, techId: 'x' })).not.toBeNull();
   });
 

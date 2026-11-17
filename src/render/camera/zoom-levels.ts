@@ -97,39 +97,9 @@ export function screenToWorld(
   return { x: (sx - hx) / zoom + hx + scrollX, y: (sy - hy) / zoom + hy + scrollY };
 }
 
-/** Wheel px per zoom level (one mouse notch is about 100 px in every browser). */
-export const WHEEL_PX_PER_LEVEL = 100;
-
 /** WheelEvent delta in px, whatever the delta mode. */
 export function wheelDeltaPx(deltaY: number, deltaMode: number, pageHeight: number): number {
   if (deltaMode === 1) return deltaY * 16;
   if (deltaMode === 2) return deltaY * pageHeight;
   return deltaY;
-}
-
-/**
- * Wheel accumulator: a discrete notch (one big event) is exactly one level,
- * and small trackpad deltas add up to a level per {@link WHEEL_PX_PER_LEVEL}.
- * A notch is 100 px on one screen and 200 px on a 2x screen, so its size is
- * learned: `notchPx` is the smallest discrete event seen so far (Infinity
- * before the first), and an event that carries several notches (the browser
- * merges a fast spin into one event per frame) moves up to three levels.
- * Returns the whole levels to move (+ = zoom in), the remainder to carry and
- * the notch size to pass back next time.
- */
-export function wheelLevels(
-  accPx: number,
-  deltaPx: number,
-  notchPx = Infinity
-): { levels: number; rest: number; notch: number } {
-  const size = Math.abs(deltaPx);
-  if (size >= 40) {
-    const notch = Math.min(notchPx, size);
-    const levels = -Math.sign(deltaPx) * Math.min(3, Math.max(1, Math.round(size / notch)));
-    return { levels, rest: 0, notch };
-  }
-  // A small delta against the carried direction drops the carry.
-  const acc = Math.sign(accPx) === -Math.sign(deltaPx) ? deltaPx : accPx + deltaPx;
-  if (Math.abs(acc) < WHEEL_PX_PER_LEVEL) return { levels: 0, rest: acc, notch: notchPx };
-  return { levels: -Math.sign(acc), rest: acc - Math.sign(acc) * WHEEL_PX_PER_LEVEL, notch: notchPx };
 }

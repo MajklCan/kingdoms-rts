@@ -1,6 +1,7 @@
 /**
- * Selection rings, health bars, villager carry dots and build markers, plus
- * the red hover ring under an attackable enemy. Immediate mode: cleared and
+ * Selection rings, health bars, villager carry dots and build markers, a
+ * "needs a builder" mark over own foundations nobody works on, plus the red
+ * hover ring under an attackable enemy. Immediate mode: cleared and
  * redrawn every frame.
  *
  * Rings are split so they read as lying on the ground: the back half is drawn
@@ -16,9 +17,11 @@
 import { hasComponent } from 'bitecs';
 import {
   AttackTarget,
+  BuildOrder,
   Building,
   Combat,
   ConstructionSite,
+  FoundationTag,
   Gatherer,
   GathererStateId,
   Health,
@@ -29,7 +32,7 @@ import {
   UnitKind,
 } from '@sim/components';
 import { BUILDING_TABLE } from '@sim/defs';
-import { findEntityNear, isEnemyOf, selectedQuery } from '@sim/world';
+import { findEntityNear, isEnemyOf, selectedQuery, unitQuery } from '@sim/world';
 import { ISO, TEAM_COLORS } from '../../config';
 import type { ScreenPos } from '../iso';
 import type { SceneContext } from '../scene-context';
@@ -55,6 +58,8 @@ const RING_POP = 0.45;
 const RING_POP_MS = 180;
 /** Dark under-stroke under every ring. */
 const RING_SHADOW = 0x0b0f14;
+/** "Needs a builder" mark: blink period, ms. */
+const IDLE_SITE_BLINK_MS = 1200;
 /** Health bar thickness, px. */
 const BAR_H = 2;
 
@@ -75,6 +80,8 @@ export class StatusOverlay {
   /** eid -> scene time it became selected (ring pop-in). */
   private readonly selectedAt = new Map<number, number>();
   private readonly selectedNow = new Set<number>();
+  /** Foundations some villager is ordered to build this frame. */
+  private readonly staffedSites = new Set<number>();
   private now = 0;
 
   constructor(private readonly ctx: SceneContext) {
@@ -96,6 +103,11 @@ export class StatusOverlay {
     if (this.selectedAt.size > this.selectedNow.size) {
       for (const eid of this.selectedAt.keys()) if (!this.selectedNow.has(eid)) this.selectedAt.delete(eid);
     }
+    this.staffedSites.clear();
+    const ecs = this.ctx.world.ecs;
+    for (const eid of unitQuery(ecs)) {
+      if (hasComponent(ecs, BuildOrder, eid) && BuildOrder.targetEid[eid] >= 0) this.staffedSites.add(BuildOrder.targetEid[eid]);
+    }
   }
 
   clear(): void {
@@ -115,7 +127,31 @@ export class StatusOverlay {
     if (selected) this.footprintRing(c, w, h, SELECTION_COLOR, 1, this.popScale(eid));
     if (!hasComponent(this.ctx.world.ecs, ConstructionSite, eid)) {
       this.drawHealthBar(eid, c.x, topY - 7, 22 + 10 * Math.max(w, h), selected, BAR_H + 1);
+    } else if (this.needsBuilder(eid)) {
+      this.drawNeedsBuilder(c.x, topY - 4);
     }
+  }
+
+  /** An own foundation that no villager is ordered to build: it will not rise. */
+  private needsBuilder(eid: number): boolean {
+    if (!hasComponent(this.ctx.world.ecs, FoundationTag, eid)) return false;
+    if (Owner.player[eid] !== this.ctx.perspectivePlayerId) return false;
+    return !this.staffedSites.has(eid);
+  }
+
+  /** Blinking gold "!" badge over a waiting foundation. */
+  private drawNeedsBuilder(cx: number, bottomY: number): void {
+    const t = (this.now % IDLE_SITE_BLINK_MS) / IDLE_SITE_BLINK_MS;
+    const alpha = 0.55 + 0.45 * Math.abs(Math.cos(t * Math.PI));
+    const x = Math.round(cx);
+    const y = Math.round(bottomY - 12);
+    this.status.fillStyle(RING_SHADOW, 0.75 * alpha);
+    this.status.fillCircle(x, y + 5, 7);
+    this.status.lineStyle(1, SELECTION_COLOR, alpha);
+    this.status.strokeCircle(x, y + 5, 7);
+    this.status.fillStyle(SELECTION_COLOR, alpha);
+    this.status.fillRect(x - 1, y, 2, 6);
+    this.status.fillRect(x - 1, y + 8, 2, 2);
   }
 
   /**
@@ -145,12 +181,12 @@ export class StatusOverlay {
       this.status.lineStyle(1, 0x000000, 0.7);
       this.status.strokeCircle(screen.x + 9, topY + 2, 3.5);
     }
-    if (hasComponent(ecs, Gatherer, eid)) {
-      const state = Gatherer.state[eid];
-      if (state === GathererStateId.BUILDING || state === GathererStateId.WALKING_TO_BUILD) {
-        this.status.fillStyle(SELECTION_COLOR, 1);
-        this.status.fillRect(screen.x - 11, topY, 3, 3);
-      }
+    const gathererBuilding = hasComponent(ecs, Gatherer, eid) &&
+      (Gatherer.state[eid] === GathererStateId.BUILDING || Gatherer.state[eid] === GathererStateId.WALKING_TO_BUILD);
+    const buildOrder = hasComponent(ecs, BuildOrder, eid) && BuildOrder.targetEid[eid] >= 0;
+    if (gathererBuilding || buildOrder) {
+      this.status.fillStyle(SELECTION_COLOR, 1);
+      this.status.fillRect(screen.x - 11, topY, 3, 3);
     }
     this.drawHealthBar(eid, screen.x, topY - 6, size?.barW ?? 18, selected, BAR_H);
   }
@@ -254,9 +290,12 @@ export class StatusOverlay {
     return false;
   }
 
+  /** A unit that takes attack orders. Armed buildings (tower, town center)
+   *  pick their own targets, so they promise nothing on hover. */
   private canAttack(eid: number): boolean {
     const ecs = this.ctx.world.ecs;
-    return hasComponent(ecs, Combat, eid) &&
+    return hasComponent(ecs, UnitKind, eid) &&
+      hasComponent(ecs, Combat, eid) &&
       hasComponent(ecs, AttackTarget, eid) &&
       hasComponent(ecs, Health, eid) &&
       Health.hp[eid] > 0 &&

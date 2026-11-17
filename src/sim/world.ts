@@ -27,13 +27,15 @@ export type {
   PlayerMatchStats,
   PlayerVisibility,
   PopState,
+  QueuedOrder,
   SimInput,
   SimWorld,
   SoundCue,
   SoundCueKind,
   VillagerRally,
 } from './core/types';
-export { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, POP_CAP_HARD_LIMIT } from './core/constants';
+export { AI_PLAYER_ID, LOCAL_PLAYER_ID, MAX_PLAYERS, ORDER_QUEUE_MAX, POP_CAP_HARD_LIMIT } from './core/constants';
+export { orderQueueRefusalForAll, type OrderQueueRefusal } from './input/order-queue';
 export { addSimEntity, entityForNetId, netIdForEntity, removeSimEntity } from './core/entities';
 export {
   buildingQuery,
@@ -42,6 +44,7 @@ export {
   deadQuery,
   dropOffQuery,
   foundationQuery,
+  gameAnimalQuery,
   gathererQuery,
   movableQuery,
   positionQuery,
@@ -51,6 +54,7 @@ export {
   selectedQuery,
   townCenterQuery,
   unitQuery,
+  worksiteHelperQuery,
   worksiteWorkerQuery,
 } from './core/queries';
 export {
@@ -110,6 +114,8 @@ export {
 export { createLateGameTestWorld } from './factories/late-game';
 export { playerFormationFacing, playerFormationMode } from './input/formation';
 export {
+  DAY_SIGHT,
+  NIGHT_SIGHT,
   createVisibilityState,
   createVisibilityStates,
   getPlayerVisibility,
@@ -118,12 +124,25 @@ export {
   isEntityVisibleTo,
   isTileExploredBy,
   isTileVisibleTo,
+  lineOfSightRadius,
   revealMapForPlayer,
   tileVisibilityIndex,
   updatePlayerVisibility,
 } from './systems/visibility';
-export { canStartCastleAge, canStartGunpowderAge } from './systems/age-tech';
-export { getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
+export { applyResearchTech, syncPlayerEra } from './systems/tech-rings';
+export { buildingEraFor } from './core/era';
+export { countWorksiteWorkers, getWorksiteWorkerSlots, worksiteUsesResourceNodes } from './systems/worksites';
+export {
+  WORKSITE_EXTRA_HELPERS,
+  WORKSITE_EXTRA_HELPER_RATE_PERCENT,
+  countWorksiteHelpers,
+  helpRefusal,
+  worksiteHelperCapacity,
+  type HelpRefusal,
+} from './systems/worksite-helpers';
+export { isGameAnimal, isLiveGameAnimal } from './systems/hunting';
+export { VILLAGER_ROLES, villagerRole, worksiteCrewRole, type VillagerRole } from './core/villager-role';
+export { villagerJob, type VillagerJob } from './core/villager-job';
 export { canPlaceBuildingAt, isPlacementInSight } from './input/buildings';
 export { aiPlayerDifficulty, aiSettingsFor, createAiPlayerState, normalizeAiDifficulty } from './ai/difficulty';
 export { aiThink } from './ai/brain';

@@ -2,6 +2,7 @@
  * AI defense response and attack wave planning (staging, targeting, orders).
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import {
@@ -57,14 +58,14 @@ export function findAiDefenseTarget(world: SimWorld, playerId: number, snapshot:
 }
 
 function aiDistanceToHomeBuildings(snapshot: AiSnapshot, eid: number): number {
-  let nearest = Math.hypot(
+  let nearest = dhypot(
     Position.x[eid] - Position.x[snapshot.tcEid],
     Position.y[eid] - Position.y[snapshot.tcEid]
   );
   for (const building of snapshot.myBuildings) {
     nearest = Math.min(
       nearest,
-      Math.hypot(Position.x[eid] - Position.x[building], Position.y[eid] - Position.y[building])
+      dhypot(Position.x[eid] - Position.x[building], Position.y[eid] - Position.y[building])
     );
   }
   return nearest;
@@ -84,8 +85,8 @@ export function aiHandleDefense(
   state.nextAttackTick = Math.max(state.nextAttackTick, world.tick + aiSettings(world).attackCooldownTicks / 2);
 
   for (const unit of snapshot.myMilitary) {
-    const dist = Math.hypot(Position.x[unit] - Position.x[target], Position.y[unit] - Position.y[target]);
-    const homeDist = Math.hypot(Position.x[unit] - Position.x[snapshot.tcEid], Position.y[unit] - Position.y[snapshot.tcEid]);
+    const dist = dhypot(Position.x[unit] - Position.x[target], Position.y[unit] - Position.y[target]);
+    const homeDist = dhypot(Position.x[unit] - Position.x[snapshot.tcEid], Position.y[unit] - Position.y[snapshot.tcEid]);
     if (dist > AI_DEFENSE_ORDER_RADIUS && homeDist > AI_DEFENSE_ORDER_RADIUS) continue;
     issueAiAttackOrder(world, unit, target);
   }
@@ -149,7 +150,7 @@ export function aiManageAttackPlan(
   const rally = state.rallyPoint;
   let nearRally = 0;
   for (const unit of state.waveUnitEids) {
-    if (Math.hypot(Position.x[unit] - rally.x, Position.y[unit] - rally.y) <= AI_STAGE_RADIUS) {
+    if (dhypot(Position.x[unit] - rally.x, Position.y[unit] - rally.y) <= AI_STAGE_RADIUS) {
       nearRally++;
     } else {
       issueAiMoveOrder(world, unit, rally);
@@ -209,8 +210,8 @@ export function aiRequiredWaveSize(world: SimWorld, playerId: number): number {
 function aiSelectWaveUnits(world: SimWorld, units: number[], rally: GridPos): number[] {
   return [...units]
     .sort((a, b) => {
-      const da = Math.hypot(Position.x[a] - rally.x, Position.y[a] - rally.y);
-      const db = Math.hypot(Position.x[b] - rally.x, Position.y[b] - rally.y);
+      const da = dhypot(Position.x[a] - rally.x, Position.y[a] - rally.y);
+      const db = dhypot(Position.x[b] - rally.x, Position.y[b] - rally.y);
       if (Math.abs(da - db) > 0.001) return da - db;
       return compareDeterministicEids(world, a, b);
     })
@@ -236,7 +237,7 @@ function aiSendWave(world: SimWorld, playerId: number, units: number[], target: 
     if (issueAiAttackMoveOrder(world, unit, destination)) continue;
     const x = Position.x[unit];
     const y = Position.y[unit];
-    if (!breach || Math.hypot(x - breach.x, y - breach.y) > AI_BREACH_SHARE_RADIUS) {
+    if (!breach || dhypot(x - breach.x, y - breach.y) > AI_BREACH_SHARE_RADIUS) {
       breach = { x, y, eid: findAiBreachTarget(world, playerId, { x, y }, target) };
     }
     if (breach.eid !== null) issueAiAttackOrder(world, unit, breach.eid);
@@ -276,7 +277,7 @@ function chooseAiAttackTarget(world: SimWorld, snapshot: AiSnapshot): number | n
     if (hasComponent(world.ecs, ConstructionSite, eid)) continue;
     const score =
       aiAttackTargetPriority(world, eid) * 100 +
-      Math.hypot(Position.x[eid] - Position.x[snapshot.tcEid], Position.y[eid] - Position.y[snapshot.tcEid]);
+      dhypot(Position.x[eid] - Position.x[snapshot.tcEid], Position.y[eid] - Position.y[snapshot.tcEid]);
     if (!best || score < best.score) best = { eid, score };
   }
   return best?.eid ?? null;

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { staffFoundations } from '../testing/staff-foundations';
 import { Building, ConstructionSite, Health, Owner, Position, Producer, TownCenterTag } from '../components';
 import { hasComponent } from 'bitecs';
 import { checksumWorld } from '../checksum';
 import { BUILDING_TABLE, BuildingDefId, UnitDefId, getBuildingDef, getUnitDef } from '../defs';
-import { loadSimWorldSnapshot, migrateSavedGame, serializeSimWorld, type SavedGameV1 } from '../save-load';
+import { SAVE_VERSION, loadSimWorldSnapshot, migrateSavedGame, serializeSimWorld, type SavedGameV1 } from '../save-load';
 import { TECH_TREE, isBuildingUnlocked, techStatus } from '../tech-tree';
 import {
   buildingQuery,
@@ -197,6 +198,7 @@ describe('match statistics', () => {
       }
     }
     expect(site).toBeGreaterThanOrEqual(0);
+    staffFoundations(world, P1);
     for (let i = 0; i < Math.floor(def.buildTimeTicks / 2); i++) step(world);
     const halfway = Health.hp[site];
     expect(halfway).toBeGreaterThan(10);
@@ -272,6 +274,8 @@ describe('match statistics', () => {
     expect(spot).not.toBeNull();
     const defId = BUILDING_TABLE.indexOf(def!);
     world.inputs.push({ type: 'placeBuilding', defId, x: spot!.x, y: spot!.y, playerId: P1 });
+    step(world);
+    staffFoundations(world, P1);
     stepUntil(world, () => world.matchStats[P1]!.buildingsBuilt > 0, def!.buildTimeTicks + 50);
     expect(world.matchStats[P1]!.buildingsBuilt).toBe(1);
     expect(events(world, 'buildingCompleted').filter((e) => e.kind === 'buildingCompleted' && e.playerId === P1)[0])
@@ -311,7 +315,7 @@ describe('match statistics', () => {
     world.matchStats[P1]!.gathered = [10, 20, 30, 40];
     world.matchStats[P2]!.buildingsRazed = 2;
     const save = JSON.parse(JSON.stringify(serializeSimWorld(world, 'stats'))) as ReturnType<typeof serializeSimWorld>;
-    expect(save.version).toBe(3);
+    expect(save.version).toBe(SAVE_VERSION);
 
     const restored = createSimWorld(1);
     loadSimWorldSnapshot(restored, save);
@@ -319,9 +323,14 @@ describe('match statistics', () => {
     expect(restored.matchStats[P2]!.buildingsRazed).toBe(2);
 
     const { matchStats: _dropped, ...rest } = save;
-    const v1: SavedGameV1 = { ...rest, version: 1 };
+    const v1: SavedGameV1 = {
+      ...rest,
+      version: 1,
+      ages: save.ages.map((age) => ({ current: age.current, progress: -1, totalTicks: 0 })),
+      campaign: null,
+    };
     const migrated = migrateSavedGame(v1);
-    expect(migrated?.version).toBe(3);
+    expect(migrated?.version).toBe(SAVE_VERSION);
     const fromV1 = createSimWorld(1);
     loadSimWorldSnapshot(fromV1, v1);
     expect(fromV1.matchStats[P1]!.unitsTrained).toBe(0);

@@ -13,9 +13,9 @@
  * the VFX layer can throw chips and topple the trunk.
  */
 
-import { entityExists } from 'bitecs';
+import { entityExists, hasComponent } from 'bitecs';
 import { MAP, SIM } from '../../config';
-import { Position, Resource, ResourceKindId } from '@sim/components';
+import { GameAnimal, Position, Resource, ResourceKindId } from '@sim/components';
 import { CampaignMissionId } from '@sim/campaign';
 import { MapFeatureKind, TileType, type MapFeature } from '@sim/map-gen';
 import { resourceQuery } from '@sim/world';
@@ -199,6 +199,8 @@ export class ResourceRenderer {
       // An emptied node is gone for the player (the sim may drop it a tick later).
       const amount = Resource.amount[eid];
       if (amount <= 0) continue;
+      // Huntable game has its own renderer (game-renderer.ts).
+      if (hasComponent(world.ecs, GameAnimal, eid)) continue;
       const kind = Resource.kind[eid];
       const x = Position.x[eid];
       const y = Position.y[eid];

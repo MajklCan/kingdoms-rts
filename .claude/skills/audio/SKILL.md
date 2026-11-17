@@ -42,7 +42,7 @@ Buses: `music`, `ambience`, `sfx`, `ui`, `voice`. Each maps to one user channel.
 | File | Role |
 |------|------|
 | `src/render/game-audio.ts` | Game-side direction: match lifecycle (menu, match, paused, over), director mood, camera-relative spatial SFX + fog, off-screen alarm, unit voice persona, research chime. |
-| `src/render/audio/audio-manager.ts` | Facade: loading, settings API, music/ambience calls, `play()`, `playVoiceBark()`, pause/world-silence, debug snapshot. |
+| `src/render/audio/audio-manager.ts` | Facade: loading, settings API, `unlock()` (resume from a gesture), music/ambience calls (`MusicTransition.fadeIn` overrides the first song's fade), `play()`, `playVoiceBark()`, pause/world-silence, debug snapshot. |
 | `src/render/audio/audio-engine.ts` | WebAudio graph, buses, ducks, one-shot voices (envelope, variation, stealing), meters, visibility suspend. |
 | `src/render/audio/mix.ts` | **All mix numbers**: `BUS_GAIN`, `SFX_TRIM_DB`, `MUSIC_TRIM_DB`, `VOICE_TRIM_DB`, `SFX_POLICY` (bus, cap, priority, detune, jitter), `BUS_VOICE_CAP`, `DUCK`. |
 | `src/render/audio/sfx-limiter.ts` | Pure: cooldown, per-key cap with weakest-steal, bus cap with priority steal, density gain. |
@@ -55,7 +55,8 @@ Buses: `music`, `ambience`, `sfx`, `ui`, `voice`. Each maps to one user channel.
 | `src/render/audio/audio-settings.ts` | Persisted settings (`kingdoms.audio`), migration. |
 | `src/render/audio/audio-debug.ts` | Dev only: `window.__AUDIO__`. |
 | `src/render/audio/sound-map.ts` | Pure tables: keys, cue -> SFX, combat -> SFX, UI configs. |
-| `src/ui/ui-sounds.ts` | DOM button click / hover sounds (rate-limited, deduped). |
+| `src/ui/ui-sounds.ts` | DOM button click / hover sounds (rate-limited, deduped; `data-silent` opts a control out). |
+| `src/ui/screens/menu-gate.ts` | Title gate: first gesture unlocks audio, swells the menu program in (`?nogate` skips). Menu music never starts before it. |
 | `src/ui/panels/settings.ts` | Volume sliders per channel. |
 | `scripts/gen-sfx-elevenlabs.mjs`, `gen-music.mjs`, `gen-voices.mjs` | ElevenLabs generators. |
 

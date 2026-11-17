@@ -23,6 +23,7 @@ Stack: **Phaser 4 beta** (rendering only) + **bitECS 0.3.40** (sim) + **TypeScri
 | `npx vite-node scripts/sim/ai-vs-ai.ts -- ...` | Headless AI vs AI batch; `scripts/sim/analyze.ts` summarises it |
 | `npx vite-node scripts/sim/matchups.ts` | Equal-cost unit fights, win and cost-efficiency matrix |
 | `node scripts/sim/batch.mjs <name> <procs> <script> ...` | Shard any of the above over processes |
+| `npx vite-node scripts/sim/replay-desync.ts -- a.json b.json` | Replay the desync reports players download on a desync; prints the checkpoint each client drifted at |
 | `MP_SOAK=2 npm test` | Adds the long lockstep soak to the test run |
 
 TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUncheckedSideEffectImports`. Don't silence them.
@@ -46,13 +47,13 @@ TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUnchecked
 
 ### Tick order (`step()` in `src/sim/step.ts`)
 
-Pre-input visibility → drain `world.inputs` → ai → ageProgression → production → construction → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
+Pre-input visibility → drain `world.inputs` → orderQueue (a unit that finished its order starts its next Shift-queued one) → ai → techRings (a ring opened by research moves the era) → production → construction (builders walk to / work at their foundation first, `systems/builders.ts`) → resourceWorksite → gathering → resourceDepletion (removes empty nodes, retargets their gatherers) → dropoff → targeting → combat → projectile/cannon impact → death → cleanup → campaign → forestRegrowth → gameAnimal (huntable game wanders, `systems/hunting.ts`) → movement (copies `Position`→`PrevPosition` first, runs separation internally) → post-move visibility → winCondition → `tick += 1`.
 
 `world.paused = true` after `createSimWorld()`. Tests must set it to `false`.
 
 ### Data flow
 
-Input (DOM/Phaser) → `world.inputs.push(...)` → consumed by `applyInput` switch during `step()`. Render layer drains `world.combatEvents` / `world.aiEvents` / `world.gameEvents` (append-only per tick; `gameEvents` is the typed HUD feed: unit trained, building complete or lost, research, age). Sim never reads them back. `world.matchStats` holds exact per-player counters for the game-over screen: write-only, excluded from the checksum, saved.
+Input (DOM/Phaser) → `world.inputs.push(...)` → consumed by `applyInput` switch during `step()`. Render layer drains `world.combatEvents` / `world.aiEvents` / `world.gameEvents` (append-only per tick; `gameEvents` is the typed HUD feed: unit trained, building complete or lost, research, ring opened / era). Sim never reads them back. `world.matchStats` holds exact per-player counters for the game-over screen: write-only, excluded from the checksum, saved.
 
 ## Repo layout
 
@@ -72,8 +73,8 @@ src/
     maps/              map generators; map-gen.ts is their barrel
     save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
-    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE, WALL_TIERS (palisade/stone/brick per age) + canAfford/spend/refund
-    tech-tree.ts       TECH_TREE nodes + pure prereq/age helpers
+    defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE (era names), WALL_TIERS (palisade/stone/brick by research) + canAfford/spend/refund
+    tech-tree.ts       the tech rings: 18 researches (ring, path, parents), ring rule, unlock mapping, starting presets
     campaign.ts        2 missions: SIEGE_OF_BRNO, BATTLE_OF_BILA_HORA
     pathfinding.ts     EasyStar wrapper, LOS smoothing, nearest-walkable fallback
     rng.ts             Mulberry32; getState/setState
@@ -116,18 +117,23 @@ index.html             27-line shell; CSS lives in src/ui/styles
 
 ## Key constants / IDs
 
+- Order queue: move / attack / attack-move / gather inputs with `queue: true` (Shift held) append to `world.orderQueues` (per unit, `ORDER_QUEUE_MAX=8`) instead of replacing the current order; rules in `src/sim/input/order-queue.ts`, system in `src/sim/systems/order-queue.ts`. Checksummed and saved (optional `orderQueues` field).
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
-- `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks.
+- `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks (one unit per 5 ticks); stone alone is slower, `STONE_GATHER_COOLDOWN=9` (one per 10 ticks, `gatherCooldownForKind`).
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.
-- Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN.
-- Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen, archery range archers (unlocked by the Archers tech).
-- Ages: DARK → CASTLE → GUNPOWDER → TOTAL_WAR. **TOTAL_WAR and MACHINE_GUN are scaffolded but unreachable** in normal play (`applyAdvanceAge` blocks; `isUnitUnlocked` returns false).
+- Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN, MORTAR, COMMANDER.
+- Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen + the Commander (one alive or queued per player, `src/sim/core/unit-limits.ts`; 200 hp, atk 10, armor 1, 150 food + 120 gold), archery range archers (unlocked by the Archers tech).
+- Tech rings, not age research: 18 researches on 5 paths (arms, timber, mines, walls, land) in rings I-III. Ring N+1 opens when 2 paths are maxed in ring N (every research of the path in that ring done); research is instant. Every unit/building past the settlement (TC, house, farm, lumber hut, quarry) is unlocked by one research (`BUILDING_UNLOCK_TECH` / `UNIT_UNLOCK_TECH`). Arms forks after Barracks into three ring I branches: Archers, the Commander (his own research) and Cavalry, so arms is maxed in ring I only with all three and has nothing in ring II. The early 6-house limit is lifted by Housing I (`housing_i`).
+- Night matches: `world.night` (a skirmish setup choice; the Blaník Night Watch map defaults to it, `MapDef.night`). Sight comes from `NIGHT_SIGHT` instead of `DAY_SIGHT` in `systems/visibility.ts`; the flag is checksummed and saved. Render: `overlays/night-renderer.ts` multiplies a darkness canvas over the world and draws torches whose light reaches exactly the sim sight radius.
+- Shift-queued orders: `world.orderQueues` (move, attack-move, attack, gather, build; `input/order-queue.ts` appends, `systems/order-queue.ts` starts the next one when the current order is done). A gather or worksite help never ends, so it closes the queue. A Shift-placed row of buildings sends the selected villagers to the first at once and queues the rest as `build` orders.
+- Eras: `world.ages[p].current` = highest open ring - 1 (DARK, CASTLE, GUNPOWDER), written by `systems/tech-rings.ts` when a ring opens; it only drives building art and the banner. Walls draw and fight at their research tier (Palisades / Stone Walls / Brick Walls). Starting ages are presets: Castle = ring I researched, Gunpowder = rings I+II. **TOTAL_WAR and MACHINE_GUN are scaffolded but unreachable** (no research unlocks them).
 
 ## Sprite pipeline
 
 Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) what to draw. Order per query: pre-rendered unit atlases (`units-manifest.json`), then Blender atlas art (`manifest.json`), then in-engine voxel bakes. A missing manifest, atlas or frame falls back per query, never blanks an entity.
 
 - **Blender atlases (primary art, "style A"):** rendered by `scripts/blender/`, packed by `scripts/pack_sprites.py` into `public/assets/sprites/*-0.{png,json}` + manifests. Re-running, conventions and variant keys: `docs/BLENDER_SPRITE_PIPELINE.md`, `docs/UNIT_SPRITES.md`; engine side (loading, zoom, layers, team colour, terrain bake, ambient life): `docs/SPRITE_ATLAS.md`.
+- **Farm construction look:** a farm foundation is a plot being laid out, not the timber scaffold: atlas asset `construction.farm` (six stages, written by `scripts/farm_construction_frames.py` from the packed farm frames, re-run by the packer), voxel fallback `buildDarkFarmSiteVoxels` (drawn solid; other voxel foundations ghost their finished model).
 - **Voxel fallback:** model fns in `src/render/voxel/models/<thing>.ts` return `Voxel[]`; `src/render/sprites/voxel-bake.ts` bakes every pose at boot (`bakeIfMissing`, fixed `bounds` so frames don't slide). Keys e.g. `voxel-villager-p1-SE-move-0`. Details: `docs/VOXEL_SPRITE_PIPELINE.md`. QA sheet: `?inspect=<unit>` (e.g. `?inspect=scout-cavalry`).
 - `scripts/gen-*-tc*.mjs` / `gen-minimal.mjs` export `.vox` files for external rendering, legacy, not on the runtime path.
 
@@ -139,10 +145,20 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 - Pixel-art chain: `pixelArt: true` + `roundPixels: true` + `antialias{,GL}: false`. Internal height stays `RENDER.HEIGHT` (720); width follows the window aspect (4:3 .. 21:9, `src/main.ts`).
 - Render reads via queries (`buildingQuery`, `unitQuery`, etc.) + `hasComponent` gates. `PrevPosition` enables 60 fps interpolation between 20 Hz sim ticks (`accumulator/TICK_MS`).
 
+## Villager jobs
+
+- Free villagers (town center trained) build, gather or hunt by hand, or help at a completed worksite (`cmdAssignWorksite`, `systems/worksite-helpers.ts`): a helper fills open crew slots at full rate, plus up to 2 extras at 60 % (3 of 5 ticks, `core/worksite-membership.ts`). Helpers are not crew: `countWorksiteWorkers` and slots ignore them. Any other order (`clearWorkOrders`) takes him off.
+- `VillagerWork` remembers the last job; a builder with nothing left to build resumes it (`systems/villager-work.ts`). Move, stop and attack orders clear it.
+- Huntable game (`GameAnimal` + FOOD `Resource`): mirrored herds placed after the berry bushes, wander via `world.rng`, become a carcass when a hunter arrives. Render: `render/entities/game-renderer.ts` (life-sheet sprites).
+- Render reads `villagerRole` (look) and `villagerJob` (status) from `core/villager-role.ts` / `core/villager-job.ts`.
+
 ## Combat / movement gotchas
+
+- **Buildings need builders.** A foundation gains progress only while a free villager with `BuildOrder.targetEid` on it stands at its edge ((n+2)/3 speed for n builders); builders then chain to the nearest open foundation. `placeBuilding` / `placeWallLine` take the builders as `eids`, `cmdBuild` sends more. Skirmish players start with 1 scout rider + 2 villagers (3/5 pop); campaign worlds pass `starterVillagers: false`. Tests that need finished buildings call `staffFoundations` (`src/sim/testing/`), which spawns pop-free builders.
 
 - Projectile damage is applied at **impact tick**, not fire tick. Tests must `stepN(world, shot.projectileTicks)` after observing a `combatEvents` entry (see `age-tower.test.ts`).
 - Cannons have a windup (`CANNON_WINDUP_TICKS`); splash with falloff exponent.
+- The town center shoots like a defensive tower (`def.combat`: the tower's damage and reload, range +`TOWN_CENTER_RANGE_BONUS` = 9, measured from its centre). Armed buildings get `Combat` in `attachBuildingCombat` when finished; foundations never shoot. Cannons and mortars still out-range it.
 - Stances: `AUTO_DEFEND` vs `HOLD_POSITION` (with melee leash distance).
 - `world.grid` IS the pathfinder grid IS `mapData.walkability`. Mutate in place when placing buildings / removing trees so EasyStar sees changes. **Never reassign.**
 - Unit separation runs 2 passes inside the movement system. Villagers are mutually non-blocking; ordered/working villagers still push others.
@@ -151,7 +167,8 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 
 ## Save / load
 
-- `SAVE_VERSION=3`. Round-trips entities, map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
+- `SAVE_VERSION=6`. Round-trips entities (incl. worksite helpers, villager work memory, huntable game), map, banks, techs, visibility, AI state, campaign, production queues, paths, rally points, Shift-queued orders, the night flag, match stats, map seed. v1 saves migrate with zeroed stats, v1/v2 saves get a map seed hashed from the map bytes, v1-v3 saves move to the tech rings (`save/migrate-tech-rings.ts`: a saved age becomes its preset, an age advance in progress is refunded). Two v4 formats exist (roles branch: v3 shape + optional entity fields; rings branch): told apart by `ages[].progress`, both reach v5, which grants the Commander research wherever Barracks is done; v6 adds the optional `night` and `orderQueues` and grants Cavalry where a realm would otherwise lose its open ring II (`migrateSavedGame`). `world.mapSeed` (`getMapSeed`) is cosmetic only: not checksummed, read by no system.
+- Finished armed buildings saved without combat data (town centers from before they could shoot) get their def's attack on every load (`save/migrate-building-combat.ts`), whatever the version.
 - Bumping any persisted component shape → bump version + write migration.
 - `createLateGameTestWorld()` produces a deterministic stress fixture exercising every player-usable building.
 
@@ -168,7 +185,7 @@ Test pattern: `const world = createSimWorld(seed); world.paused = false;` → pu
 
 ## Agent affordances
 
-In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `advanceAge`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
+In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `research`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
 
 ## Conventions & rules
 

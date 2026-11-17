@@ -2,6 +2,7 @@
  * Spatial lookups over live entities (buildings, resources, units).
  */
 
+import { dhypot } from './dmath';
 import { hasComponent } from 'bitecs';
 import {
   Building,
@@ -26,7 +27,7 @@ export function findOwnedTownCenter(world: SimWorld, playerId: number): number |
 
 export function hasMapFeatureAt(world: SimWorld, x: number, y: number, radius: number): boolean {
   for (const feature of world.map.features) {
-    if (Math.hypot(feature.x - x, feature.y - y) <= radius) return true;
+    if (dhypot(feature.x - x, feature.y - y) <= radius) return true;
   }
   return false;
 }
@@ -82,7 +83,7 @@ export function findResourceAt(
     if (dx > bestDist || dx < -bestDist) continue;
     const dy = py[eid] - y;
     if (dy > bestDist || dy < -bestDist) continue;
-    const d = Math.hypot(dx, dy);
+    const d = dhypot(dx, dy);
     if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;
@@ -114,7 +115,7 @@ export function findNearestResource(
     if (dx > bestDist || dx < -bestDist) continue;
     const dy = py[eid] - y;
     if (dy > bestDist || dy < -bestDist) continue;
-    const d = Math.hypot(dx, dy);
+    const d = dhypot(dx, dy);
     if (isCloser(world, d, eid, bestDist, bestEid)) {
       bestDist = d;
       bestEid = eid;
@@ -138,7 +139,7 @@ export function findEntityNear(
     if (!isUnit && !isBuilding) continue;
     const d = isBuilding
       ? distToBuildingEdge(world, x, y, eid)
-      : Math.hypot(Position.x[eid] - x, Position.y[eid] - y);
+      : dhypot(Position.x[eid] - x, Position.y[eid] - y);
     const effective = isUnit ? d : d + 0.02;
     if (effective < bestDist) {
       bestDist = effective;

@@ -2,6 +2,7 @@
  * Path planning toward tiles, resource nodes and building contact points.
  */
 
+import { dcos, dhypot, dsin } from './dmath';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../../config';
 import {
@@ -82,9 +83,9 @@ export function pathToResourceContact(world: SimWorld, eid: number, target: numb
     const nextPath: GridPos[] = [...path];
     const final = nextPath[nextPath.length - 1];
     if (
-      Math.hypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) >
+      dhypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) >
         RESOURCE_GATHER_DISTANCE &&
-      (!final || Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01)
+      (!final || dhypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01)
     ) {
       nextPath.push(candidate.point);
     }
@@ -126,11 +127,11 @@ function resourceApproachCandidates(
 
       let vx = tx - Position.x[target];
       let vy = ty - Position.y[target];
-      let len = Math.hypot(vx, vy);
+      let len = dhypot(vx, vy);
       if (len < 0.001) {
         const angle = deterministicPairAngle(world, eid, target);
-        vx = Math.cos(angle);
-        vy = Math.sin(angle);
+        vx = dcos(angle);
+        vy = dsin(angle);
         len = 1;
       }
       vx /= len;
@@ -143,7 +144,7 @@ function resourceApproachCandidates(
         tile: { x: tx, y: ty },
         point,
         score:
-          Math.hypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
+          dhypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
           crowdPenaltyAt(world, crowd, point.x, point.y) +
           slotPenaltyAt(world, slotRivals, point.x, point.y),
       });
@@ -186,7 +187,7 @@ function workerResourceContactSlotRivals(
 function slotPenaltyAt(world: SimWorld, rivals: readonly number[], x: number, y: number): number {
   let penalty = 0;
   for (const other of rivals) {
-    const dist = Math.hypot(Position.x[other] - x, Position.y[other] - y);
+    const dist = dhypot(Position.x[other] - x, Position.y[other] - y);
     if (dist < WORKER_RESOURCE_CONTACT_SLOT_RADIUS) {
       penalty += WORKER_RESOURCE_CONTACT_SLOT_UNIT_PENALTY *
         (1 - dist / WORKER_RESOURCE_CONTACT_SLOT_RADIUS);
@@ -195,7 +196,7 @@ function slotPenaltyAt(world: SimWorld, rivals: readonly number[], x: number, y:
     const path = world.paths.get(other);
     const final = path?.[path.length - 1];
     if (!final) continue;
-    const pathDist = Math.hypot(final.x - x, final.y - y);
+    const pathDist = dhypot(final.x - x, final.y - y);
     if (pathDist < WORKER_RESOURCE_CONTACT_SLOT_RADIUS) {
       penalty += WORKER_RESOURCE_CONTACT_SLOT_PATH_PENALTY *
         (1 - pathDist / WORKER_RESOURCE_CONTACT_SLOT_RADIUS);
@@ -218,7 +219,7 @@ export function pathToBuildingContact(world: SimWorld, eid: number, buildingEid:
     const final = nextPath[nextPath.length - 1];
     if (
       !final ||
-      Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
+      dhypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
     ) {
       nextPath.push(candidate.point);
     }
@@ -258,7 +259,7 @@ export function buildingApproachCandidates(
       const edgeY = clamp(ty, rect.minY, rect.maxY);
       let vx = tx - edgeX;
       let vy = ty - edgeY;
-      const len = Math.hypot(vx, vy) || 1;
+      const len = dhypot(vx, vy) || 1;
       vx /= len;
       vy /= len;
       const point = {
@@ -272,7 +273,7 @@ export function buildingApproachCandidates(
         point,
         resourcePenalty,
         score:
-          Math.hypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
+          dhypot(Position.x[eid] - point.x, Position.y[eid] - point.y) +
           resourcePenalty +
           crowdPenalty,
       });
@@ -308,7 +309,7 @@ export function workerContactCrowd(world: SimWorld, eid: number, units: readonly
 export function crowdPenaltyAt(world: SimWorld, crowd: readonly number[], x: number, y: number): number {
   let penalty = 0;
   for (const other of crowd) {
-    const dist = Math.hypot(Position.x[other] - x, Position.y[other] - y);
+    const dist = dhypot(Position.x[other] - x, Position.y[other] - y);
     if (dist < WORKER_CONTACT_CROWD_RADIUS) {
       penalty += WORKER_CONTACT_UNIT_PENALTY * (1 - dist / WORKER_CONTACT_CROWD_RADIUS);
     }
@@ -316,7 +317,7 @@ export function crowdPenaltyAt(world: SimWorld, crowd: readonly number[], x: num
     const path = world.paths.get(other);
     const final = path?.[path.length - 1];
     if (!final) continue;
-    const pathDist = Math.hypot(final.x - x, final.y - y);
+    const pathDist = dhypot(final.x - x, final.y - y);
     if (pathDist < WORKER_CONTACT_CROWD_RADIUS) {
       penalty += WORKER_CONTACT_PATH_PENALTY * (1 - pathDist / WORKER_CONTACT_CROWD_RADIUS);
     }

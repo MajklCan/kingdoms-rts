@@ -358,7 +358,8 @@ def build_manifest(all_records: list[dict], atlases: dict[str, list[dict]], inde
         elif a["kind"] == "construction":
             a["stages"] = sorted(keys, key=lambda k: a["variants"][k].get("progress", 0))
             a["default"] = a["stages"][0]
-        elif set(keys) <= set(FARM_STAGES):
+        elif {k.removeprefix("hemp_") for k in keys} <= set(FARM_STAGES):
+            # "hemp_<stage>" are the easter-egg crop variants; stages/default stay the grain field
             a["stages"] = [k for k in FARM_STAGES if k in keys]
             a["default"] = "ripe" if "ripe" in keys else a["stages"][0]
         else:
@@ -451,6 +452,14 @@ def main() -> None:
     total = sum(os.path.getsize(os.path.join(OUT, a["image"])) for fam in atlases.values() for a in fam)
     print(f"[pack] {len(manifest['assets'])} assets, world PNG payload {total / 1e6:.2f} MB"
           f"{' (256 colour)' if quantize else ''}")
+    # The farm's construction stages are composed from the packed farm frames
+    # (no Blender job renders them), so every pack puts them back.
+    try:
+        import farm_construction_frames
+    except ImportError as err:  # Blender's python has no Pillow
+        print(f"[pack] farm construction frames skipped ({err}); run scripts/farm_construction_frames.py")
+    else:
+        farm_construction_frames.main()
 
 
 if __name__ == "__main__":

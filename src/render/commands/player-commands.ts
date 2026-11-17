@@ -1,6 +1,6 @@
 /**
  * Player intents that need validation + feedback before they become sim
- * inputs: training, cancelling, research / age advance, stances, formations,
+ * inputs: training, cancelling, research, stances, formations,
  * demolition and building placement checks. Every command leaves through
  * {@link dispatchCommand}; refusals are reported as typed failures through
  * {@link CommandFeedback} so the HUD can say exactly what was missing.
@@ -17,17 +17,23 @@ import {
   ResourceWorksite,
   TownCenterTag,
   UnitKind,
+  VillagerTag,
   UnitStance,
   UnitStanceId,
   type UnitStanceValue,
 } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getBuildingDef, type CostTuple } from '@sim/defs';
+import { unitLimitReason } from '@sim/core/unit-limits';
 import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
 import {
   canPlaceBuildingAt,
   EARLY_HOUSE_ALLOWANCE,
+  getBuildingPopProvided,
   housingAtMaximum,
   isPlacementInSight,
+  ORDER_QUEUE_MAX,
+  orderQueueRefusalForAll,
+  pendingPopCapGain,
   POP_CAP_HARD_LIMIT,
   getWorksiteWorkerSlots,
   remainingHouseAllowance,
@@ -55,12 +61,15 @@ import {
   affordableCountForCost,
   canAffordCost,
   missingResearchText,
-  nextAgeTechId,
+  unlockResearchFor,
   populationRoomForUnitCount,
 } from './economy';
 
 /** Shift-click on a train button queues up to this many. */
 export const TRAIN_BATCH_COUNT = 5;
+
+/** Refusal for a build order without a free villager selected. */
+export const NO_BUILDER_FAILURE: CommandFailure = { reason: 'unavailable', text: 'Select a villager to build' };
 
 const FORMATION_FACING_LABELS = ['S', 'SW', 'W', 'NW', 'N', 'NE', 'E', 'SE'];
 
@@ -95,6 +104,44 @@ export class PlayerCommands {
     return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
       hasComponent(ecs, Gatherer, eid)
     ).length;
+  }
+
+  /** Own selected free villagers (worksite crews excluded) a build order would send. */
+  selectedBuilderEids(): number[] {
+    const ecs = this.ctx.world.ecs;
+    return selectedCommandableEids(this.ctx.world, this.ctx.perspectivePlayerId).filter((eid) =>
+      hasComponent(ecs, VillagerTag, eid)
+    );
+  }
+
+  /** Building needs a villager: the refusal when none is selected, else null. */
+  builderFailure(): CommandFailure | null {
+    return this.selectedBuilderEids().length > 0 ? null : NO_BUILDER_FAILURE;
+  }
+
+  /**
+   * Why a Shift-queued order would reach none of the selected units, or null
+   * when at least one of them takes it. `gatherersOnly`: the order is a
+   * gather, which only villagers take. The sim refuses the same orders
+   * without a word, so the refusal has to be said here.
+   */
+  queuedOrderFailure(gatherersOnly = false): CommandFailure | null {
+    const world = this.ctx.world;
+    const ecs = world.ecs;
+    const units = selectedCommandableEids(world, this.ctx.perspectivePlayerId).filter((eid) =>
+      hasComponent(ecs, gatherersOnly ? Gatherer : UnitKind, eid)
+    );
+    const refusal = orderQueueRefusalForAll(world, units);
+    if (refusal === 'gathering') {
+      return {
+        reason: 'unavailable',
+        text: 'Gathering never ends, so no order can be queued after it. Give the order without Shift',
+      };
+    }
+    if (refusal === 'full') {
+      return { reason: 'unavailable', text: `These units already have ${ORDER_QUEUE_MAX} orders queued` };
+    }
+    return null;
   }
 
   // ── Town center villager rally ────────────────────────────────────────────
@@ -184,36 +231,75 @@ export class PlayerCommands {
 
   // ── Placement ─────────────────────────────────────────────────────────────
 
-  /** Why no new house may be started right now (early allowance, population maximum), or null. */
-  houseStartFailure(): CommandFailure | null {
+  /**
+   * Why no new house may be started right now (early allowance, population
+   * maximum), or null. `pending` counts houses already placed whose input the
+   * sim has not applied yet (Shift-placement), so a row of houses stops at
+   * the limit instead of sending ones the sim would refuse.
+   */
+  houseStartFailure(pending = 0): CommandFailure | null {
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
-    if (housingAtMaximum(world, playerId)) {
+    if (housingAtMaximum(world, playerId) || this.pendingHousesReachMaximum(pending)) {
       return { reason: 'unavailable', text: `Your houses already reach the ${POP_CAP_HARD_LIMIT} population maximum` };
     }
-    if (remainingHouseAllowance(world, playerId) === 0) {
+    const allowance = remainingHouseAllowance(world, playerId);
+    if (allowance !== null && allowance - pending <= 0) {
       return {
         reason: 'unavailable',
-        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before the Barracks tech. Research Barracks to build more`,
+        text: `Only ${EARLY_HOUSE_ALLOWANCE} houses before Housing I. Research Housing I in Technology (K) to build more`,
       };
     }
     return null;
   }
 
-  /** Why `defId` cannot be placed at tile (tx, ty) right now, or null if it can. */
-  placementFailure(defId: number, tx: number, ty: number): CommandFailure | null {
+  private pendingHousesReachMaximum(pending: number): boolean {
+    if (pending <= 0) return false;
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const cap = world.population[playerId]?.cap ?? 0;
+    const perHouse = getBuildingPopProvided(world, playerId, BuildingDefId.HOUSE);
+    return cap + pendingPopCapGain(world, playerId) + pending * perHouse >= POP_CAP_HARD_LIMIT;
+  }
+
+  /**
+   * Why one more `defId` cannot be started wherever it is put: locked, the
+   * house limit, or the bank. `pending` is how many of it are already on
+   * their way to the sim. Null when another one can be afforded.
+   */
+  nextPlacementFailure(defId: number, pending = 0): CommandFailure | null {
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
     const def = getBuildingDef(defId);
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
-    if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
-    if (!isBuildingUnlocked(world, playerId, defId)) return { reason: 'locked', subject: def.name };
+    if (!isBuildingUnlocked(world, playerId, defId)) {
+      return { reason: 'locked', subject: def.name, research: this.unlockResearchName('building', defId) };
+    }
     if (defId === BuildingDefId.HOUSE) {
-      const houseFailure = this.houseStartFailure();
+      const houseFailure = this.houseStartFailure(pending);
       if (houseFailure) return houseFailure;
     }
-    const missing = this.missingResources(def.cost);
-    if (missing.length > 0) return { reason: 'resources', subject: def.name, missing };
+    const missing = this.missingResources(def.cost, pending + 1);
+    if (missing.length > 0) {
+      return { reason: 'resources', subject: pending > 0 ? `another ${def.name}` : def.name, missing };
+    }
+    return null;
+  }
+
+  /**
+   * Why `defId` cannot be placed at tile (tx, ty) right now, or null if it
+   * can. `pending`: as in {@link nextPlacementFailure}.
+   */
+  placementFailure(defId: number, tx: number, ty: number, pending = 0): CommandFailure | null {
+    const world = this.ctx.world;
+    const playerId = this.ctx.perspectivePlayerId;
+    const def = getBuildingDef(defId);
+    if (!def) return { reason: 'unavailable', text: 'Unknown building' };
+    const noBuilder = this.builderFailure();
+    if (noBuilder) return noBuilder;
+    if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
+    const startFailure = this.nextPlacementFailure(defId, pending);
+    if (startFailure) return startFailure;
     if (!isPlacementInSight(world, playerId, def, tx, ty)) {
       return { reason: 'unavailable', text: 'You can only build where your people can see. Scout the spot first' };
     }
@@ -257,7 +343,7 @@ export class PlayerCommands {
       const unitDef = UNIT_TABLE[unitDefId];
       if (!unitDef) return false;
       if (!isUnitUnlocked(world, this.ctx.perspectivePlayerId, unitDefId)) {
-        if (!quiet) this.fail({ reason: 'locked', subject: unitDef.name });
+        if (!quiet) this.fail({ reason: 'locked', subject: unitDef.name, research: this.unlockResearchName('unit', unitDefId) });
         return false;
       }
       this.trainAtSelectedProducer(unitDefId);
@@ -267,10 +353,9 @@ export class PlayerCommands {
     return false;
   }
 
-  /** E: second train slot if the selection has one, else advance age. */
+  /** E: the second train slot of the selected producer. */
   secondaryHotkey(): void {
-    if (this.trainHotkey(1, true)) return;
-    this.advanceAge();
+    this.trainHotkey(1);
   }
 
   trainAtSelectedProducer(unitDefId: number, requestedCount = 1): void {
@@ -323,7 +408,12 @@ export class PlayerCommands {
       }
       if (!buildingDef?.trains.includes(unitDef.id)) continue;
       if (!isUnitUnlocked(world, playerId, unitDefId)) {
-        this.fail({ reason: 'locked', subject: unitDef.name });
+        this.fail({ reason: 'locked', subject: unitDef.name, research: this.unlockResearchName('unit', unitDefId) });
+        return;
+      }
+      const limitReason = unitLimitReason(world, playerId, unitDefId);
+      if (limitReason !== null) {
+        this.fail({ reason: 'unavailable', text: limitReason });
         return;
       }
       const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
@@ -336,7 +426,9 @@ export class PlayerCommands {
         this.fail({ reason: 'population', subject: unitDef.name });
         return;
       }
-      const trainCount = Math.min(targetCount, affordable, popRoom);
+      // The Commander is one per realm: a shift-click batch is still one.
+      const batchCap = unitDefId === UnitDefId.COMMANDER ? 1 : targetCount;
+      const trainCount = Math.min(batchCap, affordable, popRoom);
       this.dispatch({
         type: 'trainUnit',
         atEid: eid,
@@ -355,13 +447,10 @@ export class PlayerCommands {
 
   // ── Research ──────────────────────────────────────────────────────────────
 
-  advanceAge(): void {
-    const techId = nextAgeTechId(this.ctx.world, this.ctx.perspectivePlayerId);
-    if (!techId) {
-      this.fail({ reason: 'unavailable', text: 'Your realm has reached its final age' });
-      return;
-    }
-    this.research(techId, this.ctx.perspectivePlayerId);
+  /** Name of the research that unlocks a locked building or unit, if any. */
+  private unlockResearchName(kind: 'building' | 'unit', defId: number): string | undefined {
+    const research = unlockResearchFor(this.ctx.world, this.ctx.perspectivePlayerId, kind, defId);
+    return research ? techDef(research.techId)?.name : undefined;
   }
 
   research(techId: TechIdValue, playerId = this.ctx.perspectivePlayerId): void {
@@ -373,17 +462,13 @@ export class PlayerCommands {
       this.fail({ reason: 'unavailable', text: `${tech.name} is already researched` });
       return;
     }
-    if (status === 'researching') {
-      this.fail({ reason: 'unavailable', text: `${tech.name} is already under way` });
-      return;
-    }
     if (status === 'locked') {
       const text = world.campaign?.lockedTechs.includes(techId)
         ? `${tech.name} is locked for this mission`
         : (() => {
             const missing = missingResearchText(world, playerId, techId);
             return missing
-              ? `${tech.name} needs research first: ${missing}. Open Technology (K)`
+              ? `${tech.name} is locked: ${missing}. Open Technology (K)`
               : `${tech.name} needs earlier research first`;
           })();
       this.fail({ reason: 'unavailable', text });

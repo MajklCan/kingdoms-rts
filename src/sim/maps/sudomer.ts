@@ -2,6 +2,7 @@
  * Sudomer ponds: campaign map with two ponds, a dry choke and a fortified town.
  */
 
+import { dcos, dsin } from '../core/dmath';
 import {
   H,
   W,
@@ -83,8 +84,8 @@ function paintSudomerPond(
       const idx = mapIndex(x, y);
       const d = ellipseDistance(x, y, pond.cx, pond.cy, pond.rx, pond.ry);
       const ripple =
-        Math.sin(x * 0.34 + y * 0.17) * 0.035 +
-        Math.cos(x * 0.19 - y * 0.27) * 0.025;
+        dsin(x * 0.34 + y * 0.17) * 0.035 +
+        dcos(x * 0.19 - y * 0.27) * 0.025;
       const shoreline = d + ripple;
       if (shoreline <= waterEdge) {
         map.tiles[idx] = TileType.WATER;
@@ -131,8 +132,8 @@ function paintSudomerRightMud(
         routeEnd.y
       );
       const wetPatchNoise =
-        Math.sin(x * 0.71 + y * 0.19) +
-        Math.cos(x * 0.31 - y * 0.53);
+        dsin(x * 0.71 + y * 0.19) +
+        dcos(x * 0.31 - y * 0.53);
 
       const reachesMapEdge = x >= guaranteedEdgeX;
       const northernRoute = routeD <= 8.5 && y <= rightPond.cy + 1;

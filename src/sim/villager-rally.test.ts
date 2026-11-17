@@ -5,6 +5,7 @@ import { BuildingDefId, UnitDefId } from './defs';
 import { TechId } from './tech-tree';
 import { loadSimWorldSnapshot, serializeSimWorld } from './save-load';
 import { checksumWorld } from './checksum';
+import { staffFoundations } from './testing/staff-foundations';
 import {
   AI_PLAYER_ID,
   buildingQuery,
@@ -197,7 +198,10 @@ describe('worksite crews and population', () => {
         world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.LUMBER_CAMP, x, y, playerId: P1 });
         step(world);
         const hut = findBuildingAt(world, x, y, 0.5);
-        if (hut !== null && Building.defId[hut] === BuildingDefId.LUMBER_CAMP) return hut;
+        if (hut !== null && Building.defId[hut] === BuildingDefId.LUMBER_CAMP) {
+          staffFoundations(world, P1);
+          return hut;
+        }
       }
     }
     throw new Error('no lumber hut spot');
@@ -209,12 +213,12 @@ describe('worksite crews and population', () => {
     for (let i = 0; i < 20 * 30; i++) step(world);
     const workers = unitQuery(world.ecs).filter((e) => Owner.player[e] === P1 && hasComponent(world.ecs, WorksiteWorker, e));
     expect(workers.length).toBe(1);
-    expect(world.population[P1].current).toBe(2); // the rider + the worker
+    expect(world.population[P1].current).toBe(4); // the rider, 2 starter villagers + the worker
   });
 
   it('a full population holds back worksite workers until there is room', () => {
     const world = newWorld(712);
-    world.population[P1].cap = 1; // the rider fills it
+    world.population[P1].cap = 3; // the rider and the 2 starter villagers fill it
     const hut = lumberHutWithFreeWorker(world);
     for (let i = 0; i < 20 * 30; i++) step(world);
     const crew = () => unitQuery(world.ecs).filter((e) => Owner.player[e] === P1 && hasComponent(world.ecs, WorksiteWorker, e)).length;
@@ -254,6 +258,7 @@ describe('houses under construction and the population maximum', () => {
     step(world);
     expect(world.population[P1].cap).toBe(5);
     expect(pendingPopCapGain(world, P1)).toBe(3);
+    staffFoundations(world, P1);
     for (let i = 0; i < 20 * 16; i++) step(world);
     expect(world.population[P1].cap).toBe(8);
     expect(pendingPopCapGain(world, P1)).toBe(0);
@@ -280,13 +285,12 @@ describe('houses under construction and the population maximum', () => {
 });
 
 describe('Start, town center units and building sight', () => {
-  it('each side starts with the town center and a single scout rider', () => {
+  it('each side starts with the town center, a single scout rider and 2 villagers', () => {
     const world = createSimWorld(710);
     for (const playerId of [P1, AI_PLAYER_ID]) {
-      const units = [...ownUnits(world, playerId)];
-      expect(units.length).toBe(1);
-      expect(UnitKind.kind[units[0]]).toBe(UnitDefId.SCOUT_CAVALRY);
-      expect(world.population[playerId]).toEqual({ current: 1, cap: 5 });
+      const kinds = [...ownUnits(world, playerId)].map((eid) => UnitKind.kind[eid]).sort();
+      expect(kinds).toEqual([UnitDefId.VILLAGER, UnitDefId.VILLAGER, UnitDefId.SCOUT_CAVALRY].sort());
+      expect(world.population[playerId]).toEqual({ current: 3, cap: 5 });
     }
   });
 

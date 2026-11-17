@@ -39,9 +39,9 @@
    "json": "buildings-0.json",
    "size": [
     2048,
-    1269
+    1320
    ],
-   "frames": 535
+   "frames": 558
   },
   {
    "key": "kr-decor-0",
@@ -474,12 +474,12 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_depleted",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_depleted__mask",
      "shadow": "farm_depleted__shadow"
@@ -488,26 +488,81 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_growing",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_growing__mask",
      "shadow": "farm_growing__shadow"
+    },
+    "hemp_depleted": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_depleted",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "mask": "farm_hemp_depleted__mask",
+     "shadow": "farm_hemp_depleted__shadow"
+    },
+    "hemp_growing": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_growing",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "mask": "farm_hemp_growing__mask",
+     "shadow": "farm_hemp_growing__shadow"
+    },
+    "hemp_ripe": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_ripe",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "shadow": "farm_hemp_ripe__shadow"
+    },
+    "hemp_sown": {
+     "atlas": "kr-buildings-0",
+     "frame": "farm_hemp_sown",
+     "anchor": [
+      91,
+      88
+     ],
+     "size": [
+      182,
+      91
+     ],
+     "mask": "farm_hemp_sown__mask",
+     "shadow": "farm_hemp_sown__shadow"
     },
     "ripe": {
      "atlas": "kr-buildings-0",
      "frame": "farm_ripe",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_ripe__mask",
      "shadow": "farm_ripe__shadow"
@@ -516,19 +571,19 @@
      "atlas": "kr-buildings-0",
      "frame": "farm_sown",
      "anchor": [
-      73,
-      83
+      87,
+      87
      ],
      "size": [
-      146,
-      86
+      174,
+      90
      ],
      "mask": "farm_sown__mask",
      "shadow": "farm_sown__shadow"
     }
    },
    "defId": "FARM",
-   "construction": "construction.2x2",
+   "construction": "construction.farm",
    "rubble": "rubble.2x2",
    "stages": [
     "sown",
@@ -2369,6 +2424,108 @@
     "0",
     "1",
     "2"
+   ],
+   "default": "0"
+  },
+  "construction.farm": {
+   "kind": "construction",
+   "footprint": [
+    2,
+    2
+   ],
+   "variants": {
+    "0": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_farm_0",
+     "anchor": [
+      87,
+      87
+     ],
+     "size": [
+      174,
+      90
+     ],
+     "shadow": "construction_farm_0__shadow",
+     "progress": 0.0
+    },
+    "1": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_farm_1",
+     "anchor": [
+      87,
+      87
+     ],
+     "size": [
+      174,
+      90
+     ],
+     "shadow": "construction_farm_1__shadow",
+     "progress": 0.1
+    },
+    "2": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_farm_2",
+     "anchor": [
+      87,
+      87
+     ],
+     "size": [
+      174,
+      90
+     ],
+     "shadow": "construction_farm_2__shadow",
+     "progress": 0.28
+    },
+    "3": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_farm_3",
+     "anchor": [
+      87,
+      87
+     ],
+     "size": [
+      174,
+      90
+     ],
+     "shadow": "construction_farm_3__shadow",
+     "progress": 0.46
+    },
+    "4": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_farm_4",
+     "anchor": [
+      87,
+      87
+     ],
+     "size": [
+      174,
+      90
+     ],
+     "shadow": "construction_farm_4__shadow",
+     "progress": 0.64
+    },
+    "5": {
+     "atlas": "kr-buildings-0",
+     "frame": "construction_farm_5",
+     "anchor": [
+      87,
+      87
+     ],
+     "size": [
+      174,
+      90
+     ],
+     "shadow": "construction_farm_5__shadow",
+     "progress": 0.82
+    }
+   },
+   "stages": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5"
    ],
    "default": "0"
   },

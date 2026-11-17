@@ -27,6 +27,7 @@ import {
   Gatherer,
   GathererStateId,
   Health,
+  NetId,
   Position,
   Resource,
   ResourceCarry,
@@ -35,7 +36,11 @@ import {
   Velocity,
 } from '@sim/components';
 import { UnitDefId } from '@sim/defs';
+import { villagerRole } from '@sim/core/villager-role';
 import type { CombatEvent } from '@sim/world';
+import { IdleGagTracker, idleGagFrame } from './commander-idle';
+import { pickVillagerAnim } from './villager-anim';
+import { villagerLook } from '../sprites/villager-look';
 import { DEFAULT_FACING, facingFromVector, type Facing } from '../sprites/facing';
 import type { UnitAnimInfo, UnitArtInfo } from '../sprites/sprite-source';
 import type { SceneContext } from '../scene-context';
@@ -48,6 +53,7 @@ const MOVE_FRAME_TICKS: Readonly<Partial<Record<number, number>>> = {
   [UnitDefId.VILLAGER]: 6,
   [UnitDefId.ARCHER]: 6,
   [UnitDefId.SPEARMAN]: 6,
+  [UnitDefId.COMMANDER]: 6,
   [UnitDefId.SCOUT_CAVALRY]: 5,
   [UnitDefId.GUNMAN]: 6,
   [UnitDefId.CANNON]: 8,
@@ -63,6 +69,7 @@ const ANIMATED_ATTACKERS: ReadonlySet<number> = new Set([
   UnitDefId.SCOUT_CAVALRY,
   UnitDefId.ARCHER,
   UnitDefId.SPEARMAN,
+  UnitDefId.COMMANDER,
   UnitDefId.GUNMAN,
   UnitDefId.CANNON,
   UnitDefId.MACHINE_GUN,
@@ -89,7 +96,7 @@ export interface UnitPose {
 }
 
 export type FrameCountLookup = (unitDefId: number, anim: string) => number;
-export type UnitArtLookup = (unitDefId: number) => UnitArtInfo | null;
+export type UnitArtLookup = (unitDefId: number, look?: string) => UnitArtInfo | null;
 
 interface WalkState {
   x: number;
@@ -105,6 +112,7 @@ export class UnitAnimator {
   private readonly lastHitMs = new Map<number, number>();
   private readonly windupEndMs = new Map<number, number>();
   private readonly walk = new Map<number, WalkState>();
+  private readonly idleGags = new IdleGagTracker();
 
   constructor(
     private readonly ctx: SceneContext,
@@ -141,7 +149,8 @@ export class UnitAnimator {
    */
   pose(eid: number, x?: number, y?: number): UnitPose | null {
     const kind = UnitKind.kind[eid];
-    const art = this.art(kind);
+    const look = kind === UnitDefId.VILLAGER ? villagerLook(this.ctx.world, eid) : undefined;
+    const art = this.art(kind, look);
     const moving = this.isMoving(eid);
     if (art) return this.atlasPose(eid, kind, art, moving, x, y);
     const moveTicks = MOVE_FRAME_TICKS[kind];
@@ -170,6 +179,7 @@ export class UnitAnimator {
     this.lastHitMs.delete(eid);
     this.windupEndMs.delete(eid);
     this.walk.delete(eid);
+    this.idleGags.forget(eid);
   }
 
   clear(): void {
@@ -178,6 +188,7 @@ export class UnitAnimator {
     this.lastHitMs.clear();
     this.windupEndMs.clear();
     this.walk.clear();
+    this.idleGags.clear();
   }
 
   // -- atlas units ---------------------------------------------------------------
@@ -196,9 +207,18 @@ export class UnitAnimator {
     const walked = this.trackWalk(eid, x, y);
     const attack = art.anim('attack');
     const attackFrame = attack ? this.attackFrame(eid, attack, moving, now) : -1;
-    if (attackFrame >= 0) return { facing, anim: 'attack', frame: attackFrame };
+    if (attackFrame >= 0) {
+      this.idleGags.forget(eid);
+      return { facing, anim: 'attack', frame: attackFrame };
+    }
     const anim = villager ? this.villagerAtlasAnim(eid, moving, art) : moving ? 'move' : 'idle';
-    const info = art.anim(anim) ?? art.anim('idle');
+    if (kind === UnitDefId.COMMANDER) {
+      const gag = this.commanderGag(eid, anim === 'idle' && !this.hasTarget(eid), art, now);
+      if (gag) return { facing, ...gag };
+    }
+    // A role look that lacks the anim is drawn with the default art, so time it by that.
+    const own = art.hasOwn?.(anim) !== false;
+    const info = (own ? art.anim(anim) : this.art(kind)?.anim(anim)) ?? art.anim('idle');
     if (!info) return { facing, anim, frame: 0 };
     let frame: number;
     if (info.stride > 0) {
@@ -209,6 +229,28 @@ export class UnitAnimator {
       frame = (Math.floor(now / info.ms) + phase) % info.frames;
     }
     return { facing, anim, frame };
+  }
+
+  /**
+   * The Commander's idle gag (smoke, sit), or null while he is busy or the
+   * art lacks the anim: he then plays the plain idle like any other unit.
+   */
+  private commanderGag(
+    eid: number,
+    idle: boolean,
+    art: UnitArtInfo,
+    now: number
+  ): { anim: string; frame: number } | null {
+    const pick = this.idleGags.pick(eid, idle, now);
+    if (!pick || pick.anim === 'idle') return null;
+    const info = art.anim(pick.anim);
+    if (!info || info.ms <= 0) return null;
+    return { anim: pick.anim, frame: idleGagFrame(pick, info.frames, info.ms) };
+  }
+
+  private hasTarget(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    return hasComponent(ecs, AttackTarget, eid) && AttackTarget.targetEid[eid] >= 0;
   }
 
   /** Attack frame for this instant, or -1 when the unit is not mid-attack. */
@@ -250,17 +292,27 @@ export class UnitAnimator {
   private villagerAtlasAnim(eid: number, moving: boolean, art: UnitArtInfo): string {
     const ecs = this.ctx.world.ecs;
     const carryAmt = hasComponent(ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;
-    const carry = carryAmt > 0 ? CARRY_ANIM[ResourceCarry.kind[eid]] ?? 'carry' : 'carry';
-    if (hasComponent(ecs, Gatherer, eid)) {
-      const state = Gatherer.state[eid];
-      if (state === GathererStateId.GATHERING) {
-        const work = this.workAnim(Gatherer.targetEid[eid]);
-        return art.anim(work) ? work : 'harvest';
-      }
-      if (state === GathererStateId.BUILDING) return 'build';
-      if ((moving || state === GathererStateId.DEPOSITING) && carryAmt > 0) return carry;
-    }
-    return moving ? 'move' : 'idle';
+    const gatherer = hasComponent(ecs, Gatherer, eid);
+    const raw = gatherer ? Gatherer.state[eid] : -1;
+    return pickVillagerAnim({
+      role: villagerRole(this.ctx.world, eid),
+      variant: NetId.value[eid],
+      moving,
+      atBuildSite: this.atBuildSite(eid, moving),
+      state:
+        raw === GathererStateId.GATHERING
+          ? 'gathering'
+          : raw === GathererStateId.BUILDING
+            ? 'building'
+            : raw === GathererStateId.DEPOSITING
+              ? 'depositing'
+              : gatherer
+                ? 'other'
+                : 'none',
+      gatherWork: gatherer && raw === GathererStateId.GATHERING ? this.workAnim(Gatherer.targetEid[eid]) : '',
+      carry: carryAmt > 0 ? CARRY_ANIM[ResourceCarry.kind[eid]] ?? 'carry' : null,
+      owns: (anim) => art.hasOwn?.(anim) ?? art.anim(anim) !== null,
+    });
   }
 
   /** Work loop for a gather target: chop trees, mine rock, hoe farms, pick berries. */
@@ -339,6 +391,7 @@ export class UnitAnimator {
   private villagerAnim(eid: number, moving: boolean): string {
     const ecs = this.ctx.world.ecs;
     const carryAmt = hasComponent(ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;
+    if (this.atBuildSite(eid, moving)) return 'build';
     if (hasComponent(ecs, Gatherer, eid)) {
       const state = Gatherer.state[eid];
       if (state === GathererStateId.GATHERING) return 'harvest';
@@ -347,6 +400,12 @@ export class UnitAnimator {
       if (state === GathererStateId.DEPOSITING && carryAmt > 0) return 'carry';
     }
     return moving ? 'move' : 'idle';
+  }
+
+  /** A builder standing still with a build order: working on its foundation. */
+  private atBuildSite(eid: number, moving: boolean): boolean {
+    if (moving || !hasComponent(this.ctx.world.ecs, BuildOrder, eid)) return false;
+    return BuildOrder.targetEid[eid] >= 0;
   }
 
   private villagerFacing(eid: number, moving: boolean): Facing {

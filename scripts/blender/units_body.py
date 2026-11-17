@@ -126,6 +126,7 @@ class Look:
     skirt_len: float = 0.09
     beard: bool = False
     bulk: float = 1.0
+    forearm: str | None = None  # rolled sleeves: the forearm in this key (usually skin)
 
 
 class Puppet:
@@ -216,7 +217,10 @@ class Puppet:
                     pole = V(-0.6, side * 1.0, -0.5)
                 elbow = two_bone(sh, handp, UPPER, FORE, pole)
             mk.capsule(sh, elbow, ARM_R * b * 1.1, ARM_R * b, sleeve)
-            mk.capsule(elbow, handp, ARM_R * b, ARM_R * b * 0.9, sleeve)
+            fore = lk.forearm if lk.forearm and sleeve == lk.sleeve else sleeve
+            mk.capsule(elbow, handp, ARM_R * b * 0.92 if fore != sleeve else ARM_R * b, ARM_R * b * 0.9, fore)
+            if fore != sleeve:  # rolled cuff just below the elbow
+                mk.capsule(elbow, elbow + (handp - elbow) * 0.22, ARM_R * b * 1.12, ARM_R * b * 1.08, sleeve, caps=False)
             if show_hand:
                 mk.ell(handp, HAND_R, hand or lk.skin)
             hw = xfp(self.torso_m, handp)

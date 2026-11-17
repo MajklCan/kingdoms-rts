@@ -86,6 +86,8 @@ export interface BuildingSpriteQuery {
   wallMask?: number;
   /** Farms: crop stage. */
   farmStage?: FarmStage;
+  /** Farms: grow the hemp easter-egg crop (falls back to grain when the art lacks it). */
+  hemp?: boolean;
   /** Foundations: construction progress 0..1. */
   construction?: number;
 }
@@ -96,6 +98,11 @@ export interface UnitSpriteQuery {
   facing: Facing;
   anim: string;
   frame: number;
+  /**
+   * Optional look of the unit (villager role, e.g. "lumberjack"). Art without
+   * that look, or a look without this anim, draws the unit's default art.
+   */
+  look?: string;
 }
 
 export interface ResourceSpriteQuery {
@@ -133,6 +140,8 @@ export interface UnitAnimInfo {
 export interface UnitArtInfo {
   /** Timing of an anim (aliases resolved), null = the art has no such anim. */
   anim(anim: string): UnitAnimInfo | null;
+  /** Has this exact anim or its own alias, no fallbacks (role looks only draw their own work). */
+  hasOwn?(anim: string): boolean;
   /** Screen offset from the feet where projectiles / muzzle smoke start, per facing. */
   projectile(facing: Facing): { dx: number; dy: number } | null;
   /** px from the feet to the top of the head. */
@@ -149,7 +158,7 @@ export interface SpriteSource {
   /** Number of frames a unit animation has; 0 when the source has no such anim. */
   unitFrameCount(unitDefId: number, anim: string): number;
   /** Pre-rendered unit facts (timing, anchors); absent / null for voxel units. */
-  unitArt?(unitDefId: number): UnitArtInfo | null;
+  unitArt?(unitDefId: number, look?: string): UnitArtInfo | null;
   resource(query: ResourceSpriteQuery): SpriteRef | null;
   /** Stump left by a felled tree (null = no stump art). */
   stump(conifer: boolean): SpriteRef | null;

@@ -2,6 +2,7 @@
  * Gatherer state machine: walk to node, harvest, return.
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import {
@@ -18,8 +19,9 @@ import {
   type ResourceKind,
   ResourceWorksite,
   VILLAGER_CARRY_CAPACITY,
-  VILLAGER_GATHER_COOLDOWN,
-  WorksiteWorker,
+  gatherCooldownForKind,
+  VillagerJobId,
+  VillagerTag,
 } from '../components';
 import { BUILDING_TABLE } from '../defs';
 import type { GridPos } from '../pathfinding';
@@ -34,12 +36,15 @@ import { gatherCueForKind, pushSoundCue } from '../core/events';
 import { buildingFootprintRect, distToBuildingEdge } from '../core/grid';
 import { buildingApproachCandidates, pathToResourceContact } from '../core/navigation';
 import { gathererQuery, resourceQuery } from '../core/queries';
+import { worksiteOf, worksThisTick } from '../core/worksite-membership';
 import type { SimWorld } from '../core/types';
 import {
   findNearestDropOffEid,
   routeToNearestDropOff,
   routeWorksiteWorkerToResource,
 } from './dropoff';
+import { huntArrivalCooldown, isGameAnimal, isLiveGameAnimal } from './hunting';
+import { rememberWork } from './villager-work';
 
 const WORKSITE_FALLBACK_DROP_OFF_RADIUS = 4;
 const DROP_OFF_DEPOSIT_TICKS = Math.round(SIM.TICK_HZ * 0.5);
@@ -104,13 +109,20 @@ function gatheringWalkingTo(world: SimWorld, eid: number): void {
 
   const dx = Position.x[eid] - Position.x[target];
   const dy = Position.y[eid] - Position.y[target];
-  const dist = Math.hypot(dx, dy);
+  const dist = dhypot(dx, dy);
   if (dist <= RESOURCE_GATHER_DISTANCE || (!world.paths.has(eid) && dist <= RESOURCE_GATHER_REACH)) {
     // Arrived at the resource node. Keep this tight so harvesting animations
     // visually connect with the trunk / rock / bush rather than swinging at air.
     Gatherer.state[eid] = GathererStateId.GATHERING;
-    Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
+    Gatherer.cooldown[eid] = huntArrivalCooldown(world, eid, target, gatherCooldownForKind(Resource.kind[target]));
     world.paths.delete(eid);
+    noteHandWork(world, eid, target);
+    return;
+  }
+  // Game wanders off while the hunter walks: follow it once his path runs out.
+  if (!world.paths.has(eid) && isLiveGameAnimal(world, target) && !pathToResourceContact(world, eid, target)) {
+    Gatherer.state[eid] = GathererStateId.IDLE;
+    Gatherer.targetEid[eid] = -1;
   }
   // Otherwise the path is in motion via movementSystem.
 }
@@ -137,6 +149,9 @@ function gatheringActive(world: SimWorld, eid: number): void {
   // removes it and moves this gatherer on later in the same tick.
   if (Resource.amount[target] <= 0) return;
 
+  // Extra helpers at a worksite work 3 of every 5 ticks.
+  if (!worksThisTick(world, eid)) return;
+
   // Tick down the cooldown; emit a gather increment when it hits 0.
   if (Gatherer.cooldown[eid] > 0) {
     Gatherer.cooldown[eid] -= 1;
@@ -150,7 +165,7 @@ function gatheringActive(world: SimWorld, eid: number): void {
   }
   ResourceCarry.amount[eid] += 1;
   Resource.amount[target] -= 1;
-  Gatherer.cooldown[eid] = VILLAGER_GATHER_COOLDOWN;
+  Gatherer.cooldown[eid] = gatherCooldownForKind(kind);
   pushSoundCue(world, gatherCueForKind(kind), Position.x[eid], Position.y[eid], Owner.player[eid]);
 
   // An emptied node stays until resourceDepletionSystem removes it later this
@@ -186,9 +201,8 @@ function gatheringReturning(world: SimWorld, eid: number): void {
 }
 
 function tryFallbackWorksiteDeposit(world: SimWorld, worker: number): boolean {
-  if (!hasComponent(world.ecs, WorksiteWorker, worker)) return false;
-  const siteEid = WorksiteWorker.siteEid[worker];
-  if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
+  const siteEid = worksiteOf(world, worker);
+  if (siteEid < 0 || !hasComponent(world.ecs, ResourceWorksite, siteEid)) return false;
   if (!hasComponent(world.ecs, DropOff, siteEid)) return false;
   if (Health.hp[siteEid] <= 0) return false;
   const carryAmt = ResourceCarry.amount[worker];
@@ -211,11 +225,19 @@ export function startGatheringResource(world: SimWorld, eid: number, target: num
   if (!pathToResourceContact(world, eid, target)) return false;
   Gatherer.targetEid[eid] = target;
   const isClose =
-    Math.hypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) <=
+    dhypot(Position.x[eid] - Position.x[target], Position.y[eid] - Position.y[target]) <=
     RESOURCE_GATHER_DISTANCE;
-  Gatherer.cooldown[eid] = isClose ? VILLAGER_GATHER_COOLDOWN : 0;
+  Gatherer.cooldown[eid] = isClose ? huntArrivalCooldown(world, eid, target, gatherCooldownForKind(Resource.kind[target])) : 0;
   Gatherer.state[eid] = isClose ? GathererStateId.GATHERING : GathererStateId.WALKING_TO;
+  noteHandWork(world, eid, target);
   return true;
+}
+
+/** A free villager gathering or hunting by hand remembers it (see villager-work.ts). */
+export function noteHandWork(world: SimWorld, eid: number, target: number): void {
+  if (!hasComponent(world.ecs, VillagerTag, eid) || worksiteOf(world, eid) >= 0) return;
+  const job = isGameAnimal(world, target) ? VillagerJobId.HUNT : VillagerJobId.GATHER;
+  rememberWork(world, eid, job, Resource.kind[target], target);
 }
 
 export function routeToNearestReachableResource(
@@ -234,7 +256,7 @@ export function routeToNearestReachableResource(
     .filter((target) => Resource.kind[target] === kind && Resource.amount[target] > 0)
     .map((target) => ({
       target,
-      dist: Math.hypot(Position.x[target] - originX, Position.y[target] - originY),
+      dist: dhypot(Position.x[target] - originX, Position.y[target] - originY),
     }))
     .filter((candidate) => candidate.dist <= maxRange)
     .sort((a, b) => a.dist - b.dist || compareDeterministicEids(world, a.target, b.target));
@@ -270,7 +292,7 @@ export function routeFarmWorkerToNextPatch(world: SimWorld, worker: number, site
     const final = nextPath[nextPath.length - 1];
     if (
       !final ||
-      Math.hypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
+      dhypot(final.x - candidate.point.x, final.y - candidate.point.y) > 0.01
     ) {
       nextPath.push(candidate.point);
     }
@@ -314,7 +336,7 @@ function farmWorkPatchCandidates(
       tile: candidate.tile,
       point,
       score:
-        Math.hypot(Position.x[worker] - point.x, Position.y[worker] - point.y) +
+        dhypot(Position.x[worker] - point.x, Position.y[worker] - point.y) +
         candidate.resourcePenalty,
     });
   }

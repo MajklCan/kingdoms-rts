@@ -2,6 +2,7 @@
  * Riverlands: the default skirmish map with a winding river and bridges.
  */
 
+import { dsin } from '../core/dmath';
 import type { Rng } from '../rng';
 import { H, W, isWaterTile } from './terrain';
 import { type MapData, TileType } from './types';
@@ -68,7 +69,7 @@ export function generateRiverlandsMap(rng: Rng): MapData {
     const centerX =
       riverStartX * (1 - t) +
       riverEndX * t +
-      Math.sin(y / wavelength * Math.PI * 2 + phase) * amplitude;
+      dsin(y / wavelength * Math.PI * 2 + phase) * amplitude;
     const cx = Math.round(centerX);
     const width = 2 + ((y % 6 === 0) ? 1 : 0); // slight variation
     for (let dx = -width; dx <= width; dx++) {

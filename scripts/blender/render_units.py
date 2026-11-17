@@ -25,6 +25,7 @@ See docs/UNIT_SPRITES.md.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import importlib
 import json
@@ -49,10 +50,17 @@ SPRITES = os.path.join(ROOT, "public", "assets", "sprites")
 PORTRAITS = os.path.join(ROOT, "public", "assets", "ui", "portraits", "units")
 CACHE = os.path.join(ROOT, "art-source", "blender", "units", ".cache")
 
-# unit name -> module (draw/ANIMS/DEF_IDS/PORTRAIT)
+# unit name -> module (draw/ANIMS/DEF_IDS/PORTRAIT); "module:role" picks a villager
+# role kit from the module's ROLE_UNITS (an extra look of the same unit def)
 UNITS = {
     "villager": "units_villager",
+    "villager-lumberjack": "units_villager:lumberjack",
+    "villager-farmer": "units_villager:farmer",
+    "villager-quarryman": "units_villager:quarryman",
+    "villager-gold-miner": "units_villager:gold-miner",
     "militia": "units_militia",
+    "commander": "units_commander",
+    "commander": "units_commander",
     "spearman": "units_spearman",
     "archer": "units_archer",
     "cavalry": "units_cavalry",
@@ -77,14 +85,17 @@ CACHE_VERSION = 3
 # ---------------------------------------------------------------------------
 
 
-def _anims(mod) -> dict:
-    return {k: v for k, v in mod.ANIMS.items()}
+def unit_module(unit: str):
+    """The module (or role namespace) that draws `unit`."""
+    name, _, role = UNITS[unit].partition(":")
+    mod = importlib.import_module(name)
+    return mod.ROLE_UNITS[role] if role else mod
 
 
 def render_task(task: tuple) -> tuple:
     """(unit, anim, facing) -> list of frame dicts. Runs in worker processes."""
     unit, anim, facing = task
-    mod = importlib.import_module(UNITS[unit])
+    mod = unit_module(unit)
     spec = mod.ANIMS[anim]
     out = []
     with np.errstate(all="ignore"):
@@ -114,7 +125,7 @@ def _source_hash(unit: str) -> str:
 def render_units(names: list[str], jobs: int) -> dict:
     tasks = []
     for unit in names:
-        mod = importlib.import_module(UNITS[unit])
+        mod = unit_module(unit)
         for anim, spec in mod.ANIMS.items():
             if spec.alias:
                 continue
@@ -284,15 +295,30 @@ def build_atlas(all_strips: dict) -> tuple[list, dict]:
         key = hashlib.sha1(sub.tobytes() + struct.pack(">4i", ox, oy, *sub.shape[:2])).hexdigest()
         uniq.setdefault(key, {"img": sub, "names": [], "ox": ox, "oy": oy, "cw": cw, "ch": ch})
         uniq[key]["names"].append(name)
-    order = sorted(uniq.values(), key=lambda e: (-e["img"].shape[0], -e["img"].shape[1]))
-    packer = Packer()
+    # Every unit lives on one page, so a frame, its team mask and its shadow
+    # always share a texture (the engine draws masks from the frame's page).
+    by_unit: dict = {}
+    for e in uniq.values():
+        by_unit.setdefault(e["names"][0].split("/")[0], []).append(e)
+    area = {u: sum(e["img"].shape[0] * e["img"].shape[1] for e in es) for u, es in by_unit.items()}
+    page_packers: list[Packer] = []
     placed = []
-    for e in order:
-        h, w = e["img"].shape[:2]
-        pi, x, y = packer.place(w, h)
-        placed.append((pi, x, y, e))
+    for unit in sorted(by_unit, key=lambda u: -area[u]):
+        order = sorted(by_unit[unit], key=lambda e: (-e["img"].shape[0], -e["img"].shape[1]))
+        for pi, packer in enumerate(page_packers + [Packer()]):
+            trial = copy.deepcopy(packer)
+            spots = [trial.place(e["img"].shape[1], e["img"].shape[0]) for e in order]
+            if all(sp[0] == 0 for sp in spots):
+                if pi == len(page_packers):
+                    page_packers.append(trial)
+                else:
+                    page_packers[pi] = trial
+                placed += [(pi, x, y, e) for (_, x, y), e in zip(spots, order)]
+                break
+        else:
+            raise SystemExit(f"{unit} does not fit on one {PAGE}x{PAGE} page")
     pages = []
-    for pi, p in enumerate(packer.pages):
+    for p in (pk.pages[0] for pk in page_packers):
         hh = min(int(2 ** math.ceil(math.log2(max(p["used_h"], 64)))), PAGE)
         pages.append({"img": np.zeros((hh, PAGE, 4), dtype=np.uint8), "frames": {}})
     for pi, x, y, e in placed:
@@ -317,7 +343,7 @@ def build_atlas(all_strips: dict) -> tuple[list, dict]:
 
 
 def unit_manifest(unit: str, strips: dict, layout: dict) -> dict:
-    mod = importlib.import_module(UNITS[unit])
+    mod = unit_module(unit)
     anims = {}
     for name, spec in mod.ANIMS.items():
         a: dict = {"frames": spec.frames}
@@ -346,6 +372,9 @@ def unit_manifest(unit: str, strips: dict, layout: dict) -> dict:
         "ring": list(RINGS.get(unit, DEFAULT_RING)),
         "anims": anims,
     }
+    look = getattr(mod, "LOOK", None)
+    if isinstance(look, str):
+        out["look"] = look  # an extra look of defIds, picked by villager role (not a unit of its own)
     point = PROJECTILE_POINT.get(unit)
     if point and "attack" in mod.ANIMS:
         hit = max(mod.ANIMS["attack"].hit, 0)
@@ -363,7 +392,7 @@ def unit_manifest(unit: str, strips: dict, layout: dict) -> dict:
 
 
 def portrait(unit: str) -> np.ndarray:
-    mod = importlib.import_module(UNITS[unit])
+    mod = unit_module(unit)
     spec = getattr(mod, "PORTRAIT", {"fit": "head", "density": 4.0, "anim": "idle", "frame": 0, "facing": 1})
     facing = spec.get("facing", 1)
 
@@ -497,7 +526,9 @@ def main(argv: list[str]) -> None:
             img = portrait(unit)
             with open(os.path.join(PORTRAITS, unit + ".png"), "wb") as fh:
                 fh.write(png_bytes(img))
-            mod = importlib.import_module(UNITS[unit])
+            mod = unit_module(unit)
+            if isinstance(getattr(mod, "LOOK", None), str):
+                continue  # role looks keep their bust but do not replace the unit's
             for d in mod.DEF_IDS:
                 index[d] = f"{unit}.png"
         idx_path = os.path.join(PORTRAITS, "index.json")

@@ -66,6 +66,11 @@ class UnitArt implements UnitArtInfo {
     return this.find(anim, 0) !== null;
   }
 
+  /** Has this exact anim or its own alias (no fallbacks): role looks only draw their own work. */
+  hasOwn(anim: string): boolean {
+    return Boolean(this.def.anims[anim] ?? this.def.anims[this.def.aliases[anim] ?? '']);
+  }
+
   anim(anim: string): UnitAnimInfo | null {
     const name = this.find(anim, 0);
     const a = name ? this.def.anims[name] : undefined;
@@ -92,6 +97,8 @@ class UnitArt implements UnitArtInfo {
 
 export class UnitAtlasSource implements SpriteSource {
   private readonly byDef = new Map<number, UnitArt>();
+  /** `<unitDefId>|<look>` -> extra look of that unit (villager roles). */
+  private readonly byLook = new Map<string, UnitArt>();
   private readonly refs = new Map<string, SpriteRef | null>();
 
   constructor(
@@ -103,7 +110,14 @@ export class UnitAtlasSource implements SpriteSource {
       // Only units whose idle frame is really in a loaded atlas count as covered.
       if (!lookup(unitFrameName(def.name, 'idle', 1, 0))) continue;
       const art = new UnitArt(def);
-      for (const id of def.unitDefIds) this.byDef.set(id, art);
+      for (const id of def.unitDefIds) {
+        if (def.look === undefined) this.byDef.set(id, art);
+        else this.byLook.set(lookKey(id, def.look), art);
+      }
+    }
+    // A look only counts when its unit has default art to fall back to.
+    for (const key of [...this.byLook.keys()]) {
+      if (!this.byDef.has(Number(key.split('|')[0]))) this.byLook.delete(key);
     }
   }
 
@@ -116,18 +130,29 @@ export class UnitAtlasSource implements SpriteSource {
     return [...this.byDef.keys()];
   }
 
-  unitArt(unitDefId: number): UnitArtInfo | null {
+  /** Art of a unit kind; with a `look` that has art of its own, that look's art. */
+  unitArt(unitDefId: number, look?: string): UnitArtInfo | null {
+    if (look !== undefined) {
+      const variant = this.byLook.get(lookKey(unitDefId, look));
+      if (variant) return variant;
+    }
     return this.byDef.get(unitDefId) ?? null;
   }
 
+  /** Looks (villager roles) drawn for a unit kind, besides its default art. */
+  looksOf(unitDefId: number): string[] {
+    const prefix = `${unitDefId}|`;
+    return [...this.byLook.keys()].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+  }
+
   unit(query: UnitSpriteQuery): SpriteRef | null {
-    const art = this.byDef.get(query.unitDefId);
+    const art = this.artFor(query.unitDefId, query.look, query.anim);
     if (!art) return null;
     const anim = art.resolve(query.anim);
     const spec = art.def.anims[anim];
     const frame = Math.max(0, Math.min(spec.frames - 1, Math.floor(query.frame)));
     const facing = Math.max(0, FACINGS.indexOf(query.facing));
-    const key = `${query.unitDefId}|${query.playerId}|${anim}|${facing}|${frame}`;
+    const key = `${art.def.name}|${query.playerId}|${anim}|${facing}|${frame}`;
     const cached = this.refs.get(key);
     if (cached !== undefined) return cached;
     const ref = this.build(art.def, query.playerId, anim, facing, frame, spec.shadowPerFrame);
@@ -159,6 +184,18 @@ export class UnitAtlasSource implements SpriteSource {
 
   mapFeature(): SpriteRef | null {
     return null;
+  }
+
+  /**
+   * Art for a query: the requested look when it has this exact anim, else the
+   * unit's default art (so a crew never blanks or plays someone else's work).
+   */
+  private artFor(unitDefId: number, look: string | undefined, anim: string): UnitArt | null {
+    const base = this.byDef.get(unitDefId);
+    if (!base) return null;
+    if (look === undefined) return base;
+    const variant = this.byLook.get(lookKey(unitDefId, look));
+    return variant && variant.hasOwn(anim) ? variant : base;
   }
 
   private build(
@@ -198,6 +235,10 @@ export class UnitAtlasSource implements SpriteSource {
     }
     return ref;
   }
+}
+
+function lookKey(unitDefId: number, look: string): string {
+  return `${unitDefId}|${look}`;
 }
 
 /** Frame -> texture lookup over the loaded unit atlases. */

@@ -10,6 +10,7 @@ import {
   ArcherTag,
   Building,
   CannonTag,
+  CommanderTag,
   Combat,
   ConstructionSite,
   Gatherer,
@@ -32,17 +33,20 @@ import {
 } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId, getUnitDef } from '@sim/defs';
 import {
+  countWorksiteHelpers,
   getBuildingPopProvided,
   getWorksiteWorkerSlots,
   selectedQuery,
   type SimWorld,
 } from '@sim/world';
 import type { SceneContext } from '../scene-context';
+import { villagerStatusText } from './villager-status';
 
 export type SelectionKind =
   | 'villager'
   | 'archer'
   | 'spearman'
+  | 'commander'
   | 'scoutCavalry'
   | 'gunman'
   | 'cannon'
@@ -79,6 +83,7 @@ const NAME_BY_KIND: Record<string, string> = {
   villager: 'Villager',
   archer: 'Archer',
   spearman: 'Pikeman',
+  commander: 'Commander',
   scoutCavalry: 'Scout Cavalry',
   gunman: 'Gunman',
   cannon: 'Field Cannon',
@@ -104,6 +109,7 @@ const GLYPH_BY_KIND: Record<string, string> = {
   villager: '🧑',
   archer: '🏹',
   spearman: '♜',
+  commander: '♛',
   scoutCavalry: '♞',
   gunman: '•',
   cannon: '●',
@@ -140,7 +146,7 @@ const BUILDING_KIND_BY_DEF: Partial<Record<number, SelectionKind>> = {
 };
 
 const UNIT_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
-  'villager', 'archer', 'spearman', 'scoutCavalry', 'gunman', 'cannon', 'machineGun', 'mortar',
+  'villager', 'archer', 'spearman', 'commander', 'scoutCavalry', 'gunman', 'cannon', 'machineGun', 'mortar',
 ]);
 
 const BUILDING_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
@@ -163,6 +169,7 @@ function selectionKindOf(world: SimWorld, eid: number): SelectionKind {
   if (hasComponent(ecs, VillagerTag, eid)) return 'villager';
   if (hasComponent(ecs, ArcherTag, eid)) return 'archer';
   if (hasComponent(ecs, SpearmanTag, eid)) return 'spearman';
+  if (hasComponent(ecs, CommanderTag, eid)) return 'commander';
   if (hasComponent(ecs, ScoutCavalryTag, eid)) return 'scoutCavalry';
   if (hasComponent(ecs, GunmanTag, eid)) return 'gunman';
   if (hasComponent(ecs, CannonTag, eid)) return 'cannon';
@@ -235,11 +242,18 @@ function selectionStats(world: SimWorld, kind: SelectionKind, e0: number): strin
     if (hasComponent(ecs, ResourceWorksite, e0)) {
       const workers = ResourceWorksite.assignedWorkers[e0];
       const slots = getWorksiteWorkerSlots(world, e0);
-      stats += `  Workers ${workers}/${slots}  ${resourceKindName(ResourceWorksite.kind[e0])}`;
+      const helpers = countWorksiteHelpers(world, e0);
+      stats += `  Workers ${workers}/${slots}`;
+      if (helpers > 0) stats += `  Helpers ${helpers}`;
+      stats += `  ${resourceKindName(ResourceWorksite.kind[e0])}`;
     } else if (defId === BuildingDefId.MILL) {
       stats += '  Food drop-off +50%';
     } else if (def.trains.length > 0) {
       stats += '  Producer';
+    }
+    // Armed buildings (tower, town center) show what they shoot with.
+    if (hasComponent(ecs, Combat, e0)) {
+      stats += `  Atk ${Combat.atk[e0]}  Rng ${formatRange(Combat.range[e0])}`;
     } else if (def.combat) {
       stats += `  Atk ${def.combat.atk}  Rng ${formatRange(def.combat.range)}`;
     }
@@ -268,6 +282,8 @@ export function getStatusInfo(ctx: SceneContext): { text: string; progressFrac: 
   if (waitingFor.length > 0) return { text: `waiting for P${waitingFor.join(', P')}`, progressFrac: null };
   const world = ctx.world;
   for (const eid of selectedQuery(world.ecs)) {
+    const villagerText = villagerStatusText(world, eid);
+    if (villagerText !== null) return { text: villagerText, progressFrac: null };
     if (hasComponent(world.ecs, Gatherer, eid)) {
       const st = Gatherer.state[eid];
       const carry = hasComponent(world.ecs, ResourceCarry, eid) ? ResourceCarry.amount[eid] : 0;
@@ -296,6 +312,7 @@ export function entityKindName(world: SimWorld, eid: number): string {
   if (hasComponent(ecs, VillagerTag, eid)) return 'villager';
   if (hasComponent(ecs, ArcherTag, eid)) return 'archer';
   if (hasComponent(ecs, SpearmanTag, eid)) return 'spearman';
+  if (hasComponent(ecs, CommanderTag, eid)) return 'commander';
   if (hasComponent(ecs, ScoutCavalryTag, eid)) return 'scout cavalry';
   if (hasComponent(ecs, GunmanTag, eid)) return 'gunman';
   if (hasComponent(ecs, CannonTag, eid)) return 'field cannon';

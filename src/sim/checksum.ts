@@ -32,6 +32,7 @@ import {
   BuildOrder,
   CannonTag,
   Combat,
+  CommanderTag,
   ConstructionSite,
   Cooldown,
   DeadTag,
@@ -63,6 +64,9 @@ import {
   Velocity,
   VillagerTag,
   WorksiteWorker,
+  WorksiteHelper,
+  VillagerWork,
+  GameAnimal,
 } from './components';
 import { sortedEids } from './core/entities';
 import { positionQuery, type SimWorld } from './world';
@@ -166,8 +170,6 @@ export function checksumWorld(world: SimWorld): number {
   }
   for (const age of world.ages) {
     h.u32(age.current);
-    h.int(age.progress);
-    h.u32(age.totalTicks);
   }
   for (const set of world.researchedTechs) {
     const sorted = [...set].sort();
@@ -188,6 +190,7 @@ export function checksumWorld(world: SimWorld): number {
   h.u32(humanPlayers.length);
   for (const playerId of humanPlayers) h.u32(playerId);
   h.str(world.aiDifficulty);
+  h.bit(world.night);
   h.str(world.outcome.state);
   if (world.outcome.state === 'victory') {
     h.u32(world.outcome.winnerPlayerId);
@@ -263,6 +266,7 @@ export function checksumWorld(world: SimWorld): number {
     h.bit(hasComponent(ecs, CannonTag, eid));
     h.bit(hasComponent(ecs, MortarTag, eid));
     h.bit(hasComponent(ecs, MachineGunTag, eid));
+    h.bit(hasComponent(ecs, CommanderTag, eid));
     h.bit(hasComponent(ecs, TownCenterTag, eid));
     h.bit(hasComponent(ecs, FoundationTag, eid));
     h.bit(hasComponent(ecs, DeadTag, eid));
@@ -299,6 +303,26 @@ export function checksumWorld(world: SimWorld): number {
       h.u32(ResourceWorksite.progress[eid]);
     }
     if (hasComponent(ecs, WorksiteWorker, eid)) h.u32(canon(WorksiteWorker.siteEid[eid]));
+    if (hasComponent(ecs, WorksiteHelper, eid)) {
+      h.u32(canon(WorksiteHelper.siteEid[eid]));
+      h.u32(WorksiteHelper.extra[eid]);
+    }
+    if (hasComponent(ecs, VillagerWork, eid)) {
+      h.u32(VillagerWork.job[eid]);
+      h.u32(VillagerWork.kind[eid]);
+      h.u32(VillagerWork.siteNetId[eid]);
+      h.f32(VillagerWork.x[eid]);
+      h.f32(VillagerWork.y[eid]);
+    }
+    if (hasComponent(ecs, GameAnimal, eid)) {
+      h.u32(GameAnimal.species[eid]);
+      h.u32(GameAnimal.state[eid]);
+      h.f32(GameAnimal.homeX[eid]);
+      h.f32(GameAnimal.homeY[eid]);
+      h.f32(GameAnimal.targetX[eid]);
+      h.f32(GameAnimal.targetY[eid]);
+      h.u32(GameAnimal.wait[eid]);
+    }
     if (hasComponent(ecs, Health, eid)) {
       h.u32(Health.hp[eid]);
       h.u32(Health.hpMax[eid]);
@@ -378,6 +402,24 @@ export function checksumWorld(world: SimWorld): number {
   hashEntityMap(h, world.formationSpeedCaps, canon, (speedCap) => {
     h.f32(speedCap);
   });
+  // Shift-queued orders. Mixed in only when some exist, so a match that never
+  // queues an order hashes exactly as it did before queues existed.
+  if (world.orderQueues.size > 0) {
+    h.u32(0x0bd3);
+    hashEntityMap(h, world.orderQueues, canon, (queue) => {
+      h.u32(queue.length);
+      for (const order of queue) {
+        h.str(order.kind);
+        if (!('targetEid' in order)) {
+          h.f32(order.x);
+          h.f32(order.y);
+          h.f32(order.speedCap);
+        } else {
+          h.u32(canon(order.targetEid));
+        }
+      }
+    });
+  }
   hashEntityMap(h, world.cannonWindups, canon, (windup) => {
     h.u32(canon(windup.targetEid));
     h.u32(windup.ticksRemaining);

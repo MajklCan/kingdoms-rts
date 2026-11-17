@@ -9,6 +9,7 @@
  */
 
 import { atlasTextureKey } from '../../render/sprites/sprite-manifest';
+import { versioned } from '../../render/asset-version';
 import { BuildingDefId, UnitDefId } from '../../sim/defs';
 import { getGame } from '../game-bridge';
 
@@ -50,7 +51,7 @@ function nameOf(table: Record<string, number>, id: number): string | undefined {
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(versioned(url));
     if (!res.ok) return null;
     const type = res.headers.get('content-type') ?? '';
     // A missing folder can come back as the SPA's index.html.
@@ -68,7 +69,7 @@ export function loadPortraits(): void {
   void fetchJson<UnitIndex>(`${UNIT_DIR}index.json`).then((index) => {
     for (const [name, file] of Object.entries(index?.units ?? {})) {
       const id = (UnitDefId as Record<string, number>)[name];
-      if (id !== undefined && typeof file === 'string') unitUrls.set(id, `${UNIT_DIR}${file}`);
+      if (id !== undefined && typeof file === 'string') unitUrls.set(id, versioned(`${UNIT_DIR}${file}`));
     }
   });
   void fetchJson<Manifest>(MANIFEST_URL).then((m) => {

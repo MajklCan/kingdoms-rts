@@ -16,6 +16,8 @@ export interface TrackWindow {
  */
 const WINDOWS: Record<string, Partial<TrackWindow>> = {
   menu_theme: { outSec: 29.3 },
+  // 90 s, quiet first 0.3 s, decays below -45 dB from about 84 s.
+  menu_theme_2: { inSec: 0.3, outSec: 85 },
   village_theme: { inSec: 0.45, outSec: 29.4 },
   ingame_1: { outSec: 29.95 },
   // 90 s, natural decay from 86 s; 2.7 s of trailing silence cut.

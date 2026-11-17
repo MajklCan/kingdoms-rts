@@ -325,6 +325,12 @@ function findFreeTile(
 
 // ───────────────────────────── action + confirm ─────────────────────────────
 
+/** The player's free villagers: every placement sends them all to build it,
+ *  and they chain on to whatever is still unfinished nearby. */
+function freeVillagers(w: SimWorld, pid: number): number[] {
+  return unitsOfKind(w, pid, UnitKindId.VILLAGER).filter((eid) => !hasComponent(w.ecs, WorksiteWorker, eid));
+}
+
 function placeAndConfirm(d: Driver, pid: number, defId: number, clear = 2): number | null {
   const w = d.world;
   const tc = ownTownCenter(w, pid);
@@ -332,7 +338,7 @@ function placeAndConfirm(d: Driver, pid: number, defId: number, clear = 2): numb
   const before = buildingsOfDef(w, pid, defId).length;
   const tile = findFreeTile(w, Position.x[tc], Position.y[tc], clear);
   if (!tile) return null;
-  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid });
+  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid, eids: freeVillagers(w, pid) });
   d.step(3);
   const after = buildingsOfDef(w, pid, defId);
   return after.length > before ? after[after.length - 1] : null;
@@ -354,6 +360,7 @@ function placeWallLineAndConfirm(d: Driver, pid: number): number {
     y0: tile.y,
     x1: tile.x + 2,
     y1: tile.y,
+    eids: freeVillagers(w, pid),
   });
   if (!cmd) return 0;
   d.push(cmd);
@@ -372,7 +379,7 @@ function placeMineralWorksite(d: Driver, pid: number, defId: number, kind: numbe
   // the ring search at 6 tiles from the node.
   const tile = findFreeTile(w, Position.x[node], Position.y[node], 0, 6);
   if (!tile) return null;
-  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid });
+  d.push({ type: 'placeBuilding', defId, x: tile.x, y: tile.y, playerId: pid, eids: freeVillagers(w, pid) });
   d.step(3);
   const after = buildingsOfDef(w, pid, defId);
   return after.length > before ? after[after.length - 1] : null;
@@ -409,24 +416,25 @@ function researchAndConfirm(d: Driver, pid: number, techId: string): boolean {
   return d.world.researchedTechs[pid].has(techId as never);
 }
 
-/** Advance BOTH players to `expected` age at once, then wait once for the timed
- *  progress - far fewer ticks than advancing them sequentially. */
-function advanceBothAges(d: Driver, expected: number, maxTicks = 1400): boolean {
-  for (const pid of PLAYERS) d.push({ type: 'advanceAge', playerId: pid });
-  for (let i = 0; i < maxTicks; i += 10) {
-    d.step(10);
-    if (PLAYERS.every((pid) => d.world.ages[pid].current >= expected)) return true;
-  }
+/** Both players' era reached `expected`: a ring opens the tick its research lands. */
+function bothAgesReached(d: Driver, expected: number): boolean {
   return PLAYERS.every((pid) => d.world.ages[pid].current >= expected);
 }
 
-function finishConstruction(d: Driver, maxTicks = 1200): void {
+/** Wait for every foundation to finish. Like a player would, send villagers
+ *  with nothing to build on to a foundation that is still waiting. */
+function finishConstruction(d: Driver, maxTicks = 6000): void {
   for (let i = 0; i < maxTicks; i += 20) {
-    d.step(20);
-    const pending = [1, 2].some((pid) =>
-      buildingQuery(d.world.ecs).some((e) => Owner.player[e] === pid && isFoundation(d.world, e))
-    );
+    let pending = false;
+    for (const pid of [1, 2]) {
+      const sites = buildingQuery(d.world.ecs).filter((e) => Owner.player[e] === pid && isFoundation(d.world, e));
+      if (sites.length === 0) continue;
+      pending = true;
+      const free = freeVillagers(d.world, pid).filter((eid) => BuildOrder.targetEid[eid] < 0);
+      if (free.length > 0) d.push({ type: 'cmdBuild', playerId: pid, eids: free, targetEid: sites[0] });
+    }
     if (!pending) return;
+    d.step(20);
   }
 }
 
@@ -476,7 +484,11 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('tech:mining_crews', researchAndConfirm(d, pid, TechId.MINING_CREWS));
       mark('tech:housing_i', researchAndConfirm(d, pid, TechId.HOUSING_I));
       mark('tech:mills', researchAndConfirm(d, pid, TechId.MILLS));
+      mark('tech:palisades', researchAndConfirm(d, pid, TechId.PALISADES));
+      mark('tech:watchtowers', researchAndConfirm(d, pid, TechId.WATCHTOWERS));
     }
+    // Every ring I path is maxed: ring II (the Castle Age) is open.
+    mark('age:castle', bothAgesReached(d, AgeId.CASTLE));
 
     for (const pid of PLAYERS) {
       mark('build:house', placeAndConfirm(d, pid, BuildingDefId.HOUSE, 1) !== null);
@@ -533,9 +545,13 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('control:rally', true); // no per-unit observable; replay parity proves apply
     }
 
-    // ── Phase 5: Castle age → stable, gold mine, cavalry, castle tech ───────────
+    // ── Phase 5: ring II → gold mine, stable, cavalry, ring II research ──────────
     d.refill();
-    mark('age:castle', advanceBothAges(d, AgeId.CASTLE));
+    for (const pid of PLAYERS) {
+      mark('tech:gold_mines', researchAndConfirm(d, pid, TechId.GOLD_MINES));
+      mark('tech:knights', researchAndConfirm(d, pid, TechId.KNIGHTS));
+      mark('tech:stone_walls', researchAndConfirm(d, pid, TechId.STONE_WALLS));
+    }
     d.refill();
     for (const pid of PLAYERS) {
       mark('build:stable', placeAndConfirm(d, pid, BuildingDefId.STABLE, 2) !== null);
@@ -550,9 +566,14 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('train:scout_cavalry', trainAndConfirm(d, pid, BuildingDefId.STABLE, UnitKindId.SCOUT_CAVALRY));
     }
 
-    // ── Phase 6: Gunpowder age → foundry, gunman, cannon, final tech ────────────
+    // ── Phase 6: ring III → foundry, gunman, cannon, final research ─────────────
+    mark('age:gunpowder', bothAgesReached(d, AgeId.GUNPOWDER));
     d.refill();
-    mark('age:gunpowder', advanceBothAges(d, AgeId.GUNPOWDER));
+    for (const pid of PLAYERS) {
+      mark('tech:foundry', researchAndConfirm(d, pid, TechId.FOUNDRY));
+      mark('tech:houfnice', researchAndConfirm(d, pid, TechId.HOUFNICE));
+      mark('tech:brick_walls', researchAndConfirm(d, pid, TechId.BRICK_WALLS));
+    }
     d.refill();
     for (const pid of PLAYERS) {
       mark('build:foundry', placeAndConfirm(d, pid, BuildingDefId.FOUNDRY, 2) !== null);

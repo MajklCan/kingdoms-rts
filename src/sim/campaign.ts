@@ -1,6 +1,6 @@
 import { AgeId, type AgeIdValue } from './defs';
 import { MapId, type MapIdValue } from './map-gen';
-import { TechId, type TechIdValue } from './tech-tree';
+import { type TechIdValue, techIdsInRing } from './tech-tree';
 
 export const CampaignMissionId = {
   SIEGE_OF_BRNO: 'siege_of_brno',
@@ -41,7 +41,8 @@ export const CAMPAIGN_MISSIONS: CampaignMissionDef[] = [
     startingAge: AgeId.DARK,
     enemyAge: AgeId.CASTLE,
     mapId: MapId.RIVERLANDS,
-    lockedTechs: [TechId.GUNPOWDER_AGE],
+    // Ring III (the Gunpowder Age) stays shut: every research in it is locked.
+    lockedTechs: techIdsInRing(3),
     objectives: [
       { id: 'destroy_brno_tc', label: 'Destroy the Brno Town Center' },
       { id: 'destroy_outer_lumber', label: 'Destroy the outer lumber camp', optional: true },

@@ -66,6 +66,7 @@ export const SFX_TRIM_DB: Record<SfxKey, number> = {
  *  only 2 dB under); the nature bed was at -43 LUFS, i.e. inaudible. */
 export const MUSIC_TRIM_DB: Record<string, number> = {
   menu_theme: 0,
+  menu_theme_2: 1.5, // -17.5 LUFS
   village_theme: -3,
   ingame_1: -3.3,
   ingame_2: 3.3,

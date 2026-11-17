@@ -34,8 +34,11 @@ export type SfxKey = (typeof SFX_KEYS)[number];
 
 // --- Music (public/assets/audio/music/<key>.ogg|.mp3) ---
 
-/** Single non-looping theme played on the title/menu screen. */
+/** Title theme: the first song after the entry gate. */
 export const MENU_MUSIC = 'menu_theme';
+
+/** Title screen program: alternates these (gapped), menu_theme first. */
+export const MENU_TRACKS = [MENU_MUSIC, 'menu_theme_2'] as const;
 
 /** Played (non-looping, with silence gaps via playGappedSingle) while the player
  *  lingers peacefully at their base - peaceful music breathes, song → quiet → song. */
@@ -66,7 +69,7 @@ export const INGAME_TRACKS = ['ingame_1', 'ingame_2'] as const;
  *  AMBIENCE_KEYS). Missing files load to nothing and every playback path no-ops
  *  on them - so partial sets are fine. */
 export const MUSIC_KEYS = [
-  MENU_MUSIC,
+  ...MENU_TRACKS,
   VILLAGE_MUSIC,
   ...BATTLE_TRACKS,
   ...INGAME_TRACKS,
@@ -160,7 +163,7 @@ export function combatSound(
   if (phase === 'windup') return null;
 
   // Melee.
-  if (range <= 1 && (attackerKind === UnitDefId.SPEARMAN || attackerKind === UnitDefId.SCOUT_CAVALRY)) {
+  if (range <= 1 && (attackerKind === UnitDefId.SPEARMAN || attackerKind === UnitDefId.COMMANDER || attackerKind === UnitDefId.SCOUT_CAVALRY)) {
     return { key: 'sword_clash', minIntervalMs: 90, volume: 0.53 };
   }
   // Villagers fighting with tools: the same clash, softer.

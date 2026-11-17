@@ -86,6 +86,25 @@ export const BuildingDefId = {
 export type BuildingDefIdValue =
   (typeof BuildingDefId)[keyof typeof BuildingDefId];
 
+/** The defensive tower's arrow fire. */
+const TOWER_COMBAT = {
+  atk: 10,
+  range: 7,
+  attackSpeedTicks: Math.round(SIM.TICK_HZ * 1.35),
+  aggroRadius: 8,
+} as const;
+
+/** How much further than a tower the town center shoots, in tiles. */
+export const TOWN_CENTER_RANGE_BONUS = 2;
+
+/** The town center defends itself with the tower's arrows (same damage and
+ *  rate of fire), from further out. Its sight (visibility.ts) covers the range. */
+const TOWN_CENTER_COMBAT = {
+  ...TOWER_COMBAT,
+  range: TOWER_COMBAT.range + TOWN_CENTER_RANGE_BONUS,
+  aggroRadius: TOWER_COMBAT.aggroRadius + TOWN_CENTER_RANGE_BONUS,
+} as const;
+
 export const BUILDING_TABLE: BuildingDef[] = [
   {
     id: 'TOWN_CENTER',
@@ -101,6 +120,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     isDropOff: true,
     dropOffMask: 0b1111,
     trains: ['VILLAGER'],
+    combat: { ...TOWN_CENTER_COMBAT },
   },
   {
     id: 'HOUSE',
@@ -148,7 +168,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     color: 0x5d4037,
     isDropOff: false,
     dropOffMask: 0,
-    trains: ['SPEARMAN', 'ARCHER'],
+    trains: ['SPEARMAN', 'ARCHER', 'COMMANDER'],
   },
   {
     id: 'ARCHERY_RANGE',
@@ -245,12 +265,7 @@ export const BUILDING_TABLE: BuildingDef[] = [
     isDropOff: false,
     dropOffMask: 0,
     trains: [],
-    combat: {
-      atk: 10,
-      range: 7,
-      attackSpeedTicks: Math.round(SIM.TICK_HZ * 1.35),
-      aggroRadius: 8,
-    },
+    combat: { ...TOWER_COMBAT },
   },
   {
     id: 'FOUNDRY',
@@ -308,6 +323,7 @@ export const UnitDefId = {
   CANNON: 6,
   MACHINE_GUN: 7,
   MORTAR: 8,
+  COMMANDER: 9,
 } as const;
 
 export type UnitDefIdValue = (typeof UnitDefId)[keyof typeof UnitDefId];
@@ -353,7 +369,8 @@ export const UNIT_TABLE: UnitDef[] = [
     id: 'SCOUT_CAVALRY',
     name: 'Scout Cavalry',
     hp: 60,
-    cost: { food: 80, wood: 0, gold: 40, stone: 0 },
+    // No gold: riders are a ring I unit now, and gold mines open in ring II.
+    cost: { food: 80, wood: 40, gold: 0, stone: 0 },
     trainTimeTicks: Math.round(SIM.TICK_HZ * 28),
     popCost: 1,
     trainAt: 'STABLE',
@@ -394,6 +411,15 @@ export const UNIT_TABLE: UnitDef[] = [
     popCost: 2,
     trainAt: 'TOTAL_WAR_DEPOT',
   },
+  {
+    id: 'COMMANDER',
+    name: 'Commander',
+    hp: 200,
+    cost: { food: 150, wood: 0, gold: 120, stone: 0 },
+    trainTimeTicks: Math.round(SIM.TICK_HZ * 40),
+    popCost: 1,
+    trainAt: 'BARRACKS',
+  },
 ];
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -412,17 +438,18 @@ export type AgeIdValue = (typeof AgeId)[keyof typeof AgeId];
 export interface AgeDef {
   id: AgeIdValue;
   name: string;
-  /** Cost to advance INTO this age. Dark is the starting age - cost ignored. */
-  advanceCost: CostTuple;
-  /** Ticks needed to advance into this age. */
-  advanceTicks: number;
 }
 
+/**
+ * Eras. No research advances them any more: the era is the highest tech ring
+ * a player has opened (tech-tree.ts ringEra), and it drives building looks.
+ * Total War is scaffolded but unreachable.
+ */
 export const AGE_TABLE: AgeDef[] = [
-  { id: AgeId.DARK, name: 'Dark Age', advanceCost: { food: 0, wood: 0, gold: 0, stone: 0 }, advanceTicks: 0 },
-  { id: AgeId.CASTLE, name: 'Castle Age', advanceCost: { food: 0, wood: 750, gold: 0, stone: 500 }, advanceTicks: Math.round(SIM.TICK_HZ * 40) },
-  { id: AgeId.GUNPOWDER, name: 'Gunpowder Age', advanceCost: { food: 0, wood: 1400, gold: 1200, stone: 1000 }, advanceTicks: Math.round(SIM.TICK_HZ * 50) },
-  { id: AgeId.TOTAL_WAR, name: 'Total War Age', advanceCost: { food: 1600, wood: 1800, gold: 1800, stone: 1400 }, advanceTicks: Math.round(SIM.TICK_HZ * 65) },
+  { id: AgeId.DARK, name: 'Dark Age' },
+  { id: AgeId.CASTLE, name: 'Castle Age' },
+  { id: AgeId.GUNPOWDER, name: 'Gunpowder Age' },
+  { id: AgeId.TOTAL_WAR, name: 'Total War Age' },
 ];
 
 export function getAgeDef(ageId: number): AgeDef | null {
@@ -430,13 +457,12 @@ export function getAgeDef(ageId: number): AgeDef | null {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Wall tiers. One WALL def; cost, build time and hp follow the owner's age.
-// Campaign preset walls keep the base def (400 hp) until their owner ages up.
+// Wall tiers. One WALL def; cost, build time and hp follow the owner's wall
+// research (palisade, then Stone Walls, then Brick Walls). Campaign preset
+// walls keep the base def (400 hp) until their owner researches a new tier.
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface WallTier {
-  /** Age the tier starts at. */
-  age: AgeIdValue;
   name: string;
   hp: number;
   /** Cost per wall tile. */
@@ -444,24 +470,21 @@ export interface WallTier {
   buildTimeTicks: number;
 }
 
-/** Ascending by age; ages past the last entry (Total War) keep the last tier. */
+/** Ascending: palisade, stone, brick (tech-tree.ts wallTierIndex picks one). */
 export const WALL_TIERS: readonly WallTier[] = [
   {
-    age: AgeId.DARK,
     name: 'Palisade Wall',
     hp: 400,
     cost: { food: 0, wood: 2, gold: 0, stone: 0 },
     buildTimeTicks: Math.round(SIM.TICK_HZ * 4),
   },
   {
-    age: AgeId.CASTLE,
     name: 'Stone Wall',
     hp: 1200,
     cost: { food: 0, wood: 0, gold: 0, stone: 5 },
     buildTimeTicks: Math.round(SIM.TICK_HZ * 8),
   },
   {
-    age: AgeId.GUNPOWDER,
     name: 'Brick Wall',
     hp: 2000,
     cost: { food: 0, wood: 0, gold: 0, stone: 6 },
@@ -469,12 +492,8 @@ export const WALL_TIERS: readonly WallTier[] = [
   },
 ];
 
-export function getWallTier(ageId: number): WallTier {
-  let tier = WALL_TIERS[0];
-  for (const candidate of WALL_TIERS) {
-    if (candidate.age <= ageId) tier = candidate;
-  }
-  return tier;
+export function getWallTier(tierIndex: number): WallTier {
+  return WALL_TIERS[Math.max(0, Math.min(WALL_TIERS.length - 1, tierIndex))];
 }
 
 /** Look up a building def by its numeric id (the index). */

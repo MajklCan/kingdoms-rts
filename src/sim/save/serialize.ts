@@ -11,6 +11,7 @@ import {
   BuildOrder,
   Building,
   CannonTag,
+  CommanderTag,
   Combat,
   ConstructionSite,
   Cooldown,
@@ -44,6 +45,9 @@ import {
   Velocity,
   VillagerTag,
   WorksiteWorker,
+  WorksiteHelper,
+  VillagerWork,
+  GameAnimal,
 } from '../components';
 import { type SimWorld, createLateGameTestWorld, positionQuery } from '../world';
 import { SAVE_VERSION, type SavedEntityV1, type SavedGame } from './schema';
@@ -76,6 +80,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     if (hasComponent(world.ecs, CannonTag, eid)) entity.cannon = true;
     if (hasComponent(world.ecs, MachineGunTag, eid)) entity.machineGun = true;
     if (hasComponent(world.ecs, MortarTag, eid)) entity.mortar = true;
+    if (hasComponent(world.ecs, CommanderTag, eid)) entity.commander = true;
     if (hasComponent(world.ecs, MachineGunDeployment, eid)) {
       entity.machineGunDeployment = {
         deployed: MachineGunDeployment.deployed[eid],
@@ -127,6 +132,29 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     }
     if (hasComponent(world.ecs, WorksiteWorker, eid)) {
       entity.worksiteWorker = { siteEid: WorksiteWorker.siteEid[eid] };
+    }
+    if (hasComponent(world.ecs, WorksiteHelper, eid)) {
+      entity.worksiteHelper = { siteEid: WorksiteHelper.siteEid[eid], extra: WorksiteHelper.extra[eid] };
+    }
+    if (hasComponent(world.ecs, VillagerWork, eid)) {
+      entity.villagerWork = {
+        job: VillagerWork.job[eid],
+        kind: VillagerWork.kind[eid],
+        siteNetId: VillagerWork.siteNetId[eid],
+        x: VillagerWork.x[eid],
+        y: VillagerWork.y[eid],
+      };
+    }
+    if (hasComponent(world.ecs, GameAnimal, eid)) {
+      entity.gameAnimal = {
+        species: GameAnimal.species[eid],
+        state: GameAnimal.state[eid],
+        homeX: GameAnimal.homeX[eid],
+        homeY: GameAnimal.homeY[eid],
+        targetX: GameAnimal.targetX[eid],
+        targetY: GameAnimal.targetY[eid],
+        wait: GameAnimal.wait[eid],
+      };
     }
     if (hasComponent(world.ecs, Health, eid)) {
       entity.health = {
@@ -197,6 +225,7 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     ages: world.ages.map((age) => ({ ...age })),
     researchedTechs: world.researchedTechs.map((set) => Array.from(set)),
     revealedMapPlayers: world.revealedMapPlayers.slice(),
+    night: world.night,
     humanPlayers: [...world.humanPlayers],
     formationModes: world.formationModes.slice(),
     formationFacings: world.formationFacings.slice(),
@@ -213,6 +242,10 @@ export function serializeSimWorld(world: SimWorld, label = 'Manual Save'): Saved
     paths: Array.from(world.paths.entries()).map(([eid, waypoints]) => ({
       eid,
       waypoints: waypoints.map((p) => ({ ...p })),
+    })),
+    orderQueues: Array.from(world.orderQueues.entries()).map(([eid, orders]) => ({
+      eid,
+      orders: orders.map((order) => ({ ...order })),
     })),
     movementStuck: Array.from(world.movementStuck.entries()).map(([eid, state]) => ({
       eid,

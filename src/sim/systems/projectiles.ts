@@ -2,6 +2,7 @@
  * Projectile flight time and impact damage (arrows, shots, cannon and mortar splash).
  */
 
+import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
 import { SIM } from '../../config';
 import { GunmanTag, Health, MachineGunTag, Owner, Position } from '../components';
@@ -16,7 +17,6 @@ import { retaliateWhenEngaged } from './combat';
 const CANNON_SPLASH_FULL_DAMAGE_RADIUS = 0.48;
 const CANNON_SPLASH_MAX_RADIUS = 1.8;
 const CANNON_SPLASH_MIN_DAMAGE_FRACTION = 0.08;
-const CANNON_SPLASH_FALLOFF_EXPONENT = 2.3;
 const CANNON_BUILDING_DIRECT_HIT_RADIUS = 0.35;
 const CANNON_BUILDING_DAMAGE_MULTIPLIER = 2;
 
@@ -111,7 +111,7 @@ function applyCannonImpactDamage(world: SimWorld, impact: PendingCannonImpact): 
 
   for (const victim of sortedEids(world, unitQuery(world.ecs))) {
     if (!isValidCannonSplashVictim(world, impact.attackerOwner, victim)) continue;
-    const distance = Math.hypot(Position.x[victim] - impact.impactX, Position.y[victim] - impact.impactY);
+    const distance = dhypot(Position.x[victim] - impact.impactX, Position.y[victim] - impact.impactY);
     if (distance > CANNON_SPLASH_MAX_RADIUS) continue;
     applyDamage(world, victim, computeCannonSplashDamage(impact.damage, victim, distance), impact.attackerOwner);
     retaliateWhenEngaged(world, victim, impact.attackerEid);
@@ -139,9 +139,11 @@ function isValidCannonSplashVictim(world: SimWorld, attackerOwner: number, victi
 function computeCannonSplashDamage(baseDamage: number, victim: number, distance: number): number {
   const span = Math.max(0.01, CANNON_SPLASH_MAX_RADIUS - CANNON_SPLASH_FULL_DAMAGE_RADIUS);
   const t = Math.min(1, Math.max(0, (distance - CANNON_SPLASH_FULL_DAMAGE_RADIUS) / span));
+  // Falloff (1 - t)^2.25, built from * and sqrt only: Math.pow's last bits
+  // differ between browsers, which would desync lockstep peers.
+  const u = 1 - t;
   const damageFraction =
     CANNON_SPLASH_MIN_DAMAGE_FRACTION +
-    (1 - CANNON_SPLASH_MIN_DAMAGE_FRACTION) *
-      Math.pow(1 - t, CANNON_SPLASH_FALLOFF_EXPONENT);
+    (1 - CANNON_SPLASH_MIN_DAMAGE_FRACTION) * (u * u * Math.sqrt(Math.sqrt(u)));
   return Math.max(1, Math.ceil(baseDamage * damageFraction) - Health.armor[victim]);
 }

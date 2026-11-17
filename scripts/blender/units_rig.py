@@ -89,12 +89,27 @@ PALETTE: dict[str, int] = {
     "flash": 0xFFF0B0,
     "spark": 0xFFB030,
     "powder": 0x2A2624,
+    # villager role kits (appended so earlier key ids stay put)
+    "cap": 0xB0602C,
+    "cap_d": 0x7A3E1C,
+    "fur": 0x6A4A2E,
+    "fur_l": 0x9C7650,
+    "dust": 0xA8A296,
+    "dust_d": 0x77716A,
+    "miner_white": 0xEEEBE2,
+    "lamp": 0xFFD46A,
+    "moss": 0x55682C,
+    "grey": 0xC2BCB0,
+    "smoke": 0xDADCE0,
+    "ochre": 0xB8873A,
+    "ochre_d": 0x8A6128,
+    "water": 0x7FB8E0,
 }
 
 #: keys that are never saturation / value boosted
-NEUTRAL_KEYS = {"team", "team_trim", "eye", "flash", "spark"}
+NEUTRAL_KEYS = {"team", "team_trim", "eye", "flash", "spark", "lamp"}
 #: emissive keys skip lighting
-EMISSIVE = {"flash": 1.0, "spark": 1.0}
+EMISSIVE = {"flash": 1.0, "spark": 1.0, "lamp": 1.0}
 #: keys drawn into the team-colour mask
 TEAM_KEYS = {"team"}
 #: per key value jitter amplitude (default 0.035)
@@ -104,6 +119,7 @@ JITTER = {
     "log_end": 0.05, "basket": 0.08, "hood": 0.05, "stone": 0.1, "gold": 0.08, "wheat": 0.09,
     "linen": 0.03, "team": 0.025, "skin": 0.02, "steel": 0.03, "eye": 0.0, "flash": 0.0, "spark": 0.0,
     "trousers": 0.05, "tunic": 0.05, "sack": 0.05, "leaf": 0.08, "berry": 0.06,
+    "fur": 0.1, "fur_l": 0.1, "dust": 0.06, "dust_d": 0.06, "cap": 0.05, "lamp": 0.0,
 }
 A_SAT = 1.12
 A_VAL = 1.04

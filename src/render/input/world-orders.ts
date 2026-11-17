@@ -5,8 +5,13 @@
  *
  *   select      pick the entity under a point (left click, long press)
  *   command     context order (right click, tap with a selection):
- *               visible enemy -> attack; only army buildings -> rally;
- *               explored resource -> gather / hint; else move
+ *               visible enemy -> attack; own foundation + villagers ->
+ *               build; own worksite + villagers -> help there; only army
+ *               buildings -> rally; explored resource or game -> gather /
+ *               hunt / hint; else move.
+ *               With Shift held (mouse only) the order is queued behind
+ *               what the units are doing instead of replacing it (helping
+ *               at a worksite never ends, so it is always a plain order)
  *   box         own units inside a camera-world rectangle
  *   same kind   every own unit of a type on screen (double click / tap)
  *
@@ -17,6 +22,7 @@ import { hasComponent } from 'bitecs';
 import {
   Building,
   DeadTag,
+  FoundationTag,
   Health,
   Owner,
   Position,
@@ -25,11 +31,15 @@ import {
   UnitKind,
   WorksiteWorker,
 } from '@sim/components';
+import { BUILDING_TABLE } from '@sim/defs';
 import {
   clearSelection,
+  countWorksiteHelpers,
   findEntityNear,
   findResourceAt,
+  helpRefusal,
   isEnemyOf,
+  isGameAnimal,
   selectedQuery,
   setSelected,
   unitQuery,
@@ -97,26 +107,41 @@ export class WorldOrders {
     return picked !== null && this.ctx.isEntityVisible(picked) ? picked : null;
   }
 
-  /** Move or attack-move the selection to a tile. False when nothing commandable is selected. */
-  issueMapOrder(kind: MapOrderKind, tx: number, ty: number): boolean {
+  /**
+   * Move or attack-move the selection to a tile; `queue` (Shift held) puts
+   * the order behind what the units are doing. False when nothing
+   * commandable is selected.
+   */
+  issueMapOrder(kind: MapOrderKind, tx: number, ty: number, queue = false): boolean {
     const { commands, audio } = this.deps;
     if (!isInsideMap(tx, ty)) return false;
     if (commands.selectedCommandableCount() === 0) return false;
+    if (queue && this.refuseQueued()) return true;
     if (kind === 'attackMove') {
-      commands.dispatch({ type: 'attackMoveSelected', to: { x: tx, y: ty } });
+      commands.dispatch({ type: 'attackMoveSelected', to: { x: tx, y: ty }, ...queueFlag(queue) });
       audio.barkAttack();
       this.feedback?.orderMarker('attack-move', tx, ty);
     } else {
-      commands.dispatch({ type: 'moveSelected', to: { x: tx, y: ty } });
+      commands.dispatch({ type: 'moveSelected', to: { x: tx, y: ty }, ...queueFlag(queue) });
       audio.barkMove();
       this.feedback?.orderMarker('move', tx, ty);
     }
-    setLastEvent(`${kind} -> (${tx},${ty})`);
+    setLastEvent(`${queue ? 'queue ' : ''}${kind} -> (${tx},${ty})`);
     return true;
   }
 
-  /** Right-click semantics at a camera-world point. */
-  command(wx: number, wy: number): void {
+  /** A Shift-queued order none of the selected units would take: say why. True when refused. */
+  private refuseQueued(gatherersOnly = false): boolean {
+    const failure = this.deps.commands.queuedOrderFailure(gatherersOnly);
+    if (failure) this.deps.commands.fail(failure);
+    return failure !== null;
+  }
+
+  /**
+   * Right-click semantics at a camera-world point. `queue` (Shift held):
+   * unit orders are queued behind the current one instead of replacing it.
+   */
+  command(wx: number, wy: number, queue = false): void {
     const world = this.ctx.world;
     const { commands, audio } = this.deps;
     const { tx, ty, tileX, tileY } = this.ctx.pickTile(wx, wy);
@@ -129,12 +154,15 @@ export class WorldOrders {
       this.ctx.isEntityVisible(targetEid) &&
       isEnemyOf(world, targetEid, this.ctx.perspectivePlayerId)
     ) {
-      commands.dispatch({ type: 'attackSelected', targetEid });
+      if (queue && this.refuseQueued()) return;
+      commands.dispatch({ type: 'attackSelected', targetEid, ...queueFlag(queue) });
       audio.barkAttack();
       this.feedback?.orderMarker('attack', Position.x[targetEid], Position.y[targetEid]);
-      setLastEvent(`attack eid=${targetEid}`);
+      setLastEvent(`${queue ? 'queue ' : ''}attack eid=${targetEid}`);
       return;
     }
+    if (hasUnits && targetEid !== null && this.tryBuildOrder(targetEid, queue)) return;
+    if (hasUnits && targetEid !== null && this.tryWorksiteOrder(targetEid)) return;
     if (!hasUnits) {
       // Right click with the town center selected: where its new villagers go.
       if (commands.selectedTownCenters().length > 0) {
@@ -154,12 +182,20 @@ export class WorldOrders {
     }
     const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
     if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
+      const game = isGameAnimal(world, resourceEid);
       if (commands.selectedGathererCount() > 0 && Resource.amount[resourceEid] > 0) {
-        // Free villagers (town center trained) gather by hand and carry to a drop-off.
-        commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid });
-        audio.barkMove();
-        this.feedback?.orderMarker('move', Position.x[resourceEid], Position.y[resourceEid]);
-        setLastEvent(`gather eid=${resourceEid}`);
+        // Free villagers (town center trained) gather by hand and carry to a
+        // drop-off; on game they hunt it first.
+        if (queue && this.refuseQueued(true)) return;
+        commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid, ...queueFlag(queue) });
+        if (game) audio.barkAttack();
+        else audio.barkMove();
+        this.feedback?.orderMarker(game ? 'attack' : 'move', Position.x[resourceEid], Position.y[resourceEid]);
+        setLastEvent(`${queue ? 'queue ' : ''}${game ? 'hunt' : 'gather'} eid=${resourceEid}`);
+        return;
+      }
+      if (game) {
+        commands.fail({ reason: 'unavailable', text: 'Only villagers can hunt. Select a villager' });
         return;
       }
       const kind = Resource.kind[resourceEid];
@@ -172,7 +208,50 @@ export class WorldOrders {
       });
       return;
     }
-    this.issueMapOrder('move', tx, ty);
+    this.issueMapOrder('move', tx, ty, queue);
+  }
+
+  /**
+   * Own unfinished foundation with free villagers selected: send them to
+   * build it (`queue`: after what they are doing). False (nothing sent) for
+   * anything else.
+   */
+  private tryBuildOrder(targetEid: number, queue = false): boolean {
+    if (!this.isOwnFoundation(targetEid)) return false;
+    if (this.deps.commands.selectedBuilderEids().length === 0) return false;
+    if (queue && this.refuseQueued(true)) return true;
+    this.deps.commands.dispatch({ type: 'buildSelected', targetEid, ...queueFlag(queue) });
+    this.deps.audio.barkMove();
+    this.feedback?.orderMarker('move', Position.x[targetEid], Position.y[targetEid]);
+    setLastEvent(`${queue ? 'queue ' : ''}build eid=${targetEid}`);
+    return true;
+  }
+
+  /**
+   * Own worksite (farm, lumber hut, quarry, gold mine) with free villagers
+   * selected: send them to help there. A full or unfinished one says why.
+   * False (nothing sent, nothing said) for anything else.
+   */
+  private tryWorksiteOrder(targetEid: number): boolean {
+    const world = this.ctx.world;
+    if (!hasComponent(world.ecs, Building, targetEid)) return false;
+    if (this.deps.commands.selectedBuilderEids().length === 0) return false;
+    const refusal = helpRefusal(world, targetEid, this.ctx.perspectivePlayerId);
+    if (refusal === 'not-worksite' || refusal === 'foreign' || refusal === 'unfinished') return false;
+    const name = BUILDING_TABLE[Building.defId[targetEid]]?.name ?? 'This worksite';
+    if (refusal === 'full') {
+      this.deps.commands.fail({
+        reason: 'unavailable',
+        text: `${name} has no room for more helpers (${countWorksiteHelpers(world, targetEid)} already help)`,
+      });
+      return true;
+    }
+    this.deps.commands.dispatch({ type: 'assignWorksiteSelected', targetEid });
+    this.deps.audio.barkMove();
+    this.feedback?.orderMarker('move', Position.x[targetEid], Position.y[targetEid]);
+    this.deps.commands.confirm(`Villagers help at the ${name}`);
+    setLastEvent(`help worksite eid=${targetEid}`);
+    return true;
   }
 
   /** Left-click semantics: select what is under the point (or clear). Returns the eid. */
@@ -205,6 +284,11 @@ export class WorldOrders {
       const { tx, ty } = this.ctx.pickTile(wx, wy);
       if (this.issueMapOrder('attackMove', tx, ty)) return;
     }
+    // A tap on an own foundation with villagers selected builds it rather
+    // than selecting it, like a right click.
+    if (eid !== null && this.tryBuildOrder(eid)) return;
+    // Likewise a tap on an own worksite sends them to help there.
+    if (eid !== null && this.tryWorksiteOrder(eid)) return;
     if (eid !== null && this.isOwnEntity(eid)) {
       if (count === 2 && this.ctx.isOwnUnit(eid)) {
         const n = this.selectSameKindOnScreen(eid);
@@ -297,6 +381,14 @@ export class WorldOrders {
       Owner.player[eid] === this.ctx.perspectivePlayerId;
   }
 
+  /** A living foundation of the perspective player. */
+  private isOwnFoundation(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    return hasComponent(ecs, FoundationTag, eid) &&
+      !hasComponent(ecs, DeadTag, eid) &&
+      Owner.player[eid] === this.ctx.perspectivePlayerId;
+  }
+
   /** Selection is non-empty and only our own barracks / stables / foundries. */
   selectionIsOwnArmyProducers(): boolean {
     const world = this.ctx.world;
@@ -328,6 +420,11 @@ function isAliveUnit(ecs: Parameters<typeof hasComponent>[0], eid: number): bool
   if (hasComponent(ecs, DeadTag, eid)) return false;
   if (hasComponent(ecs, WorksiteWorker, eid)) return false;
   return !hasComponent(ecs, Health, eid) || Health.hp[eid] > 0;
+}
+
+/** The Shift-queue flag of an order input: present only when set. */
+function queueFlag(queue: boolean): { queue?: true } {
+  return queue ? { queue: true } : {};
 }
 
 function capitalize(text: string): string {

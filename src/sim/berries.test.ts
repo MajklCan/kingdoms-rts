@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../config';
-import { Position, Resource, ResourceKindId } from './components';
+import { GameAnimal, Position, Resource, ResourceKindId } from './components';
 import { BERRY_BUSH_AMOUNT } from './core/create-world';
 import { MapId, type MapIdValue } from './map-gen';
 import {
@@ -16,7 +16,10 @@ import {
 } from './world';
 
 function berries(world: SimWorld): number[] {
-  return [...resourceQuery(world.ecs)].filter((eid) => Resource.kind[eid] === ResourceKindId.FOOD);
+  // Huntable game is FOOD too, but not a bush.
+  return [...resourceQuery(world.ecs)].filter(
+    (eid) => Resource.kind[eid] === ResourceKindId.FOOD && !hasComponent(world.ecs, GameAnimal, eid)
+  );
 }
 
 function berriesNear(world: SimWorld, x: number, y: number, radius: number): number {

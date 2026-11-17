@@ -75,6 +75,8 @@ export class MusicPlayer {
   private beds: Deck[] = [];
   private bedKey: string | null = null;
   private pendingFadeOut = 0;
+  /** Per-transition fade-in for the program's first song (null = program's). */
+  private pendingFadeIn: number | null = null;
   readonly crossfades: Crossfade[] = [];
 
   constructor(
@@ -92,11 +94,12 @@ export class MusicPlayer {
    * Switch program. Running songs fade out over `fadeOut`; the new program's
    * first song starts after `delay` (overlap = crossfade). Same id: no-op.
    */
-  setProgram(program: MusicProgram, transition: { fadeOut: number; delay?: number }): void {
+  setProgram(program: MusicProgram, transition: { fadeOut: number; delay?: number; fadeIn?: number }): void {
     if (program.id === this.program.id) return;
     const now = this.engine.now();
     for (const d of this.songs) if (!d.fading || d.ramp.to > 0) this.fadeTo(d, 0, transition.fadeOut, now);
     this.pendingFadeOut = transition.fadeOut;
+    this.pendingFadeIn = transition.fadeIn ?? null;
     this.program = program;
     this.current = null;
     this.nextAt = program.kind === 'silent' ? Infinity : now + Math.max(0, transition.delay ?? 0);
@@ -121,7 +124,11 @@ export class MusicPlayer {
     if (p.kind === 'silent') return;
     const cur = this.current;
     if (!cur) {
-      if (now >= this.nextAt) this.startNext(now, p.fadeIn, this.pendingFadeOut);
+      if (now >= this.nextAt) {
+        const fadeIn = this.pendingFadeIn ?? p.fadeIn;
+        this.pendingFadeIn = null;
+        this.startNext(now, fadeIn, this.pendingFadeOut);
+      }
       return;
     }
     if (p.kind === 'gapped') {

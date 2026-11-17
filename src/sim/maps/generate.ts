@@ -5,6 +5,7 @@
 import type { Rng } from '../rng';
 import { generateKrkonoseWinterCrownMap } from './krkonose';
 import {
+  generateBlanikNightWatchMap,
   generateBohemianBorderForestMap,
   generateFloodedBasinMap,
   generateMachovoJezeroMap,
@@ -46,6 +47,7 @@ export const MAP_DEFS: MapDef[] = [
     id: MapId.SUDOMER_PONDS,
     name: 'Sudoměř Ponds',
     description: 'Upper-left Sudoměř, a blocked lower pond, a dry choke, and a muddy right-pond flank.',
+    campaignOnly: true,
   },
   {
     id: MapId.KRKONOSE_WINTER_CROWN,
@@ -62,7 +64,26 @@ export const MAP_DEFS: MapDef[] = [
     name: 'Flooded Basin',
     description: 'A round, shell-cratered battlefield ringed by impassable floodwater. Symmetric north/south bases for a tight 1v1.',
   },
+  {
+    id: MapId.BLANIK_NIGHT_WATCH,
+    name: 'Blaník Night Watch',
+    description: 'A night battle around the wooded hill of the sleeping knights. Torches light only a short way, so scouts and towers are your eyes.',
+    night: true,
+  },
 ];
+
+/** Whether a map is played at night when the setup does not say. */
+export function isNightMap(mapId: MapIdValue | undefined): boolean {
+  return MAP_DEFS.find((def) => def.id === mapId)?.night === true;
+}
+
+/** The maps a skirmish can be played on (campaign-only maps left out). */
+export const SKIRMISH_MAP_DEFS: MapDef[] = MAP_DEFS.filter((def) => !def.campaignOnly);
+
+/** A stored or typed map id to a skirmish map; anything else is the Riverlands. */
+export function normalizeSkirmishMapId(value: string | undefined): MapIdValue {
+  return SKIRMISH_MAP_DEFS.some((def) => def.id === value) ? (value as MapIdValue) : MapId.RIVERLANDS;
+}
 
 export function normalizeMapId(value: string | undefined): MapIdValue {
   return MAP_DEFS.some((def) => def.id === value)
@@ -88,6 +109,8 @@ export function generateMap(rng: Rng, mapId: MapIdValue = MapId.RIVERLANDS): Map
       return generateZborovMap();
     case MapId.FLOODED_BASIN:
       return generateFloodedBasinMap();
+    case MapId.BLANIK_NIGHT_WATCH:
+      return generateBlanikNightWatchMap();
     default:
       return generateRiverlandsMap(rng);
   }

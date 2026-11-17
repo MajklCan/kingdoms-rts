@@ -58,6 +58,8 @@ const SOUNDS = [
 
   // --- Alert (under attack) ---
   { id: 'alert',          text: 'Urgent medieval town alarm bell ringing fast, a large bronze church bell clanging repeatedly as a warning, danger is near, clear metallic tolls, no music', dur: 1.6, infl: 0.45 },
+
+  // --- Title entry + match start stingers (ui bus) ---
 ];
 
 function ensureDirs() {

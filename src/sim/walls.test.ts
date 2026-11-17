@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { staffFoundations } from './testing/staff-foundations';
 import { hasComponent } from 'bitecs';
 import { MAP } from '../config';
 import { Building, ConstructionSite, Health, Owner, Position, Resource, ResourceKindId } from './components';
@@ -37,7 +38,7 @@ function wallWorld(seed = 4242): SimWorld {
   world.paused = false;
   world.humanPlayers = new Set([1, 2]);
   world.aiPlayers[AI_PLAYER_ID] = null;
-  world.researchedTechs[P1].add(TechId.BARRACKS_PIKEMEN);
+  world.researchedTechs[P1].add(TechId.PALISADES);
   world.resources[P1] = Int32Array.of(0, 1000, 1000, 1000);
   return world;
 }
@@ -118,15 +119,15 @@ describe('wall line geometry', () => {
 });
 
 describe('walls', () => {
-  it('unlock with the Barracks tech and cost the palisade tier per tile', () => {
+  it('unlock with the Palisades research and cost the palisade tier per tile', () => {
     const world = wallWorld();
-    world.researchedTechs[P1].delete(TechId.BARRACKS_PIKEMEN);
+    world.researchedTechs[P1].delete(TechId.PALISADES);
     const tc = townCenterOf(world, P1);
     const at = openBlock(world, Math.round(Position.x[tc]), Math.round(Position.y[tc]), 7, 1);
     placeLine(world, at.x, at.y, at.x + 6, at.y);
     expect(wallsOf(world, P1)).toHaveLength(0);
 
-    world.researchedTechs[P1].add(TechId.BARRACKS_PIKEMEN);
+    world.researchedTechs[P1].add(TechId.PALISADES);
     expect(getBuildingCost(world, P1, BuildingDefId.WALL)).toEqual(PALISADE.cost);
     const woodBefore = world.resources[P1][1];
     placeLine(world, at.x, at.y, at.x + 6, at.y);
@@ -140,6 +141,7 @@ describe('walls', () => {
       expect(Health.hpMax[eid]).toBe(PALISADE.hp);
       expect(ConstructionSite.totalTicks[eid]).toBe(PALISADE.buildTimeTicks);
     }
+    staffFoundations(world, P1);
     stepN(world, PALISADE.buildTimeTicks + 2);
     for (const eid of walls) {
       expect(hasComponent(world.ecs, ConstructionSite, eid)).toBe(false);
@@ -188,24 +190,31 @@ describe('walls', () => {
     expect(destroyed).toMatchObject({ defId: BuildingDefId.WALL, footprint: { w: 1, h: 1 }, killerOwnerId: P2 });
   });
 
-  it('upgrades standing walls on age-up and builds the next tier after it', () => {
+  it('upgrades standing walls with the Stone Walls research and builds the next tier after it', () => {
     const world = wallWorld(31);
     const tc = townCenterOf(world, P1);
     const at = openBlock(world, Math.round(Position.x[tc]), Math.round(Position.y[tc]), 6, 3);
     placeLine(world, at.x, at.y, at.x + 1, at.y);
+    staffFoundations(world, P1);
     stepN(world, PALISADE.buildTimeTicks + 2);
     const [done, other] = wallsOf(world, P1);
     applyDamage(world, done, 100, P2);
-    // One foundation still building when the age arrives.
+    // One foundation still building when the research lands.
     placeLine(world, at.x + 4, at.y, at.x + 4, at.y);
     const site = wallsOf(world, P1).find((eid) => hasComponent(world.ecs, ConstructionSite, eid))!;
+    staffFoundations(world, P1);
     stepN(world, 10);
     const siteHpBefore = Health.hp[site];
 
-    world.ages[P1].progress = 0;
-    world.ages[P1].totalTicks = 1;
+    // An era alone changes nothing: walls follow their research.
+    world.ages[P1].current = AgeId.CASTLE;
+    expect(getBuildingCost(world, P1, BuildingDefId.WALL)).toEqual(PALISADE.cost);
+    for (const techId of [TechId.WATCHTOWERS, TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.COMMANDER, TechId.KNIGHTS]) {
+      world.researchedTechs[P1].add(techId);
+    }
+    world.inputs.push({ type: 'researchTech', playerId: P1, techId: TechId.STONE_WALLS });
     step(world);
-    expect(world.ages[P1].current).toBe(AgeId.CASTLE);
+    expect(world.researchedTechs[P1].has(TechId.STONE_WALLS)).toBe(true);
     expect(Health.hpMax[done]).toBe(STONE.hp);
     expect(Health.hp[done]).toBe(STONE.hp - 100);
     expect(Health.hp[other]).toBe(STONE.hp);
@@ -220,6 +229,7 @@ describe('walls', () => {
     const fresh = wallsOf(world, P1).filter((eid) => Position.y[eid] === at.y + 2);
     expect(fresh).toHaveLength(3);
     expect(world.resources[P1][3]).toBe(stoneBefore - 3 * STONE.cost.stone);
+    staffFoundations(world, P1);
     stepN(world, STONE.buildTimeTicks + 2);
     for (const eid of fresh) expect(Health.hp[eid]).toBe(STONE.hp);
   });
@@ -279,7 +289,7 @@ describe('AI wall breaching', () => {
   it('an AI attack wave breaks through walls around a walled-in town center', () => {
     const world = createSimWorld(4242);
     world.paused = false;
-    world.researchedTechs[P1].add(TechId.BARRACKS_PIKEMEN);
+    world.researchedTechs[P1].add(TechId.PALISADES);
     world.resources[P1] = Int32Array.of(0, 5000, 5000, 5000);
     const tc = townCenterOf(world, P1);
     // Clear the ground the ring needs: no starting army, no trees in the way.

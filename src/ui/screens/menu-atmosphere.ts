@@ -39,7 +39,8 @@ const lean = { x: 0, y: 0 };
 function spawn(w: number, h: number, initial: boolean): Ember {
   const max = 6 + Math.random() * 8;
   return {
-    x: w * (0.15 + Math.random() * 0.7),
+    // Over the open map, right of the title column.
+    x: w * (0.3 + Math.random() * 0.65),
     y: initial ? Math.random() * h : h + 10,
     vx: (Math.random() - 0.5) * 12,
     vy: -(12 + Math.random() * 26),

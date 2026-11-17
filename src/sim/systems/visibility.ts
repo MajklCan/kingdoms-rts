@@ -15,17 +15,46 @@ import {
   ScoutCavalryTag,
   UnitKind,
 } from '../components';
-import { AgeId, BUILDING_TABLE, BuildingDefId } from '../defs';
+import { BUILDING_TABLE, BuildingDefId } from '../defs';
+import { buildingEraFor } from '../core/era';
 import { LOCAL_PLAYER_ID, MAX_PLAYERS } from '../core/constants';
 import { findBuildingAt } from '../core/lookup';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { LastSeenBuilding, PlayerVisibility, SimWorld } from '../core/types';
 
-const DEFAULT_UNIT_LINE_OF_SIGHT = 6;
-const SCOUT_LINE_OF_SIGHT = 10;
-const BUILDING_LINE_OF_SIGHT = 7;
-const TOWN_CENTER_LINE_OF_SIGHT = 10;
-const TOWER_LINE_OF_SIGHT = 12;
+interface SightTable {
+  unit: number;
+  scout: number;
+  machineGun: number;
+  mortar: number;
+  building: number;
+  townCenter: number;
+  tower: number;
+}
+
+/** Sight radius in tiles by day. */
+export const DAY_SIGHT: Readonly<SightTable> = {
+  unit: 6,
+  scout: 10,
+  machineGun: 8,
+  // Indirect fire is useless without spotting - match LOS to the 10-tile range.
+  mortar: 10,
+  building: 7,
+  townCenter: 10,
+  tower: 12,
+};
+
+/** Sight radius in tiles at night: how far the torches of each reach. */
+export const NIGHT_SIGHT: Readonly<SightTable> = {
+  unit: 4,
+  scout: 7,
+  machineGun: 6,
+  mortar: 7,
+  building: 5,
+  townCenter: 8,
+  tower: 8,
+};
+
 const VISION_TILE_FOOTPRINT_RADIUS = 0.5;
 const VISION_EDGE_SOFTENING_TILES = 1;
 const MAP_W = MAP.WIDTH;
@@ -241,18 +270,22 @@ function smoothVisibilityFrontier(vis: PlayerVisibility): void {
   }
 }
 
-function lineOfSightRadius(world: SimWorld, eid: number): number {
+/**
+ * How far a unit or building sees, in tiles. At night (`world.night`) that is
+ * the reach of its torches, always shorter than its daytime sight.
+ */
+export function lineOfSightRadius(world: SimWorld, eid: number): number {
+  const sight = world.night ? NIGHT_SIGHT : DAY_SIGHT;
   if (hasComponent(world.ecs, Building, eid)) {
     const defId = Building.defId[eid];
-    if (defId === BuildingDefId.TOWN_CENTER) return TOWN_CENTER_LINE_OF_SIGHT;
-    if (defId === BuildingDefId.DEFENSIVE_TOWER) return TOWER_LINE_OF_SIGHT;
-    return BUILDING_LINE_OF_SIGHT;
+    if (defId === BuildingDefId.TOWN_CENTER) return sight.townCenter;
+    if (defId === BuildingDefId.DEFENSIVE_TOWER) return sight.tower;
+    return sight.building;
   }
-  if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return SCOUT_LINE_OF_SIGHT;
-  if (hasComponent(world.ecs, MachineGunTag, eid)) return 8;
-  // Indirect fire is useless without spotting - match LOS to the 10-tile range.
-  if (hasComponent(world.ecs, MortarTag, eid)) return 10;
-  return DEFAULT_UNIT_LINE_OF_SIGHT;
+  if (hasComponent(world.ecs, ScoutCavalryTag, eid)) return sight.scout;
+  if (hasComponent(world.ecs, MachineGunTag, eid)) return sight.machineGun;
+  if (hasComponent(world.ecs, MortarTag, eid)) return sight.mortar;
+  return sight.unit;
 }
 
 function updateLastSeenBuildings(
@@ -293,7 +326,7 @@ function snapshotBuilding(world: SimWorld, eid: number): LastSeenBuilding {
     eid,
     owner: Owner.player[eid],
     defId: Building.defId[eid],
-    age: world.ages[Owner.player[eid]]?.current ?? AgeId.DARK,
+    age: buildingEraFor(world, Owner.player[eid], Building.defId[eid]),
     x: Position.x[eid],
     y: Position.y[eid],
     hp: hasComponent(world.ecs, Health, eid) ? Health.hp[eid] : 0,

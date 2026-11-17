@@ -30,6 +30,11 @@ const PROMPTS = {
     'Medieval Bohemian orchestral ambient game music, calm and pastoral, warm strings, ' +
     'soft lute and flute, gentle harp, noble and a little melancholic, ' +
     'instrumental, steady tempo, no drums, no vocals, soft natural ending',
+  // Second title theme, alternates with menu_theme (gapped, so a soft ending).
+  menu_theme_2:
+    'Dramatic Bohemian medieval orchestral theme for a strategy game title screen, slow brooding build ' +
+    'from low cellos and a deep war drum to full strings and warm brass, lute and distant horn, ' +
+    'noble, ominous and a little melancholic, minor key, steady tempo, instrumental, no vocals, soft natural ending',
 };
 
 async function main() {

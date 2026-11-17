@@ -78,6 +78,8 @@ M = {
     "ash": Surface((0x5c5650, 0x48423c, 0x6e665c), "soil", 0.03, roughness=1.0, bump=0.3, grime=0.0, ao=0.3),
     "crop_green": Surface((0x6c9a3a, 0x58842e, 0x7eaa48), "leaves", 0.03, roughness=0.8, bump=0.6, grime=0.0, ao=0.6),
     "crop_young": Surface((0x86b04c, 0x6c963a, 0x9cc060), "leaves", 0.03, roughness=0.8, bump=0.5, grime=0.0, ao=0.5),
+    "hemp_leaf": Surface((0x2f6e22, 0x245a18, 0x428a30), "leaves", 0.03, roughness=0.8, bump=0.6, grime=0.0, ao=0.6),
+    "hemp_head": Surface((0xd2ea58, 0xb4d03c, 0xe6f880), "leaves", 0.02, roughness=0.7, bump=0.5, grime=0.0, ao=0.5),
     "wheat": Surface((0xdcb456, 0xc89c40, 0xe8c870), "straw", 0.015, roughness=0.9, bump=0.7, grime=0.0, ao=0.6),
     "stubble": Surface((0xb09460, 0x96784a, 0xc4a874), "straw", 0.015, roughness=1.0, bump=0.5, grime=0.0, ao=0.4),
     "white": Surface((0xece6da, 0xe0d8c8), "none", roughness=0.7, grime=0.0, ao=0.3),

@@ -44,6 +44,8 @@ function tipFor(action: Action): TipContent {
     disabled = missing.length > 0 ? `Not enough ${missing.join(' and ')}` : 'Not available right now';
   }
   const isTrain = action.kind === 'train';
+  // Walls are placed as a line already; every other building can be Shift-placed in a row.
+  const isRowBuild = action.kind === 'build' && action.id !== 'build-wall';
   return {
     title: plainDashes(action.label),
     hotkey: action.key ? actionKeyHint(action.id, action.key) : undefined,
@@ -54,7 +56,13 @@ function tipFor(action: Action): TipContent {
     pop: meta.pop,
     meta: meta.extra && meta.extra !== 'Research' ? plainDashes(meta.extra) : undefined,
     disabled,
-    hint: isTrain && action.enabled ? (isTouchUi() ? 'Tap again to queue more.' : 'Shift-click to queue five.') : undefined,
+    hint: !action.enabled
+      ? undefined
+      : isTrain
+        ? (isTouchUi() ? 'Tap again to queue more.' : 'Shift-click to queue five.')
+        : isRowBuild && !isTouchUi()
+          ? 'Hold Shift while placing to build several.'
+          : undefined,
   };
 }
 
