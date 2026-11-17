@@ -79,8 +79,8 @@ export const TECH_TREE: readonly TechDef[] = [
     unlocks: ['Archer', 'Archery Range'],
   },
   {
-    id: TechId.KNIGHTS, name: 'Cavalry', path: 'arms', ring: 2, parents: [TechId.ARCHERS, TechId.GOLD_MINES], cost: cost(400, 300),
-    description: 'Stables and scout cavalry. Cavalry are paid in gold, so they also need Gold Mine.',
+    id: TechId.KNIGHTS, name: 'Cavalry', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(300, 200),
+    description: 'Stables and scout cavalry: fast riders to scout, raid and run down archers. The other branch after Barracks.',
     unlocks: ['Stable', 'Scout Cavalry'],
   },
   // Timber.
@@ -107,7 +107,7 @@ export const TECH_TREE: readonly TechDef[] = [
   },
   {
     id: TechId.GOLD_MINES, name: 'Gold Mine', path: 'mines', ring: 2, parents: [TechId.MINING_CREWS], cost: cost(400, 300),
-    description: 'Gold mines on the gold veins. Gold pays for riders, gunmen and cannon.',
+    description: 'Gold mines on the gold veins. Gold pays for gunmen, cannon and the late research.',
     unlocks: ['Gold Mine'],
   },
   {

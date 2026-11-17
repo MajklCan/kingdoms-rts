@@ -17,7 +17,7 @@ function stateWith(...techs: TechIdValue[]): TechStateWorld {
   return { researchedTechs: [new Set(), new Set(techs)], ages: [{ current: 0 }, { current: AgeId.DARK }] };
 }
 
-const ARMS_I = [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS];
+const ARMS_I = [TechId.BARRACKS_PIKEMEN, TechId.ARCHERS, TechId.KNIGHTS];
 const TIMBER_I = [TechId.LUMBER_CREWS, TechId.HOUSING_I];
 const WALLS_I = [TechId.PALISADES, TechId.WATCHTOWERS];
 const RING_I = techIdsInRing(1);
@@ -76,18 +76,22 @@ describe('tech rings', () => {
     expect(techStatus(state, 1, TechId.BRICK_WALLS)).toBe('locked');
   });
 
-  it('makes Cavalry need Gold Mine as well as Archers, and counts it for arms', () => {
-    const state = stateWith(...RING_I);
-    expect(techStatus(state, 1, TechId.KNIGHTS)).toBe('locked');
-    expect(techLockedReason(state, 1, TechId.KNIGHTS)).toBe('Needs Gold Mine');
+  it('branches arms after Barracks: Archers and Cavalry each need only Barracks, in ring I', () => {
+    const none = stateWith();
+    expect(techLockedReason(none, 1, TechId.ARCHERS)).toBe('Needs Barracks');
+    expect(techLockedReason(none, 1, TechId.KNIGHTS)).toBe('Needs Barracks');
 
-    const noBow = stateWith(TechId.BARRACKS_PIKEMEN, ...TIMBER_I, ...WALLS_I, TechId.MINING_CREWS, TechId.GOLD_MINES);
-    expect(techLockedReason(noBow, 1, TechId.KNIGHTS)).toBe('Needs Archers');
+    const barracks = stateWith(TechId.BARRACKS_PIKEMEN);
+    expect(techStatus(barracks, 1, TechId.ARCHERS)).toBe('available');
+    // Cavalry needs neither Archers nor a gold mine any more.
+    expect(techStatus(barracks, 1, TechId.KNIGHTS)).toBe('available');
 
-    state.researchedTechs[1].add(TechId.GOLD_MINES);
-    expect(techStatus(state, 1, TechId.KNIGHTS)).toBe('available');
-    state.researchedTechs[1].add(TechId.KNIGHTS);
-    expect(maxedPaths(state, 1, 2)).toEqual(['arms', 'mines']);
+    // The path counts for the ring only with both branches done.
+    expect(maxedPaths(stateWith(TechId.BARRACKS_PIKEMEN, TechId.ARCHERS), 1, 1)).toEqual([]);
+    expect(maxedPaths(stateWith(TechId.BARRACKS_PIKEMEN, TechId.KNIGHTS), 1, 1)).toEqual([]);
+    expect(maxedPaths(stateWith(...ARMS_I), 1, 1)).toEqual(['arms']);
+    // Arms has nothing in ring II, so it cannot help open ring III.
+    expect(maxedPaths(stateWith(...RING_I, TechId.GOLD_MINES), 1, 2)).toEqual(['mines']);
   });
 
   it('researches instantly, and the era follows the ring the moment it opens', () => {
@@ -97,7 +101,7 @@ describe('tech rings', () => {
 
     research(world, ...ARMS_I);
     expect(techStatus(world, 1, TechId.ARCHERS)).toBe('researched');
-    expect(world.resources[1][1]).toBe(5000 - 250 - 300);
+    expect(world.resources[1][1]).toBe(5000 - 250 - 300 - 300);
     expect(world.ages[1].current).toBe(AgeId.DARK);
 
     research(world, TechId.LUMBER_CREWS, TechId.HOUSING_I);

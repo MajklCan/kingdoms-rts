@@ -29,7 +29,7 @@ const RES_LABEL: Record<ResourceKey, string> = { food: 'Food', wood: 'Wood', gol
 const RES_TIP: Record<ResourceKey, string> = {
   food: 'Feeds new villagers and soldiers. Farms and mills keep it flowing.',
   wood: 'Timber for houses, worksites and bows. Cut by lumber huts.',
-  gold: 'Pays for riders, gunmen, cannon and the late research. Mined at gold mines.',
+  gold: 'Pays for gunmen, cannon and the late research. Mined at gold mines.',
   stone: 'Needed for most research and for stone walls. Cut by stone quarries.',
 };
 

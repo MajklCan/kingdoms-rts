@@ -11,7 +11,7 @@ type Row = [id: string, name: string, path: string, ring: number, parents: strin
 const ROWS: Row[] = [
   ['barracks_pikemen', 'Barracks', 'arms', 1, [], '250 wood', ['Barracks', 'Pikeman']],
   ['archers', 'Archers', 'arms', 1, ['barracks_pikemen'], '300 wood 200 stone', ['Archer', 'Archery Range']],
-  ['knights', 'Cavalry', 'arms', 2, ['archers', 'gold_mines'], '400 wood 300 stone', ['Stable', 'Scout Cavalry']],
+  ['knights', 'Cavalry', 'arms', 1, ['barracks_pikemen'], '300 wood 200 stone', ['Stable', 'Scout Cavalry']],
   ['lumber_crews', 'Lumber Crews', 'timber', 1, [], '250 wood', ['Lumber huts take three workers']],
   ['housing_i', 'Housing I', 'timber', 1, ['lumber_crews'], '250 wood 150 stone', ['Houses hold 5', 'No limit on houses']],
   ['housing_ii', 'Housing II', 'timber', 2, ['housing_i'], '600 wood 400 stone', ['Houses hold 8']],

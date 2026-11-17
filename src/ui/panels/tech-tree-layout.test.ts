@@ -72,7 +72,10 @@ describe('ring chart layout', () => {
 
   it('spreads the five paths evenly and runs each outward along its ray', () => {
     const rays = new Map<string, number>();
+    // The two branches after Barracks stand to either side of the arms ray (next test).
+    const branches = new Set(['archers', 'knights']);
     for (const n of layout.nodes) {
+      if (branches.has(n.id)) continue;
       const a = angle(n);
       if (!rays.has(n.path)) rays.set(n.path, a);
       expect(Math.cos(a)).toBeCloseTo(Math.cos(rays.get(n.path)!), 6);
@@ -99,15 +102,23 @@ describe('ring chart layout', () => {
     }
   });
 
-  it('draws a prerequisite on another path as a cross link between neighbouring rays', () => {
-    const crossLinks = layout.links.filter((l) => l.cross);
-    expect(crossLinks.map((l) => `${l.from}>${l.to}`)).toEqual(['gold_mines>knights']);
-    expect(crossLinks[0]!.path).toBe('mines');
-    // It keeps to ring II all the way.
-    for (const p of crossLinks[0]!.points) {
-      expect(reach(p)).toBeGreaterThan(layout.bands[0]!.r);
-      expect(reach(p)).toBeLessThan(layout.bands[1]!.r);
-    }
+  it('fans the two branches after Barracks out to either side of the arms ray', () => {
+    const barracks = byId.get('barracks_pikemen')!;
+    const archers = byId.get('archers')!;
+    const cavalry = byId.get('knights')!;
+    // Same distance out, both beyond their parent, a clear gap between them.
+    expect(reach(archers)).toBeCloseTo(reach(cavalry), 6);
+    expect(reach(archers)).toBeGreaterThan(reach(barracks) + SEAL_R * 2);
+    expect(Math.hypot(archers.x - cavalry.x, archers.y - cavalry.y)).toBeGreaterThan(SEAL_R * 2 + 1.5);
+    // Mirrored about the ray Barracks stands on.
+    const ray = angle(barracks);
+    expect(angle(archers) - ray).toBeCloseTo(ray - angle(cavalry), 6);
+    // Each hangs off Barracks, and nothing in the real tree crosses paths any more.
+    for (const id of ['archers', 'knights']) expect(layout.links.find((l) => l.to === id)!.from).toBe('barracks_pikemen');
+    expect(layout.links.filter((l) => l.cross)).toEqual([]);
+    // The path's gate sits on the ray, between the branches.
+    const gate = layout.gates.find((g) => g.path === 'arms' && g.ring === 1)!;
+    expect(angle(gate)).toBeCloseTo(ray, 6);
   });
 
   it('keeps links from crossing each other or running through a seal', () => {
@@ -194,9 +205,9 @@ describe('ring chart layout', () => {
       }
     }
     expect(seen.size).toBe(INPUT.length);
-    expect(neighbourInDirection(layout.nodes, 'mining_crews', 'right')).toBe('gold_mines');
-    expect(neighbourInDirection(layout.nodes, 'palisades', 'left')).toBe('watchtowers');
-    expect(neighbourInDirection(layout.nodes, 'mills', 'down')).toBe('farms');
+    expect(neighbourInDirection(layout.nodes, 'lumber_crews', 'right')).toBe('housing_i');
+    expect(neighbourInDirection(layout.nodes, 'mining_crews', 'down')).toBe('gold_mines');
+    expect(neighbourInDirection(layout.nodes, 'barracks_pikemen', 'left')).toMatch(/^(archers|knights)$/);
   });
 });
 

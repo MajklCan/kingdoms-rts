@@ -368,7 +368,8 @@ export const UNIT_TABLE: UnitDef[] = [
     id: 'SCOUT_CAVALRY',
     name: 'Scout Cavalry',
     hp: 60,
-    cost: { food: 80, wood: 0, gold: 40, stone: 0 },
+    // No gold: riders are a ring I unit now, and gold mines open in ring II.
+    cost: { food: 80, wood: 40, gold: 0, stone: 0 },
     trainTimeTicks: Math.round(SIM.TICK_HZ * 28),
     popCost: 1,
     trainAt: 'STABLE',
