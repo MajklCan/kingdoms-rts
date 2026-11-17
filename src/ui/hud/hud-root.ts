@@ -27,6 +27,7 @@ import { buildIdleButton } from './idle-villagers';
 import { buildMinimap } from './minimap';
 import { buildSelectionPanel } from './selection-panel';
 import { bindSpeedButton, buildTopBar } from './top-bar';
+import { trace } from '../../render/trace/active-trace';
 
 let pausedBanner: HTMLElement | null = null;
 
@@ -73,6 +74,7 @@ function togglePause(): void {
   const scene = getScene();
   if (!scene || scene.isMultiplayer()) return;
   const paused = !scene.isPaused();
+  trace('game:pause');
   scene.setPaused(paused);
   setLastEvent(paused ? 'paused' : 'resumed');
 }

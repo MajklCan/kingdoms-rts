@@ -16,6 +16,7 @@ import { RESOURCE_ICON_SMALL } from '../icons/catalog';
 import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { quitToMenu } from '../match/match-flow';
+import { downloadMatchTrace, hasMatchTrace } from '../trace/match-trace';
 
 let root: HTMLElement | null = null;
 let card: HTMLElement | null = null;
@@ -54,6 +55,10 @@ function show(scene: GameScene, won: boolean): void {
     dismissed = true;
     hide();
   });
+  const traceBtn = hasMatchTrace()
+    ? h('button', { type: 'button', class: 'btn btn-ink btn-lg', id: 'game-over-trace' }, icon('download'), 'Download Trace')
+    : null;
+  traceBtn?.addEventListener('click', () => downloadMatchTrace());
   const banner = h(
     'div',
     { class: `go-banner ${won ? 'is-victory' : 'is-defeat'}` },
@@ -93,7 +98,7 @@ function show(scene: GameScene, won: boolean): void {
         stat(RESOURCE_ICON_SMALL.stone, 'Stone gathered', formatAmount(stone))
       )
     ),
-    h('div', { class: 'go-actions' }, watchBtn, returnBtn)
+    h('div', { class: 'go-actions' }, traceBtn, watchBtn, returnBtn)
   );
   card!.setAttribute('aria-describedby', 'game-over-subtitle');
   card!.replaceChildren(banner, sheet);

@@ -52,6 +52,7 @@ import type { GameAudio } from '../game-audio';
 import { entityKindName, resourceKindName } from '../hud/selection-info';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
+import { trace } from '../trace/active-trace';
 
 export type MapOrderKind = 'move' | 'attackMove';
 
@@ -260,6 +261,7 @@ export class WorldOrders {
     const eid = this.visibleEntityAt(wx, wy);
     clearSelection(world);
     if (eid !== null) {
+      trace('select:click');
       setSelected(world, eid, true);
       if (this.ctx.isOwnUnit(eid)) this.deps.audio.barkSelect(eid);
       setLastEvent(`selected ${entityKindName(world, eid)} eid=${eid}`);
@@ -308,6 +310,7 @@ export class WorldOrders {
 
   /** Double click / tap: every own unit of the source unit's type that is on screen. */
   selectSameKindOnScreen(sourceEid: number): number {
+    trace('select:double-click');
     const world = this.ctx.world;
     const playerId = this.ctx.perspectivePlayerId;
     const kind = UnitKind.kind[sourceEid];
@@ -332,6 +335,7 @@ export class WorldOrders {
    * figure counts (the same body box a click uses), else the feet anchor.
    */
   selectInWorldBox(x0: number, y0: number, x1: number, y1: number): number {
+    trace('select:box');
     const world = this.ctx.world;
     const root = this.ctx.layers.root;
     clearSelection(world);
@@ -356,6 +360,7 @@ export class WorldOrders {
 
   /** Own villagers (true) or own military (false); returns the count. */
   selectOwnUnits(villagers: boolean): number {
+    trace(villagers ? 'select:all-villagers' : 'select:all-military');
     const world = this.ctx.world;
     clearSelection(world);
     let n = 0;

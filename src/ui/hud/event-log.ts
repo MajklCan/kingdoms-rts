@@ -9,6 +9,7 @@ import type { GameScene } from '../../render/game-scene';
 import { h, plainDashes } from '../dom';
 import { onGameMessage, panToTile, type GameMessage } from '../game-bridge';
 import { attachTip } from './tooltip';
+import { trace } from '../../render/trace/active-trace';
 
 const MAX_LINES = 4;
 const LINE_TTL = 9000;
@@ -46,6 +47,7 @@ export function logLine(text: string, tone: GameMessage['tone'] = 'info', at?: G
     attachTip(el, () => ({ title: 'Show on the map', body: 'Click to move the camera there.' }));
     el.addEventListener('click', () => {
       const scene = activeScene;
+      trace('camera:event-log');
       if (scene) panToTile(scene, at.x, at.y);
     });
   }

@@ -28,6 +28,7 @@ import { GestureRecognizer, type GestureEvent } from './gesture-recognizer';
 import { isTouchUi } from './input-mode';
 import { DRAG_BOX_DEPTH } from './pointer-controller';
 import { drawSelectionBox, type WorldOrders } from './world-orders';
+import { trace } from '../trace/active-trace';
 
 /** Glide decay time constant after a flick (ms). */
 const INERTIA_TAU_MS = 220;
@@ -205,6 +206,7 @@ export class TouchController {
           return;
         }
         this.panning = true;
+        trace('camera:pan-drag', { via: 'touch' });
         this.deps.camera.setMoving(true);
         return;
       case 'pan':
@@ -240,6 +242,7 @@ export class TouchController {
         this.stopGlide();
         const c = this.toGame(e.cx, e.cy);
         this.pinch = { zoom0: this.deps.camera.zoom, world: this.deps.camera.screenToWorld(c.x, c.y) };
+        trace('camera:zoom-pinch', { via: 'touch' });
         this.deps.camera.beginPinch();
         return;
       }

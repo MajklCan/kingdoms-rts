@@ -453,3 +453,6 @@ export class ActionGrid {
     ];
   }
 }
+
+/** Building keys on the build buttons, in grid order (the player trace's catalog). */
+export const BUILD_BUTTON_MODES: readonly string[] = BUILD_BUTTONS.map(([, mode]) => mode);

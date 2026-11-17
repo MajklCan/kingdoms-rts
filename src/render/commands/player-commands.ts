@@ -64,6 +64,7 @@ import {
   unlockResearchFor,
   populationRoomForUnitCount,
 } from './economy';
+import { traceFailure } from '../trace/command-trace';
 
 /** Shift-click on a train button queues up to this many. */
 export const TRAIN_BATCH_COUNT = 5;
@@ -194,6 +195,7 @@ export class PlayerCommands {
 
   /** Report a refused command: error sound + typed notice for the HUD. */
   fail(failure: CommandFailure): void {
+    traceFailure(failure);
     setLastEvent(describeFailure(failure));
     if (this.feedback) this.feedback.fail(failure);
     else this.audio.playUi(SFX_ERROR);

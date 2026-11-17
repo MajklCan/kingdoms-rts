@@ -9,6 +9,7 @@
 
 import { selectedCommandableEids as selectedCommandableEidsFor, type SimInput } from '@sim/world';
 import type { SceneContext } from '../scene-context';
+import { traceCommand } from '../trace/command-trace';
 
 /** Selected entities this client may command: owned by the perspective player,
  *  excluding worksite workers (mirror of the sim's commandable selection). */
@@ -19,9 +20,13 @@ export function selectedCommandableEids(ctx: SceneContext): number[] {
 export function dispatchCommand(ctx: SceneContext, input: SimInput): void {
   const mp = ctx.multiplayer;
   if (mp) {
-    if (mp.state === 'playing') mp.sendCommand(input);
+    if (mp.state === 'playing') {
+      traceCommand(input);
+      mp.sendCommand(input);
+    }
     return;
   }
   // Single-player: straight into the sim input queue.
+  traceCommand(input);
   ctx.world.inputs.push(input);
 }
