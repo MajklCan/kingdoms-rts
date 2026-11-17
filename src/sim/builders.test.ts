@@ -12,7 +12,8 @@ import { spawnVillager } from './factories/units';
 import { canPlaceBuildingAt } from './input/buildings';
 import { BUILD_CONTACT_DISTANCE, buildWorkThisTick } from './systems/builders';
 import { distToBuildingEdge } from './core/grid';
-import { createSimWorld, step } from './world';
+import { createSimWorld, removeSimEntity, step } from './world';
+import { checksumWorld } from './checksum';
 
 const P1 = 1;
 const HOUSE = BUILDING_TABLE[BuildingDefId.HOUSE];
@@ -256,6 +257,28 @@ describe('villager builders', () => {
     step(world);
     expect(BuildOrder.targetEid[builder]).toBe(siteC);
     expect(world.orderQueues.has(builder)).toBe(false);
+  });
+
+  it('a queued build names its site in the checksum and goes when the site is removed', () => {
+    const queued = (which: number) => {
+      const world = quietWorld();
+      const first = houseSpot(world);
+      const siteA = spawnFoundation(world, BuildingDefId.HOUSE, first.x, first.y, P1);
+      const [builder] = buildersAt(world, siteA, 1);
+      const sites = [0, 1].map(() => {
+        const spot = houseSpot(world);
+        return spawnFoundation(world, BuildingDefId.HOUSE, spot.x, spot.y, P1);
+      });
+      world.inputs.push({ type: 'cmdBuild', playerId: P1, eids: [builder], targetEid: sites[which], queue: true });
+      step(world);
+      return { world, builder, site: sites[which] };
+    };
+    const a = queued(0);
+    const b = queued(1);
+    expect(a.world.orderQueues.get(a.builder)).toEqual([{ kind: 'build', targetEid: a.site }]);
+    expect(checksumWorld(a.world)).not.toBe(checksumWorld(b.world));
+    removeSimEntity(a.world, a.site);
+    expect(a.world.orderQueues.has(a.builder)).toBe(false);
   });
 
   it('a move or gather order takes a builder off the job', () => {

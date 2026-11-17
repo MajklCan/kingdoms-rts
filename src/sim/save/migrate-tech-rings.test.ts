@@ -250,6 +250,29 @@ describe('save v5 -> v6 (Cavalry in ring I)', () => {
     expect(world.orderQueues.size).toBe(0);
   });
 
+  it('keeps ring III open for a realm that opened it through old ring II Cavalry', () => {
+    // v5: ring III through arms (Cavalry was ring II) and walls (Stone Walls).
+    const ringIII = [...V5_RING_I, TechId.KNIGHTS, TechId.STONE_WALLS];
+    const withMills = parseSavedGame(JSON.stringify(v5Save(924, AgeId.GUNPOWDER, [...ringIII, TechId.MILLS])))!;
+    // Farming I needs only Mills, which the realm has: the cheapest grant.
+    expect([...withMills.researchedTechs[1]].sort()).toEqual([...ringIII, TechId.MILLS, TechId.FARMS].sort());
+    const world = createSimWorld(1);
+    loadSimWorldSnapshot(world, withMills);
+    expect(openRing(world, 1)).toBe(3);
+
+    // No ring I parents for any other ring II path: the first one in tree
+    // order among the cheapest comes with its parent.
+    const bare = parseSavedGame(JSON.stringify(v5Save(925, AgeId.GUNPOWDER, ringIII)))!;
+    expect([...bare.researchedTechs[1]].sort()).toEqual([...ringIII, TechId.MINING_CREWS, TechId.GOLD_MINES].sort());
+    const bareWorld = createSimWorld(1);
+    loadSimWorldSnapshot(bareWorld, bare);
+    expect(openRing(bareWorld, 1)).toBe(3);
+
+    // A Castle Age realm with the same research is not lifted into ring III.
+    const castle = parseSavedGame(JSON.stringify(v5Save(926, AgeId.CASTLE, ringIII)))!;
+    expect([...castle.researchedTechs[1]].sort()).toEqual([...ringIII].sort());
+  });
+
   it('grants nothing to a realm still in ring I', () => {
     const parsed = parseSavedGame(JSON.stringify(v5Save(922, AgeId.DARK, V5_RING_I)))!;
     expect([...parsed.researchedTechs[1]].sort()).toEqual([...V5_RING_I].sort());

@@ -1,5 +1,6 @@
 /**
- * Save v3 -> v4: from age research to the tech rings (v4 -> v5 at the end).
+ * Save v3 -> v4: from age research to the tech rings (v4 -> v5 and v5 -> v6
+ * at the end).
  *
  * - A saved age becomes its starting preset: Castle = all of ring I,
  *   Gunpowder = rings I and II, Total War = every research.
@@ -19,11 +20,14 @@ import { AgeId } from '../defs';
 import {
   TechId,
   type TechIdValue,
+  type TechRing,
+  type TechStateWorld,
   createStartingTechSetForAge,
   isRingOpen,
   isTechId,
   openRing,
   ringEra,
+  techDef,
   techIdsInRing,
 } from '../tech-tree';
 import type { SavedCampaignV1, SavedCampaignV4, SavedGameV3, SavedGameV4, SavedGameV5, SavedGameV6 } from './schema';
@@ -121,11 +125,16 @@ export function migrateSaveV4ToV5(save: SavedGameV4): SavedGameV5 {
 
 /**
  * Save v5 -> v6: Cavalry moved from ring II into ring I, as a branch after
- * Barracks, so the arms path is complete in ring I only with it. A realm
- * whose ring II was open (its era says so) and that would lose it for want of
- * Cavalry alone gets the research, as the Commander was granted in v5. The
- * night flag and Shift-queued orders are new optional fields: absent means a
- * day match and nothing queued.
+ * Barracks, so the arms path is complete in ring I only with it and has no
+ * ring II content any more. A realm keeps the rings its era says it had:
+ *  - ring II open but closed for want of Cavalry alone: it gets Cavalry, as
+ *    the Commander was granted in v5;
+ *  - ring III open through arms (old ring II Cavalry) and one other path: it
+ *    gets the ring II research of another path that needs the fewest grants
+ *    (with any missing parents), first in tree order on a tie.
+ * Nothing is granted when the grants would not reopen the ring. The night
+ * flag and Shift-queued orders are new optional fields: absent means a day
+ * match and nothing queued.
  */
 export function migrateSaveV5ToV6(save: SavedGameV5): SavedGameV6 {
   const researched = (save.researchedTechs ?? []).map((ids) => new Set<TechIdValue>(ids));
@@ -135,11 +144,42 @@ export function migrateSaveV5ToV6(save: SavedGameV5): SavedGameV6 {
     campaign: save.campaign ? { lockedTechs: save.campaign.lockedTechs ?? [] } : null,
   };
   researched.forEach((techs, playerId) => {
-    if (playerId === 0 || techs.has(TechId.KNIGHTS) || !techs.has(TechId.ARCHERS)) return;
-    if ((ringWorld.ages[playerId]?.current ?? AgeId.DARK) < ringEra(2)) return;
-    if (isRingOpen(ringWorld, playerId, 2)) return;
-    techs.add(TechId.KNIGHTS);
-    if (!isRingOpen(ringWorld, playerId, 2)) techs.delete(TechId.KNIGHTS);
+    if (playerId === 0) return;
+    const era = ringWorld.ages[playerId]?.current ?? AgeId.DARK;
+    if (era >= ringEra(2) && techs.has(TechId.ARCHERS) && !isRingOpen(ringWorld, playerId, 2)) {
+      grantIfReopens(ringWorld, playerId, 2, [TechId.KNIGHTS]);
+    }
+    if (era >= ringEra(3) && isRingOpen(ringWorld, playerId, 2) && !isRingOpen(ringWorld, playerId, 3)) {
+      const options = techIdsInRing(2)
+        .filter((id) => !techs.has(id) && !isCampaignLockedId(ringWorld, id))
+        .map((id) => withMissingParents(techs, id));
+      const fewest = options.reduce<TechIdValue[] | null>((best, ids) => (best && best.length <= ids.length ? best : ids), null);
+      if (fewest) grantIfReopens(ringWorld, playerId, 3, fewest);
+    }
   });
   return { ...save, version: 6, researchedTechs: researched.map((set) => [...set]) };
+}
+
+/** Add `ids` to the realm's research, and take them back if `ring` stays shut. */
+function grantIfReopens(world: TechStateWorld, playerId: number, ring: TechRing, ids: TechIdValue[]): void {
+  const techs = world.researchedTechs[playerId];
+  const added = ids.filter((id) => !techs.has(id));
+  for (const id of added) techs.add(id);
+  if (!isRingOpen(world, playerId, ring)) for (const id of added) techs.delete(id);
+}
+
+/** `id` and every ancestor the realm has not researched, parents first. */
+function withMissingParents(techs: Set<TechIdValue>, id: TechIdValue): TechIdValue[] {
+  const out: TechIdValue[] = [];
+  const visit = (techId: TechIdValue) => {
+    if (techs.has(techId) || out.includes(techId)) return;
+    for (const parent of techDef(techId)?.parents ?? []) visit(parent);
+    out.push(techId);
+  };
+  visit(id);
+  return out;
+}
+
+function isCampaignLockedId(world: TechStateWorld, id: TechIdValue): boolean {
+  return world.campaign?.lockedTechs.includes(id) ?? false;
 }
