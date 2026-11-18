@@ -15,6 +15,7 @@ import {
   UnitKind,
 } from '../components';
 import {
+  BUILDING_TABLE,
   type BuildingDef,
   BuildingDefId,
   UnitDefId,
@@ -24,14 +25,13 @@ import {
 } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
-import { distToBuildingEdge } from '../core/grid';
-import { ResourceProbe } from '../core/placement-probe';
+import { PlacementProbe } from '../core/placement-probe';
 import { sortedEids } from '../core/entities';
 import { unitLimitReached } from '../core/unit-limits';
 import { countQueuedPopCost, hasPopulationRoom, houseLimitReached } from '../core/population';
 import { buildingQuery, positionQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
-import { canPlaceBuildingAt } from '../input/buildings';
+import { isFootprintFree } from '../input/buildings';
 import { currentAiThinkScope } from './context';
 import { activeAiActuator } from './direct-actuator';
 import {
@@ -111,59 +111,120 @@ function aiFindBuildingSpot(
   const cx = Math.round(nearX);
   const cy = Math.round(nearY);
   const maxR = aiBuildingPlacementSearchRadius(def);
-  // Nothing changes while we scan, so index resources and enemies once
-  // instead of rescanning every entity for each candidate spot.
-  const probe = new ResourceProbe(world);
+  // Nothing changes while we scan, so index resources, buildings and enemies
+  // once instead of rescanning every entity for each candidate spot.
+  const probe = new PlacementProbe(world);
+  const own = new OwnBuildingIndex(world, playerId);
   const enemies = aiEnemyPoints(world, playerId);
   const actuator = activeAiActuator();
+  const usesNodes = worksiteUsesResourceNodes(def);
+  const harvestKind = def.harvestKind as ResourceKind;
+  const harvestRadius = def.harvestRadius ?? 6;
   let bestSpot: GridPos | null = null;
   let bestScore = Infinity;
+  const consider = (x: number, y: number): void => {
+    if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) return;
+    // canPlaceBuildingAt, split so the score reuses the node distance.
+    const resourceDist = usesNodes ? probe.nearestDistance(x, y, harvestKind, harvestRadius) : null;
+    if (usesNodes && resourceDist === null) return;
+    if (!isFootprintFree(world, def, x, y, probe)) return;
+    if (actuator.isSpotClaimed(defId, x, y)) return;
+    if (hasPointNear(enemies, x, y, 8)) return;
+    const score = aiBuildingPlacementScore(def, x, y, nearX, nearY, own, resourceDist ?? harvestRadius);
+    if (score < bestScore) {
+      bestScore = score;
+      bestSpot = { x, y };
+    }
+  };
+  // Ring by ring, each ring row by row (dy, then dx ascending): the first of
+  // equally scored spots wins, so this order decides ties.
   for (let r = 2; r <= maxR; r++) {
     for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-        const x = cx + dx;
-        const y = cy + dy;
-        if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) continue;
-        if (!canPlaceBuildingAt(world, def, x, y, probe)) continue;
-        if (actuator.isSpotClaimed(defId, x, y)) continue;
-        if (hasPointNear(enemies, x, y, 8)) continue;
-        const score = aiBuildingPlacementScore(world, def, x, y, nearX, nearY, playerId, probe);
-        if (score < bestScore) {
-          bestScore = score;
-          bestSpot = { x, y };
-        }
+      if (dy === -r || dy === r) {
+        for (let dx = -r; dx <= r; dx++) consider(cx + dx, cy + dy);
+      } else {
+        consider(cx - r, cy + dy);
+        consider(cx + r, cy + dy);
       }
     }
   }
   return bestSpot;
 }
 
+/**
+ * The player's live buildings, in NetId order, as footprint rectangles: the
+ * numbers distToBuildingEdge measures against, read once per spot search.
+ */
+class OwnBuildingIndex {
+  readonly minX: number[] = [];
+  readonly maxX: number[] = [];
+  readonly minY: number[] = [];
+  readonly maxY: number[] = [];
+  readonly defId: number[] = [];
+
+  constructor(world: SimWorld, playerId: number) {
+    // NetId order: a float sum in query order can differ in the last bit after a load.
+    for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
+      if (Owner.player[eid] !== playerId) continue;
+      if (Health.hp[eid] <= 0) continue;
+      const def = BUILDING_TABLE[Building.defId[eid]];
+      if (def) {
+        const x0 = Math.round(Position.x[eid]) - Math.floor(def.footprint.w / 2);
+        const y0 = Math.round(Position.y[eid]) - Math.floor(def.footprint.h / 2);
+        this.minX.push(x0 - 0.5);
+        this.maxX.push(x0 + def.footprint.w - 0.5);
+        this.minY.push(y0 - 0.5);
+        this.maxY.push(y0 + def.footprint.h - 0.5);
+      } else {
+        // distToBuildingEdge measures a def-less building from its position: a
+        // zero-size rectangle gives the same |dx|, |dy| and so the same hypot.
+        this.minX.push(Position.x[eid]);
+        this.maxX.push(Position.x[eid]);
+        this.minY.push(Position.y[eid]);
+        this.maxY.push(Position.y[eid]);
+      }
+      this.defId.push(Building.defId[eid]);
+    }
+  }
+
+  get length(): number {
+    return this.defId.length;
+  }
+
+  /** distToBuildingEdge(world, x, y, eid) for the i-th building. */
+  edgeDistance(i: number, x: number, y: number): number {
+    const minX = this.minX[i];
+    const maxX = this.maxX[i];
+    const minY = this.minY[i];
+    const maxY = this.maxY[i];
+    const dx = x < minX ? minX - x : x > maxX ? x - maxX : 0;
+    const dy = y < minY ? minY - y : y > maxY ? y - maxY : 0;
+    return dhypot(dx, dy);
+  }
+}
+
 function aiBuildingPlacementScore(
-  world: SimWorld,
   def: BuildingDef,
   x: number,
   y: number,
   baseX: number,
   baseY: number,
-  playerId: number,
-  probe: ResourceProbe
+  own: OwnBuildingIndex,
+  resourceDist: number
 ): number {
   const baseDist = dhypot(x - baseX, y - baseY);
-  const spacingPenalty = aiOwnedBuildingSpacingPenalty(world, def, x, y, playerId);
+  const spacingPenalty = aiOwnedBuildingSpacingPenalty(def, x, y, own);
   if (worksiteUsesResourceNodes(def)) {
-    const radius = def.harvestRadius ?? 6;
-    const resourceDist = probe.nearestDistance(x, y, def.harvestKind as ResourceKind, radius) ?? radius;
     return resourceDist * 5 + baseDist * 0.08 + spacingPenalty;
   }
   if (def.id === 'FARM') {
     return aiPreferredBaseDistanceScore(baseDist, 7) +
-      aiNearestOwnedBuildingTypeDistance(world, x, y, playerId, BuildingDefId.FARM) * 0.2 +
+      aiNearestOwnedBuildingTypeDistance(own, x, y, BuildingDefId.FARM) * 0.2 +
       spacingPenalty;
   }
   if (def.id === 'MILL') {
     return aiPreferredBaseDistanceScore(baseDist, 8) +
-      aiNearestOwnedBuildingTypeDistance(world, x, y, playerId, BuildingDefId.FARM) * 1.8 +
+      aiNearestOwnedBuildingTypeDistance(own, x, y, BuildingDefId.FARM) * 1.8 +
       spacingPenalty;
   }
   if (def.id === 'DEFENSIVE_TOWER') {
@@ -183,20 +244,12 @@ function aiPreferredBaseDistanceScore(distance: number, preferred: number): numb
   return Math.abs(distance - preferred) * 0.75 + tooClosePenalty;
 }
 
-function aiOwnedBuildingSpacingPenalty(
-  world: SimWorld,
-  def: BuildingDef,
-  x: number,
-  y: number,
-  playerId: number
-): number {
+function aiOwnedBuildingSpacingPenalty(def: BuildingDef, x: number, y: number, own: OwnBuildingIndex): number {
   const desiredGap = aiDesiredBuildingGap(def);
   let penalty = 0;
-  // NetId order: a float sum in query order can differ in the last bit after a load.
-  for (const eid of sortedEids(world, buildingQuery(world.ecs))) {
-    if (Owner.player[eid] !== playerId) continue;
-    if (Health.hp[eid] <= 0) continue;
-    const edgeDist = distToBuildingEdge(world, x, y, eid);
+  // In the index's NetId order, so the float sum is the same on every peer.
+  for (let i = 0; i < own.length; i++) {
+    const edgeDist = own.edgeDistance(i, x, y);
     if (edgeDist >= desiredGap) continue;
     const deficit = desiredGap - edgeDist;
     penalty += deficit * deficit * 8;
@@ -214,19 +267,11 @@ function aiDesiredBuildingGap(def: BuildingDef): number {
   return 2.2;
 }
 
-function aiNearestOwnedBuildingTypeDistance(
-  world: SimWorld,
-  x: number,
-  y: number,
-  playerId: number,
-  defId: number
-): number {
+function aiNearestOwnedBuildingTypeDistance(own: OwnBuildingIndex, x: number, y: number, defId: number): number {
   let best = 20;
-  for (const eid of buildingQuery(world.ecs)) {
-    if (Owner.player[eid] !== playerId) continue;
-    if (Building.defId[eid] !== defId) continue;
-    if (Health.hp[eid] <= 0) continue;
-    best = Math.min(best, distToBuildingEdge(world, x, y, eid));
+  for (let i = 0; i < own.length; i++) {
+    if (own.defId[i] !== defId) continue;
+    best = Math.min(best, own.edgeDistance(i, x, y));
   }
   return best;
 }

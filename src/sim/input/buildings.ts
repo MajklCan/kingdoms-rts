@@ -10,7 +10,7 @@ import { houseLimitReached } from '../core/population';
 import { isTileVisibleTo } from '../systems/visibility';
 import { sortedEids } from '../core/entities';
 import { findBuildingAt, findNearestResource, findResourceAt } from '../core/lookup';
-import type { ResourceProbe } from '../core/placement-probe';
+import type { PlacementProbe } from '../core/placement-probe';
 import { selectedQuery } from '../core/queries';
 import type { SimWorld } from '../core/types';
 import { spawnFoundation } from '../factories/buildings';
@@ -106,14 +106,14 @@ export function isPlacementInSight(
 /**
  * Footprint free and, for resource worksites, a node in reach. `probe` (for
  * batches of queries in one tick, like the AI's spot search) gives the same
- * answer from an index instead of scanning every resource node.
+ * answer from an index instead of scanning every resource node and building.
  */
 export function canPlaceBuildingAt(
   world: SimWorld,
   def: BuildingDef,
   x: number,
   y: number,
-  probe?: ResourceProbe
+  probe?: PlacementProbe
 ): boolean {
   if (worksiteUsesResourceNodes(def)) {
     const kind = def.harvestKind as ResourceKind;
@@ -123,7 +123,17 @@ export function canPlaceBuildingAt(
       : findNearestResource(world, x, y, kind, radius) !== null;
     if (!inReach) return false;
   }
+  return isFootprintFree(world, def, x, y, probe);
+}
 
+/** The footprint half of {@link canPlaceBuildingAt}: on the map, walkable, no resource node or building on it. */
+export function isFootprintFree(
+  world: SimWorld,
+  def: BuildingDef,
+  x: number,
+  y: number,
+  probe?: PlacementProbe
+): boolean {
   const fw = def.footprint.w;
   const fh = def.footprint.h;
   const x0 = x - Math.floor(fw / 2);
@@ -134,8 +144,12 @@ export function canPlaceBuildingAt(
       const ty = y0 + dy;
       if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return false;
       if (world.map.walkability[ty][tx] !== 0) return false;
-      if (probe ? probe.hasResourceAt(tx, ty, 0.6) : findResourceAt(world, tx, ty, 0.6) !== null) return false;
-      if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;
+      if (probe) {
+        if (probe.hasResourceAt(tx, ty, 0.6) || probe.hasBuildingAt(tx, ty)) return false;
+      } else {
+        if (findResourceAt(world, tx, ty, 0.6) !== null) return false;
+        if (findBuildingAt(world, tx, ty, 0.01) !== null) return false;
+      }
     }
   }
   return true;

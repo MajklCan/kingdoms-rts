@@ -1,18 +1,22 @@
 /**
- * Indexed resource lookups for a batch of placement queries within one tick.
+ * Indexed resource and building lookups for a batch of placement queries
+ * within one tick.
  *
  * The AI scores thousands of candidate spots per placement attempt (a lumber
  * camp searches a 52-tile radius), and every spot used to scan all resource
  * nodes several times (findResourceAt per footprint tile, findNearestResource
- * for the worksite check and the score). The probe buckets the nodes by tile
- * once and answers the same questions with the same math, so the results are
- * identical to the plain lookups. Only valid while resources do not change,
- * so build a fresh one per batch.
+ * for the worksite check and the score) and every building per footprint tile
+ * (findBuildingAt). The probes bucket the nodes by tile and mark the tiles
+ * buildings stand on once, then answer the same questions with the same math,
+ * so the results are identical to the plain lookups. Only valid while
+ * resources and buildings do not change, so build a fresh one per batch.
  */
 
 import { dhypot } from './dmath';
-import { Position, Resource, type ResourceKind } from '../components';
-import { resourceQuery } from './queries';
+import { Building, Position, Resource, type ResourceKind } from '../components';
+import { BUILDING_TABLE } from '../defs';
+import { distToBuildingEdge } from './grid';
+import { buildingQuery, resourceQuery } from './queries';
 import type { SimWorld } from './types';
 
 /** Per-tile linked lists of eids (head per cell, next per entry). */
@@ -123,5 +127,57 @@ export class ResourceProbe {
       }
     }
     return found ? best : null;
+  }
+}
+
+/**
+ * A {@link ResourceProbe} that also knows which tiles a building stands on.
+ * `hasBuildingAt` answers `findBuildingAt(world, tx, ty, 0.01) !== null` for
+ * an integer tile: that is true exactly when the tile lies in some building's
+ * footprint (distance 0; a tile outside one is at least 0.5 from its edge).
+ * Same lifetime rule: build a fresh one per batch.
+ */
+export class PlacementProbe extends ResourceProbe {
+  private readonly covered: Uint8Array;
+  private readonly width: number;
+  private readonly height: number;
+  /** Checked the slow way: buildings without a def (measured from their
+   *  position) and footprints reaching off the map. */
+  private readonly unindexed: number[] = [];
+
+  constructor(private readonly world: SimWorld) {
+    super(world);
+    this.width = world.map.width;
+    this.height = world.map.height;
+    this.covered = new Uint8Array(this.width * this.height);
+    for (const eid of buildingQuery(world.ecs)) {
+      const def = BUILDING_TABLE[Building.defId[eid]];
+      if (!def) {
+        this.unindexed.push(eid);
+        continue;
+      }
+      // The tiles distToBuildingEdge measures 0 for: its rectangle's integer points.
+      const x0 = Math.round(Position.x[eid]) - Math.floor(def.footprint.w / 2);
+      const y0 = Math.round(Position.y[eid]) - Math.floor(def.footprint.h / 2);
+      if (x0 < 0 || y0 < 0 || x0 + def.footprint.w > this.width || y0 + def.footprint.h > this.height) {
+        this.unindexed.push(eid);
+      }
+      for (let ty = Math.max(0, y0); ty <= Math.min(this.height - 1, y0 + def.footprint.h - 1); ty++) {
+        for (let tx = Math.max(0, x0); tx <= Math.min(this.width - 1, x0 + def.footprint.w - 1); tx++) {
+          this.covered[ty * this.width + tx] = 1;
+        }
+      }
+    }
+  }
+
+  /** Same as `findBuildingAt(world, tx, ty, 0.01) !== null` for integer `tx`, `ty`. */
+  hasBuildingAt(tx: number, ty: number): boolean {
+    if (tx >= 0 && ty >= 0 && tx < this.width && ty < this.height && this.covered[ty * this.width + tx] === 1) {
+      return true;
+    }
+    for (const eid of this.unindexed) {
+      if (distToBuildingEdge(this.world, tx, ty, eid) < 0.01) return true;
+    }
+    return false;
   }
 }
