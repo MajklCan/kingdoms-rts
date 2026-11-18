@@ -38,4 +38,14 @@ describe('villager build buttons for the endless worksites', () => {
       expect(action, id).toBeDefined();
     }
   });
+
+  it("leave a bare V to the army rally point: the forester's lodge is B then V", () => {
+    const world = createSimWorld(1, { startingAge: AgeId.CASTLE });
+    const grid = villagerGrid(world);
+    expect(grid.available().find((a) => a.id === 'build-forester')?.key).toBe('B V');
+    const builds = grid.available().filter((a) => a.kind === 'build');
+    expect(builds.filter((a) => a.key === 'V')).toEqual([]);
+    // No build button answers V, so the hotkey handler falls through to the rally.
+    expect(grid.buildHotkey('V')).toBe(false);
+  });
 });

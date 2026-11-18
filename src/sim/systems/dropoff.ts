@@ -106,6 +106,14 @@ function routeWorksiteWorkerAfterDropoff(
   if (Building.defId[siteEid] === BuildingDefId.FARM) {
     return kind === ResourceKindId.FOOD && routeFarmWorkerToNextPatch(world, worker, siteEid);
   }
+  const def = getBuildingDef(Building.defId[siteEid]);
+  if (def && !worksiteUsesResourceNodes(def)) {
+    // Back from delivering his load to a mint, brickworks or forester's
+    // lodge: no node to walk to, his site walks him back next tick.
+    Gatherer.state[worker] = GathererStateId.IDLE;
+    Gatherer.targetEid[worker] = -1;
+    return true;
+  }
   return routeWorksiteWorkerToResource(world, worker, kind);
 }
 

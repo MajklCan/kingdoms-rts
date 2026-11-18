@@ -25,7 +25,7 @@ export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-gold-mine': { icon: 'b-gold-mine', description: 'Worksite placed on a gold vein. Miners bring in gold for the army.', keyHint: BUILD_HINT('G') },
   'build-mint': { icon: 'r-gold', description: 'Endless gold worksite: three villagers strike coin without a gold vein, slower than a mine but it never runs dry.', keyHint: BUILD_HINT('J') },
   'build-brickworks': { icon: 'tech-brick', description: 'Endless stone worksite: three villagers fire bricks without a quarry, slower than cutting stone but it never runs dry.', keyHint: BUILD_HINT('U') },
-  'build-forester': { icon: 'tech-lumber', description: 'Endless wood worksite: three villagers plant and fell their own trees, slower than a lumber camp but it never runs dry.', keyHint: BUILD_HINT('V') },
+  'build-forester': { icon: 'tech-lumber', description: 'Endless wood worksite: three villagers plant and fell their own trees, slower than a lumber camp but it never runs dry.', keyHint: 'B, then V' },
   'build-barracks': { icon: 'b-barracks', description: 'Trains pikemen and archers, the backbone of a medieval host.', keyHint: BUILD_HINT('R') },
   'build-archery-range': { icon: 'b-archery-range', description: 'Trains archers alongside the barracks, so ranged troops come out faster.', keyHint: BUILD_HINT('N') },
   'build-stable': { icon: 'b-stable', description: 'Trains fast scout cavalry for raids and reconnaissance.', keyHint: BUILD_HINT('T') },

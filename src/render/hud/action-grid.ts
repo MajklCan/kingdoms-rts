@@ -91,7 +91,9 @@ const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, 
   ['build-wall', 'WALL', 'Z', '▬', 'wall'],
   ['build-mint', 'MINT', 'J', '¤', 'mint'],
   ['build-brickworks', 'BRICKWORKS', 'U', '▤', 'brickworks'],
-  ['build-forester', 'FORESTER', 'V', '♣', 'forester'],
+  // No letter of its own (all 26 are taken): B then V. "B V" never matches a
+  // single key in buildHotkey, so a bare V stays the army rally point.
+  ['build-forester', 'FORESTER', 'B V', '♣', 'forester'],
 ];
 
 /** Mint, brickworks and forester's lodge: shown only once unlocked. */

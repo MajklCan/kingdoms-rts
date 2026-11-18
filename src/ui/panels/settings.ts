@@ -81,7 +81,7 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['M / I', 'Build a farm / mill'],
       ['L / C / G', 'Lumber hut / stone quarry / gold mine'],
       ['R / N / T / F / Y / Z', 'Barracks / archery range / stable / foundry / tower / wall'],
-      ['J / U / V', "Mint / brickworks / forester's lodge (from the Castle Age; V with villagers selected)"],
+      ['J / U / B V', "Mint / brickworks / forester's lodge (from the Castle Age; the lodge is B then V)"],
       ['Q / E', 'Train first / second unit'],
       ['G', 'Town center villager rally point'],
       ['Shift+click', 'On a train button: queue five units'],
