@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { activeTrace, currentVia, noteInput, setActiveTrace, trace } from './active-trace';
+import { activeTrace, currentVia, installTraceInputSource, noteInput, setActiveTrace, trace } from './active-trace';
 import {
   HOTKEY_ECHO_MS,
   MAX_TRACE_EVENTS,
   TraceRecorder,
   featureGroup,
+  moreCompleteTrace,
+  traceBundleFileName,
   traceFileName,
+  traceKey,
   type TraceMeta,
 } from './player-trace';
 
@@ -142,6 +145,21 @@ describe('trace helpers', () => {
     expect(traceFileName(recorder.finish('victory', 'x', null))).toBe(`kingdoms-trace-${stamp}-dominik-multiplayer.json`);
     const { recorder: open } = harness();
     expect(traceFileName(open.snapshot())).toBe(`kingdoms-trace-${stamp}-dominik-multiplayer-unfinished.json`);
+    expect(traceBundleFileName(d)).toBe(`kingdoms-trace-saved-${stamp}.json`);
+  });
+
+  it('tells copies of one match apart from other matches and picks the fuller copy', () => {
+    const { clock, recorder } = harness();
+    recorder.record('order:move', 'click');
+    const snap = recorder.snapshot();
+    clock.tick = 30;
+    recorder.record('order:stop', 'click');
+    const done = recorder.finish('defeat', 'x', null);
+    expect(traceKey(snap)).toBe(traceKey(done));
+    expect(traceKey({ player: 'Michal', startedAt: done.startedAt })).not.toBe(traceKey(done));
+    expect(moreCompleteTrace(snap, done)).toBe(done);
+    expect(moreCompleteTrace(done, snap)).toBe(done);
+    expect(moreCompleteTrace(done, { ...done, events: [...done.events, ...done.events] }).events).toHaveLength(4);
   });
 });
 
@@ -172,6 +190,26 @@ describe('active trace hooks', () => {
       ]);
     } finally {
       setActiveTrace(null);
+      noteInput('pointer');
+    }
+  });
+
+  it('take a held key repeating for the input it was, not a new key press', () => {
+    const target = new EventTarget();
+    const uninstall = installTraceInputSource(target as unknown as Window);
+    const fire = (type: string, props: object) => target.dispatchEvent(Object.assign(new Event(type), props));
+    try {
+      fire('keydown', { key: 'w', repeat: false });
+      expect(currentVia()).toBe('hotkey');
+      fire('pointerdown', { pointerType: 'mouse' });
+      fire('keydown', { key: 'w', repeat: true });
+      expect(currentVia()).toBe('click');
+      fire('keydown', { key: 'Shift', repeat: false });
+      expect(currentVia()).toBe('click');
+      fire('pointerdown', { pointerType: 'touch' });
+      expect(currentVia()).toBe('touch');
+    } finally {
+      uninstall();
       noteInput('pointer');
     }
   });

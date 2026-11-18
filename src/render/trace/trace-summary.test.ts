@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TraceRecorder, type PlayerTrace, type TraceFeature } from './player-trace';
-import { formatClock, formatTraceSummary, summarizeTraces } from './trace-summary';
+import { dedupeTraces, formatClock, formatTraceSummary, summarizeTraces } from './trace-summary';
 
 const CATALOG: TraceFeature[] = [
   { id: 'build:HOUSE', label: 'House' },
@@ -104,6 +104,22 @@ describe('summarizeTraces', () => {
     expect(text).toContain('[build] Stable');
     expect(text).toContain('[group] Assign control group');
     expect(text).toMatch(/3 +resources +Not enough wood for House/);
+  });
+
+  it('counts a match found in several files once', () => {
+    const again = summarizeTraces([dominik, michal, structuredClone(dominik), structuredClone(michal)]);
+    expect(again.duplicates).toBe(2);
+    expect(again.traces).toHaveLength(2);
+    expect(again.used.find((u) => u.id === 'build:HOUSE')!.uses).toBe(3);
+    expect(again.via).toEqual(s.via);
+    expect(again.failures[0]!.count).toBe(3);
+    expect(formatTraceSummary(again)).toContain('Traces: 2 (2 duplicate copies left out)');
+  });
+
+  it('keeps the most complete copy of a match', () => {
+    const snapshot = { ...structuredClone(dominik), outcome: 'unfinished' as const, events: dominik.events.slice(0, 1) };
+    expect(dedupeTraces([snapshot, dominik])).toEqual([dominik]);
+    expect(dedupeTraces([dominik, snapshot])).toEqual([dominik]);
   });
 
   it('marks a resumed match', () => {

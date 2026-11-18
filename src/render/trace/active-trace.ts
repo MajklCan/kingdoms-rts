@@ -34,6 +34,8 @@ export function currentVia(): TraceVia {
 /** Watch raw input on `target` (the window). Returns the uninstaller. */
 export function installTraceInputSource(target: Window): () => void {
   const onKey = (ev: KeyboardEvent) => {
+    // A held key (WASD panning) repeats every ~30 ms: only its first press is input.
+    if (ev.repeat) return;
     // Modifiers alone (Shift for a queued click) are not the action.
     if (ev.key === 'Shift' || ev.key === 'Control' || ev.key === 'Alt' || ev.key === 'Meta') return;
     noteInput('key');

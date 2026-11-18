@@ -220,12 +220,37 @@ function structuredCloneStats(stats: PlayerMatchStats): PlayerMatchStats {
   return JSON.parse(JSON.stringify(stats)) as PlayerMatchStats;
 }
 
+/**
+ * One match of one player: the same trace downloaded twice (or saved, then
+ * downloaded again in a bundle) has the same key.
+ */
+export function traceKey(trace: Pick<PlayerTrace, 'player' | 'startedAt'>): string {
+  return `${trace.player}\u0000${trace.startedAt}`;
+}
+
+/**
+ * Of two copies of one match's trace, the more complete: a finished one over
+ * an unfinished snapshot, then the one with more events, then the later end.
+ */
+export function moreCompleteTrace(a: PlayerTrace, b: PlayerTrace): PlayerTrace {
+  const done = (t: PlayerTrace) => (t.outcome === 'unfinished' ? 0 : 1);
+  const order = done(b) - done(a) || b.events.length - a.events.length || b.endTick - a.endTick;
+  return order > 0 ? b : a;
+}
+
+function fileStamp(d: Date): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
+}
+
 /** Download file name: local start time, player and mode, safe on every filesystem. */
 export function traceFileName(trace: PlayerTrace): string {
-  const d = new Date(trace.startedAt);
-  const two = (n: number) => String(n).padStart(2, '0');
-  const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
   const who = trace.player.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'player';
   const suffix = trace.outcome === 'unfinished' ? '-unfinished' : '';
-  return `kingdoms-trace-${stamp}-${who}-${trace.mode}${suffix}.json`;
+  return `kingdoms-trace-${fileStamp(new Date(trace.startedAt))}-${who}-${trace.mode}${suffix}.json`;
+}
+
+/** File name of the saved traces downloaded together (a JSON array of traces). */
+export function traceBundleFileName(now: Date): string {
+  return `kingdoms-trace-saved-${fileStamp(now)}.json`;
 }

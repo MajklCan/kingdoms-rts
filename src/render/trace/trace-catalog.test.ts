@@ -1,14 +1,33 @@
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { UnitStanceId } from '@sim/components';
 import { BuildingDefId, UnitDefId } from '@sim/defs';
 import { TECH_TREE, TechId } from '@sim/tech-tree';
 import type { SimInput } from '@sim/world';
+import { BUILD_BUTTON_MODES } from '../hud/action-grid';
 import { UI_FEATURES, buildTraceCatalog, commandFeature } from './trace-catalog';
 
-const MODES = ['LUMBER_CAMP', 'STONE_QUARRY', 'HOUSE', 'BARRACKS', 'GOLD_MINE', 'STABLE', 'FARM', 'MILL', 'FOUNDRY', 'DEFENSIVE_TOWER', 'WALL'];
+/**
+ * Every SimInput type the render and UI code builds as a literal
+ * (`type: 'moveSelected'`): the commands a player can send. Literals that
+ * are not commands (button types, gesture kinds) fall through
+ * commandFeature to its `cmd:` fallback and are left out.
+ */
+function commandsInSource(): string[] {
+  const found = new Set<string>();
+  for (const root of ['../', '../../ui/']) {
+    const dir = new URL(root, import.meta.url);
+    for (const rel of readdirSync(dir, { recursive: true }) as string[]) {
+      if (!rel.endsWith('.ts') || rel.endsWith('.test.ts') || rel.startsWith('trace/')) continue;
+      const source = readFileSync(new URL(rel, dir), 'utf8');
+      for (const m of source.matchAll(/type: '([A-Za-z]+)'/g)) found.add(m[1]!);
+    }
+  }
+  return [...found].filter((type) => !commandFeature({ type } as SimInput).feature.startsWith('cmd:')).sort();
+}
 
 describe('trace catalog', () => {
-  const catalog = buildTraceCatalog(MODES);
+  const catalog = buildTraceCatalog(BUILD_BUTTON_MODES);
   const ids = new Set(catalog.map((f) => f.id));
 
   it('lists each feature once with a label', () => {
@@ -17,11 +36,10 @@ describe('trace catalog', () => {
   });
 
   it('offers exactly the buildings on the build buttons', () => {
-    for (const mode of MODES) {
-      expect(ids.has(`build:${mode}`)).toBe(true);
-      expect(ids.has(`build-arm:${mode}`)).toBe(true);
-    }
-    expect(ids.has('build:ARCHERY_RANGE')).toBe(false);
+    expect(BUILD_BUTTON_MODES.length).toBeGreaterThan(5);
+    const built = catalog.filter((f) => f.id.startsWith('build:')).map((f) => f.id.slice('build:'.length));
+    expect(built.sort()).toEqual([...BUILD_BUTTON_MODES].sort());
+    for (const mode of BUILD_BUTTON_MODES) expect(ids.has(`build-arm:${mode}`)).toBe(true);
     expect(ids.has('build:TOWN_CENTER')).toBe(false);
   });
 
@@ -39,7 +57,7 @@ describe('trace catalog', () => {
   });
 
   it('has a catalog entry for every command the HUD sends', () => {
-    // One of each SimInput type the render layer dispatches.
+    // One of each SimInput type the render and UI code sends (checked against the source below).
     const sent: SimInput[] = [
       { type: 'moveSelected', to: { x: 1, y: 1 } },
       { type: 'moveSelected', to: { x: 1, y: 1 }, queue: true },
@@ -66,6 +84,11 @@ describe('trace catalog', () => {
       { type: 'cancelProduction', atEid: 4, playerId: 1, slot: 0 },
       { type: 'researchTech', playerId: 1, techId: TechId.ARCHERS },
     ];
+    const sampled = new Set<string>(sent.map((input) => input.type));
+    const inSource = commandsInSource();
+    expect(inSource).toEqual(expect.arrayContaining(['moveSelected', 'placeBuilding', 'trainUnit', 'researchTech']));
+    const missing = inSource.filter((type) => !sampled.has(type));
+    expect(missing, 'commands the HUD sends without a sample here').toEqual([]);
     for (const input of sent) {
       const { feature, queued } = commandFeature(input);
       expect(ids.has(feature), `${input.type} -> ${feature}`).toBe(true);

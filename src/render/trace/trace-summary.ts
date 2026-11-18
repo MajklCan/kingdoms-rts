@@ -2,10 +2,11 @@
  * Report over one or more player traces: how often each feature was used,
  * hotkey vs click vs touch, when it first came up, who used it, which
  * features nobody touched and which actions the game refused. Pure: the
- * report script runs it in node.
+ * report script runs it in node. Copies of one match's trace (a file
+ * downloaded twice, a saved-traces bundle next to the single file) count once.
  */
 
-import { TRACE_VIAS, featureGroup, type PlayerTrace, type TraceVia } from './player-trace';
+import { TRACE_VIAS, featureGroup, moreCompleteTrace, traceKey, type PlayerTrace, type TraceVia } from './player-trace';
 
 export type ViaCounts = Record<TraceVia, number>;
 
@@ -45,6 +46,8 @@ export interface FailureCount {
 
 export interface TraceSummary {
   traces: TraceHeader[];
+  /** Copies of an already counted trace that were left out. */
+  duplicates: number;
   players: string[];
   via: ViaCounts;
   viaByPlayer: Record<string, ViaCounts>;
@@ -57,7 +60,19 @@ export interface TraceSummary {
 
 const emptyVia = (): ViaCounts => ({ hotkey: 0, click: 0, touch: 0 });
 
-export function summarizeTraces(traces: readonly PlayerTrace[]): TraceSummary {
+/** One trace per player and match, the most complete copy, in first-seen order. */
+export function dedupeTraces(traces: readonly PlayerTrace[]): PlayerTrace[] {
+  const byKey = new Map<string, PlayerTrace>();
+  for (const t of traces) {
+    const key = traceKey(t);
+    const seen = byKey.get(key);
+    byKey.set(key, seen ? moreCompleteTrace(seen, t) : t);
+  }
+  return [...byKey.values()];
+}
+
+export function summarizeTraces(input: readonly PlayerTrace[]): TraceSummary {
+  const traces = dedupeTraces(input);
   const labels = new Map<string, string>();
   for (const trace of traces) for (const f of trace.catalog) if (!labels.has(f.id)) labels.set(f.id, f.label);
 
@@ -141,6 +156,7 @@ export function summarizeTraces(traces: readonly PlayerTrace[]): TraceSummary {
       truncated: t.truncated,
       resumed: t.resumed === true,
     })),
+    duplicates: input.length - traces.length,
     players,
     via,
     viaByPlayer,
@@ -168,7 +184,7 @@ function pad(text: string, width: number): string {
 
 export function formatTraceSummary(s: TraceSummary, opts: { maxFailures?: number } = {}): string {
   const lines: string[] = [];
-  lines.push(`Traces: ${s.traces.length}`);
+  lines.push(`Traces: ${s.traces.length}${s.duplicates > 0 ? ` (${s.duplicates} duplicate copies left out)` : ''}`);
   for (const t of s.traces) {
     const notes = [t.resumed ? 'resumed' : '', t.truncated ? 'TRUNCATED' : ''].filter(Boolean).join(', ');
     lines.push(

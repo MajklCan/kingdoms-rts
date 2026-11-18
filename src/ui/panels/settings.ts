@@ -1,6 +1,6 @@
 /**
  * Settings: Audio (mute + per-channel volume), Game (speed, interface
- * scale, input mode, performance mode, fullscreen) and Controls (touch
+ * scale, input mode, performance mode, play traces, fullscreen) and Controls (touch
  * gestures and hotkey reference). Opens from the main menu and the pause
  * menu. Audio values live in the AudioManager (which persists them); the
  * rest persists in localStorage.
@@ -15,6 +15,7 @@ import { icon } from '../icons/icon';
 import { syncPixelScale } from '../skin/pixel-scale';
 import { buildFullscreenButton, canFullscreen } from '../touch/fullscreen';
 import { setStoredInputPref, setStoredPerfPref, storedInputPref, storedPerfPref } from '../touch/touch-mode';
+import { downloadSavedTraces, isTraceAutoDownloadOn, savedTraceCount, setTraceAutoDownloadOn } from '../trace/trace-files';
 import { createModal, type Modal } from './modal';
 
 export type SettingsTab = 'audio' | 'game' | 'controls';
@@ -105,6 +106,9 @@ const sliders = new Map<string, { input: HTMLInputElement; out: HTMLOutputElemen
 let muteSwitch: HTMLButtonElement | null = null;
 let audioNote: HTMLElement | null = null;
 let speedInputs: HTMLInputElement[] = [];
+let traceSwitch: HTMLButtonElement | null = null;
+let traceSaved: HTMLButtonElement | null = null;
+let traceSavedLabel: HTMLElement | null = null;
 
 /**
  * Touch with no stored choice: a step up ("Large") where the automatic fit
@@ -148,6 +152,43 @@ function refreshGame(): void {
   const scene = getScene();
   const speed = scene?.getGameSpeed() ?? 1;
   for (const input of speedInputs) input.checked = Number(input.value) === speed;
+  refreshTraces();
+}
+
+function refreshTraces(): void {
+  if (traceSwitch) traceSwitch.setAttribute('aria-checked', String(isTraceAutoDownloadOn()));
+  if (!traceSaved || !traceSavedLabel) return;
+  const count = savedTraceCount();
+  traceSaved.disabled = count === 0;
+  traceSavedLabel.textContent = `Download saved traces (${count})`;
+}
+
+function buildTraceField(): HTMLElement {
+  traceSwitch = h(
+    'button',
+    { type: 'button', class: 'switch', role: 'switch', 'aria-checked': 'false', id: 'settings-trace-auto' },
+    h('span', { class: 'switch-track', 'aria-hidden': 'true' }),
+    'Save a play trace after every match'
+  );
+  traceSwitch.addEventListener('click', () => {
+    setTraceAutoDownloadOn(!isTraceAutoDownloadOn());
+    refreshTraces();
+  });
+  traceSavedLabel = h('span', null, 'Download saved traces');
+  traceSaved = h('button', { type: 'button', class: 'btn btn-ink', id: 'settings-trace-saved' }, icon('download'), traceSavedLabel);
+  traceSaved.addEventListener('click', () => downloadSavedTraces());
+  return h(
+    'fieldset',
+    { class: 'field' },
+    h('legend', { class: 'field-label' }, 'Play traces'),
+    traceSwitch,
+    traceSaved,
+    h(
+      'p',
+      { class: 'field-note' },
+      'This device keeps which commands and buttons you used in your last 3 skirmish and multiplayer matches. On: every match also downloads its trace as a file when it ends.'
+    )
+  );
 }
 
 function buildAudioPanel(): HTMLElement {
@@ -215,6 +256,7 @@ function buildGamePanel(): HTMLElement {
     h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Interface size'), scale, h('p', { class: 'field-note' }, 'Scales every menu and HUD element on top of the automatic fit to your screen.')),
     segField<InputModePref>('Input', 'settings-input', INPUT_CHOICES, storedInputPref(), setStoredInputPref, 'Touch shows on-screen buttons and bigger targets. Auto follows the last thing you pressed with.'),
     segField<PerfModePref>('Performance mode', 'settings-perf', PERF_CHOICES, storedPerfPref(), setStoredPerfPref, 'Fewer particles and no ambient life (birds, smoke, swaying trees). Auto turns it on when a touch screen runs slow.'),
+    buildTraceField(),
     canFullscreen() ? h('div', { class: 'field' }, fullscreen) : null
   );
 }
