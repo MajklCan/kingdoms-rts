@@ -40,7 +40,7 @@ export function generateSudomerPondsMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
       map.elevation[idx] = edge < 5 ? 4 : 3;
     }
@@ -81,7 +81,7 @@ function paintSudomerPond(
 ): void {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const d = ellipseDistance(x, y, pond.cx, pond.cy, pond.rx, pond.ry);
       const ripple =
         dsin(x * 0.34 + y * 0.17) * 0.035 +
@@ -119,8 +119,8 @@ function paintSudomerRightMud(
 
   for (let y = 0; y <= edgeBandBottom; y++) {
     for (let x = mudMinX; x < W; x++) {
-      if (!inBounds(x, y)) continue;
-      const idx = mapIndex(x, y);
+      if (!inBounds(map, x, y)) continue;
+      const idx = mapIndex(map, x, y);
       if (isWaterTile(map.tiles[idx])) continue;
       const pondD = ellipseDistance(x, y, rightPond.cx, rightPond.cy, rightPond.rx, rightPond.ry);
       const routeD = pointSegmentDistance(
@@ -156,8 +156,8 @@ function carveSudomerDryChoke(map: MapData): void {
   const maxY = Math.round(H * 0.80);
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
-      if (!inBounds(x, y)) continue;
-      const idx = mapIndex(x, y);
+      if (!inBounds(map, x, y)) continue;
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = Math.abs(x - Math.round((minX + maxX) / 2)) <= 1
         ? TileType.DIRT
         : TileType.GRASS;
@@ -173,7 +173,7 @@ function carveSudomerTownSite(map: MapData, town: { x: number; y: number }): voi
   const maxY = Math.min(H - 2, town.y + 14);
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = isSudomerTownRoad(x, y, town)
         ? TileType.DIRT
         : TileType.GRASS;

@@ -12,7 +12,6 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import { Building, Health, Owner } from '../components';
 import { getBuildingDef } from '../defs';
 import { sortedEids } from '../core/entities';
@@ -50,8 +49,8 @@ export function findAiBreachTarget(
   from: GridPos,
   targetEid: number
 ): number | null {
-  const W = MAP.WIDTH;
-  const H = MAP.HEIGHT;
+  const W = world.map.width;
+  const H = world.map.height;
   const sx = Math.round(from.x);
   const sy = Math.round(from.y);
   if (sx < 0 || sy < 0 || sx >= W || sy >= H) return null;

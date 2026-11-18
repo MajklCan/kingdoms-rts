@@ -121,7 +121,7 @@ export class PointerController {
     if (placement.mode !== 'none' && pointer.leftButtonDown() && placement.refuseClick(tx, ty)) return;
     const wasRallyMode = placement.armyRallyMode;
     if (placement.handlePointerDown(pointer, tx, ty)) {
-      if (wasRallyMode && pointer.leftButtonDown() && isInsideMap(tx, ty)) {
+      if (wasRallyMode && pointer.leftButtonDown() && isInsideMap(this.ctx.world, tx, ty)) {
         this.feedback?.orderMarker('rally', tx, ty);
         commands.confirm('Army rally point set');
       }

@@ -21,6 +21,7 @@ import {
 import { AgeId, BuildingDefId, getBuildingDef } from '../defs';
 import type { GridPos } from '../pathfinding';
 import { compareDeterministicEids } from '../core/entities';
+import { POP_CAP_HARD_LIMIT } from '../core/constants';
 import { findSpawnSpot } from '../core/grid';
 import type { AiPlayerState, SimWorld } from '../core/types';
 import { isTargetInAttackRange, isValidHostileTarget } from '../systems/targeting';
@@ -125,7 +126,7 @@ export function aiManageAttackPlan(
     return;
   }
 
-  const required = aiRequiredWaveSize(world, playerId);
+  const required = Math.min(aiRequiredWaveSize(world, playerId), aiArmyRoom(world, playerId, snapshot));
   const cooling = world.tick < state.nextAttackTick && !ahead;
   if (cooling || snapshot.myMilitary.length < required) {
     if (state.plan !== 'opening') state.plan = 'massing';
@@ -198,13 +199,32 @@ function isIdleMilitary(world: SimWorld, eid: number): boolean {
   return !hasComponent(world.ecs, AttackMoveGoal, eid) || AttackMoveGoal.active[eid] === 0;
 }
 
+/**
+ * Most population slots the AI keeps free for soldiers: its workforce stops
+ * growing this far below the population maximum (see aiWorkerCap).
+ */
+export const AI_ARMY_POP_RESERVE_MAX = 24;
+
 export function aiRequiredWaveSize(world: SimWorld, playerId: number): number {
   const settings = aiSettings(world);
   const base = (world.ages[playerId]?.current ?? AgeId.DARK) >= AgeId.CASTLE
     ? settings.castleWaveSize
     : settings.darkWaveSize;
   const growth = Math.floor(Math.max(0, aiElapsedMinutes(world) - 3) * settings.waveGrowthPerMinute);
-  return Math.min(settings.maxWaveUnits, base + growth);
+  // Never more than the army the population leaves room for: a long game
+  // (large maps) used to grow the wave past it, and the AI then massed forever.
+  return Math.min(settings.maxWaveUnits, AI_ARMY_POP_RESERVE_MAX, base + growth);
+}
+
+/**
+ * Soldiers the population maximum still leaves room for next to the current
+ * workforce. Worksite workers can push the workforce past aiWorkerCap, and
+ * an AI that needed more soldiers than fit then massed for the rest of a
+ * long game without ever attacking.
+ */
+function aiArmyRoom(world: SimWorld, playerId: number, snapshot: AiSnapshot): number {
+  const workers = (world.population[playerId]?.current ?? 0) - snapshot.myMilitary.length;
+  return Math.max(3, POP_CAP_HARD_LIMIT - workers);
 }
 
 function aiSelectWaveUnits(world: SimWorld, units: number[], rally: GridPos): number[] {

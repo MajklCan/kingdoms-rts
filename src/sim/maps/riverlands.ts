@@ -222,5 +222,5 @@ export function generateRiverlandsMap(rng: Rng): MapData {
   spawns.push(findClearSpawn(Math.round(W * 0.18), Math.round(H * 0.78)));
   spawns.push(findClearSpawn(Math.round(W * 0.82), Math.round(H * 0.22)));
 
-  return { tiles, elevation, bridgePositions, walkability, spawns, features: [] };
+  return { width: W, height: H, tiles, elevation, bridgePositions, walkability, spawns, features: [] };
 }

@@ -301,7 +301,7 @@ export class PlayerCommands {
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
     const noBuilder = this.builderFailure();
     if (noBuilder) return noBuilder;
-    if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
+    if (!isInsideMap(this.ctx.world, tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
     const startFailure = this.nextPlacementFailure(defId, pending);
     if (startFailure) return startFailure;
     if (!isPlacementInSight(world, playerId, def, tx, ty)) {

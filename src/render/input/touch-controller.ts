@@ -285,7 +285,7 @@ export class TouchController {
       if (drag) return;
       const wasRally = placement.armyRallyMode;
       placement.rallyAt(tile.x, tile.y);
-      if (wasRally && isInsideMap(tile.x, tile.y)) {
+      if (wasRally && isInsideMap(this.ctx.world, tile.x, tile.y)) {
         this.feedback?.orderMarker('rally', tile.x, tile.y);
         commands.confirm('Army rally point set');
       }
@@ -406,6 +406,6 @@ export class TouchController {
   private tileAt(clientX: number, clientY: number): { x: number; y: number } | null {
     const w = this.toWorld(clientX, clientY);
     const { tx, ty } = this.ctx.pickTile(w.x, w.y);
-    return isInsideMap(tx, ty) ? { x: tx, y: ty } : null;
+    return isInsideMap(this.ctx.world, tx, ty) ? { x: tx, y: ty } : null;
   }
 }

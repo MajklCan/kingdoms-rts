@@ -3,7 +3,10 @@
  */
 
 import type { Rng } from '../rng';
+import { generateAdrspachRockTownMap } from './adrspach';
 import { generateKrkonoseWinterCrownMap } from './krkonose';
+import { generateMilesovkaUplandsMap } from './milesovka';
+import { generateMoravskyKrasMap } from './moravsky-kras';
 import {
   generateBlanikNightWatchMap,
   generateBohemianBorderForestMap,
@@ -70,6 +73,24 @@ export const MAP_DEFS: MapDef[] = [
     description: 'A night battle around the wooded hill of the sleeping knights. Torches light only a short way, so scouts and towers are your eyes.',
     night: true,
   },
+  {
+    id: MapId.MILESOVKA_UPLANDS,
+    name: 'Milešovka Uplands',
+    description: 'A large map of volcanic cones. Milešovka blocks the middle; brooks, fords, and two saddles decide the way across.',
+    large: true,
+  },
+  {
+    id: MapId.ADRSPACH_ROCK_TOWN,
+    name: 'Adršpach Rock Town',
+    description: 'A large map split by a maze of sandstone towers. Narrow lanes, a central glade, and quarry lakes with gold.',
+    large: true,
+  },
+  {
+    id: MapId.MORAVSKY_KRAS,
+    name: 'Moravský Kras',
+    description: 'A large karst plateau around the Macocha abyss. Walled gorges on the flanks are fast hidden roads with gold in their caves.',
+    large: true,
+  },
 ];
 
 /** Whether a map is played at night when the setup does not say. */
@@ -111,6 +132,12 @@ export function generateMap(rng: Rng, mapId: MapIdValue = MapId.RIVERLANDS): Map
       return generateFloodedBasinMap();
     case MapId.BLANIK_NIGHT_WATCH:
       return generateBlanikNightWatchMap();
+    case MapId.MILESOVKA_UPLANDS:
+      return generateMilesovkaUplandsMap();
+    case MapId.ADRSPACH_ROCK_TOWN:
+      return generateAdrspachRockTownMap();
+    case MapId.MORAVSKY_KRAS:
+      return generateMoravskyKrasMap();
     default:
       return generateRiverlandsMap(rng);
   }

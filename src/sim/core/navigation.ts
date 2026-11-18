@@ -4,7 +4,6 @@
 
 import { dcos, dhypot, dsin } from './dmath';
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import {
   Building,
   Gatherer,
@@ -119,7 +118,7 @@ function resourceApproachCandidates(
     for (let dx = -1; dx <= 1; dx++) {
       const tx = cx + dx;
       const ty = cy + dy;
-      if (!isTileInMap(tx, ty)) continue;
+      if (!isTileInMap(world, tx, ty)) continue;
       if (world.map.walkability[ty][tx] !== 0) continue;
       const key = `${tx},${ty}`;
       if (seen.has(key)) continue;
@@ -252,7 +251,7 @@ export function buildingApproachCandidates(
       if (tx >= rect.tileX0 && tx <= rect.tileX1 && ty >= rect.tileY0 && ty <= rect.tileY1) {
         continue;
       }
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) continue;
+      if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) continue;
       if (world.map.walkability[ty][tx] !== 0) continue;
 
       const edgeX = clamp(tx, rect.minX, rect.maxX);

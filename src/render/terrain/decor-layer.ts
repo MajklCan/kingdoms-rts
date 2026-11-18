@@ -7,7 +7,6 @@
  */
 
 import { TileType, type MapData } from '@sim/map-gen';
-import { MAP } from '../../config';
 import { reducedMotion } from '../effects/motion-prefs';
 import { performanceMode } from '../effects/perf-mode';
 import type { Occupancy } from '../entities/occupancy';
@@ -121,10 +120,10 @@ export class DecorLayer {
     this.destroy();
     if (!art || !names) return;
     const placed: Array<{ x: number; y: number; frame: ArtFrame; sx: number; sy: number }> = [];
-    for (let y = 0; y < MAP.HEIGHT; y++) {
-      for (let x = 0; x < MAP.WIDTH; x++) {
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
         if (map.walkability[y]?.[x] !== 0) continue;
-        const tile = map.tiles[y * MAP.WIDTH + x];
+        const tile = map.tiles[y * map.width + x];
         if (tile === TileType.BRIDGE || tile === TileType.WATER || tile === TileType.WATER_SHALLOW) continue;
         const frame = this.pick(map, names, art, x, y, seed);
         if (!frame) continue;
@@ -132,7 +131,7 @@ export class DecorLayer {
         // voxel steps (2 px across, 1 px down) keep the art on the pixel lattice.
         const jx = Math.round((tileHash01(x, y, seed ^ 0x51) - 0.5) * 11) * 2;
         const jy = Math.round((tileHash01(x, y, seed ^ 0x52) - 0.5) * 9);
-        const e = map.elevation[y * MAP.WIDTH + x];
+        const e = map.elevation[y * map.width + x];
         const sx = (x - y) * 32 + jx;
         const sy = (x + y) * 16 + 16 - e * 4 + jy;
         placed.push({ x, y, frame, sx, sy });
@@ -224,7 +223,7 @@ export class DecorLayer {
     y: number,
     seed: number
   ): ArtFrame | null {
-    const name = names[y * MAP.WIDTH + x];
+    const name = names[y * map.width + x];
     const roll = tileHash01(x, y, seed ^ 0xdec0);
     if (REED_TERRAIN.has(name) && touchesWater(map, x, y)) {
       return roll < REED_CHANCE ? art.frame('decor.reeds', 'default') : null;
@@ -245,8 +244,8 @@ function touchesWater(map: MapData, x: number, y: number): boolean {
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
     const nx = x + dx;
     const ny = y + dy;
-    if (nx < 0 || ny < 0 || nx >= MAP.WIDTH || ny >= MAP.HEIGHT) continue;
-    const t = map.tiles[ny * MAP.WIDTH + nx];
+    if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+    const t = map.tiles[ny * map.width + nx];
     if (t === TileType.WATER || t === TileType.WATER_SHALLOW) return true;
   }
   return false;

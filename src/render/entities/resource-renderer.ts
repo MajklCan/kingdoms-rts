@@ -14,7 +14,7 @@
  */
 
 import { entityExists, hasComponent } from 'bitecs';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import { GameAnimal, Position, Resource, ResourceKindId } from '@sim/components';
 import { CampaignMissionId } from '@sim/campaign';
 import { MapFeatureKind, TileType, type MapFeature } from '@sim/map-gen';
@@ -146,8 +146,8 @@ export class ResourceRenderer {
 
   /** Tree drawn on a tile this frame. */
   treeViewAt(tileX: number, tileY: number): SpriteView | undefined {
-    if (tileX < 0 || tileY < 0 || tileX >= MAP.WIDTH || tileY >= MAP.HEIGHT) return undefined;
-    const eid = this.treeByTile.get(tileY * MAP.WIDTH + tileX);
+    if (tileX < 0 || tileY < 0 || tileX >= this.ctx.world.map.width || tileY >= this.ctx.world.map.height) return undefined;
+    const eid = this.treeByTile.get(tileY * this.ctx.world.map.width + tileX);
     return eid === undefined ? undefined : this.resources.get(eid);
   }
 
@@ -208,7 +208,7 @@ export class ResourceRenderer {
       if (kind === ResourceKindId.WOOD) {
         this.treesSeen.add(eid);
         this.trees.set(eid, { x, y, conifer });
-        this.stumps.delete(tileIndex(x, y));
+        this.stumps.delete(tileIndex(this.ctx.world.map.width, x, y));
       }
       if (!this.ctx.isResourceExplored(eid)) continue;
       const ref = this.sprites.resource({
@@ -232,7 +232,7 @@ export class ResourceRenderer {
         if (last !== undefined && amount < last && visible) this.hit(eid, kind, x, y, c, c.y - ref.top, now);
       }
       if (kind === ResourceKindId.WOOD) {
-        this.treeByTile.set(tileIndex(x, y), eid);
+        this.treeByTile.set(tileIndex(this.ctx.world.map.width, x, y), eid);
         const lean = visible ? this.treeLean(eid, x, y, conifer, now, sway) : 0;
         applyLean(view, ref.poses, lean, conifer ? SWAY_CONIFER : SWAY_BROADLEAF);
       } else if (kind === ResourceKindId.GOLD && visible) {
@@ -329,7 +329,7 @@ export class ResourceRenderer {
     for (const [eid, tree] of this.trees) {
       if (this.treesSeen.has(eid)) continue;
       this.trees.delete(eid);
-      this.stumps.set(tileIndex(tree.x, tree.y), {
+      this.stumps.set(tileIndex(this.ctx.world.map.width, tree.x, tree.y), {
         x: Math.round(tree.x),
         y: Math.round(tree.y),
         conifer: tree.conifer,
@@ -383,8 +383,8 @@ export class ResourceRenderer {
   private tileAt(x: number, y: number): number {
     const tx = Math.round(x);
     const ty = Math.round(y);
-    if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return TileType.GRASS;
-    return this.ctx.world.map.tiles[ty * MAP.WIDTH + tx];
+    if (tx < 0 || ty < 0 || tx >= this.ctx.world.map.width || ty >= this.ctx.world.map.height) return TileType.GRASS;
+    return this.ctx.world.map.tiles[ty * this.ctx.world.map.width + tx];
   }
 
   private featureScreenPosition(feature: MapFeature): ScreenPos {
@@ -414,8 +414,8 @@ export class ResourceRenderer {
   }
 }
 
-function tileIndex(x: number, y: number): number {
-  return Math.round(y) * MAP.WIDTH + Math.round(x);
+function tileIndex(width: number, x: number, y: number): number {
+  return Math.round(y) * width + Math.round(x);
 }
 
 /** Lean past this share of the sway amplitude shows the bent pose frame. */

@@ -71,7 +71,7 @@ src/
     systems/           one file per tick system (visibility, production, combat, movement, ...)
     ai/                computer player: difficulty, snapshot, brain, economy, military, attack, breach (picks the wall to knock down)
     missions/          campaign world setup + scripted mission runtime (one file per mission)
-    maps/              map generators; map-gen.ts is their barrel
+    maps/              map generators; map-gen.ts is their barrel; large-kit.ts builds the mirrored 112x112 maps
     save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
     defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE (era names), WALL_TIERS (palisade/stone/brick by research) + canAfford/spend/refund
@@ -120,6 +120,7 @@ index.html             27-line shell; CSS lives in src/ui/styles
 ## Key constants / IDs
 
 - Order queue: move / attack / attack-move / gather inputs with `queue: true` (Shift held) append to `world.orderQueues` (per unit, `ORDER_QUEUE_MAX=8`) instead of replacing the current order; rules in `src/sim/input/order-queue.ts`, system in `src/sim/systems/order-queue.ts`. Checksummed and saved (optional `orderQueues` field).
+- Map size is per map: `world.map.width/height`. Standard maps are `MAP.WIDTH`x`MAP.HEIGHT` (64), the large ones (`MapDef.large`) `MAP.LARGE_SIZE` (112). Use `MAP.WIDTH` only for the standard size (missions, layer origin), never as the size of the current map.
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
 - `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks (one unit per 5 ticks); stone alone is slower, `STONE_GATHER_COOLDOWN=9` (one per 10 ticks, `gatherCooldownForKind`).
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.

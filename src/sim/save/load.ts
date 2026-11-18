@@ -109,6 +109,7 @@ export function loadSimWorldSnapshot(world: SimWorld, saved: AnySavedGame): void
   world.outcome = { ...snapshot.outcome };
   world.campaign = null;
   world.map = {
+    ...savedMapSize(snapshot.map),
     tiles: Uint8Array.from(snapshot.map.tiles),
     elevation: Uint8Array.from(snapshot.map.elevation),
     bridgePositions: snapshot.map.bridgePositions.map((p) => ({ ...p })),
@@ -560,6 +561,18 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/** Map size of a save. Every save before large maps wrote 64 x 64 here; the
+ *  walkability rows are the fallback for a hand-edited or truncated file. */
+function savedMapSize(map: SavedGame['map']): { width: number; height: number } {
+  const height = isPositiveInt(map.height) ? map.height : map.walkability.length;
+  const width = isPositiveInt(map.width) ? map.width : (map.walkability[0]?.length ?? 0);
+  return { width, height };
+}
+
+function isPositiveInt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 function remapEid(savedEid: number, eidMap: Map<number, number>): number {
   if (savedEid < 0) return -1;
   return eidMap.get(savedEid) ?? -1;
@@ -570,7 +583,7 @@ function restoreVisibility(
   snapshot: SavedGame,
   eidMap: Map<number, number>
 ): void {
-  const next = createVisibilityStates();
+  const next = createVisibilityStates(world.map.width, world.map.height);
   for (let playerId = 0; playerId < next.length; playerId++) {
     const saved = snapshot.visibility?.[playerId];
     if (!saved) continue;

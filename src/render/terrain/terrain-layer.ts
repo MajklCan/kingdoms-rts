@@ -7,7 +7,6 @@
  */
 
 import type { MapData } from '@sim/map-gen';
-import { MAP } from '../../config';
 import type { ArtCatalog } from '../sprites/art-catalog';
 import { LINEAR_FILTER } from '../sprites/sprite-registry';
 import { bakeTerrain } from '../voxel/terrain';
@@ -102,8 +101,8 @@ export class TerrainLayer {
     let index = 0;
     // Back-to-front so overlapping chunk edges paint in tile order.
     const order: Array<[number, number]> = [];
-    for (let cy = 0; cy < MAP.HEIGHT / CHUNK_TILES; cy++) {
-      for (let cx = 0; cx < MAP.WIDTH / CHUNK_TILES; cx++) order.push([cx, cy]);
+    for (let cy = 0; cy < Math.ceil(map.height / CHUNK_TILES); cy++) {
+      for (let cx = 0; cx < Math.ceil(map.width / CHUNK_TILES); cx++) order.push([cx, cy]);
     }
     order.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0]);
     for (const [cx, cy] of order) {

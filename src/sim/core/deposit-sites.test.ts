@@ -64,7 +64,7 @@ describe('skirmish deposits', () => {
   it('plans mirrored sites and moves the centre to the shores when the middle is water', () => {
     const p1 = { x: 12, y: 50 };
     const p2 = { x: 51, y: 13 };
-    const open = planDeposits(p1, p2, () => true);
+    const open = planDeposits({ width: 64, height: 64 }, p1, p2, () => true);
     expect(open.center).toEqual({ x: 32, y: 32 });
     expect(open.natural).not.toBeNull();
     expect(open.flanks).toHaveLength(1);
@@ -74,7 +74,7 @@ describe('skirmish deposits', () => {
     const flank = open.flanks[0]!;
     expect(Math.abs(Math.hypot(flank.x - p1.x, flank.y - p1.y) - Math.hypot(flank.x - p2.x, flank.y - p2.y))).toBeLessThan(1.5);
 
-    const lake = planDeposits(p1, p2, (x, y) => Math.hypot(x - 31.5, y - 31.5) > 7);
+    const lake = planDeposits({ width: 64, height: 64 }, p1, p2, (x, y) => Math.hypot(x - 31.5, y - 31.5) > 7);
     expect(lake.center).toBeNull();
     expect(lake.flanks.length).toBe(2);
     // On the shore: most of each field's 5 x 5 is dry land.

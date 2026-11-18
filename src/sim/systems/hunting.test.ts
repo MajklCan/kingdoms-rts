@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import {
   GameAnimal,
   GameAnimalStateId,
@@ -62,8 +61,8 @@ describe('huntable game', () => {
         for (const s of spawns) expect(Math.hypot(s.x - x, s.y - y)).toBeGreaterThanOrEqual(HERD_MIN_SPAWN_DISTANCE - 2);
         const mirror = herd.find(
           (other) =>
-            Position.x[other] === MAP.WIDTH - 1 - x &&
-            Position.y[other] === MAP.HEIGHT - 1 - y &&
+            Position.x[other] === world.map.width - 1 - x &&
+            Position.y[other] === world.map.height - 1 - y &&
             GameAnimal.species[other] === GameAnimal.species[eid]
         );
         expect(mirror, `${mapId} ${x},${y}`).not.toBeUndefined();

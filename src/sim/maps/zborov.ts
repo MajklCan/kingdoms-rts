@@ -35,7 +35,7 @@ export function generateZborovMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const mudPatch = isZborovMudPatch(x, y);
       map.tiles[idx] = mudPatch ? TileType.MUD : TileType.DIRT;
       map.elevation[idx] = mudPatch ? 2 : 3;

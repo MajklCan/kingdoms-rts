@@ -4,10 +4,11 @@
 
 import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import { Health, Position, Resource, ResourceKindId } from '../components';
 import { TileType } from '../map-gen';
 import { TREE_EDGE_BAND_TILES, TREE_REGEN_BUILDING_CLEARANCE } from '../core/constants';
+import { scaleByMapArea } from '../core/map-size';
 import { isResourceTerrainTile } from '../core/create-world';
 import { distToBuildingEdge } from '../core/grid';
 import { findResourceAt, hasMapFeatureAt } from '../core/lookup';
@@ -25,8 +26,8 @@ const TREE_REGEN_CHANCE_PER_NEARBY_TREE = 0.006;
 const TREE_REGEN_EDGE_PRESSURE_BONUS = 2.5;
 const TREE_REGEN_MAX_CHANCE = 0.08;
 
-export function edgeProximity01(x: number, y: number): number {
-  const edgeDistance = Math.min(x, y, MAP.WIDTH - 1 - x, MAP.HEIGHT - 1 - y);
+export function edgeProximity01(world: SimWorld, x: number, y: number): number {
+  const edgeDistance = Math.min(x, y, world.map.width - 1 - x, world.map.height - 1 - y);
   if (edgeDistance >= TREE_EDGE_BAND_TILES) return 0;
   return (TREE_EDGE_BAND_TILES - edgeDistance) / TREE_EDGE_BAND_TILES;
 }
@@ -48,9 +49,9 @@ function canTreeGrowAt(
   y: number,
   buildingClearance: number
 ): boolean {
-  if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return false;
+  if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) return false;
   if (world.map.walkability[y][x] !== 0) return false;
-  const tile = world.map.tiles[y * MAP.WIDTH + x];
+  const tile = world.map.tiles[y * world.map.width + x];
   if (!isResourceTerrainTile(tile)) return false;
   if (
     tile !== TileType.GRASS
@@ -101,19 +102,22 @@ function countNearbyTrees(
 
 export function forestRegrowthSystem(world: SimWorld): void {
   if (world.tick === 0 || world.tick % TREE_REGEN_INTERVAL_TICKS !== 0) return;
-  if (countWoodNodes(world) >= TREE_REGEN_MAX_WOOD_NODES) return;
+  // A large map gets proportionally more trees and more growth attempts.
+  const maxWoodNodes = scaleByMapArea(world.map, TREE_REGEN_MAX_WOOD_NODES);
+  if (countWoodNodes(world) >= maxWoodNodes) return;
 
-  for (let i = 0; i < TREE_REGEN_CANDIDATES_PER_PASS; i++) {
-    if (countWoodNodes(world) >= TREE_REGEN_MAX_WOOD_NODES) return;
+  const candidates = scaleByMapArea(world.map, TREE_REGEN_CANDIDATES_PER_PASS);
+  for (let i = 0; i < candidates; i++) {
+    if (countWoodNodes(world) >= maxWoodNodes) return;
 
-    const x = world.rng.int(MAP.WIDTH);
-    const y = world.rng.int(MAP.HEIGHT);
+    const x = world.rng.int(world.map.width);
+    const y = world.rng.int(world.map.height);
     if (!canTreeGrowAt(world, x, y, TREE_REGEN_BUILDING_CLEARANCE)) continue;
 
     const nearbyTrees = countNearbyTrees(world, x, y, TREE_REGEN_RADIUS);
-    const tile = world.map.tiles[y * MAP.WIDTH + x];
+    const tile = world.map.tiles[y * world.map.width + x];
     const forestTileBonus = tile === TileType.FOREST || tile === TileType.SNOW_FOREST ? 1 : 0;
-    const edgeBonus = edgeProximity01(x, y) * TREE_REGEN_EDGE_PRESSURE_BONUS;
+    const edgeBonus = edgeProximity01(world, x, y) * TREE_REGEN_EDGE_PRESSURE_BONUS;
     const growthPressure = nearbyTrees + forestTileBonus + edgeBonus;
     if (growthPressure <= 0) continue;
 
