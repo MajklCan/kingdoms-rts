@@ -315,10 +315,15 @@ export class PlayerCommands {
 
   // ── Production ────────────────────────────────────────────────────────────
 
-  /** Q (slot 0) / E (slot 1): train from the first selected own producer. */
+  /**
+   * Q (slot 0) / E (slot 1): train from the first selected own producer that
+   * has a unit in that slot (several kinds selected: a town center without
+   * an E slot does not stop the barracks behind it).
+   */
   trainHotkey(slot = 0, quiet = false): boolean {
     const world = this.ctx.world;
-    for (const eid of selectedQuery(world.ecs)) {
+    let refusal: CommandFailure | null = null;
+    for (const eid of sortedEids(world, selectedQuery(world.ecs))) {
       if (!hasComponent(world.ecs, Producer, eid)) continue;
       if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
       const buildingDef = BUILDING_TABLE[Building.defId[eid]];
@@ -327,18 +332,18 @@ export class PlayerCommands {
           this.trainAtSelectedProducer(UnitDefId.VILLAGER);
           return true;
         }
-        if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
-        return false;
+        refusal ??= { reason: 'unavailable', text: 'Nothing to train in that slot' };
+        continue;
       }
       const trainIds = buildingDef?.trains ?? [];
       if (trainIds.length === 0) {
-        if (!quiet) this.fail({ reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` });
-        return false;
+        refusal ??= { reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` };
+        continue;
       }
       const idStr = trainIds[slot];
       if (!idStr) {
-        if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
-        return false;
+        refusal ??= { reason: 'unavailable', text: 'Nothing to train in that slot' };
+        continue;
       }
       const unitDefId = UNIT_TABLE.findIndex((u) => u.id === idStr);
       if (unitDefId < 0) return false;
@@ -351,7 +356,7 @@ export class PlayerCommands {
       this.trainAtSelectedProducer(unitDefId);
       return true;
     }
-    if (!quiet) this.fail({ reason: 'unavailable', text: 'Select a building that trains units first' });
+    if (!quiet) this.fail(refusal ?? { reason: 'unavailable', text: 'Select a building that trains units first' });
     return false;
   }
 

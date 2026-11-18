@@ -305,7 +305,8 @@ export class ActionGrid {
     const addWorksiteWorkerAction = () => {
       const unit = UNIT_TABLE[UnitDefId.VILLAGER];
       const affordable = canAfford(unit.cost);
-      const hasSlot = selectedWorksiteEids.some(hasOpenWorksiteWorkerSlot);
+      // A town center selected alongside full worksites still takes the villager.
+      const hasSlot = selectedWorksiteEids.some(hasOpenWorksiteWorkerSlot) || hasTc;
       const hasPopRoom = hasPopulationRoomForUnit(world, playerId, UnitDefId.VILLAGER);
       actions.push({
         id: `train-unit-${UnitDefId.VILLAGER}`,

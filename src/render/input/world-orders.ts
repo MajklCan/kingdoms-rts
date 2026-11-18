@@ -384,6 +384,8 @@ export class WorldOrders {
     const units: number[] = [];
     for (const eid of unitQuery(world.ecs)) {
       if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
+      // Worksite crews take no orders: a box over staffed farms takes the farms.
+      if (hasComponent(world.ecs, WorksiteWorker, eid)) continue;
       const body = this.deps.unitBody?.(eid) ?? null;
       const s = this.screenAnchor(eid);
       const touched = body
@@ -393,6 +395,8 @@ export class WorldOrders {
     }
     const picked = units.length > 0 ? units : this.ownBuildingsInBox(x0, y0, x1, y1);
     const buildings = units.length === 0;
+    // A Shift box that caught nothing keeps what was selected.
+    if (additive && picked.length === 0) return 0;
     if (additive) this.keepOnlyCompatible(buildings);
     else clearSelection(world);
     for (const eid of picked) setSelected(world, eid, true);
