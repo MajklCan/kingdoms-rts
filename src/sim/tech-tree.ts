@@ -3,7 +3,8 @@
  * land) in three rings. Ring I is always open; ring N+1 opens when two paths
  * are "maxed" in ring N (every research of that path lying in ring N is done).
  * Research is instant. Every unit and building past the settlement is
- * unlocked by exactly one research (BUILDING_UNLOCK_TECH / UNIT_UNLOCK_TECH).
+ * unlocked by exactly one research (BUILDING_UNLOCK_TECH / UNIT_UNLOCK_TECH),
+ * except the endless worksites, which come with ring II itself.
  *
  * The highest open ring is also the era the realm's buildings are drawn in:
  * ring I = Dark Age, II = Castle Age, III = Gunpowder Age. The sim writes it
@@ -76,8 +77,8 @@ export const TECH_TREE: readonly TechDef[] = [
   },
   {
     id: TechId.ARCHERS, name: 'Archers', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(300, 200),
-    description: 'Bowmakers for ranged infantry, trained at the barracks and the archery range.',
-    unlocks: ['Archer', 'Archery Range'],
+    description: 'Bowmakers for ranged infantry, trained at the barracks.',
+    unlocks: ['Archer'],
   },
   {
     id: TechId.COMMANDER, name: 'Commander', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(200, 150),
@@ -298,10 +299,13 @@ export function techLockedReason(world: TechStateWorld, playerId: number, techId
 
 // ── What each research unlocks ─────────────────────────────────────────────
 
-/** The research that unlocks each building; absent = part of the settlement. */
+/**
+ * The research that unlocks each building; absent and not part of the
+ * settlement = never buildable. The archery range is retired (archers come
+ * from the barracks); ranges in old saves still stand and train archers.
+ */
 export const BUILDING_UNLOCK_TECH: Readonly<Partial<Record<number, TechIdValue>>> = {
   [BuildingDefId.BARRACKS]: TechId.BARRACKS_PIKEMEN,
-  [BuildingDefId.ARCHERY_RANGE]: TechId.ARCHERS,
   [BuildingDefId.STABLE]: TechId.KNIGHTS,
   [BuildingDefId.GOLD_MINE]: TechId.GOLD_MINES,
   [BuildingDefId.FOUNDRY]: TechId.FOUNDRY,
@@ -309,6 +313,18 @@ export const BUILDING_UNLOCK_TECH: Readonly<Partial<Record<number, TechIdValue>>
   [BuildingDefId.DEFENSIVE_TOWER]: TechId.WATCHTOWERS,
   [BuildingDefId.MILL]: TechId.MILLS,
 };
+
+/**
+ * Mint, brickworks, forester's lodge: open with ring II (Castle Age), not a
+ * research. Every research costs wood and stone, so a realm whose deposits
+ * ran dry could never pay for the one that would save it.
+ */
+const ENDLESS_WORKSITE_BUILDINGS: ReadonlySet<number> = new Set([
+  BuildingDefId.MINT,
+  BuildingDefId.BRICKWORKS,
+  BuildingDefId.FORESTER,
+]);
+export const ENDLESS_WORKSITE_RING: TechRing = 2;
 
 const SETTLEMENT_BUILDINGS: ReadonlySet<number> = new Set([
   BuildingDefId.TOWN_CENTER,
@@ -330,6 +346,7 @@ export const UNIT_UNLOCK_TECH: Readonly<Partial<Record<number, TechIdValue>>> = 
 
 export function isBuildingUnlocked(world: TechStateWorld, playerId: number, defId: number): boolean {
   if (SETTLEMENT_BUILDINGS.has(defId)) return true;
+  if (ENDLESS_WORKSITE_BUILDINGS.has(defId)) return isRingOpen(world, playerId, ENDLESS_WORKSITE_RING);
   const techId = BUILDING_UNLOCK_TECH[defId];
   return techId !== undefined && hasTech(world, playerId, techId);
 }

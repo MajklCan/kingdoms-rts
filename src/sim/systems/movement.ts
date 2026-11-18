@@ -4,7 +4,7 @@
 
 import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import {
   BuildOrder,
   Gatherer,
@@ -129,8 +129,8 @@ function isSegmentPassable(world: SimWorld, eid: number, x: number, y: number, t
 function movementTerrainSpeedMultiplier(world: SimWorld, eid: number): number {
   const tx = Math.round(Position.x[eid]);
   const ty = Math.round(Position.y[eid]);
-  if (!isTileInMap(tx, ty)) return 1;
-  const tile = world.map.tiles[ty * MAP.WIDTH + tx];
+  if (!isTileInMap(world, tx, ty)) return 1;
+  const tile = world.map.tiles[ty * world.map.width + tx];
   // Barbed wire bogs any unit to a crawl - the WW1 kill-zone in front of the
   // machine-gun nests.
   if (tile === TileType.BARBED_WIRE) return ZBOROV_WIRE_SPEED_MULTIPLIER;
@@ -309,7 +309,7 @@ function repathAroundStuckDestination(
         if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
         const x = destX + dx;
         const y = destY + dy;
-        if (!isTileInMap(x, y) || world.map.walkability[y][x] !== 0) continue;
+        if (!isTileInMap(world, x, y) || world.map.walkability[y][x] !== 0) continue;
         const key = `${x},${y}`;
         if (seen.has(key)) continue;
         seen.add(key);

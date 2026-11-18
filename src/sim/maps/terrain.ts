@@ -12,6 +12,8 @@ import {
   type TileTypeValue,
 } from './types';
 
+/** Size of the standard skirmish and campaign maps. A map's own size lives on
+ *  MapData.width/height; generators of standard maps may build with W and H. */
 export const W = MAP.WIDTH;
 export const H = MAP.HEIGHT;
 
@@ -60,17 +62,24 @@ export function ellipseDistance(
   return dhypot(nx, ny);
 }
 
-export function mapIndex(x: number, y: number): number {
-  return y * W + x;
+export function mapIndex(map: MapData, x: number, y: number): number {
+  return y * map.width + x;
 }
 
-export function createBaseMap(tileType: TileTypeValue, elevationLevel: number): MapData {
-  const tiles = new Uint8Array(W * H);
-  const elevation = new Uint8Array(W * H);
+export function createBaseMap(
+  tileType: TileTypeValue,
+  elevationLevel: number,
+  width: number = W,
+  height: number = H
+): MapData {
+  const tiles = new Uint8Array(width * height);
+  const elevation = new Uint8Array(width * height);
   tiles.fill(tileType);
   elevation.fill(clampElevation(elevationLevel));
-  const walkability = Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
+  const walkability = Array.from({ length: height }, () => Array.from({ length: width }, () => 0));
   return {
+    width,
+    height,
     tiles,
     elevation,
     bridgePositions: [],
@@ -80,8 +89,8 @@ export function createBaseMap(tileType: TileTypeValue, elevationLevel: number): 
   };
 }
 
-export function inBounds(x: number, y: number): boolean {
-  return x >= 0 && y >= 0 && x < W && y < H;
+export function inBounds(map: MapData, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < map.width && y < map.height;
 }
 
 export function clampElevation(value: number): number {
@@ -112,11 +121,11 @@ export function carveDryRoad(
   radius: number,
   waterTile: number = TileType.DIRT
 ): void {
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
       const d = pointSegmentDistance(x, y, a.x, a.y, b.x, b.y);
       if (d > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = isWaterTile(map.tiles[idx]) ? waterTile : TileType.DIRT;
       map.elevation[idx] = Math.max(2, Math.min(3, map.elevation[idx]));
     }
@@ -124,11 +133,11 @@ export function carveDryRoad(
 }
 
 export function addVerticalCauseway(map: MapData, centerX: number, radius: number): void {
-  for (let y = 2; y < H - 2; y++) {
+  for (let y = 2; y < map.height - 2; y++) {
     for (let dx = -radius; dx <= radius; dx++) {
       const x = centerX + dx;
-      if (!inBounds(x, y)) continue;
-      const idx = mapIndex(x, y);
+      if (!inBounds(map, x, y)) continue;
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = isWaterTile(map.tiles[idx]) ? TileType.BRIDGE : TileType.DIRT;
       map.elevation[idx] = Math.max(2, map.elevation[idx]);
     }
@@ -138,10 +147,10 @@ export function addVerticalCauseway(map: MapData, centerX: number, radius: numbe
 export function addDryIsland(map: MapData, cx: number, cy: number, radius: number): void {
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const d = dhypot(x - cx, y - cy);
       if (d > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.elevation[idx] = d < radius * 0.6 ? 3 : 2;
       map.tiles[idx] = d < radius * 0.78 ? TileType.GRASS : TileType.SAND;
     }
@@ -159,12 +168,12 @@ export function addForestBlob(
   const effectiveRadius = radius * (0.62 + clampedFullness * 0.38);
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const d = dhypot(x - cx, y - cy);
       const edge = effectiveRadius
         * (1 + dsin((x + cx) * 0.34) * 0.04 + dcos((y - cy) * 0.31) * 0.04);
       if (d > edge) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const tile = map.tiles[idx];
       if (
         isWaterTile(tile)
@@ -189,14 +198,14 @@ export function carveForestClearing(
 ): void {
   for (let y = cy - ry - 1; y <= cy + ry + 1; y++) {
     for (let x = cx - rx - 1; x <= cx + rx + 1; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const nx = (x - cx) / rx;
       const ny = (y - cy) / ry;
       const boundary = nx * nx + ny * ny
         + dsin((x + cx) * 0.27) * 0.045
         + dcos((y - cy) * 0.31) * 0.045;
       if (boundary > 1) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = TileType.GRASS;
       map.elevation[idx] = 3;
     }
@@ -206,10 +215,10 @@ export function carveForestClearing(
 export function addStonePocket(map: MapData, cx: number, cy: number, radius: number): void {
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const d = dhypot(x - cx, y - cy);
       if (d > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       if (map.tiles[idx] === TileType.DIRT) continue;
       map.tiles[idx] = TileType.STONE;
       map.elevation[idx] = d < radius * 0.55 ? 5 : 4;
@@ -236,8 +245,8 @@ export function addMountainRockSpires(
   ];
 
   for (const anchor of anchors) {
-    const x = Math.round(W * anchor.x);
-    const y = Math.round(H * anchor.y);
+    const x = Math.round(map.width * anchor.x);
+    const y = Math.round(map.height * anchor.y);
     if (pointSegmentDistance(x, y, roadStart.x, roadStart.y, roadEnd.x, roadEnd.y) < 6.5) {
       continue;
     }
@@ -260,8 +269,8 @@ function addRockSpireFeature(
         const x = Math.round(cx + dx - (size - 1) / 2);
         const y = Math.round(cy + dy - (size - 1) / 2);
         if (!canPlaceRockSpire(map, x, y, size, roadStart, roadEnd)) continue;
-        forRockSpireFootprint(x, y, size, (tx, ty) => {
-          const idx = mapIndex(tx, ty);
+        forRockSpireFootprint(map, x, y, size, (tx, ty) => {
+          const idx = mapIndex(map, tx, ty);
           map.tiles[idx] = TileType.STONE;
           const centerBoost = dhypot(tx - (x + (size - 1) / 2), ty - (y + (size - 1) / 2)) < size * 0.36;
           map.elevation[idx] = clampElevation(Math.max(map.elevation[idx], centerBoost ? 7 : 6));
@@ -281,7 +290,7 @@ function canPlaceRockSpire(
   roadStart: { x: number; y: number },
   roadEnd: { x: number; y: number }
 ): boolean {
-  if (x < 1 || y < 1 || x + size >= W - 1 || y + size >= H - 1) return false;
+  if (x < 1 || y < 1 || x + size >= map.width - 1 || y + size >= map.height - 1) return false;
   for (const feature of map.features) {
     if (feature.kind !== MapFeatureKind.ROCK_SPIRE) continue;
     if (rockSlicesOverlap(x, y, size, feature.x, feature.y, rockFeatureSize(feature), 2)) {
@@ -290,8 +299,8 @@ function canPlaceRockSpire(
   }
   let stoneOrHighGround = false;
   let canPlace = true;
-  forRockSpireFootprint(x, y, size, (tx, ty) => {
-    const idx = mapIndex(tx, ty);
+  forRockSpireFootprint(map, x, y, size, (tx, ty) => {
+    const idx = mapIndex(map, tx, ty);
     const tile = map.tiles[idx];
     if (
       isWaterTile(tile)
@@ -342,8 +351,8 @@ export function addLindenTreeFeature(map: MapData, cx: number, cy: number): void
 }
 
 function canPlaceLindenTree(map: MapData, x: number, y: number): boolean {
-  if (x < 2 || y < 2 || x >= W - 2 || y >= H - 2) return false;
-  const tile = map.tiles[mapIndex(x, y)];
+  if (x < 2 || y < 2 || x >= map.width - 2 || y >= map.height - 2) return false;
+  const tile = map.tiles[mapIndex(map, x, y)];
   if (tile !== TileType.FOREST && tile !== TileType.GRASS) return false;
   for (const feature of map.features) {
     if (dhypot(feature.x - x, feature.y - y) < 4) return false;
@@ -359,9 +368,9 @@ export function clearSpawnPatch(
 ): void {
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       if (dhypot(x - cx, y - cy) > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = Math.abs(x - cx) + Math.abs(y - cy) <= 1 ? TileType.DIRT : TileType.GRASS;
       map.elevation[idx] = 3;
     }
@@ -370,16 +379,16 @@ export function clearSpawnPatch(
 
 export function applySandFringe(map: MapData): void {
   const next = Uint8Array.from(map.tiles);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const idx = mapIndex(map, x, y);
       if (map.tiles[idx] !== TileType.GRASS) continue;
       let nearWater = false;
       for (let dy = -1; dy <= 1 && !nearWater; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
-          if (!inBounds(x + dx, y + dy)) continue;
-          if (isWaterTile(map.tiles[mapIndex(x + dx, y + dy)])) {
+          if (!inBounds(map, x + dx, y + dy)) continue;
+          if (isWaterTile(map.tiles[mapIndex(map, x + dx, y + dy)])) {
             nearWater = true;
             break;
           }
@@ -392,6 +401,7 @@ export function applySandFringe(map: MapData): void {
 }
 
 function forRockSpireFootprint(
+  map: MapData,
   x: number,
   y: number,
   size: number,
@@ -401,7 +411,7 @@ function forRockSpireFootprint(
     for (let dx = 0; dx < size; dx++) {
       const tx = x + dx;
       const ty = y + dy;
-      if (!inBounds(tx, ty)) continue;
+      if (!inBounds(map, tx, ty)) continue;
       visit(tx, ty);
     }
   }
@@ -412,15 +422,15 @@ function rockFeatureSize(feature: MapFeature): number {
 }
 
 export function rebuildWalkability(map: MapData): void {
-  for (let y = 0; y < H; y++) {
+  for (let y = 0; y < map.height; y++) {
     if (!map.walkability[y]) map.walkability[y] = [];
-    for (let x = 0; x < W; x++) {
-      map.walkability[y][x] = isWaterTile(map.tiles[mapIndex(x, y)]) ? 1 : 0;
+    for (let x = 0; x < map.width; x++) {
+      map.walkability[y][x] = isWaterTile(map.tiles[mapIndex(map, x, y)]) ? 1 : 0;
     }
   }
   for (const feature of map.features) {
     if (feature.kind !== MapFeatureKind.ROCK_SPIRE) continue;
-    forRockSpireFootprint(feature.x, feature.y, rockFeatureSize(feature), (x, y) => {
+    forRockSpireFootprint(map, feature.x, feature.y, rockFeatureSize(feature), (x, y) => {
       map.walkability[y][x] = 1;
     });
   }
@@ -442,9 +452,9 @@ function findClearSpawn(map: MapData, preferX: number, preferY: number): { x: nu
         if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
         const x = preferX + dx;
         const y = preferY + dy;
-        if (x < 4 || y < 4 || x >= W - 4 || y >= H - 4) continue;
+        if (x < 4 || y < 4 || x >= map.width - 4 || y >= map.height - 4) continue;
         if (map.walkability[y][x] !== 0) continue;
-        const tile = map.tiles[mapIndex(x, y)];
+        const tile = map.tiles[mapIndex(map, x, y)];
         if (
           tile !== TileType.GRASS
           && tile !== TileType.DIRT
@@ -464,8 +474,8 @@ function hasNearbyWater(map: MapData, x: number, y: number, radius: number): boo
     for (let dx = -radius; dx <= radius; dx++) {
       const nx = x + dx;
       const ny = y + dy;
-      if (!inBounds(nx, ny)) continue;
-      if (isWaterTile(map.tiles[mapIndex(nx, ny)])) return true;
+      if (!inBounds(map, nx, ny)) continue;
+      if (isWaterTile(map.tiles[mapIndex(map, nx, ny)])) return true;
     }
   }
   return false;
@@ -473,9 +483,9 @@ function hasNearbyWater(map: MapData, x: number, y: number, radius: number): boo
 
 export function refreshBridgePositions(map: MapData): void {
   map.bridgePositions.length = 0;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      if (map.tiles[mapIndex(x, y)] === TileType.BRIDGE) {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      if (map.tiles[mapIndex(map, x, y)] === TileType.BRIDGE) {
         map.bridgePositions.push({ x, y });
       }
     }
@@ -484,12 +494,12 @@ export function refreshBridgePositions(map: MapData): void {
 
 /** Helper for the render layer - get tile type at (x, y). */
 export function getTile(map: MapData, x: number, y: number): number {
-  if (x < 0 || y < 0 || x >= W || y >= H) return TileType.GRASS;
-  return map.tiles[y * W + x];
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return TileType.GRASS;
+  return map.tiles[y * map.width + x];
 }
 
 /** Helper - get elevation at (x, y). */
 export function getElevation(map: MapData, x: number, y: number): number {
-  if (x < 0 || y < 0 || x >= W || y >= H) return 3;
-  return map.elevation[y * W + x];
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return 3;
+  return map.elevation[y * map.width + x];
 }

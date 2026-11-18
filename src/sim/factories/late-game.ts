@@ -4,7 +4,7 @@
 
 import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import {
   Building,
   Health,
@@ -88,6 +88,9 @@ function buildLateGameBase(world: SimWorld, playerId: number): void {
     placePresetBuilding(world, BuildingDefId.FARM, spawn.x + side * 3, spawn.y + side * 4, playerId),
     placePresetBuilding(world, BuildingDefId.GOLD_MINE, spawn.x - side * 5, spawn.y - side * 2, playerId),
     placePresetBuilding(world, BuildingDefId.STONE_QUARRY, spawn.x - side * 6, spawn.y + side * 3, playerId),
+    placePresetBuilding(world, BuildingDefId.MINT, spawn.x - side * 9, spawn.y - side * 5, playerId),
+    placePresetBuilding(world, BuildingDefId.BRICKWORKS, spawn.x - side * 10, spawn.y + side * 1, playerId),
+    placePresetBuilding(world, BuildingDefId.FORESTER, spawn.x - side * 3, spawn.y - side * 7, playerId),
   ];
   placePresetBuilding(world, BuildingDefId.MILL, spawn.x + side * 6, spawn.y + side * 5, playerId);
 
@@ -165,7 +168,7 @@ function findPresetBuildingSpot(
         if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
         const x = cx + dx;
         const y = cy + dy;
-        if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
+        if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) continue;
         if (canPlaceBuildingAt(world, def, x, y)) return { x, y };
       }
     }
@@ -280,9 +283,9 @@ function canPresetUnitStandAt(
   playerId: number,
   enemyClearance: number
 ): boolean {
-  if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) return false;
+  if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) return false;
   if (world.map.walkability[y][x] !== 0) return false;
-  const tile = world.map.tiles[y * MAP.WIDTH + x];
+  const tile = world.map.tiles[y * world.map.width + x];
   if (
     tile !== TileType.GRASS
     && tile !== TileType.DIRT
@@ -326,8 +329,8 @@ function isNearWaterOrBridge(
 ): boolean {
   for (let ny = y - radius; ny <= y + radius; ny++) {
     for (let nx = x - radius; nx <= x + radius; nx++) {
-      if (nx < 0 || ny < 0 || nx >= MAP.WIDTH || ny >= MAP.HEIGHT) continue;
-      const tile = world.map.tiles[ny * MAP.WIDTH + nx];
+      if (nx < 0 || ny < 0 || nx >= world.map.width || ny >= world.map.height) continue;
+      const tile = world.map.tiles[ny * world.map.width + nx];
       if (
         tile === TileType.WATER ||
         tile === TileType.WATER_SHALLOW ||

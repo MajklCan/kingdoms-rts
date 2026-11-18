@@ -5,7 +5,6 @@
  * spruces in small clumps. Sparse, pooled, only around the camera view.
  */
 
-import { MAP } from '../../config';
 import { ResourceKindId } from '@sim/components';
 import { TileType } from '@sim/map-gen';
 import type { ResourceHit, ResourceRenderer } from '../entities/resource-renderer';
@@ -332,7 +331,7 @@ export class ForestLife {
     const tiles = this.host.ctx.world.map.tiles;
     for (const tree of this.resources.liveTrees.values()) {
       if (!tree.conifer) continue;
-      const t = tiles[Math.round(tree.y) * MAP.WIDTH + Math.round(tree.x)];
+      const t = tiles[Math.round(tree.y) * this.host.ctx.world.map.width + Math.round(tree.x)];
       if (!SNOW_TILES.has(t)) continue;
       const view = this.resources.treeViewAt(tree.x, tree.y);
       if (!view || !view.sprite.visible || view.sprite.isTinted) continue;

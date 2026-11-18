@@ -47,6 +47,7 @@ import { bindUiSounds } from './ui-sounds';
 import { buildRotateHint } from './touch/rotate-hint';
 import { resetTouchBar } from './touch/touch-bar';
 import { bindTouchMode, onTouchModeChange } from './touch/touch-mode';
+import { bindMatchTrace } from './trace/match-trace';
 
 function resetMatchUi(): void {
   dismissAllModals();
@@ -124,6 +125,7 @@ export function mountUi(game: Phaser.Game): void {
   bindUiSounds();
   bindCursor();
   bindAutosave();
+  bindMatchTrace();
 
   installMultiplayerDebugApi();
   bindMultiplayerClientDiagnostics();

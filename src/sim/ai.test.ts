@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { hasComponent, removeEntity } from 'bitecs';
-import { MAP } from '../config';
+import { MAP, SIM } from '../config';
+import { AI_ARMY_POP_RESERVE_MAX, aiRequiredWaveSize } from './ai/attack';
+import { POP_CAP_HARD_LIMIT } from './core/constants';
 import {
   AttackTarget,
   Building,
@@ -19,6 +21,7 @@ import {
   createSimWorld,
   findBuildingAt,
   findResourceAt,
+  removeSimEntity,
   resourceQuery,
   spawnArcher,
   spawnCompletedBuilding,
@@ -406,5 +409,40 @@ describe('enemy AI', () => {
     expect(ai.plan).toBe('staging');
     expect(ai.waveUnitEids.length).toBeGreaterThanOrEqual(8);
     expect(world.aiEvents.some((event) => event.message.includes('gathering'))).toBe(true);
+  });
+
+  it('caps a hard AI wave at the army the population leaves room for', () => {
+    const world = createLateGameTestWorld();
+    world.aiDifficulty = 'hard';
+    const ai = world.aiPlayers[AI_PLAYER_ID];
+    if (ai) ai.difficulty = 'hard';
+    // An hour in, hard's own wave growth would ask for its maximum of 34.
+    world.tick = SIM.TICK_HZ * 60 * 60;
+    expect(aiRequiredWaveSize(world, AI_PLAYER_ID)).toBe(AI_ARMY_POP_RESERVE_MAX);
+  });
+
+  it('attacks with the army that fits once workers fill the population', () => {
+    const lateMassing = (fullPopulation: boolean) => {
+      const world = createLateGameTestWorld();
+      const ai = world.aiPlayers[AI_PLAYER_ID];
+      if (!ai) throw new Error('No AI player');
+      // Forty minutes in: the wave has grown to its cap.
+      world.tick = SIM.TICK_HZ * 60 * 40;
+      ai.nextAttackTick = world.tick;
+      ai.plan = 'massing';
+      const soldiers = unitQuery(world.ecs).filter(
+        (eid) => Owner.player[eid] === AI_PLAYER_ID && UnitKind.kind[eid] !== UnitKindId.VILLAGER
+      );
+      const army = 12;
+      for (const eid of soldiers.slice(army)) removeSimEntity(world, eid);
+      expect(army).toBeLessThan(AI_ARMY_POP_RESERVE_MAX);
+      // Either plenty of room left for soldiers, or workers fill all of it.
+      world.population[AI_PLAYER_ID].current = fullPopulation ? POP_CAP_HARD_LIMIT : army + 40;
+      step(world);
+      return ai.plan;
+    };
+
+    expect(lateMassing(false)).toBe('massing');
+    expect(lateMassing(true)).toBe('staging');
   });
 });

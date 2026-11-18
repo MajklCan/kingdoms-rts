@@ -12,7 +12,7 @@
 
 import { dhypot } from '../core/dmath';
 import { hasComponent } from 'bitecs';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import {
   GameAnimal,
   GameAnimalStateId,
@@ -111,7 +111,7 @@ function pickWanderTarget(world: SimWorld, eid: number): void {
 function isWalkable(world: SimWorld, x: number, y: number): boolean {
   const tx = Math.round(x);
   const ty = Math.round(y);
-  if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
+  if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return false;
   return world.grid[ty][tx] === 0;
 }
 

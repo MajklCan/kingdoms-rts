@@ -33,6 +33,7 @@ import {
 } from '@sim/components';
 import { BUILDING_TABLE } from '@sim/defs';
 import {
+  buildingQuery,
   clearSelection,
   countWorksiteHelpers,
   findEntityNear,
@@ -52,6 +53,7 @@ import type { GameAudio } from '../game-audio';
 import { entityKindName, resourceKindName } from '../hud/selection-info';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
+import { trace } from '../trace/active-trace';
 
 export type MapOrderKind = 'move' | 'attackMove';
 
@@ -114,7 +116,7 @@ export class WorldOrders {
    */
   issueMapOrder(kind: MapOrderKind, tx: number, ty: number, queue = false): boolean {
     const { commands, audio } = this.deps;
-    if (!isInsideMap(tx, ty)) return false;
+    if (!isInsideMap(this.ctx.world, tx, ty)) return false;
     if (commands.selectedCommandableCount() === 0) return false;
     if (queue && this.refuseQueued()) return true;
     if (kind === 'attackMove') {
@@ -145,7 +147,7 @@ export class WorldOrders {
     const world = this.ctx.world;
     const { commands, audio } = this.deps;
     const { tx, ty, tileX, tileY } = this.ctx.pickTile(wx, wy);
-    if (!isInsideMap(tx, ty)) return;
+    if (!isInsideMap(this.ctx.world, tx, ty)) return;
     const hasUnits = commands.selectedCommandableCount() > 0;
     const targetEid = this.pickEntity(wx, wy, tileX, tileY);
     if (
@@ -260,6 +262,7 @@ export class WorldOrders {
     const eid = this.visibleEntityAt(wx, wy);
     clearSelection(world);
     if (eid !== null) {
+      trace('select:click');
       setSelected(world, eid, true);
       if (this.ctx.isOwnUnit(eid)) this.deps.audio.barkSelect(eid);
       setLastEvent(`selected ${entityKindName(world, eid)} eid=${eid}`);
@@ -271,7 +274,7 @@ export class WorldOrders {
 
   /**
    * Touch tap: an own unit or building replaces the selection (a double tap
-   * on a unit takes every one of its kind on screen), so a tap on your own
+   * takes every one of its kind on screen), so a tap on your own
    * town center selects it instead of walking the army there; with
    * commandable units (or only army buildings) selected anything else is a
    * context command, as a right click; with nothing to command it selects
@@ -290,9 +293,9 @@ export class WorldOrders {
     // Likewise a tap on an own worksite sends them to help there.
     if (eid !== null && this.tryWorksiteOrder(eid)) return;
     if (eid !== null && this.isOwnEntity(eid)) {
-      if (count === 2 && this.ctx.isOwnUnit(eid)) {
+      if (count === 2) {
         const n = this.selectSameKindOnScreen(eid);
-        setLastEvent(`double-tap: selected ${n} ${entityKindName(this.ctx.world, eid)} unit${n === 1 ? '' : 's'}`);
+        setLastEvent(`double-tap: selected ${n} ${entityKindName(this.ctx.world, eid)}`);
       } else {
         this.select(wx, wy);
       }
@@ -306,20 +309,24 @@ export class WorldOrders {
     this.select(wx, wy);
   }
 
-  /** Double click / tap: every own unit of the source unit's type that is on screen. */
+  /**
+   * Double click / tap: every own unit of the source unit's type that is on
+   * screen, or for a building every own finished building of its type (an
+   * unfinished one: every foundation of its type).
+   */
   selectSameKindOnScreen(sourceEid: number): number {
+    trace('select:double-click');
     const world = this.ctx.world;
+    if (hasComponent(world.ecs, Building, sourceEid)) return this.selectSameBuildingOnScreen(sourceEid);
     const playerId = this.ctx.perspectivePlayerId;
     const kind = UnitKind.kind[sourceEid];
-    const view = this.ctx.scene.cameras.main.worldView;
     clearSelection(world);
     let n = 0;
     for (const eid of unitQuery(world.ecs)) {
       if (Owner.player[eid] !== playerId) continue;
       if (UnitKind.kind[eid] !== kind) continue;
       if (!isAliveUnit(world.ecs, eid)) continue;
-      const s = this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
-      if (eid !== sourceEid && !view.contains(s.x, s.y)) continue;
+      if (eid !== sourceEid && !this.isOnScreen(eid)) continue;
       setSelected(world, eid, true);
       n++;
     }
@@ -327,35 +334,121 @@ export class WorldOrders {
     return n;
   }
 
-  /**
-   * Select own units the camera-world box touches: any part of a drawn
-   * figure counts (the same body box a click uses), else the feet anchor.
-   */
-  selectInWorldBox(x0: number, y0: number, x1: number, y1: number): number {
+  private selectSameBuildingOnScreen(sourceEid: number): number {
     const world = this.ctx.world;
-    const root = this.ctx.layers.root;
+    const ecs = world.ecs;
+    const defId = Building.defId[sourceEid];
+    const foundation = hasComponent(ecs, FoundationTag, sourceEid);
     clearSelection(world);
     let n = 0;
+    for (const eid of buildingQuery(ecs)) {
+      if (!this.isOwnLivingBuilding(eid)) continue;
+      if (Building.defId[eid] !== defId) continue;
+      if (hasComponent(ecs, FoundationTag, eid) !== foundation) continue;
+      if (eid !== sourceEid && !this.isOnScreen(eid)) continue;
+      setSelected(world, eid, true);
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * Shift+click: add an own unit or building to the selection, or take it
+   * out when it is already in. Units and buildings are not mixed, and a
+   * selected enemy or resource is dropped, so the addition starts over in
+   * those cases. A click on nothing (or on something not ours) keeps the
+   * selection. Returns the entity toggled, or null.
+   */
+  toggleAt(wx: number, wy: number): number | null {
+    const world = this.ctx.world;
+    const eid = this.visibleEntityAt(wx, wy);
+    if (eid === null || !this.isOwnEntity(eid)) return null;
+    if (isSelectedNow(world.ecs, eid)) {
+      setSelected(world, eid, false);
+      setLastEvent(`deselected ${entityKindName(world, eid)} eid=${eid}`);
+      return eid;
+    }
+    this.keepOnlyCompatible(hasComponent(world.ecs, Building, eid));
+    setSelected(world, eid, true);
+    if (this.ctx.isOwnUnit(eid)) this.deps.audio.barkSelect(eid);
+    setLastEvent(`added ${entityKindName(world, eid)} eid=${eid}`);
+    return eid;
+  }
+
+  /**
+   * Select what the camera-world box touches: own units first (any part of
+   * a drawn figure counts, the same body box a click uses, else the feet
+   * anchor); a box with no unit in it takes the own buildings whose anchor
+   * it covers. `additive` (Shift held) adds to the selection instead.
+   */
+  selectInWorldBox(x0: number, y0: number, x1: number, y1: number, additive = false): number {
+    trace('select:box');
+    const world = this.ctx.world;
+    const root = this.ctx.layers.root;
+    const units: number[] = [];
     for (const eid of unitQuery(world.ecs)) {
       if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
+      // Worksite crews take no orders: a box over staffed farms takes the farms.
+      if (hasComponent(world.ecs, WorksiteWorker, eid)) continue;
       const body = this.deps.unitBody?.(eid) ?? null;
-      const s = this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
+      const s = this.screenAnchor(eid);
       const touched = body
         ? body.x1 + root.x >= x0 && body.x0 + root.x <= x1 && body.y1 + root.y >= y0 && body.y0 + root.y <= y1
         : s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1;
-      if (touched) {
-        setSelected(world, eid, true);
-        n++;
-      }
+      if (touched) units.push(eid);
     }
-    const rep = this.deps.audio.representativeSelectedUnit();
-    if (rep !== null) this.deps.audio.barkSelect(rep);
-    setLastEvent(`box-selected ${n} unit${n === 1 ? '' : 's'}`);
+    const picked = units.length > 0 ? units : this.ownBuildingsInBox(x0, y0, x1, y1);
+    const buildings = units.length === 0;
+    // A Shift box that caught nothing keeps what was selected.
+    if (additive && picked.length === 0) return 0;
+    if (additive) this.keepOnlyCompatible(buildings);
+    else clearSelection(world);
+    for (const eid of picked) setSelected(world, eid, true);
+    const n = picked.length;
+    if (!buildings) {
+      const rep = this.deps.audio.representativeSelectedUnit();
+      if (rep !== null) this.deps.audio.barkSelect(rep);
+    }
+    setLastEvent(`box-selected ${n} ${buildings ? 'building' : 'unit'}${n === 1 ? '' : 's'}`);
     return n;
+  }
+
+  private ownBuildingsInBox(x0: number, y0: number, x1: number, y1: number): number[] {
+    const out: number[] = [];
+    for (const eid of buildingQuery(this.ctx.world.ecs)) {
+      if (!this.isOwnLivingBuilding(eid)) continue;
+      const s = this.screenAnchor(eid);
+      if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) out.push(eid);
+    }
+    return out;
+  }
+
+  /**
+   * Before adding to the selection: keep it only when it is all our own
+   * buildings (`buildings`) or all our own units; anything else starts over.
+   */
+  private keepOnlyCompatible(buildings: boolean): void {
+    const world = this.ctx.world;
+    const selected = Array.from(selectedQuery(world.ecs));
+    const compatible = selected.every((eid) =>
+      buildings ? this.isOwnLivingBuilding(eid) : this.ctx.isOwnUnit(eid)
+    );
+    if (!compatible) clearSelection(world);
+  }
+
+  /** An entity's anchor (feet, building centre) in camera-world coordinates. */
+  private screenAnchor(eid: number): { x: number; y: number } {
+    return this.ctx.localToWorld(this.ctx.tileToScreen(Position.x[eid], Position.y[eid]));
+  }
+
+  private isOnScreen(eid: number): boolean {
+    const s = this.screenAnchor(eid);
+    return this.ctx.scene.cameras.main.worldView.contains(s.x, s.y);
   }
 
   /** Own villagers (true) or own military (false); returns the count. */
   selectOwnUnits(villagers: boolean): number {
+    trace(villagers ? 'select:all-villagers' : 'select:all-military');
     const world = this.ctx.world;
     clearSelection(world);
     let n = 0;
@@ -375,10 +468,19 @@ export class WorldOrders {
   }
 
   /** A unit or a building (finished or under construction) of the perspective player. */
-  private isOwnEntity(eid: number): boolean {
+  isOwnEntity(eid: number): boolean {
     if (this.ctx.isOwnUnit(eid)) return true;
     return hasComponent(this.ctx.world.ecs, Building, eid) &&
       Owner.player[eid] === this.ctx.perspectivePlayerId;
+  }
+
+  /** A standing building (or foundation) of the perspective player. */
+  private isOwnLivingBuilding(eid: number): boolean {
+    const ecs = this.ctx.world.ecs;
+    return hasComponent(ecs, Building, eid) &&
+      !hasComponent(ecs, DeadTag, eid) &&
+      Owner.player[eid] === this.ctx.perspectivePlayerId &&
+      (!hasComponent(ecs, Health, eid) || Health.hp[eid] > 0);
   }
 
   /** A living foundation of the perspective player. */
@@ -414,6 +516,10 @@ export function drawSelectionBox(g: Phaser.GameObjects.Graphics, x0: number, y0:
   g.strokeRect(x, y, w, h);
   g.fillStyle(0xfeca57, 0.12);
   g.fillRect(x, y, w, h);
+}
+
+function isSelectedNow(ecs: Parameters<typeof hasComponent>[0], eid: number): boolean {
+  return selectedQuery(ecs).includes(eid);
 }
 
 function isAliveUnit(ecs: Parameters<typeof hasComponent>[0], eid: number): boolean {

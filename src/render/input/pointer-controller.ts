@@ -1,5 +1,6 @@
 /**
- * Mouse input on the battlefield: click / double-click / drag-box selection,
+ * Mouse input on the battlefield: click / double-click / drag-box selection
+ * (Shift: add to the selection; a box with no unit takes buildings),
  * right-click context command, A+click attack-move (either with Shift held:
  * queued behind the units' current order), and hand-off to placement modes
  * while one is armed. What a click means lives in
@@ -14,7 +15,7 @@
  * touch-controller.ts owns them.
  */
 
-import { clearSelection } from '@sim/world';
+import { clearSelection, selectedQuery, setSelected } from '@sim/world';
 import { setLastEvent } from '../../debug/overlay';
 import type { CommandFeedback } from '../commands/feedback';
 import type { PlayerCommands } from '../commands/player-commands';
@@ -43,7 +44,10 @@ export class PointerController {
   private dragCurrent: Point | null = null;
   private isDragging = false;
   private dragGfx!: Phaser.GameObjects.Graphics;
-  private lastLeftUnitClick: { eid: number; atMs: number } | null = null;
+  private lastLeftClick: { eid: number; atMs: number } | null = null;
+  /** Shift held at the press: the box adds to what was selected then. */
+  private dragAdditive = false;
+  private selectionAtPress: number[] = [];
   private feedback: CommandFeedback | null = null;
 
   constructor(
@@ -117,7 +121,7 @@ export class PointerController {
     if (placement.mode !== 'none' && pointer.leftButtonDown() && placement.refuseClick(tx, ty)) return;
     const wasRallyMode = placement.armyRallyMode;
     if (placement.handlePointerDown(pointer, tx, ty)) {
-      if (wasRallyMode && pointer.leftButtonDown() && isInsideMap(tx, ty)) {
+      if (wasRallyMode && pointer.leftButtonDown() && isInsideMap(this.ctx.world, tx, ty)) {
         this.feedback?.orderMarker('rally', tx, ty);
         commands.confirm('Army rally point set');
       }
@@ -137,23 +141,34 @@ export class PointerController {
     this.dragStart = { x: pointer.worldX, y: pointer.worldY };
     this.dragCurrent = this.dragStart;
     this.isDragging = false;
+    this.dragAdditive = false;
 
     // A held: attack-move to the clicked tile.
     const aKey = this.ctx.scene.input.keyboard?.addKey('A', false);
     if (aKey?.isDown) {
-      this.lastLeftUnitClick = null;
+      this.lastLeftClick = null;
       this.cancelDragBox();
       this.issueMapOrder('attackMove', tx, ty, isShiftHeld(pointer));
       return;
     }
 
-    const eid = this.orders.visibleEntityAt(pointer.worldX, pointer.worldY);
-    if (eid !== null && this.ctx.isOwnUnit(eid) && this.isDoubleClickOnSameUnit(eid)) {
-      const n = this.orders.selectSameKindOnScreen(eid);
-      setLastEvent(`double-click: selected ${n} ${entityKindName(this.ctx.world, eid)} unit${n === 1 ? '' : 's'}`);
+    // Shift+click adds to (or takes out of) the selection; a Shift drag adds
+    // its box to what was selected at the press.
+    if (isShiftHeld(pointer)) {
+      this.dragAdditive = true;
+      this.selectionAtPress = Array.from(selectedQuery(this.ctx.world.ecs));
+      this.lastLeftClick = null;
+      this.orders.toggleAt(pointer.worldX, pointer.worldY);
       return;
     }
-    if (eid === null || !this.ctx.isOwnUnit(eid)) this.lastLeftUnitClick = null;
+
+    const eid = this.orders.visibleEntityAt(pointer.worldX, pointer.worldY);
+    if (eid !== null && this.orders.isOwnEntity(eid) && this.isDoubleClickOnSame(eid)) {
+      const n = this.orders.selectSameKindOnScreen(eid);
+      setLastEvent(`double-click: selected ${n} ${entityKindName(this.ctx.world, eid)}`);
+      return;
+    }
+    if (eid === null || !this.orders.isOwnEntity(eid)) this.lastLeftClick = null;
     this.orders.select(pointer.worldX, pointer.worldY);
   }
 
@@ -216,9 +231,11 @@ export class PointerController {
     const dy = point.y - this.dragStart.y;
     if (!this.isDragging && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
       this.isDragging = true;
-      this.lastLeftUnitClick = null;
-      // Past the threshold: box-selecting, so drop the pointer-down pick.
+      this.lastLeftClick = null;
+      // Past the threshold: box-selecting, so drop the pointer-down pick
+      // (a Shift drag goes back to the selection it started from).
       clearSelection(this.ctx.world);
+      if (this.dragAdditive) for (const eid of this.selectionAtPress) setSelected(this.ctx.world, eid, true);
     }
     if (!this.isDragging) return;
     drawSelectionBox(this.dragGfx, this.dragStart.x, this.dragStart.y, point.x, point.y);
@@ -232,7 +249,8 @@ export class PointerController {
         Math.min(this.dragStart.x, point.x),
         Math.min(this.dragStart.y, point.y),
         Math.max(this.dragStart.x, point.x),
-        Math.max(this.dragStart.y, point.y)
+        Math.max(this.dragStart.y, point.y),
+        this.dragAdditive
       );
     }
     this.cancelDragBox();
@@ -243,12 +261,14 @@ export class PointerController {
     this.dragStart = null;
     this.dragCurrent = null;
     this.isDragging = false;
+    this.dragAdditive = false;
+    this.selectionAtPress = [];
   }
 
-  private isDoubleClickOnSameUnit(eid: number): boolean {
+  private isDoubleClickOnSame(eid: number): boolean {
     const now = this.ctx.scene.time.now;
-    const last = this.lastLeftUnitClick;
-    this.lastLeftUnitClick = { eid, atMs: now };
+    const last = this.lastLeftClick;
+    this.lastLeftClick = { eid, atMs: now };
     return last !== null && last.eid === eid && now - last.atMs <= DOUBLE_CLICK_MS;
   }
 }

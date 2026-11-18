@@ -24,6 +24,7 @@ import { updateAutosave } from './saves/autosave';
 import { updateCursor } from './skin/cursors';
 import { resetPerfProbe, tickPerfProbe } from './touch/perf-probe';
 import { updateTouchBar } from './touch/touch-bar';
+import { updateMatchTrace } from './trace/match-trace';
 
 function tick(now: number): void {
   requestAnimationFrame(tick);
@@ -49,6 +50,7 @@ function tick(now: number): void {
   renderTechTree(scene);
   updateObjectives(scene);
   updateGameOver(scene);
+  updateMatchTrace(scene);
   updateAutosave(scene, now);
   updateConnectionLost();
   updateCursor(scene, now);

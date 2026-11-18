@@ -32,6 +32,9 @@ export const MapId = {
   ZBOROV_LINES: 'zborov_lines',
   FLOODED_BASIN: 'flooded_basin',
   BLANIK_NIGHT_WATCH: 'blanik_night_watch',
+  MILESOVKA_UPLANDS: 'milesovka_uplands',
+  ADRSPACH_ROCK_TOWN: 'adrspach_rock_town',
+  MORAVSKY_KRAS: 'moravsky_kras',
 } as const;
 
 export type MapIdValue = (typeof MapId)[keyof typeof MapId];
@@ -58,9 +61,30 @@ export interface MapDef {
   night?: boolean;
   /** Built for a campaign mission: not offered in skirmish setup. */
   campaignOnly?: boolean;
+  /** A large map (MAP.LARGE_SIZE), labelled as such in the setup. */
+  large?: boolean;
+}
+
+/** How rich an authored gold or stone node is (amounts live in deposit-sites.ts). */
+export type MapDepositTier = 'center' | 'flank' | 'natural' | 'scattered';
+
+/**
+ * An authored gold or stone node on player 1's side of a point-mirrored map.
+ * World creation places it together with its mirror through the middle
+ * between the two towns, so both sides get the same.
+ */
+export interface MapDeposit {
+  kind: 'gold' | 'stone';
+  x: number;
+  y: number;
+  tier: MapDepositTier;
 }
 
 export interface MapData {
+  /** Size in tiles. Standard maps are MAP.WIDTH x MAP.HEIGHT; large maps are
+   *  bigger. Every index into tiles/elevation is y * width + x. */
+  width: number;
+  height: number;
   /** tiles[y][x] - TileType. */
   tiles: Uint8Array;
   /** elevation[y][x] - 0..7. */
@@ -73,4 +97,7 @@ export interface MapData {
   spawns: Array<{ x: number; y: number }>;
   /** Decorative or blocking authored terrain features. */
   features: MapFeature[];
+  /** Authored gold and stone, placed in mirrored pairs at world creation.
+   *  Only read when the world is created, so saves do not carry it. */
+  deposits?: MapDeposit[];
 }

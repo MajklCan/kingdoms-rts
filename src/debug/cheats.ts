@@ -3,7 +3,6 @@
  * Single-player only: in a lockstep match they would desync the peers.
  */
 
-import { MAP } from '../config';
 import { Owner, Position, ResourceKindId } from '@sim/components';
 import {
   clearSelection,
@@ -102,7 +101,7 @@ export class Cheats {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
           const x = baseX + dx;
           const y = baseY + dy;
-          if (x < 0 || y < 0 || x >= MAP.WIDTH || y >= MAP.HEIGHT) continue;
+          if (x < 0 || y < 0 || x >= world.map.width || y >= world.map.height) continue;
           if (world.map.walkability[y][x] !== 0) continue;
           if (findResourceAt(world, x, y, 0.7) !== null) continue;
           return { x, y };

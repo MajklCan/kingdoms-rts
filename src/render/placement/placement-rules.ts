@@ -4,7 +4,6 @@
  * placement; these only predict what it will say.
  */
 
-import { MAP } from '../../config';
 import { Building, Position, Resource } from '@sim/components';
 import { BUILDING_TABLE, type BuildingDef } from '@sim/defs';
 import { buildingQuery, findResourceAt, resourceQuery, type SimWorld } from '@sim/world';
@@ -16,7 +15,7 @@ export function isBuildFootprintBlocked(world: SimWorld, def: BuildingDef, x: nu
     for (let dx = 0; dx < def.footprint.w; dx++) {
       const tx = x0 + dx;
       const ty = y0 + dy;
-      if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return true;
+      if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return true;
       if (world.map.walkability[ty][tx] !== 0) return true;
       if (findResourceAt(world, tx, ty, 0.6) !== null) return true;
       if (findBuildingNear(world, tx, ty, 0.01) !== null) return true;

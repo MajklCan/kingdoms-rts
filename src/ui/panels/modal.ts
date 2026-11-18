@@ -7,6 +7,7 @@
 import { closeLayer, focusablesIn, isLayerOpen, openLayer, releaseLayer } from '../a11y/layers';
 import { h } from '../dom';
 import { icon } from '../icons/icon';
+import { trace } from '../../render/trace/active-trace';
 
 export interface ModalOptions {
   id: string;
@@ -79,6 +80,7 @@ export function createModal(opts: ModalOptions): Modal {
     open(initialFocus) {
       if (!backdrop.hidden && isLayerOpen(dialog)) return;
       backdrop.hidden = false;
+      trace(`panel:${opts.id}`);
       opts.onOpen?.();
       openLayer({
         el: dialog,

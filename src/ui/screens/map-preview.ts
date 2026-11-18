@@ -22,7 +22,8 @@ function topDown(mapId: MapIdValue) {
   const cached = topDowns.get(mapId);
   if (cached) return cached;
   const map = generateMap(new Rng(PREVIEW_SEED), mapId);
-  const n = Math.round(Math.sqrt(map.tiles.length));
+  // Every map is square: 64 tiles a side, 112 for the large ones.
+  const n = map.width;
   const canvas = document.createElement('canvas');
   canvas.width = n;
   canvas.height = n;

@@ -4,7 +4,7 @@
  * offset to get camera world coordinates.
  */
 
-import { ISO, MAP } from '../config';
+import { ISO } from '../config';
 import { Building, Position } from '@sim/components';
 import { BUILDING_TABLE, type BuildingDef } from '@sim/defs';
 import type { SimWorld } from '@sim/world';
@@ -12,8 +12,8 @@ import { screenToTile, tileToScreen, type ScreenPos } from './iso';
 
 /** Elevation at integer tile (tx, ty); 3 (default ground) if out of bounds. */
 export function elevationAt(world: SimWorld, tx: number, ty: number): number {
-  if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return 3;
-  return world.map.elevation[ty * MAP.WIDTH + tx];
+  if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return 3;
+  return world.map.elevation[ty * world.map.width + tx];
 }
 
 /**
@@ -115,6 +115,6 @@ export function screenToTileElev(world: SimWorld, localX: number, localY: number
   return { tx, ty, tileX: tile.x, tileY: tile.y };
 }
 
-export function isInsideMap(tx: number, ty: number): boolean {
-  return tx >= 0 && ty >= 0 && tx < MAP.WIDTH && ty < MAP.HEIGHT;
+export function isInsideMap(world: SimWorld, tx: number, ty: number): boolean {
+  return tx >= 0 && ty >= 0 && tx < world.map.width && ty < world.map.height;
 }

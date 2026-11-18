@@ -112,7 +112,13 @@ export function bindSkirmishSetup(): void {
           h(
             'span',
             { class: 'map-option-text' },
-            h('span', { class: 'map-option-name' }, map.name, map.night ? h('span', { class: 'map-option-tag' }, 'Night') : null),
+            h(
+              'span',
+              { class: 'map-option-name' },
+              map.name,
+              map.large ? h('span', { class: 'map-option-tag' }, 'Large') : null,
+              map.night ? h('span', { class: 'map-option-tag' }, 'Night') : null
+            ),
             h('span', { class: 'map-option-desc' }, plainDashes(map.description))
           )
         )

@@ -10,7 +10,7 @@
  * by their renderers (see fog-style.ts), so tall art is never cut by a tile.
  */
 
-import { ISO, MAP } from '../../config';
+import { ISO } from '../../config';
 import { getPlayerVisibility } from '@sim/world';
 import type { SceneContext } from '../scene-context';
 import { LINEAR_FILTER } from '../sprites/sprite-registry';
@@ -138,9 +138,10 @@ export class FogRenderer {
     scratch.fillStyle = '#000';
     // One fill per tile: a single path holding thousands of subpaths costs
     // ~35 ms to build in Chrome, per-tile fills cost under 2 ms for the map.
-    for (let y = 0; y < MAP.HEIGHT; y++) {
-      for (let x = 0; x < MAP.WIDTH; x++) {
-        if (!covered(y * MAP.WIDTH + x)) continue;
+    const { width: mapW, height: mapH } = this.ctx.world.map;
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        if (!covered(y * mapW + x)) continue;
         scratch.beginPath();
         this.tilePath(scratch, x, y);
         scratch.fill();

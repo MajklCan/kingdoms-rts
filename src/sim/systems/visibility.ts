@@ -3,7 +3,6 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import {
   Building,
   ConstructionSite,
@@ -57,11 +56,8 @@ export const NIGHT_SIGHT: Readonly<SightTable> = {
 
 const VISION_TILE_FOOTPRINT_RADIUS = 0.5;
 const VISION_EDGE_SOFTENING_TILES = 1;
-const MAP_W = MAP.WIDTH;
-const MAP_H = MAP.HEIGHT;
-
-export function createVisibilityState(): PlayerVisibility {
-  const size = MAP.WIDTH * MAP.HEIGHT;
+export function createVisibilityState(width: number, height: number): PlayerVisibility {
+  const size = width * height;
   return {
     explored: new Uint8Array(size),
     visible: new Uint8Array(size),
@@ -69,12 +65,12 @@ export function createVisibilityState(): PlayerVisibility {
   };
 }
 
-export function createVisibilityStates(): PlayerVisibility[] {
-  return Array.from({ length: MAX_PLAYERS }, () => createVisibilityState());
+export function createVisibilityStates(width: number, height: number): PlayerVisibility[] {
+  return Array.from({ length: MAX_PLAYERS }, () => createVisibilityState(width, height));
 }
 
-export function tileVisibilityIndex(x: number, y: number): number {
-  return y * MAP.WIDTH + x;
+export function tileVisibilityIndex(world: SimWorld, x: number, y: number): number {
+  return y * world.map.width + x;
 }
 
 export function getPlayerVisibility(
@@ -92,8 +88,8 @@ export function isTileVisibleTo(
 ): boolean {
   const tx = Math.round(x);
   const ty = Math.round(y);
-  if (!isTileInMap(tx, ty)) return false;
-  return (world.visibility[playerId]?.visible[tileVisibilityIndex(tx, ty)] ?? 0) === 1;
+  if (!isTileInMap(world, tx, ty)) return false;
+  return (world.visibility[playerId]?.visible[tileVisibilityIndex(world, tx, ty)] ?? 0) === 1;
 }
 
 export function isTileExploredBy(
@@ -104,8 +100,8 @@ export function isTileExploredBy(
 ): boolean {
   const tx = Math.round(x);
   const ty = Math.round(y);
-  if (!isTileInMap(tx, ty)) return false;
-  return (world.visibility[playerId]?.explored[tileVisibilityIndex(tx, ty)] ?? 0) === 1;
+  if (!isTileInMap(world, tx, ty)) return false;
+  return (world.visibility[playerId]?.explored[tileVisibilityIndex(world, tx, ty)] ?? 0) === 1;
 }
 
 export function isEntityVisibleTo(
@@ -146,7 +142,7 @@ export function isBuildingFootprintVisibleTo(
   y: number
 ): boolean {
   let visible = false;
-  forEachBuildingFootprintTile(defId, x, y, (tx, ty) => {
+  forEachBuildingFootprintTile(world, defId, x, y, (tx, ty) => {
     if (isTileVisibleTo(world, playerId, tx, ty)) visible = true;
   });
   return visible;
@@ -173,10 +169,10 @@ export function updatePlayerVisibility(
     if (!hasComponent(world.ecs, UnitKind, eid) && !hasComponent(world.ecs, Building, eid)) {
       continue;
     }
-    revealCircle(vis, Position.x[eid], Position.y[eid], lineOfSightRadius(world, eid));
+    revealCircle(world, vis, Position.x[eid], Position.y[eid], lineOfSightRadius(world, eid));
   }
 
-  smoothVisibilityFrontier(vis);
+  smoothVisibilityFrontier(world, vis);
   updateLastSeenBuildings(world, playerId, vis);
 }
 
@@ -194,11 +190,12 @@ export function visibilitySystem(world: SimWorld): void {
   }
 }
 
-export function isTileInMap(x: number, y: number): boolean {
-  return x >= 0 && y >= 0 && x < MAP.WIDTH && y < MAP.HEIGHT;
+export function isTileInMap(world: SimWorld, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < world.map.width && y < world.map.height;
 }
 
 function revealCircle(
+  world: SimWorld,
   vis: PlayerVisibility,
   x: number,
   y: number,
@@ -210,9 +207,10 @@ function revealCircle(
   const r = Math.ceil(effectiveRadius + VISION_TILE_FOOTPRINT_RADIUS);
   const r2 = effectiveRadius * effectiveRadius;
   const x0 = Math.max(0, cx - r);
+  const MAP_W = world.map.width;
   const x1 = Math.min(MAP_W - 1, cx + r);
   const y0 = Math.max(0, cy - r);
-  const y1 = Math.min(MAP_H - 1, cy + r);
+  const y1 = Math.min(world.map.height - 1, cy + r);
   const { visible, explored } = vis;
   for (let ty = y0; ty <= y1; ty++) {
     // Reveal if the vision circle touches the tile footprint, not only when
@@ -235,7 +233,9 @@ let frontierScratch = new Uint8Array(0);
 
 /** Fill fog notches: a hidden tile with 5+ visible neighbours, or 3+ visible
  *  cardinal neighbours, becomes visible (judged on the pre-pass state). */
-function smoothVisibilityFrontier(vis: PlayerVisibility): void {
+function smoothVisibilityFrontier(world: SimWorld, vis: PlayerVisibility): void {
+  const MAP_W = world.map.width;
+  const MAP_H = world.map.height;
   const { visible, explored } = vis;
   if (frontierScratch.length !== visible.length) frontierScratch = new Uint8Array(visible.length);
   const before = frontierScratch;
@@ -336,6 +336,7 @@ function snapshotBuilding(world: SimWorld, eid: number): LastSeenBuilding {
 }
 
 function forEachBuildingFootprintTile(
+  world: SimWorld,
   defId: number,
   x: number,
   y: number,
@@ -352,7 +353,7 @@ function forEachBuildingFootprintTile(
     for (let dx = 0; dx < def.footprint.w; dx++) {
       const tx = x0 + dx;
       const ty = y0 + dy;
-      if (isTileInMap(tx, ty)) visit(tx, ty);
+      if (isTileInMap(world, tx, ty)) visit(tx, ty);
     }
   }
 }

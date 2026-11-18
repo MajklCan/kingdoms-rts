@@ -24,6 +24,7 @@ Stack: **Phaser 4 beta** (rendering only) + **bitECS 0.3.40** (sim) + **TypeScri
 | `npx vite-node scripts/sim/matchups.ts` | Equal-cost unit fights, win and cost-efficiency matrix |
 | `node scripts/sim/batch.mjs <name> <procs> <script> ...` | Shard any of the above over processes |
 | `npx vite-node scripts/sim/replay-desync.ts -- a.json b.json` | Replay the desync reports players download on a desync; prints the checkpoint each client drifted at |
+| `npx vite-node scripts/sim/trace-report.ts -- ~/Downloads` | Report over player trace files (game-over button, Settings > Play traces bundle, or every match with that setting / `?trace` on): feature use, hotkey vs click, first use, never-used features, refused actions; copies of one match count once |
 | `MP_SOAK=2 npm test` | Adds the long lockstep soak to the test run |
 
 TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUncheckedSideEffectImports`. Don't silence them.
@@ -70,7 +71,7 @@ src/
     systems/           one file per tick system (visibility, production, combat, movement, ...)
     ai/                computer player: difficulty, snapshot, brain, economy, military, attack, breach (picks the wall to knock down)
     missions/          campaign world setup + scripted mission runtime (one file per mission)
-    maps/              map generators; map-gen.ts is their barrel
+    maps/              map generators; map-gen.ts is their barrel; large-kit.ts builds the mirrored 112x112 maps
     save/              save schema, serialize, load; save-load.ts is their barrel
     components.ts      bitECS components, *KindId enums, gameplay constants
     defs.ts            BUILDING_TABLE, UNIT_TABLE, AGE_TABLE (era names), WALL_TIERS (palisade/stone/brick by research) + canAfford/spend/refund
@@ -95,6 +96,7 @@ src/
     effects/           particles, combat fx, ambient life (birds, smoke, wildlife)
     overlays/          fog of war (fog-renderer.ts), status overlay
     hud/ commands/ input/ placement/ camera/   HUD data, player commands, hotkeys + pointer, build ghost, camera
+    trace/             player trace: recorder, feature catalog, report (pure); one-line hooks in the input code
     audio/             AudioManager + sound-map (game-audio.ts routes sim events to cues)
     inspection/        `?inspect=<unit>` voxel sprite sheets
     voxel/             voxel models (dark-*, gunpowder-*, total-war-*, resources, wall) + bakeVoxelTexture
@@ -118,12 +120,13 @@ index.html             27-line shell; CSS lives in src/ui/styles
 ## Key constants / IDs
 
 - Order queue: move / attack / attack-move / gather inputs with `queue: true` (Shift held) append to `world.orderQueues` (per unit, `ORDER_QUEUE_MAX=8`) instead of replacing the current order; rules in `src/sim/input/order-queue.ts`, system in `src/sim/systems/order-queue.ts`. Checksummed and saved (optional `orderQueues` field).
+- Map size is per map: `world.map.width/height`. Standard maps are `MAP.WIDTH`x`MAP.HEIGHT` (64), the large ones (`MapDef.large`) `MAP.LARGE_SIZE` (112). Use `MAP.WIDTH` only for the standard size (missions, layer origin), never as the size of the current map.
 - Players: `MAX_PLAYERS=3`. `0`=Gaia (resources), `1`=`LOCAL_PLAYER_ID` (human), `2`=`AI_PLAYER_ID`.
 - `POP_CAP_HARD_LIMIT=75`. `VILLAGER_CARRY_CAPACITY=10`. `VILLAGER_GATHER_COOLDOWN=4` ticks (one unit per 5 ticks); stone alone is slower, `STONE_GATHER_COOLDOWN=9` (one per 10 ticks, `gatherCooldownForKind`).
 - Resources: `FOOD=0, WOOD=1, GOLD=2, STONE=3`. Dropoff bitmask 1/2/4/8.
 - Units (`UnitKindId`): VILLAGER, MILITIA (legacy, no longer trainable), ARCHER, SPEARMAN, SCOUT_CAVALRY, GUNMAN, CANNON, MACHINE_GUN, MORTAR, COMMANDER.
-- Buildings: 13 defs (`BuildingDefId` TOWN_CENTER=0 … MILL=12). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen + the Commander (one alive or queued per player, `src/sim/core/unit-limits.ts`; 200 hp, atk 10, armor 1, 150 food + 120 gold), archery range archers (unlocked by the Archers tech).
-- Tech rings, not age research: 18 researches on 5 paths (arms, timber, mines, walls, land) in rings I-III. Ring N+1 opens when 2 paths are maxed in ring N (every research of the path in that ring done); research is instant. Every unit/building past the settlement (TC, house, farm, lumber hut, quarry) is unlocked by one research (`BUILDING_UNLOCK_TECH` / `UNIT_UNLOCK_TECH`). Arms forks after Barracks into three ring I branches: Archers, the Commander (his own research) and Cavalry, so arms is maxed in ring I only with all three and has nothing in ring II. The early 6-house limit is lifted by Housing I (`housing_i`).
+- Buildings: 16 defs (`BuildingDefId` TOWN_CENTER=0 … FORESTER=15). A building trains whatever its def `trains` lists: town center villagers, barracks archers + spearmen + the Commander (one alive or queued per player, `src/sim/core/unit-limits.ts`; 200 hp, atk 10, armor 1, 150 food + 120 gold). The archery range is retired: nothing unlocks it (archers come from the barracks); ranges in old saves still train archers.
+- Tech rings, not age research: 18 researches on 5 paths (arms, timber, mines, walls, land) in rings I-III. Ring N+1 opens when 2 paths are maxed in ring N (every research of the path in that ring done); research is instant. Every unit/building past the settlement (TC, house, farm, lumber hut, quarry) is unlocked by one research (`BUILDING_UNLOCK_TECH` / `UNIT_UNLOCK_TECH`), except the endless worksites, which open with ring II. Arms forks after Barracks into three ring I branches: Archers, the Commander (his own research) and Cavalry, so arms is maxed in ring I only with all three and has nothing in ring II. The early 6-house limit is lifted by Housing I (`housing_i`).
 - Night matches: `world.night` (a skirmish setup choice; the Blaník Night Watch map defaults to it, `MapDef.night`). Sight comes from `NIGHT_SIGHT` instead of `DAY_SIGHT` in `systems/visibility.ts`; the flag is checksummed and saved. Render: `overlays/night-renderer.ts` multiplies a darkness canvas over the world and draws torches whose light reaches exactly the sim sight radius.
 - Shift-queued orders: `world.orderQueues` (move, attack-move, attack, gather, build; `input/order-queue.ts` appends, `systems/order-queue.ts` starts the next one when the current order is done). A gather or worksite help never ends, so it closes the queue. A Shift-placed row of buildings sends the selected villagers to the first at once and queues the rest as `build` orders.
 - Eras: `world.ages[p].current` = highest open ring - 1 (DARK, CASTLE, GUNPOWDER), written by `systems/tech-rings.ts` when a ring opens; it only drives building art and the banner. Walls draw and fight at their research tier (Palisades / Stone Walls / Brick Walls). Starting ages are presets: Castle = ring I researched, Gunpowder = rings I+II. **TOTAL_WAR and MACHINE_GUN are scaffolded but unreachable** (no research unlocks them).
@@ -149,6 +152,7 @@ Renderers ask `SpriteSourceRegistry` (`src/render/sprites/sprite-registry.ts`) w
 
 - Free villagers (town center trained) build, gather or hunt by hand, or help at a completed worksite (`cmdAssignWorksite`, `systems/worksite-helpers.ts`): a helper fills open crew slots at full rate, plus up to 2 extras at 60 % (3 of 5 ticks, `core/worksite-membership.ts`). Helpers are not crew: `countWorksiteWorkers` and slots ignore them. Any other order (`clearWorkOrders`) takes him off.
 - `VillagerWork` remembers the last job; a builder with nothing left to build resumes it (`systems/villager-work.ts`). Move, stop and attack orders clear it.
+- Endless worksites (`isEndlessWorksite`): mint (gold), brickworks (stone), forester's lodge (wood). They open with ring II (Castle Age), not a research: every research costs wood and stone, so a realm that ran dry could never unlock them. They make their resource with no node in reach, 20 a minute per worker (`ENDLESS_WORKSITE_RATE_TICKS`), always 3 slots (the crews research does not apply), and none costs its own resource. Voxel art only so far (baked at footprint size), no Blender atlas frames; the HUD hides their build buttons until ring II. Hotkeys J / U, the lodge B then V (every letter is taken; a bare V is the army rally). The AI builds them once the deposits near its town run low (`ai/endless-economy.ts`); idle crews of its dried-up mines and quarries move to open slots at its other worksites, endless ones first (`systems/dry-worksite-crews.ts`).
 - Huntable game (`GameAnimal` + FOOD `Resource`): mirrored herds placed after the berry bushes, wander via `world.rng`, become a carcass when a hunter arrives. Render: `render/entities/game-renderer.ts` (life-sheet sprites).
 - Render reads `villagerRole` (look) and `villagerJob` (status) from `core/villager-role.ts` / `core/villager-job.ts`.
 
@@ -185,7 +189,7 @@ Test pattern: `const world = createSimWorld(seed); world.paused = false;` → pu
 
 ## Agent affordances
 
-In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `research`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
+In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `research`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. `window.__TRACE__` (`src/ui/trace/match-trace.ts`): `current`, `last`, `saved`, `download` for the player traces (every skirmish / multiplayer match records one; the last 3 stay in localStorage, `src/ui/trace/trace-store.ts`; nothing downloads by itself unless Settings > Play traces or `?trace` turns it on). Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
 
 ## Conventions & rules
 

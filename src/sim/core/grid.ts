@@ -4,7 +4,6 @@
 
 import { dhypot } from './dmath';
 import { hasComponent } from 'bitecs';
-import { MAP } from '../../config';
 import { Building, Gatherer, Position } from '../components';
 import { worksiteOf } from './worksite-membership';
 import { BUILDING_TABLE, type BuildingDef, BuildingDefId } from '../defs';
@@ -59,14 +58,14 @@ export function findSpawnSpot(
   const ix = Math.round(cx);
   const iy = Math.round(cy);
   if (
-    ix >= 0 && iy >= 0 && ix < MAP.WIDTH && iy < MAP.HEIGHT &&
+    ix >= 0 && iy >= 0 && ix < world.map.width && iy < world.map.height &&
     world.map.walkability[iy][ix] === 0
   ) {
     return { x: ix, y: iy };
   }
   return world.pathfinder.nearestWalkable(
-    Math.max(0, Math.min(MAP.WIDTH - 1, ix)),
-    Math.max(0, Math.min(MAP.HEIGHT - 1, iy)),
+    Math.max(0, Math.min(world.map.width - 1, ix)),
+    Math.max(0, Math.min(world.map.height - 1, iy)),
     maxR
   );
 }
@@ -75,7 +74,7 @@ export function findSpawnSpot(
  *  array also updates EasyStar (same array reference). */
 function markTileBlocked(world: SimWorld, x: number, y: number, blocked: boolean): void {
   const ix = Math.round(x), iy = Math.round(y);
-  if (ix < 0 || iy < 0 || ix >= MAP.WIDTH || iy >= MAP.HEIGHT) return;
+  if (ix < 0 || iy < 0 || ix >= world.map.width || iy >= world.map.height) return;
   world.map.walkability[iy][ix] = blocked ? 1 : 0;
 }
 
@@ -102,7 +101,7 @@ export function markFootprintBlocked(
 export function canUnitOccupy(world: SimWorld, x: number, y: number): boolean {
   const tx = Math.round(x);
   const ty = Math.round(y);
-  if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) return false;
+  if (tx < 0 || ty < 0 || tx >= world.map.width || ty >= world.map.height) return false;
   return world.map.walkability[ty][tx] === 0;
 }
 
@@ -115,7 +114,7 @@ export function canUnitSqueezeAlongDiagonalPath(
   waypoint: GridPos
 ): boolean {
   if (Math.abs(dirX) < 0.2 || Math.abs(dirY) < 0.2) return false;
-  if (!isTileInMap(Math.round(x), Math.round(y))) return false;
+  if (!isTileInMap(world, Math.round(x), Math.round(y))) return false;
   return canUnitOccupy(world, waypoint.x, waypoint.y);
 }
 

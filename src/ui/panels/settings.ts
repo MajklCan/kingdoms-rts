@@ -1,6 +1,6 @@
 /**
  * Settings: Audio (mute + per-channel volume), Game (speed, interface
- * scale, input mode, performance mode, fullscreen) and Controls (touch
+ * scale, input mode, performance mode, play traces, fullscreen) and Controls (touch
  * gestures and hotkey reference). Opens from the main menu and the pause
  * menu. Audio values live in the AudioManager (which persists them); the
  * rest persists in localStorage.
@@ -15,6 +15,7 @@ import { icon } from '../icons/icon';
 import { syncPixelScale } from '../skin/pixel-scale';
 import { buildFullscreenButton, canFullscreen } from '../touch/fullscreen';
 import { setStoredInputPref, setStoredPerfPref, storedInputPref, storedPerfPref } from '../touch/touch-mode';
+import { downloadSavedTraces, isTraceAutoDownloadOn, savedTraceCount, setTraceAutoDownloadOn } from '../trace/trace-files';
 import { createModal, type Modal } from './modal';
 
 export type SettingsTab = 'audio' | 'game' | 'controls';
@@ -50,8 +51,9 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
   {
     group: 'Selection',
     rows: [
-      ['Click / drag', 'Select units or buildings'],
-      ['Double-click', 'Select every unit of that type on screen'],
+      ['Click / drag', 'Select units (a box with no units takes buildings)'],
+      ['Double-click', 'Select every unit or building of that type on screen'],
+      ['Shift+click / drag', 'Add to the selection, or take out what is already in'],
       ['F1', 'Select all villagers'],
       ['F2', 'Select all military'],
       ['.', 'Next idle villager'],
@@ -80,8 +82,9 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['H', 'Build a house (nothing or a villager selected; B then H with anything)'],
       ['M / I', 'Build a farm / mill'],
       ['L / C / G', 'Lumber hut / stone quarry / gold mine'],
-      ['R / N / T / F / Y / Z', 'Barracks / archery range / stable / foundry / tower / wall'],
-      ['Q / E', 'Train first / second unit'],
+      ['R / T / F / Y / Z', 'Barracks / stable / foundry / tower / wall'],
+      ['J / U / B V', "Mint / brickworks / forester's lodge (from the Castle Age; the lodge is B then V)"],
+      ['Q / E', 'Train first / second unit (several buildings selected: the least busy one)'],
       ['G', 'Town center villager rally point'],
       ['Shift+click', 'On a train button: queue five units'],
       ['Shift+click', 'While placing a building: place it and keep placing the same one'],
@@ -105,6 +108,9 @@ const sliders = new Map<string, { input: HTMLInputElement; out: HTMLOutputElemen
 let muteSwitch: HTMLButtonElement | null = null;
 let audioNote: HTMLElement | null = null;
 let speedInputs: HTMLInputElement[] = [];
+let traceSwitch: HTMLButtonElement | null = null;
+let traceSaved: HTMLButtonElement | null = null;
+let traceSavedLabel: HTMLElement | null = null;
 
 /**
  * Touch with no stored choice: a step up ("Large") where the automatic fit
@@ -148,6 +154,43 @@ function refreshGame(): void {
   const scene = getScene();
   const speed = scene?.getGameSpeed() ?? 1;
   for (const input of speedInputs) input.checked = Number(input.value) === speed;
+  refreshTraces();
+}
+
+function refreshTraces(): void {
+  if (traceSwitch) traceSwitch.setAttribute('aria-checked', String(isTraceAutoDownloadOn()));
+  if (!traceSaved || !traceSavedLabel) return;
+  const count = savedTraceCount();
+  traceSaved.disabled = count === 0;
+  traceSavedLabel.textContent = `Download saved traces (${count})`;
+}
+
+function buildTraceField(): HTMLElement {
+  traceSwitch = h(
+    'button',
+    { type: 'button', class: 'switch', role: 'switch', 'aria-checked': 'false', id: 'settings-trace-auto' },
+    h('span', { class: 'switch-track', 'aria-hidden': 'true' }),
+    'Save a play trace after every match'
+  );
+  traceSwitch.addEventListener('click', () => {
+    setTraceAutoDownloadOn(!isTraceAutoDownloadOn());
+    refreshTraces();
+  });
+  traceSavedLabel = h('span', null, 'Download saved traces');
+  traceSaved = h('button', { type: 'button', class: 'btn btn-ink', id: 'settings-trace-saved' }, icon('download'), traceSavedLabel);
+  traceSaved.addEventListener('click', () => downloadSavedTraces());
+  return h(
+    'fieldset',
+    { class: 'field' },
+    h('legend', { class: 'field-label' }, 'Play traces'),
+    traceSwitch,
+    traceSaved,
+    h(
+      'p',
+      { class: 'field-note' },
+      'This device keeps which commands and buttons you used in your last 3 skirmish and multiplayer matches. On: every match also downloads its trace as a file when it ends.'
+    )
+  );
 }
 
 function buildAudioPanel(): HTMLElement {
@@ -215,6 +258,7 @@ function buildGamePanel(): HTMLElement {
     h('fieldset', { class: 'field' }, h('legend', { class: 'field-label' }, 'Interface size'), scale, h('p', { class: 'field-note' }, 'Scales every menu and HUD element on top of the automatic fit to your screen.')),
     segField<InputModePref>('Input', 'settings-input', INPUT_CHOICES, storedInputPref(), setStoredInputPref, 'Touch shows on-screen buttons and bigger targets. Auto follows the last thing you pressed with.'),
     segField<PerfModePref>('Performance mode', 'settings-perf', PERF_CHOICES, storedPerfPref(), setStoredPerfPref, 'Fewer particles and no ambient life (birds, smoke, swaying trees). Auto turns it on when a touch screen runs slow.'),
+    buildTraceField(),
     canFullscreen() ? h('div', { class: 'field' }, fullscreen) : null
   );
 }
@@ -249,7 +293,7 @@ function segField<T extends string>(
 
 const TOUCH_GESTURES: Array<[string, string]> = [
   ['Tap', 'Select, or order the selection there (move, gather, attack, repair)'],
-  ['Double-tap a unit', 'Select every unit of that type on screen'],
+  ['Double-tap', 'Select every unit or building of that type on screen'],
   ['Drag', 'Pan the camera'],
   ['Hold, then drag', 'Box-select'],
   ['Pinch / two fingers', 'Zoom and pan'],

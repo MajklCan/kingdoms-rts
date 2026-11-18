@@ -31,7 +31,7 @@ export function generateKrkonoseWinterCrownMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
       const mainPassD = pointSegmentDistance(x, y, mainPassA.x, mainPassA.y, mainPassB.x, mainPassB.y);
       const crossPassD = pointSegmentDistance(x, y, crossPassA.x, crossPassA.y, crossPassB.x, crossPassB.y);
@@ -92,7 +92,7 @@ function carvePackedSnowRoad(
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (pointSegmentDistance(x, y, a.x, a.y, b.x, b.y) > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = TileType.PACKED_SNOW;
       map.elevation[idx] = Math.min(map.elevation[idx], 3);
     }
@@ -104,7 +104,7 @@ function paintCentralIce(map: MapData, centerX: number, centerY: number): void {
   const ry = H * 0.12;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const d = dhypot((x - centerX) / rx, (y - centerY) / ry);
       const frostRipple = dcos((x - centerX) * 0.54) * 0.025
         + dcos((y - centerY) * 0.46) * 0.025;
@@ -145,14 +145,14 @@ function addSnowForestBlob(
   const effectiveRadius = radius * (0.62 + clampedFullness * 0.38);
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const dx = x - cx;
       const dy = y - cy;
       const d = dhypot(dx, dy);
       const edge = effectiveRadius
         * (1 + dcos(dx * 0.41 + dy * 0.17) * 0.04 + dcos((dx - dy) * 0.29) * 0.04);
       if (d > edge) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const tile = map.tiles[idx];
       if (
         tile === TileType.ICE
@@ -178,10 +178,10 @@ function addMirroredSnowStonePocket(map: MapData, cx: number, cy: number, radius
 function addSnowStonePocket(map: MapData, cx: number, cy: number, radius: number): void {
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const d = dhypot(x - cx, y - cy);
       if (d > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       if (map.tiles[idx] === TileType.ICE || map.tiles[idx] === TileType.PACKED_SNOW) continue;
       map.tiles[idx] = TileType.STONE;
       map.elevation[idx] = d < radius * 0.55 ? 5 : 4;
@@ -197,10 +197,10 @@ function clearSnowSpawnPatch(
 ): void {
   for (let y = cy - radius; y <= cy + radius; y++) {
     for (let x = cx - radius; x <= cx + radius; x++) {
-      if (!inBounds(x, y)) continue;
+      if (!inBounds(map, x, y)) continue;
       const d = dhypot(x - cx, y - cy);
       if (d > radius) continue;
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.tiles[idx] = Math.abs(x - cx) + Math.abs(y - cy) <= 1
         ? TileType.PACKED_SNOW
         : TileType.SNOW;

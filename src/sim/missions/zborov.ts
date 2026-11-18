@@ -298,7 +298,7 @@ function seedZborovAmbientDeadTrees(world: SimWorld): void {
 }
 
 function isZborovDeadTreeCandidate(world: SimWorld, x: number, y: number): boolean {
-  if (!isTileInMap(x, y)) return false;
+  if (!isTileInMap(world, x, y)) return false;
   if (world.map.walkability[y][x] !== 0) return false;
   const tile = world.map.tiles[y * MAP.WIDTH + x];
   return tile === TileType.DIRT || tile === TileType.MUD;
@@ -334,7 +334,7 @@ function spawnZborovResource(
         if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
         const x = cx + dx;
         const y = cy + dy;
-        if (!isTileInMap(x, y)) continue;
+        if (!isTileInMap(world, x, y)) continue;
         if (world.map.walkability[y][x] !== 0) continue;
         if (findResourceAt(world, x, y, 0.6) !== null) continue;
         if (findBuildingAt(world, x, y, 0.9) !== null) continue;
@@ -367,7 +367,7 @@ function layZborovWire(world: SimWorld): void {
   const rightX = cx + ZBOROV_CORRIDOR_HALF;
 
   const wireAt = (x: number, y: number) => {
-    if (!isTileInMap(x, y)) return;
+    if (!isTileInMap(world, x, y)) return;
     const idx = y * MAP.WIDTH + x;
     if (isWaterCampaignTile(world.map.tiles[idx])) return; // clip to the dry arena
     world.map.tiles[idx] = TileType.BARBED_WIRE;

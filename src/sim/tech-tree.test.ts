@@ -129,7 +129,6 @@ describe('technology tree', () => {
   it('unlocks every unit and building past the settlement by exactly its research', () => {
     const expectedBuildings: Record<number, TechIdValue> = {
       [BuildingDefId.BARRACKS]: TechId.BARRACKS_PIKEMEN,
-      [BuildingDefId.ARCHERY_RANGE]: TechId.ARCHERS,
       [BuildingDefId.STABLE]: TechId.KNIGHTS,
       [BuildingDefId.GOLD_MINE]: TechId.GOLD_MINES,
       [BuildingDefId.FOUNDRY]: TechId.FOUNDRY,
@@ -177,7 +176,7 @@ describe('technology tree', () => {
     expect(castle.researchedTechs[1].size).toBe(10);
     expect([...castle.researchedTechs[1]].every((id) => ringOf(id) === 1)).toBe(true);
     expect(castle.researchedTechs[0].size).toBe(0);
-    expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(true);
+    expect(isBuildingUnlocked(castle, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.DEFENSIVE_TOWER)).toBe(true);
     expect(isBuildingUnlocked(castle, 1, BuildingDefId.MILL)).toBe(true);
     // Stables are ring I (the second branch after Barracks); gold mines and stone walls are ring II.

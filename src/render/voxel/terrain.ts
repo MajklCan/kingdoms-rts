@@ -5,7 +5,7 @@
  * one draw call per frame for the entire ground layer.
  */
 
-import { ISO, MAP } from '../../config';
+import { ISO } from '../../config';
 // (Sharper terrain: render the tile diamonds at 2× to match the new voxel
 //  bake size. Adjust TILE rendering scale here so the whole world stays in
 //  proportion when we change the bake resolution.)
@@ -52,10 +52,10 @@ export function bakeTerrain(
   // Compute bounds of the rendered terrain.
   let minSx = Infinity, maxSx = -Infinity;
   let minSy = Infinity, maxSy = -Infinity;
-  for (let y = 0; y < MAP.HEIGHT; y++) {
-    for (let x = 0; x < MAP.WIDTH; x++) {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
       const c = tileToScreen(x, y);
-      const e = map.elevation[y * MAP.WIDTH + x];
+      const e = map.elevation[y * map.width + x];
       const sy = c.y - e * VPER;
       const sx0 = c.x - halfW;
       const sx1 = c.x + halfW;
@@ -79,8 +79,8 @@ export function bakeTerrain(
   // Sort tiles back-to-front (painter's algorithm). For iso, back tiles are
   // lower x+y; paint them first.
   const tileOrder: Array<{ x: number; y: number; key: number }> = [];
-  for (let y = 0; y < MAP.HEIGHT; y++) {
-    for (let x = 0; x < MAP.WIDTH; x++) {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
       tileOrder.push({ x, y, key: x + y });
     }
   }
@@ -88,7 +88,7 @@ export function bakeTerrain(
 
   for (const { x, y } of tileOrder) {
     const c = tileToScreen(x, y);
-    const idx = y * MAP.WIDTH + x;
+    const idx = y * map.width + x;
     const tileType = map.tiles[idx];
     const e = map.elevation[idx];
     const colors = TILE_COLORS[tileType] ?? TILE_COLORS[TileType.GRASS];

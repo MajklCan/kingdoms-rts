@@ -38,7 +38,7 @@ export function generateBohemianBorderForestMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
       const northRidge = y < H * 0.24 && x > W * 0.18 && x < W * 0.82;
       const southRidge = y > H * 0.76 && x > W * 0.18 && x < W * 0.82;
@@ -81,7 +81,7 @@ export function generateOreMountainPassMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const roadD = pointSegmentDistance(x, y, p1.x, p1.y, p2.x, p2.y);
       const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
       const ridgeBand = roadD > 10 || edge < 6;
@@ -129,7 +129,7 @@ export function generateMachovoJezeroMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const nx = (x - cx) / rx;
       const ny = (y - cy) / ry;
       const d = dhypot(nx, ny);
@@ -178,7 +178,7 @@ export function generateSilesianMarshMap(rng: Rng): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       map.elevation[idx] = 2;
       map.tiles[idx] = TileType.GRASS;
     }
@@ -191,8 +191,8 @@ export function generateSilesianMarshMap(rng: Rng): MapData {
       const centerY = Math.round(H * channel + dsin(x * 0.18 + phase) * 3);
       for (let dy = -3; dy <= 3; dy++) {
         const y = centerY + dy;
-        if (!inBounds(x, y)) continue;
-        const idx = mapIndex(x, y);
+        if (!inBounds(map, x, y)) continue;
+        const idx = mapIndex(map, x, y);
         map.tiles[idx] = Math.abs(dy) <= 2 ? TileType.WATER_SHALLOW : TileType.SAND;
         map.elevation[idx] = 1;
       }
@@ -230,7 +230,7 @@ export function generateFloodedBasinMap(): MapData {
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const idx = mapIndex(x, y);
+      const idx = mapIndex(map, x, y);
       const d = dhypot(x - cx, y - cy);
       if (d <= R) {
         const crater = dsin(x * 0.45 + y * 0.31) + dcos(x * 0.21 - y * 0.6);

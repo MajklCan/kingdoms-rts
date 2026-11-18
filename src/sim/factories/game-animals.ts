@@ -9,7 +9,6 @@
 
 import { dhypot } from '../core/dmath';
 import { addComponent } from 'bitecs';
-import { MAP } from '../../config';
 import {
   GameAnimal,
   GameAnimalStateId,
@@ -73,13 +72,13 @@ export function placeGameHerds(
   spawns: readonly GridPos[],
   canPlace: (x: number, y: number) => boolean
 ): void {
-  const mirror = (p: GridPos): GridPos => ({ x: MAP.WIDTH - 1 - p.x, y: MAP.HEIGHT - 1 - p.y });
+  const mirror = (p: GridPos): GridPos => ({ x: world.map.width - 1 - p.x, y: world.map.height - 1 - p.y });
   const farFromSpawns = (p: GridPos) =>
     spawns.every((s) => dhypot(s.x - p.x, s.y - p.y) >= HERD_MIN_SPAWN_DISTANCE);
 
   for (let herd = 0; herd < HERDS_PER_SIDE; herd++) {
     for (let attempt = 0; attempt < HERD_PLACEMENT_ATTEMPTS; attempt++) {
-      const center = { x: world.rng.int(MAP.WIDTH), y: world.rng.int(MAP.HEIGHT) };
+      const center = { x: world.rng.int(world.map.width), y: world.rng.int(world.map.height) };
       const species = world.rng.next() < 0.34 ? GameSpeciesId.BOAR : GameSpeciesId.DEER;
       const size = species === GameSpeciesId.BOAR ? 2 : 3 + world.rng.int(2);
       const other = mirror(center);

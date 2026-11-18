@@ -12,6 +12,7 @@ import { h, isTextEntryTarget, setAttr, setText } from '../dom';
 import { entityTile, getIdleVillagers, getScene, panToTile, selectEntities } from '../game-bridge';
 import { icon } from '../icons/icon';
 import { attachTip } from './tooltip';
+import { trace } from '../../render/trace/active-trace';
 
 let btn: HTMLButtonElement | null = null;
 let countEl: HTMLElement | null = null;
@@ -21,6 +22,7 @@ let lastCheck = 0;
 let idle: number[] = [];
 
 function selectNext(): void {
+  trace('select:idle-villager');
   const scene = getScene();
   if (!scene) return;
   idle = getIdleVillagers(scene, scene.getPerspectivePlayerId());

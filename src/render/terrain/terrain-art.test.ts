@@ -6,11 +6,13 @@ import { parseSpriteManifest } from '../sprites/sprite-manifest';
 import { hashBytes, tileHash, valueNoise } from '../tile-hash';
 import { TILE_TERRAIN, terrainNames, tileTransitions, tileVariantKey } from './terrain-art';
 
+const STANDARD = { width: MAP.WIDTH, height: MAP.HEIGHT };
+
 function flatMap(fill: number): MapData {
   const tiles = new Uint8Array(MAP.WIDTH * MAP.HEIGHT).fill(fill);
   const elevation = new Uint8Array(MAP.WIDTH * MAP.HEIGHT).fill(3);
   const walkability = Array.from({ length: MAP.HEIGHT }, () => new Array<number>(MAP.WIDTH).fill(0));
-  return { tiles, elevation, walkability } as unknown as MapData;
+  return { ...STANDARD, tiles, elevation, walkability } as unknown as MapData;
 }
 
 describe('terrain art mapping', () => {
@@ -40,12 +42,12 @@ describe('terrain art mapping', () => {
     const names = new Array<string>(MAP.WIDTH * MAP.HEIGHT).fill('dirt');
     names[5 * MAP.WIDTH + 6] = 'grass'; // +x neighbour of (5, 5)
     names[6 * MAP.WIDTH + 6] = 'forest'; // +x+y corner of (5, 5)
-    const t = tileTransitions(names, 5, 5);
+    const t = tileTransitions(STANDARD, names, 5, 5);
     expect(t.map((x) => x.neighbour)).toEqual(['grass', 'forest']);
     expect(t[0].masks[0]).toMatch(/^edge_px\.[0-2]$/);
     expect(t[1].masks).toEqual(['corner_px_py']);
     // Lower priority neighbours never bleed into a higher one.
-    expect(tileTransitions(names, 6, 5).map((x) => x.neighbour)).toEqual(['forest']);
+    expect(tileTransitions(STANDARD, names, 6, 5).map((x) => x.neighbour)).toEqual(['forest']);
   });
 });
 

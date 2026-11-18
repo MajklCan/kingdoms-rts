@@ -4,7 +4,7 @@
  */
 
 import { hasComponent } from 'bitecs';
-import { MAP, SIM } from '../../config';
+import { SIM } from '../../config';
 import { Building, Owner, Position, Resource, UnitKind, VillagerTag } from '@sim/components';
 import {
   buildingQuery,
@@ -152,5 +152,5 @@ export function buildMinimapData(ctx: SceneContext, alerts: MinimapAlerts): Mini
     entities.push({ x: Position.x[eid], y: Position.y[eid], player: 0, kind: 10 + Resource.kind[eid] });
   }
 
-  return { mapW: MAP.WIDTH, mapH: MAP.HEIGHT, tiles, entities, combatAlerts };
+  return { mapW: world.map.width, mapH: world.map.height, tiles, entities, combatAlerts };
 }

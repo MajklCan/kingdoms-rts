@@ -144,17 +144,15 @@ describe('town center villagers', () => {
   });
 });
 
-describe('archery range', () => {
-  it('unlocks with the Archers tech', () => {
+describe('archery range (retired: archers come from the barracks)', () => {
+  it('never unlocks, not even with the Archers tech', () => {
     const world = quietWorld(501);
-    expect(isBuildingUnlocked(world, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
     world.researchedTechs[1].add(TechId.BARRACKS_PIKEMEN);
-    expect(isBuildingUnlocked(world, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
     world.researchedTechs[1].add(TechId.ARCHERS);
-    expect(isBuildingUnlocked(world, 1, BuildingDefId.ARCHERY_RANGE)).toBe(true);
+    expect(isBuildingUnlocked(world, 1, BuildingDefId.ARCHERY_RANGE)).toBe(false);
   });
 
-  it('can be placed by the player once Archers is researched', () => {
+  it('cannot be placed, even in the Castle Age', () => {
     const world = quietWorld(501, AgeId.CASTLE);
     const tc = ownTownCenter(world, 1);
     world.resources[1][ResourceKindId.WOOD] = 5_000;
@@ -165,10 +163,10 @@ describe('archery range', () => {
       ).length;
     world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.ARCHERY_RANGE, x: spot.x, y: spot.y, playerId: 1 });
     step(world);
-    expect(count()).toBe(1);
+    expect(count()).toBe(0);
   });
 
-  it('trains archers, and the barracks still does too', () => {
+  it('one already standing (an old save) still trains archers, and the barracks does too', () => {
     const world = quietWorld(501, AgeId.CASTLE);
     const tc = ownTownCenter(world, 1);
     world.resources[1][ResourceKindId.FOOD] = 5_000;

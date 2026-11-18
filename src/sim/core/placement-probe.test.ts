@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { MAP } from '../../config';
 import { Position, Resource, ResourceKindId, type ResourceKind } from '../components';
-import { BUILDING_TABLE } from '../defs';
+import { BUILDING_TABLE, BuildingDefId } from '../defs';
+import { spawnFoundation } from '../factories/buildings';
 import { canPlaceBuildingAt } from '../input/buildings';
 import { dhypot } from './dmath';
 import { MapId } from '../map-gen';
 import { createSimWorld, resourceQuery } from '../world';
-import { findNearestResource, findResourceAt } from './lookup';
-import { ResourceProbe } from './placement-probe';
+import { findBuildingAt, findNearestResource, findResourceAt } from './lookup';
+import { PlacementProbe } from './placement-probe';
 
 const KINDS: ResourceKind[] = [ResourceKindId.FOOD, ResourceKindId.WOOD, ResourceKindId.GOLD, ResourceKindId.STONE];
 
-describe('ResourceProbe', () => {
+describe('PlacementProbe', () => {
   it('answers exactly like the plain lookups and canPlaceBuildingAt', () => {
     for (const mapId of [MapId.RIVERLANDS, MapId.KRKONOSE_WINTER_CROWN]) {
       const world = createSimWorld(4242, { mapId });
@@ -20,13 +21,18 @@ describe('ResourceProbe', () => {
       Resource.amount[nodes[0]] = 0;
       Position.x[nodes[1]] += 0.4;
       Position.y[nodes[2]] -= 0.45;
-      const probe = new ResourceProbe(world);
+      // Even and odd footprints, one hanging over the map corner.
+      spawnFoundation(world, BuildingDefId.BARRACKS, 0, 0, 1);
+      spawnFoundation(world, BuildingDefId.HOUSE, 20, 31, 1);
+      spawnFoundation(world, BuildingDefId.FARM, MAP.WIDTH - 1, 12, 2);
+      const probe = new PlacementProbe(world);
       let checked = 0;
       for (let y = -1; y <= MAP.HEIGHT; y += 1) {
         for (let x = -1; x <= MAP.WIDTH; x += 1) {
           for (const r of [0.35, 0.6]) {
             expect(probe.hasResourceAt(x, y, r), `${x},${y} r${r}`).toBe(findResourceAt(world, x, y, r) !== null);
           }
+          expect(probe.hasBuildingAt(x, y), `building ${x},${y}`).toBe(findBuildingAt(world, x, y, 0.01) !== null);
           for (const kind of KINDS) {
             const target = findNearestResource(world, x, y, kind, 6);
             const want = target === null ? null : dhypot(Position.x[target] - x, Position.y[target] - y);

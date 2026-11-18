@@ -24,6 +24,7 @@ import {
 } from '@sim/components';
 import { BUILDING_TABLE, BuildingDefId, UNIT_TABLE, UnitDefId, getBuildingDef, type CostTuple } from '@sim/defs';
 import { unitLimitReason } from '@sim/core/unit-limits';
+import { sortedEids } from '@sim/core/entities';
 import { isBuildingUnlocked, isUnitUnlocked, techDef, techStatus, type TechIdValue } from '@sim/tech-tree';
 import {
   canPlaceBuildingAt,
@@ -64,6 +65,8 @@ import {
   unlockResearchFor,
   populationRoomForUnitCount,
 } from './economy';
+import { splitTraining } from './train-split';
+import { traceFailure } from '../trace/command-trace';
 
 /** Shift-click on a train button queues up to this many. */
 export const TRAIN_BATCH_COUNT = 5;
@@ -194,6 +197,7 @@ export class PlayerCommands {
 
   /** Report a refused command: error sound + typed notice for the HUD. */
   fail(failure: CommandFailure): void {
+    traceFailure(failure);
     setLastEvent(describeFailure(failure));
     if (this.feedback) this.feedback.fail(failure);
     else this.audio.playUi(SFX_ERROR);
@@ -297,7 +301,7 @@ export class PlayerCommands {
     if (!def) return { reason: 'unavailable', text: 'Unknown building' };
     const noBuilder = this.builderFailure();
     if (noBuilder) return noBuilder;
-    if (!isInsideMap(tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
+    if (!isInsideMap(this.ctx.world, tx, ty)) return { reason: 'placement', subject: def.name, detail: 'outside-map' };
     const startFailure = this.nextPlacementFailure(defId, pending);
     if (startFailure) return startFailure;
     if (!isPlacementInSight(world, playerId, def, tx, ty)) {
@@ -313,10 +317,15 @@ export class PlayerCommands {
 
   // ── Production ────────────────────────────────────────────────────────────
 
-  /** Q (slot 0) / E (slot 1): train from the first selected own producer. */
+  /**
+   * Q (slot 0) / E (slot 1): train from the first selected own producer that
+   * has a unit in that slot (several kinds selected: a town center without
+   * an E slot does not stop the barracks behind it).
+   */
   trainHotkey(slot = 0, quiet = false): boolean {
     const world = this.ctx.world;
-    for (const eid of selectedQuery(world.ecs)) {
+    let refusal: CommandFailure | null = null;
+    for (const eid of sortedEids(world, selectedQuery(world.ecs))) {
       if (!hasComponent(world.ecs, Producer, eid)) continue;
       if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
       const buildingDef = BUILDING_TABLE[Building.defId[eid]];
@@ -325,18 +334,18 @@ export class PlayerCommands {
           this.trainAtSelectedProducer(UnitDefId.VILLAGER);
           return true;
         }
-        if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
-        return false;
+        refusal ??= { reason: 'unavailable', text: 'Nothing to train in that slot' };
+        continue;
       }
       const trainIds = buildingDef?.trains ?? [];
       if (trainIds.length === 0) {
-        if (!quiet) this.fail({ reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` });
-        return false;
+        refusal ??= { reason: 'unavailable', text: `${buildingDef?.name ?? 'This building'} trains nothing` };
+        continue;
       }
       const idStr = trainIds[slot];
       if (!idStr) {
-        if (!quiet) this.fail({ reason: 'unavailable', text: 'Nothing to train in that slot' });
-        return false;
+        refusal ??= { reason: 'unavailable', text: 'Nothing to train in that slot' };
+        continue;
       }
       const unitDefId = UNIT_TABLE.findIndex((u) => u.id === idStr);
       if (unitDefId < 0) return false;
@@ -349,7 +358,7 @@ export class PlayerCommands {
       this.trainAtSelectedProducer(unitDefId);
       return true;
     }
-    if (!quiet) this.fail({ reason: 'unavailable', text: 'Select a building that trains units first' });
+    if (!quiet) this.fail(refusal ?? { reason: 'unavailable', text: 'Select a building that trains units first' });
     return false;
   }
 
@@ -364,85 +373,108 @@ export class PlayerCommands {
     if (!unitDef) return;
     const numericCount = Number.isFinite(requestedCount) ? requestedCount : 1;
     const targetCount = Math.max(1, Math.min(TRAIN_BATCH_COUNT, Math.trunc(numericCount)));
-    for (const eid of selectedQuery(world.ecs)) {
-      if (!hasComponent(world.ecs, Producer, eid)) continue;
-      if (!hasComponent(world.ecs, Building, eid)) continue;
-      if (Owner.player[eid] !== this.ctx.perspectivePlayerId) continue;
-      const playerId = Owner.player[eid];
-      const buildingDef = BUILDING_TABLE[Building.defId[eid]];
-      if (unitDefId === UnitDefId.VILLAGER && hasComponent(world.ecs, ResourceWorksite, eid)) {
-        const siteName = buildingDef?.name ?? 'Worksite';
-        const queue = world.productionQueues.get(eid) ?? [];
-        const queuedWorkers = queue.filter((defId) => defId === UnitDefId.VILLAGER).length;
-        const slots = getWorksiteWorkerSlots(world, eid);
-        const slotRoom = slots - ResourceWorksite.assignedWorkers[eid] - queuedWorkers;
-        if (slotRoom <= 0) {
-          this.fail({ reason: 'unavailable', text: `${siteName} has no free worker slots` });
-          return;
-        }
-        const queueRoom = Math.max(0, 2 - queue.length);
-        if (queueRoom <= 0) {
-          this.fail({ reason: 'queue-full', subject: siteName });
-          return;
-        }
-        const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
-        if (affordable <= 0) {
-          this.fail({ reason: 'resources', subject: 'a worker', missing: this.missingResources(unitDef.cost) });
-          return;
-        }
-        const popRoom = populationRoomForUnitCount(world, playerId, unitDefId, targetCount);
-        if (popRoom <= 0) {
-          this.fail({ reason: 'population', subject: 'a worker' });
-          return;
-        }
-        const trainCount = Math.min(targetCount, slotRoom, queueRoom, affordable, popRoom);
-        this.dispatch({
-          type: 'trainUnit',
-          atEid: eid,
-          defId: unitDefId,
-          count: trainCount,
-          playerId: this.ctx.perspectivePlayerId,
-        });
-        setLastEvent(`queued ${trainCount}x worker at eid=${eid}`);
-        return;
-      }
-      if (!buildingDef?.trains.includes(unitDef.id)) continue;
-      if (!isUnitUnlocked(world, playerId, unitDefId)) {
-        this.fail({ reason: 'locked', subject: unitDef.name, research: this.unlockResearchName('unit', unitDefId) });
-        return;
-      }
-      const limitReason = unitLimitReason(world, playerId, unitDefId);
-      if (limitReason !== null) {
-        this.fail({ reason: 'unavailable', text: limitReason });
-        return;
-      }
-      const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
-      if (affordable <= 0) {
-        this.fail({ reason: 'resources', subject: unitDef.name, missing: this.missingResources(unitDef.cost) });
-        return;
-      }
-      const popRoom = populationRoomForUnitCount(world, playerId, unitDefId, targetCount);
-      if (popRoom <= 0) {
-        this.fail({ reason: 'population', subject: unitDef.name });
-        return;
-      }
-      // The Commander is one per realm: a shift-click batch is still one.
-      const batchCap = unitDefId === UnitDefId.COMMANDER ? 1 : targetCount;
-      const trainCount = Math.min(batchCap, affordable, popRoom);
-      this.dispatch({
-        type: 'trainUnit',
-        atEid: eid,
-        defId: unitDefId,
-        count: trainCount,
-        playerId: this.ctx.perspectivePlayerId,
+    const playerId = this.ctx.perspectivePlayerId;
+    const producers = sortedEids(
+      world,
+      selectedQuery(world.ecs).filter(
+        (eid) =>
+          hasComponent(world.ecs, Producer, eid) &&
+          hasComponent(world.ecs, Building, eid) &&
+          Owner.player[eid] === playerId
+      )
+    );
+    const worksites = producers.filter((eid) => hasComponent(world.ecs, ResourceWorksite, eid));
+    const trainers = producers.filter(
+      (eid) => !worksites.includes(eid) && BUILDING_TABLE[Building.defId[eid]]?.trains.includes(unitDef.id)
+    );
+    // Worksite crews first; a town center selected alongside full worksites
+    // still takes the villager.
+    if (unitDefId === UnitDefId.VILLAGER && worksites.length > 0) {
+      if (this.trainWorksiteCrew(worksites, unitDefId, targetCount, trainers.length > 0)) return;
+    }
+    if (trainers.length === 0) {
+      this.fail({
+        reason: 'unavailable',
+        text: `Select a ${unitDef.trainAt.toLowerCase().replace('_', ' ')} to train ${unitDef.name}`,
       });
-      setLastEvent(`queued ${trainCount}x ${unitDef.name} at eid=${eid}`);
       return;
     }
-    this.fail({
-      reason: 'unavailable',
-      text: `Select a ${unitDef.trainAt.toLowerCase().replace('_', ' ')} to train ${unitDef.name}`,
+    if (!isUnitUnlocked(world, playerId, unitDefId)) {
+      this.fail({ reason: 'locked', subject: unitDef.name, research: this.unlockResearchName('unit', unitDefId) });
+      return;
+    }
+    const limitReason = unitLimitReason(world, playerId, unitDefId);
+    if (limitReason !== null) {
+      this.fail({ reason: 'unavailable', text: limitReason });
+      return;
+    }
+    const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
+    if (affordable <= 0) {
+      this.fail({ reason: 'resources', subject: unitDef.name, missing: this.missingResources(unitDef.cost) });
+      return;
+    }
+    const popRoom = populationRoomForUnitCount(world, playerId, unitDefId, targetCount);
+    if (popRoom <= 0) {
+      this.fail({ reason: 'population', subject: unitDef.name });
+      return;
+    }
+    // The Commander is one per realm: a shift-click batch is still one.
+    const batchCap = unitDefId === UnitDefId.COMMANDER ? 1 : targetCount;
+    const trainCount = Math.min(batchCap, affordable, popRoom);
+    // Several producers selected: each unit goes to the shortest queue.
+    const loads = trainers.map((eid) => ({ eid, queued: world.productionQueues.get(eid)?.length ?? 0 }));
+    for (const share of splitTraining(loads, trainCount)) {
+      this.dispatch({ type: 'trainUnit', atEid: share.eid, defId: unitDefId, count: share.count, playerId });
+      setLastEvent(`queued ${share.count}x ${unitDef.name} at eid=${share.eid}`);
+    }
+  }
+
+  /**
+   * Worksite crews: the selected worksite with the most room (free worker
+   * slots and queue places) takes the batch; when none has room, say why for
+   * the first one, unless `canFallBack` (a town center is selected too).
+   * False when nothing was done and the caller should try the others.
+   */
+  private trainWorksiteCrew(
+    worksites: readonly number[],
+    unitDefId: number,
+    targetCount: number,
+    canFallBack: boolean
+  ): boolean {
+    const world = this.ctx.world;
+    const unitDef = UNIT_TABLE[unitDefId];
+    if (!unitDef) return true;
+    const playerId = this.ctx.perspectivePlayerId;
+    const rooms = worksites.map((eid) => {
+      const queue = world.productionQueues.get(eid) ?? [];
+      const queuedWorkers = queue.filter((defId) => defId === UnitDefId.VILLAGER).length;
+      const slotRoom = getWorksiteWorkerSlots(world, eid) - ResourceWorksite.assignedWorkers[eid] - queuedWorkers;
+      const queueRoom = Math.max(0, 2 - queue.length);
+      return { eid, slotRoom, queueRoom, room: Math.min(slotRoom, queueRoom) };
     });
+    const best = rooms.reduce((a, b) => (b.room > a.room ? b : a));
+    if (best.room <= 0) {
+      if (canFallBack) return false;
+      const first = rooms[0];
+      const siteName = BUILDING_TABLE[Building.defId[first.eid]]?.name ?? 'Worksite';
+      if (first.slotRoom <= 0) this.fail({ reason: 'unavailable', text: `${siteName} has no free worker slots` });
+      else this.fail({ reason: 'queue-full', subject: siteName });
+      return true;
+    }
+    const affordable = affordableCountForCost(world, playerId, unitDef.cost, targetCount);
+    if (affordable <= 0) {
+      this.fail({ reason: 'resources', subject: 'a worker', missing: this.missingResources(unitDef.cost) });
+      return true;
+    }
+    const popRoom = populationRoomForUnitCount(world, playerId, unitDefId, targetCount);
+    if (popRoom <= 0) {
+      this.fail({ reason: 'population', subject: 'a worker' });
+      return true;
+    }
+    const trainCount = Math.min(targetCount, best.room, affordable, popRoom);
+    this.dispatch({ type: 'trainUnit', atEid: best.eid, defId: unitDefId, count: trainCount, playerId });
+    setLastEvent(`queued ${trainCount}x worker at eid=${best.eid}`);
+    return true;
   }
 
   // ── Research ──────────────────────────────────────────────────────────────

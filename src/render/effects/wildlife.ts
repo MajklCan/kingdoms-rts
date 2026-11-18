@@ -5,7 +5,6 @@
  * Spawned only on visible tiles around the camera view, a handful at a time.
  */
 
-import { MAP } from '../../config';
 import { TileType } from '@sim/map-gen';
 import { clamp01, type FxHost } from './fx-host';
 import {
@@ -374,8 +373,8 @@ export class Wildlife {
       for (let dx = -r; dx <= r; dx++) {
         const tx = x + dx;
         const ty = y + dy;
-        if (tx < 0 || ty < 0 || tx >= MAP.WIDTH || ty >= MAP.HEIGHT) continue;
-        if (!WATER.has(tiles[ty * MAP.WIDTH + tx])) return true;
+        if (tx < 0 || ty < 0 || tx >= this.host.ctx.world.map.width || ty >= this.host.ctx.world.map.height) continue;
+        if (!WATER.has(tiles[ty * this.host.ctx.world.map.width + tx])) return true;
       }
     }
     return false;

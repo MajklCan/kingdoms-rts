@@ -4,7 +4,6 @@
  * checked against the sending slot by the net layer.
  */
 
-import { MAP } from '../../config';
 import { Position } from '../components';
 import { BuildingDefId, canAfford, getBuildingDef, spend } from '../defs';
 import { isBuildingUnlocked } from '../tech-tree';
@@ -33,7 +32,7 @@ export function applyPlaceWallLine(
   builderEids: number[] = []
 ): number {
   if (![x0, y0, x1, y1].every(Number.isInteger)) return 0;
-  if (!isTileInBounds(x0, y0) || !isTileInBounds(x1, y1)) return 0;
+  if (!isTileInBounds(world, x0, y0) || !isTileInBounds(world, x1, y1)) return 0;
   if (!isBuildingUnlocked(world, playerId, BuildingDefId.WALL)) return 0;
   const bank = world.resources[playerId];
   const def = getBuildingDef(BuildingDefId.WALL);
@@ -44,7 +43,7 @@ export function applyPlaceWallLine(
   let placed = 0;
   for (const { x, y } of wallLineTiles(x0, y0, x1, y1)) {
     if (!canAfford(bank, tier.cost)) break;
-    if (occupied.has(y * MAP.WIDTH + x)) continue;
+    if (occupied.has(y * world.map.width + x)) continue;
     if (!canPlaceBuildingAt(world, def, x, y)) continue;
     if (!isPlacementInSight(world, playerId, def, x, y)) continue;
     spend(bank, tier.cost);
@@ -58,8 +57,8 @@ export function applyPlaceWallLine(
   return placed;
 }
 
-function isTileInBounds(x: number, y: number): boolean {
-  return x >= 0 && y >= 0 && x < MAP.WIDTH && y < MAP.HEIGHT;
+function isTileInBounds(world: SimWorld, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < world.map.width && y < world.map.height;
 }
 
 /** Tiles a living unit stands on: a wall there would trap it. */
@@ -68,7 +67,7 @@ function unitTiles(world: SimWorld): Set<number> {
   for (const eid of sortedEids(world, unitQuery(world.ecs))) {
     const x = Math.round(Position.x[eid]);
     const y = Math.round(Position.y[eid]);
-    if (isTileInBounds(x, y)) out.add(y * MAP.WIDTH + x);
+    if (isTileInBounds(world, x, y)) out.add(y * world.map.width + x);
   }
   return out;
 }

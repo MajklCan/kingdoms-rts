@@ -35,6 +35,7 @@ import type { IconName } from '../icons/icon-names';
 import { recentEvents } from './event-log';
 import { loadPortraits, portraitForKey } from './portraits';
 import { attachTip } from './tooltip';
+import { trace } from '../../render/trace/active-trace';
 
 const QUEUE_SLOTS = 6;
 /** Mini portraits shown for a multi-selection before "+N" takes over. */
@@ -113,8 +114,13 @@ let lastTilesSig = '';
 let lastQueueSig = '';
 let lastStateSig = '';
 let lastIdleSig = '';
-let queueProducer = -1;
-let queueItems: ProductionSlotInfo[] = [];
+/** A queue slot on screen: which selected building it belongs to and its place there. */
+interface QueueEntry {
+  producer: number;
+  slot: number;
+  info: ProductionSlotInfo;
+}
+let queueItems: QueueEntry[] = [];
 let tiles: Array<{ eid: number; el: HTMLElement }> = [];
 let activeScene: GameScene | null = null;
 
@@ -213,16 +219,18 @@ function buildQueue(): Pick<Refs, 'queueWrap' | 'queueSlots' | 'queueMore'> {
     );
     slot.addEventListener('click', () => {
       const scene = activeScene;
-      if (!scene || queueProducer < 0 || !queueItems[i]) return;
+      const entry = queueItems[i];
+      if (!scene || !entry) return;
       // Redraw on the next frame even if the sim has not applied it yet.
-      if (cancelProduction(scene, queueProducer, i)) lastQueueSig = '';
+      if (cancelProduction(scene, entry.producer, entry.slot)) lastQueueSig = '';
     });
     attachTip(slot, () => {
-      const item = queueItems[i];
-      if (!slot.classList.contains('is-filled') || !item) return null;
+      const entry = queueItems[i];
+      const item = entry?.info;
+      if (!slot.classList.contains('is-filled') || !entry || !item) return null;
       return {
         title: item.name,
-        body: `${i === 0 ? `Training now, ${Math.floor(item.progressFrac * 100)}% done.` : 'Waiting in the queue.'} Click to cancel. ${refundText(item)}`,
+        body: `${entry.slot === 0 ? `Training now, ${Math.floor(item.progressFrac * 100)}% done.` : 'Waiting in the queue.'} Click to cancel. ${refundText(item)}`,
       };
     });
     queueSlots.push(slot);
@@ -378,38 +386,44 @@ function renderState(scene: GameScene): void {
 function renderQueue(scene: GameScene, selected: number[], me: number): void {
   if (!refs) return;
   const producers = selected.filter((eid) => isProducer(scene, eid) && isOwnedBy(scene, eid, me));
-  let producer = -1;
-  let queue: ProductionSlotInfo[] = [];
-  for (const eid of producers) {
-    const q = getProductionQueue(scene, eid);
-    if (producer < 0 || (queue.length === 0 && q.length > 0)) {
-      producer = eid;
-      queue = q;
+  // Several buildings selected: one shared row, every unit in training first
+  // (one per busy building), then the waiting ones, so a train click that
+  // went to another building shows up too.
+  const queues = producers.map((eid) => ({ eid, queue: getProductionQueue(scene, eid) }));
+  const depth = queues.reduce((max, q) => Math.max(max, q.queue.length), 0);
+  const entries: QueueEntry[] = [];
+  for (let slot = 0; slot < depth; slot++) {
+    for (const q of queues) {
+      const info = q.queue[slot];
+      if (info) entries.push({ producer: q.eid, slot, info });
     }
   }
-  queueProducer = producer;
-  queueItems = queue;
-  refs.queueWrap.classList.toggle('is-visible', producer >= 0);
-  refs.root.classList.toggle('has-queue', producer >= 0);
-  const sig = `${producer}|${queue.map((s) => s.unitDefId).join(',')}|${Math.floor((queue[0]?.progressFrac ?? 0) * 72)}`;
+  queueItems = entries;
+  const shown = producers.length > 0;
+  refs.queueWrap.classList.toggle('is-visible', shown);
+  refs.root.classList.toggle('has-queue', shown);
+  const progress = entries.filter((e) => e.slot === 0).map((e) => Math.floor(e.info.progressFrac * 72));
+  const sig = `${producers.join(',')}|${entries.map((e) => `${e.producer}:${e.info.unitDefId}`).join(',')}|${progress.join(',')}`;
   if (sig === lastQueueSig) return;
   lastQueueSig = sig;
   refs.queueSlots.forEach((slot, i) => {
-    const item = queue[i];
+    const entry = entries[i];
+    const item = entry?.info;
+    const training = entry?.slot === 0;
     slot.classList.toggle('is-filled', !!item);
-    slot.classList.toggle('is-active', i === 0 && !!item);
+    slot.classList.toggle('is-active', training);
     slot.classList.toggle('is-cancel', !!item);
     (slot as HTMLButtonElement).disabled = !item;
     slot.tabIndex = item ? 0 : -1;
-    setAttr(slot, 'aria-label', item ? `${item.name}, ${i === 0 ? 'training' : 'queued'}. Cancel and refund` : 'Empty slot');
+    setAttr(slot, 'aria-label', item ? `${item.name}, ${training ? 'training' : 'queued'}. Cancel and refund` : 'Empty slot');
     if (item) {
       slot.dataset.unit = String(item.unitDefId);
       // Same picture as the train button the unit came from.
       setIcon(slot.querySelector<HTMLElement>('.queue-icon')!, UNIT_ICON_BY_DEF[item.unitDefId] ?? 'person');
     }
-    (slot.querySelector('.queue-progress') as HTMLElement).style.setProperty('--p', i === 0 && item ? item.progressFrac.toFixed(3) : '0');
+    (slot.querySelector('.queue-progress') as HTMLElement).style.setProperty('--p', training && item ? item.progressFrac.toFixed(3) : '0');
   });
-  setText(refs.queueMore, queue.length > QUEUE_SLOTS ? `+${queue.length - QUEUE_SLOTS}` : '');
+  setText(refs.queueMore, entries.length > QUEUE_SLOTS ? `+${entries.length - QUEUE_SLOTS}` : '');
 }
 
 // --- Multi -------------------------------------------------------------------
@@ -442,7 +456,10 @@ function renderMulti(scene: GameScene, selected: number[], age: number): void {
           icon(kindIcon(key, age), 'group-icon'),
           h('span', { class: 'group-count num' }, String(eids.length))
         );
-        btn.addEventListener('click', () => selectEntities(scene, eids));
+        btn.addEventListener('click', () => {
+          trace('select:from-panel');
+          selectEntities(scene, eids);
+        });
         attachTip(btn, () => ({ title: `${kindName(key)} x${eids.length}`, body: 'Click to keep only this kind selected.' }));
         return btn;
       })
@@ -467,7 +484,10 @@ function renderMulti(scene: GameScene, selected: number[], age: number): void {
         glyph,
         h('span', { class: 'tile-hp', 'aria-hidden': 'true' }, h('i'))
       );
-      el.addEventListener('click', () => selectEntities(scene, [eid]));
+      el.addEventListener('click', () => {
+        trace('select:from-panel');
+        selectEntities(scene, [eid]);
+      });
       attachTip(el, () => {
         const f = healthFrac(scene, eid);
         return { title: kindName(key), body: f === null ? 'Click to select only this one.' : `Health ${Math.round(f * 100)}%. Click to select only this one.` };
@@ -529,7 +549,6 @@ export function updateSelectionPanel(scene: GameScene): void {
   refs.multi.hidden = mode !== 'multi';
   if (mode === 'empty') {
     lastQueueSig = '';
-    queueProducer = -1;
     queueItems = [];
     refs.root.classList.remove('has-queue');
     renderIdle(scene);
@@ -537,7 +556,6 @@ export function updateSelectionPanel(scene: GameScene): void {
   }
   const age = scene.getAge(me).current;
   if (mode === 'multi') {
-    queueProducer = -1;
     queueItems = [];
     refs.root.classList.remove('has-queue');
     renderMulti(scene, selected, age);
@@ -582,7 +600,6 @@ export function resetSelectionPanel(): void {
   lastQueueSig = '';
   lastStateSig = '';
   lastIdleSig = '';
-  queueProducer = -1;
   queueItems = [];
   tiles = [];
 }

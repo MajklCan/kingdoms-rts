@@ -23,7 +23,7 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from '../components';
-import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } from '../defs';
+import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef, isEndlessWorksite } from '../defs';
 import { TechId, hasTech, worksiteWorkerSlotsForKind } from '../tech-tree';
 import { aiResourceWorksiteCanStillProduce } from '../ai/snapshot';
 import {
@@ -45,6 +45,7 @@ import { spawnVillager } from '../factories/units';
 import { clearFormationSpeedCap } from '../input/unit-orders';
 import { findNearestDropOffEid, routeToNearestDropOff } from './dropoff';
 import { routeFarmWorkerToNextPatch, routeToNearestReachableResource } from './gathering';
+import { reassignIdleDryCrews } from './dry-worksite-crews';
 import {
   refreshWorksiteHelpers,
   releaseStrandedHelpers,
@@ -62,6 +63,7 @@ const FARM_YIELDS_II_FOOD_PER_WORK_CYCLE = 4;
 export function resourceWorksiteSystem(world: SimWorld): void {
   releaseStrandedHelpers(world);
   const sites = sortedEids(world, resourceWorksiteQuery(world.ecs));
+  reassignIdleDryCrews(world, sites);
   for (const siteEid of sites) {
     if (hasComponent(world.ecs, ConstructionSite, siteEid)) continue;
     if (Health.hp[siteEid] <= 0) continue;
@@ -215,7 +217,9 @@ function assignSelfProducingWorksiteWorkers(world: SimWorld, siteEid: number): n
     if (worksiteOf(world, worker) !== siteEid) continue;
     if (Health.hp[worker] <= 0) continue;
     Gatherer.targetEid[worker] = siteEid;
-    ResourceCarry.amount[worker] = 0;
+    // A helper (or a crew from a dry mine) still carrying a load delivers it
+    // first: zeroing it here threw away what he had gathered.
+    if (ResourceCarry.amount[worker] > 0 && sendLoadHome(world, worker)) continue;
     const dist = distToBuildingEdge(world, Position.x[worker], Position.y[worker], siteEid);
     if (dist > DROP_OFF_EDGE_DISTANCE) {
       Gatherer.state[worker] = GathererStateId.WALKING_TO_BUILD;
@@ -230,6 +234,21 @@ function assignSelfProducingWorksiteWorkers(world: SimWorld, siteEid: number): n
     if (worksThisTick(world, worker)) activeWorkers++;
   }
   return activeWorkers;
+}
+
+/** Send `worker` to deliver his load; false (load dropped) when no drop-off is left to take it. */
+function sendLoadHome(world: SimWorld, worker: number): boolean {
+  const state = Gatherer.state[worker];
+  if (state === GathererStateId.RETURNING || state === GathererStateId.DEPOSITING) return true;
+  if (findNearestDropOffEid(world, worker) === null) {
+    ResourceCarry.amount[worker] = 0;
+    return false;
+  }
+  Gatherer.state[worker] = GathererStateId.RETURNING;
+  Gatherer.cooldown[worker] = 0;
+  world.paths.delete(worker);
+  routeToNearestDropOff(world, worker);
+  return true;
 }
 
 function worksiteProductionRateTicks(
@@ -364,6 +383,9 @@ export function getWorksiteWorkerSlots(world: SimWorld, siteEid: number): number
   if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return 0;
   const def = getBuildingDef(Building.defId[siteEid]);
   const baseSlots = def?.workerSlots ?? 1;
+  // Crews research adds hands at a vein or a forest; the endless sites
+  // (mint, brickworks, forester's lodge) dig nothing and take a full crew.
+  if (def && isEndlessWorksite(def)) return baseSlots;
   return Math.min(
     baseSlots,
     worksiteWorkerSlotsForKind(

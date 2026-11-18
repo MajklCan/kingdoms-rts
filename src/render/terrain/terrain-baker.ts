@@ -10,7 +10,8 @@
  */
 
 import { TileType, type MapData } from '@sim/map-gen';
-import { ISO, MAP } from '../../config';
+import { ISO } from '../../config';
+import type { MapSize } from '@sim/core/map-size';
 import type { ArtCatalog, ArtFrame } from '../sprites/art-catalog';
 import { tileHash } from '../tile-hash';
 import {
@@ -96,8 +97,8 @@ export class TerrainBaker {
    */
   bakeChunk(x0: number, y0: number, x1: number, y1: number): TerrainChunkBake | null {
     const tiles: Array<[number, number]> = [];
-    for (let y = y0; y < Math.min(y1, MAP.HEIGHT); y++) {
-      for (let x = x0; x < Math.min(x1, MAP.WIDTH); x++) tiles.push([x, y]);
+    for (let y = y0; y < Math.min(y1, this.map.height); y++) {
+      for (let x = x0; x < Math.min(x1, this.map.width); x++) tiles.push([x, y]);
     }
     if (tiles.length === 0) return null;
     tiles.sort(painterOrder);
@@ -149,8 +150,8 @@ export class TerrainBaker {
     const cx = Math.floor(x0 / size);
     const cy = Math.floor(y0 / size);
     const out: Array<[number, number]> = [];
-    for (let y = Math.max(0, y0 - 1); y <= Math.min(y1, MAP.HEIGHT - 1); y++) {
-      for (let x = Math.max(0, x0 - 1); x <= Math.min(x1, MAP.WIDTH - 1); x++) {
+    for (let y = Math.max(0, y0 - 1); y <= Math.min(y1, this.map.height - 1); y++) {
+      for (let x = Math.max(0, x0 - 1); x <= Math.min(x1, this.map.width - 1); x++) {
         if (x >= x0 && x < x1 && y >= y0 && y < y1) continue;
         const tx = Math.floor(x / size);
         const ty = Math.floor(y / size);
@@ -178,7 +179,7 @@ export class TerrainBaker {
       composite.canvas.width / this.opts.scale,
       composite.canvas.height / this.opts.scale
     );
-    if (this.map.tiles[y * MAP.WIDTH + x] === TileType.BARBED_WIRE) {
+    if (this.map.tiles[y * this.map.width + x] === TileType.BARBED_WIRE) {
       drawBarbedWire(ctx, b.x, b.y - HALF_H, x, y);
     }
     ctx.restore();
@@ -195,7 +196,7 @@ export class TerrainBaker {
     const t = resetContext(this.scratchT, w, h, s, this.pixelArt);
     this.drawFrame(t, tile, ax, ay);
     const self = this.nameAt(x, y);
-    for (const transition of tileTransitions(this.names, x, y)) {
+    for (const transition of tileTransitions(this.map, this.names, x, y)) {
       const neighbour = this.tileFrame(transition.neighbour, x, y, frame);
       if (!neighbour) continue;
       const m = resetContext(this.scratchM, w, h, s, this.pixelArt);
@@ -230,7 +231,7 @@ export class TerrainBaker {
   /** Elevation accents: contact shade at a cliff foot, lit rim on a raised edge. */
   private edgeAccents(x: number, y: number): string[] {
     const e = this.elevation(x, y);
-    const at = (nx: number, ny: number): number => (inside(nx, ny) ? this.elevation(nx, ny) : 0);
+    const at = (nx: number, ny: number): number => (inside(this.map, nx, ny) ? this.elevation(nx, ny) : 0);
     const keys: string[] = [];
     if (at(x - 1, y) > e) keys.push('ao_mx');
     if (at(x, y - 1) > e) keys.push('ao_my');
@@ -256,7 +257,7 @@ export class TerrainBaker {
     if (!edges) return;
     const b = this.bottomCorner(x, y);
     for (const [dx, dy, key] of edges) {
-      const n = inside(x + dx, y + dy) ? this.nameAt(x + dx, y + dy) : null;
+      const n = inside(this.map, x + dx, y + dy) ? this.nameAt(x + dx, y + dy) : null;
       if (n !== null && RAIL_EDGES[n]) continue;
       const rail = this.art.frame('terrain.bridge_rail', key);
       if (rail) this.drawFrame(ctx, rail, b.x, b.y);
@@ -293,7 +294,7 @@ export class TerrainBaker {
     }
     const e = this.elevation(x, y);
     const kOf = (nx: number, ny: number): number =>
-      inside(nx, ny) && this.elevation(nx, ny) === e ? EDGE_BLEED : 0;
+      inside(this.map, nx, ny) && this.elevation(nx, ny) === e ? EDGE_BLEED : 0;
     const kTR = kOf(x, y - 1);
     const kBR = kOf(x + 1, y);
     const kBL = kOf(x, y + 1);
@@ -349,7 +350,7 @@ export class TerrainBaker {
   /** Steps a tile drops toward its front neighbour (all of its height at the map edge). */
   private dropTo(nx: number, ny: number, x: number, y: number): number {
     const e = this.elevation(x, y);
-    const n = inside(nx, ny) ? this.elevation(nx, ny) : 0;
+    const n = inside(this.map, nx, ny) ? this.elevation(nx, ny) : 0;
     return Math.max(0, e - n);
   }
 
@@ -361,11 +362,11 @@ export class TerrainBaker {
   }
 
   private elevation(x: number, y: number): number {
-    return this.map.elevation[y * MAP.WIDTH + x];
+    return this.map.elevation[y * this.map.width + x];
   }
 
   private nameAt(x: number, y: number): string {
-    return this.names[y * MAP.WIDTH + x] ?? 'grass';
+    return this.names[y * this.map.width + x] ?? 'grass';
   }
 }
 
@@ -374,8 +375,8 @@ function painterOrder(a: readonly [number, number], b: readonly [number, number]
   return a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0];
 }
 
-function inside(x: number, y: number): boolean {
-  return x >= 0 && y >= 0 && x < MAP.WIDTH && y < MAP.HEIGHT;
+function inside(map: MapSize, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < map.width && y < map.height;
 }
 
 /**
