@@ -18,6 +18,7 @@ import {
   canAfford,
   getBuildingDef,
   getUnitDef,
+  isEndlessWorksite,
 } from '../defs';
 import { TechId, hasTech, isBuildingUnlocked, isUnitUnlocked } from '../tech-tree';
 import { POP_CAP_HARD_LIMIT } from '../core/constants';
@@ -31,6 +32,7 @@ import {
 } from '../systems/worksites';
 import { AI_ARMY_POP_RESERVE_MAX, aiRequiredWaveSize } from './attack';
 import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
+import { aiEndlessSiteTargets } from './endless-economy';
 import { aiPlaceBuilding, aiQueueUnit } from './placement';
 import {
   type AiSnapshot,
@@ -413,6 +415,7 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
     { defId: BuildingDefId.STONE_QUARRY, target: desiredStone, enabled: hasBarracks },
     { defId: BuildingDefId.GOLD_MINE, target: desiredGold, enabled: hasBarracks },
     { defId: BuildingDefId.MILL, target: aiDesiredMillCount(world, playerId, snapshot), enabled: hasBarracks },
+    ...aiEndlessSiteTargets(world, playerId, snapshot),
   ];
   const currentCounts = new Map<number, number>();
   for (const item of economyPlan) {
@@ -478,6 +481,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
     { defId: BuildingDefId.STONE_QUARRY, target: targets.stone, enabled: hasBarracksTech || hasBarracks },
     { defId: BuildingDefId.GOLD_MINE, target: targets.gold, enabled: hasBarracksTech || hasBarracks },
     { defId: BuildingDefId.MILL, target: targets.mills, enabled: hasBarracksTech || hasBarracks },
+    ...aiEndlessSiteTargets(world, playerId, snapshot),
   ];
   const currentCounts = new Map<number, number>();
   for (const item of adaptiveEconomyPlan) {
@@ -555,9 +559,16 @@ function aiWorkerCap(world: SimWorld): number {
   return POP_CAP_HARD_LIMIT - Math.min(aiSettings(world).maxWaveUnits, AI_ARMY_POP_RESERVE_MAX);
 }
 
-/** With the workforce full only mills (no workers) and the first gold mines go up. */
+/**
+ * With the workforce full only mills (no workers), the endless worksites and
+ * the first gold mines go up. An endless site is only wanted once the
+ * deposits near town run low; its crew then comes from the dry mines
+ * (`systems/dry-worksite-crews.ts`), which is why the workforce stays full.
+ */
 function aiPlacementAllowedWhenFull(world: SimWorld, playerId: number, snapshot: AiSnapshot, defId: number): boolean {
   if (defId === BuildingDefId.MILL) return true;
+  const def = getBuildingDef(defId);
+  if (def && isEndlessWorksite(def)) return true;
   return defId === BuildingDefId.GOLD_MINE &&
     countAiBuildings(snapshot, BuildingDefId.GOLD_MINE) < aiSettings(world).goldMinesCastle &&
     isBuildingUnlocked(world, playerId, BuildingDefId.GOLD_MINE);

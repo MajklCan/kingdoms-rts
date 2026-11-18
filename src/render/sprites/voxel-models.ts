@@ -26,6 +26,9 @@ import { buildGunpowderFoundryVoxels } from '../voxel/models/gunpowder-foundry';
 import { buildDarkLumberCampVoxels } from '../voxel/models/dark-lumber-camp';
 import { buildDarkMillVoxels } from '../voxel/models/dark-mill';
 import { buildDarkGoldMineVoxels } from '../voxel/models/dark-gold-mine';
+import { buildBrickworksVoxels } from '../voxel/models/endless-brickworks';
+import { buildForesterVoxels } from '../voxel/models/endless-forester';
+import { buildMintVoxels } from '../voxel/models/endless-mint';
 import { buildDarkStoneQuarryVoxels } from '../voxel/models/dark-stone-quarry';
 import { buildDarkDefensiveTowerVoxels } from '../voxel/models/dark-defensive-tower';
 import { buildWallVoxels } from '../voxel/models/wall';
@@ -118,6 +121,9 @@ export const VOXEL_KEYS = {
   GOLD_MINE: 'voxel-dark-gold-mine',
   STONE_QUARRY: 'voxel-dark-stone-quarry',
   FOUNDRY: 'voxel-gunpowder-foundry',
+  MINT: 'voxel-mint',
+  BRICKWORKS: 'voxel-brickworks',
+  FORESTER: 'voxel-forester',
   WALL_X: 'voxel-palisade-wall-x',
   WALL_Y: 'voxel-palisade-wall-y',
   TREE: 'voxel-tree',
@@ -318,6 +324,11 @@ export const VOXEL_SHARED_BAKES: readonly VoxelStaticBake[] = [
   { key: VOXEL_KEYS.GOLD_MINE, build: buildDarkGoldMineVoxels, voxelW: 4 },
   { key: VOXEL_KEYS.STONE_QUARRY, build: buildDarkStoneQuarryVoxels, voxelW: 4 },
   { key: VOXEL_KEYS.FOUNDRY, build: buildGunpowderFoundryVoxels, voxelW: 4 },
+  // No Blender art yet: baked at footprint size (2x2 = 128 px, 1x1 = 64 px) so
+  // they stand level with the atlas buildings beside them.
+  { key: VOXEL_KEYS.MINT, build: buildMintVoxels, voxelW: 8 },
+  { key: VOXEL_KEYS.BRICKWORKS, build: buildBrickworksVoxels, voxelW: 8 },
+  { key: VOXEL_KEYS.FORESTER, build: buildForesterVoxels, voxelW: 5 },
   { key: VOXEL_KEYS.WALL_X, build: () => buildWallVoxels('x'), voxelW: 4, bounds: WALL_BOUNDS },
   { key: VOXEL_KEYS.WALL_Y, build: () => buildWallVoxels('y'), voxelW: 4, bounds: WALL_BOUNDS },
   { key: VOXEL_KEYS.TREE, build: buildTreeVoxels, voxelW: 4 },
@@ -370,6 +381,9 @@ export function voxelBuildingSprite(
     case BuildingDefId.ARCHERY_RANGE: return { key: VOXEL_KEYS.ARCHERY_RANGE, originY: 0.632 };
     case BuildingDefId.STABLE: return { key: VOXEL_KEYS.STABLE, originY: 0.611 };
     case BuildingDefId.FOUNDRY: return { key: VOXEL_KEYS.FOUNDRY, originY: 0.61 };
+    case BuildingDefId.MINT: return { key: VOXEL_KEYS.MINT, originY: 0.64 };
+    case BuildingDefId.BRICKWORKS: return { key: VOXEL_KEYS.BRICKWORKS, originY: 0.62 };
+    case BuildingDefId.FORESTER: return { key: VOXEL_KEYS.FORESTER, originY: 0.58 };
     case BuildingDefId.DEFENSIVE_TOWER:
       return { key: VOXEL_KEYS.DEFENSIVE_TOWER_PREFIX + playerId, originY: 0.743 };
     case BuildingDefId.WALL:

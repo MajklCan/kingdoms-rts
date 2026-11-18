@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILDING_TABLE } from '@sim/defs';
+import { BUILDING_TABLE, BuildingDefId } from '@sim/defs';
 import manifestJson from '../../../public/assets/sprites/manifest.json';
 import { EMPTY_SPRITE_MANIFEST, atlasTextureKey, parseSpriteManifest } from './sprite-manifest';
 
@@ -10,6 +10,13 @@ const variant = (frame: string, extra: Record<string, unknown> = {}) => ({
   size: [128, 128],
   ...extra,
 });
+
+/** No Blender art yet: the registry draws these from their voxel models. */
+const VOXEL_ONLY_BUILDINGS: ReadonlySet<number> = new Set([
+  BuildingDefId.MINT,
+  BuildingDefId.BRICKWORKS,
+  BuildingDefId.FORESTER,
+]);
 
 describe('parseSpriteManifest', () => {
   it('treats a missing manifest as empty without problems', () => {
@@ -64,7 +71,8 @@ describe('parseSpriteManifest', () => {
 
   it('has art for every building with the sim footprint', () => {
     const { manifest } = parseSpriteManifest(manifestJson);
-    for (const def of BUILDING_TABLE) {
+    for (const [defId, def] of BUILDING_TABLE.entries()) {
+      if (VOXEL_ONLY_BUILDINGS.has(defId)) continue;
       const asset = Object.values(manifest.assets).find((a) => a.kind === 'building' && a.defId === def.id);
       expect(asset, def.id).toBeDefined();
       expect(asset?.footprint, def.id).toEqual([def.footprint.w, def.footprint.h]);

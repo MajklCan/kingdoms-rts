@@ -14,9 +14,17 @@ const { manifest } = parseSpriteManifest(manifestJson);
 const art = new ArtCatalog(manifest, { hasFrame: () => true });
 const source = new AtlasSpriteSource(art, [0x888888, 0x3b82f6, 0xef4444]);
 
+/** No Blender art yet: the registry draws these from their voxel models. */
+const VOXEL_ONLY_BUILDINGS: ReadonlySet<number> = new Set([
+  BuildingDefId.MINT,
+  BuildingDefId.BRICKWORKS,
+  BuildingDefId.FORESTER,
+]);
+
 describe('AtlasSpriteSource (shipped manifest)', () => {
   it('draws every building in every age', () => {
     BUILDING_TABLE.forEach((def, defId) => {
+      if (VOXEL_ONLY_BUILDINGS.has(defId)) return;
       for (const age of Object.values(AgeId)) {
         const ref = source.building({ defId, age, playerId: 1 });
         expect(ref, `${def.id} age ${age}`).not.toBeNull();

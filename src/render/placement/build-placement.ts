@@ -61,7 +61,10 @@ export type BuildMode =
   | 'STABLE'
   | 'FOUNDRY'
   | 'DEFENSIVE_TOWER'
-  | 'WALL';
+  | 'WALL'
+  | 'MINT'
+  | 'BRICKWORKS'
+  | 'FORESTER';
 
 export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   HOUSE: BuildingDefId.HOUSE,
@@ -76,6 +79,9 @@ export const BUILD_MODE_TO_DEF: Record<Exclude<BuildMode, 'none'>, number> = {
   FOUNDRY: BuildingDefId.FOUNDRY,
   DEFENSIVE_TOWER: BuildingDefId.DEFENSIVE_TOWER,
   WALL: BuildingDefId.WALL,
+  MINT: BuildingDefId.MINT,
+  BRICKWORKS: BuildingDefId.BRICKWORKS,
+  FORESTER: BuildingDefId.FORESTER,
 };
 
 interface Tile {

@@ -39,6 +39,10 @@ const BUILD_KEYS: Array<[string, Exclude<BuildMode, 'none'>, string]> = [
   ['F', 'FOUNDRY', 'build FOUNDRY - left-click to place'],
   ['Y', 'DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - left-click to place'],
   ['Z', 'WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
+  ['J', 'MINT', 'build MINT - left-click to place'],
+  ['U', 'BRICKWORKS', 'build BRICKWORKS - left-click to place'],
+  // B then V only: a bare V is the army rally point.
+  ['V', 'FORESTER', "build FORESTER'S LODGE - left-click to place"],
 ];
 
 export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
@@ -76,10 +80,15 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   onHotkey('keydown-R', () => {
     if (!placement.awaitingBuildKind && !deps.buildHotkey('R')) commands.trainHotkey(2, true);
   });
+  // V is the army rally point; only after B is it the forester's lodge
+  // (every letter is taken, so the lodge has no key of its own).
+  onHotkey('keydown-V', () => {
+    if (!placement.awaitingBuildKind) placement.startArmyRallyMode();
+  });
   for (const [key, mode, message] of BUILD_KEYS) {
     onHotkey(`keydown-${key}`, () => {
       if (placement.awaitingBuildKind) placement.startBuildMode(mode, message);
-      else if (key !== 'G' && key !== 'R') deps.buildHotkey(key);
+      else if (key !== 'G' && key !== 'R' && key !== 'V') deps.buildHotkey(key);
     });
   }
   onHotkey('keydown-ESC', () => {
@@ -90,7 +99,6 @@ export function installHotkeys(scene: Phaser.Scene, deps: HotkeyDeps): void {
   });
   onHotkey('keydown-Q', () => commands.trainHotkey(0));
   onHotkey('keydown-E', () => commands.secondaryHotkey());
-  onHotkey('keydown-V', () => placement.startArmyRallyMode());
   onHotkey('keydown-DELETE', () => commands.removeSelectedBuildings());
 
   onHotkey('keydown-PLUS', () => camera.zoomStep(1));

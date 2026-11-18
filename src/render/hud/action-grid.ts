@@ -78,7 +78,7 @@ export interface ActionGridAction {
 /**
  * Build buttons in grid order: [action id, mode, hotkey, glyph, HUD icon].
  * Five per row: the economy in resource-bar order (food, wood, gold, stone),
- * then the army and defences, then the house.
+ * then the army and defences, then the house and the endless worksites.
  */
 const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, string]> = [
   ['build-farm', 'FARM', 'M', '🌾', 'farm'],
@@ -92,7 +92,17 @@ const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, 
   ['build-defensive-tower', 'DEFENSIVE_TOWER', 'Y', '♜', 'defensiveTower'],
   ['build-wall', 'WALL', 'Z', '▬', 'wall'],
   ['build-house', 'HOUSE', 'H', '⌂', 'house'],
+  // Endless worksites (shown once unlocked), in resource-bar order.
+  // The lodge has no letter of its own (all 26 are taken): B then V. "B V"
+  // never matches a single key in buildHotkey, so a bare V stays the army
+  // rally point.
+  ['build-forester', 'FORESTER', 'B V', '♣', 'forester'],
+  ['build-mint', 'MINT', 'J', '¤', 'mint'],
+  ['build-brickworks', 'BRICKWORKS', 'U', '▤', 'brickworks'],
 ];
+
+/** Mint, brickworks and forester's lodge: shown only once unlocked. */
+const ENDLESS_WORKSITE_MODES: ReadonlySet<Exclude<BuildMode, 'none'>> = new Set(['MINT', 'BRICKWORKS', 'FORESTER']);
 
 /** Placement prompt shown when a build button is clicked. */
 const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]> = {
@@ -107,6 +117,9 @@ const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]>
   'build-foundry': ['FOUNDRY', 'build FOUNDRY - click to place'],
   'build-defensive-tower': ['DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - click to place'],
   'build-wall': ['WALL', 'build WALL - drag from the start tile to the end tile, or click both'],
+  'build-mint': ['MINT', 'build MINT - click to place'],
+  'build-brickworks': ['BRICKWORKS', 'build BRICKWORKS - click to place'],
+  'build-forester': ['FORESTER', "build FORESTER'S LODGE - click to place"],
 };
 
 /**
@@ -236,6 +249,9 @@ export class ActionGrid {
         const def = BUILDING_TABLE[defId];
         if (!def) continue;
         if (!isBuildingUnlocked(world, playerId, defId)) {
+          // Endless worksites stay off the grid until their research: the
+          // villager's board keeps fitting one page through the early game.
+          if (ENDLESS_WORKSITE_MODES.has(mode)) continue;
           const locked = lockedAction(id, `Build ${def.name}`, key, glyph, 'build', unlockResearchFor(world, playerId, 'building', defId));
           if (locked) actions.push({ ...locked, hudIcon });
           continue;
