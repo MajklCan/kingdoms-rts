@@ -35,6 +35,7 @@ import type { IconName } from '../icons/icon-names';
 import { recentEvents } from './event-log';
 import { loadPortraits, portraitForKey } from './portraits';
 import { attachTip } from './tooltip';
+import { trace } from '../../render/trace/active-trace';
 
 const QUEUE_SLOTS = 6;
 /** Mini portraits shown for a multi-selection before "+N" takes over. */
@@ -455,7 +456,10 @@ function renderMulti(scene: GameScene, selected: number[], age: number): void {
           icon(kindIcon(key, age), 'group-icon'),
           h('span', { class: 'group-count num' }, String(eids.length))
         );
-        btn.addEventListener('click', () => selectEntities(scene, eids));
+        btn.addEventListener('click', () => {
+          trace('select:from-panel');
+          selectEntities(scene, eids);
+        });
         attachTip(btn, () => ({ title: `${kindName(key)} x${eids.length}`, body: 'Click to keep only this kind selected.' }));
         return btn;
       })
@@ -480,7 +484,10 @@ function renderMulti(scene: GameScene, selected: number[], age: number): void {
         glyph,
         h('span', { class: 'tile-hp', 'aria-hidden': 'true' }, h('i'))
       );
-      el.addEventListener('click', () => selectEntities(scene, [eid]));
+      el.addEventListener('click', () => {
+        trace('select:from-panel');
+        selectEntities(scene, [eid]);
+      });
       attachTip(el, () => {
         const f = healthFrac(scene, eid);
         return { title: kindName(key), body: f === null ? 'Click to select only this one.' : `Health ${Math.round(f * 100)}%. Click to select only this one.` };

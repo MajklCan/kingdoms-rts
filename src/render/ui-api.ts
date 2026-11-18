@@ -66,6 +66,7 @@ import type { MapOrderKind, PointerController } from './input/pointer-controller
 import type { TouchController } from './input/touch-controller';
 import { BUILD_MODE_TO_DEF, type BuildPlacement, type TouchPlacementState } from './placement/build-placement';
 import type { SceneContext } from './scene-context';
+import { trace } from './trace/active-trace';
 
 export type { GameMessage, GameMessageListener, GameMessageTone, TilePoint, UiAlert, UiAlertKind } from './hud/ui-alerts';
 export type { CommandFailure, ResourceName } from './commands/feedback';
@@ -289,6 +290,7 @@ export class UiApi {
       return false;
     }
     orders.attackMoveArmed = true;
+    trace('attack-move:arm');
     this.deps.commands.confirm('Tap the map to attack-move');
     return true;
   }

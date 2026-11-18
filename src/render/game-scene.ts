@@ -94,6 +94,7 @@ import { DecorLayer } from './terrain/decor-layer';
 import { TerrainLayer } from './terrain/terrain-layer';
 import { createWorldLayers, type WorldLayers } from './world-layers';
 import { UiApi } from './ui-api';
+import { trace } from './trace/active-trace';
 
 /** Max sim steps per frame when catching up (avoids a spiral of death). */
 const MAX_STEPS_PER_FRAME = 8;
@@ -380,6 +381,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   toggleGameSpeed(): number {
+    trace('game:speed');
     this.setGameSpeed(this.ctx.gameSpeed === 1 ? 2 : 1);
     return this.ctx.gameSpeed;
   }

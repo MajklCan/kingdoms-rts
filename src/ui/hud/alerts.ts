@@ -27,6 +27,7 @@ import { icon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { addMinimapPing } from './minimap';
 import { flashMissingResources, flashPopulation } from './top-bar';
+import { trace } from '../../render/trace/active-trace';
 
 /** What a toast shows: a scene alert, or a UI-local notice (objectives, tech panel). */
 export interface HudAlert {
@@ -113,6 +114,7 @@ function jumpTo(alert: HudAlert): void {
   if (!scene || !alert.at) return;
   // An attack alert follows the fight if it moved since the toast appeared.
   const target = alert.kind === 'attack' ? (lastFightPosition(scene) ?? alert.at) : alert.at;
+  trace('camera:alert');
   panToTile(scene, target.x, target.y);
 }
 

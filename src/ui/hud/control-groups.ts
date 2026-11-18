@@ -26,6 +26,7 @@ import { icon, setIcon } from '../icons/icon';
 import type { IconName } from '../icons/icon-names';
 import { logLine } from './event-log';
 import { attachTip } from './tooltip';
+import { trace } from '../../render/trace/active-trace';
 
 const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const DOUBLE_TAP_MS = 350;
@@ -61,6 +62,7 @@ function recall(n: number, jump: boolean): void {
     return;
   }
   groups.set(n, alive);
+  trace(jump ? 'group:jump' : 'group:recall');
   selectEntities(scene, alive);
   if (jump) {
     const c = centroidOf(scene, alive);
@@ -102,6 +104,7 @@ export function bindControlGroups(): void {
     const me = scene.getPerspectivePlayerId();
     if (ev.ctrlKey || ev.metaKey || ev.altKey) {
       ev.preventDefault();
+      trace('group:assign');
       const sel = filterOwnedAlive(scene, getSelectedEids(scene), me);
       if (sel.length === 0) {
         groups.delete(n);
@@ -114,6 +117,7 @@ export function bindControlGroups(): void {
     }
     if (ev.shiftKey) {
       ev.preventDefault();
+      trace('group:add');
       const sel = filterOwnedAlive(scene, getSelectedEids(scene), me);
       const merged = Array.from(new Set([...(groups.get(n) ?? []), ...sel]));
       if (merged.length > 0) groups.set(n, merged);

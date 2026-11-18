@@ -29,6 +29,10 @@ import {
   stepLevel,
   wheelDeltaPx,
 } from './zoom-levels';
+import { trace } from '../trace/active-trace';
+
+/** Camera input this close together is one gesture in the player trace. */
+const TRACE_GESTURE_MS = 600;
 
 export const INITIAL_ZOOM = 1.5;
 /** Longest frame step the zoom ease integrates (a stalled tab must not jump). */
@@ -120,6 +124,7 @@ export class CameraController {
   private onWheel(sx: number, sy: number, deltaY: number, deltaMode: number, ctrlKey: boolean): void {
     const px = wheelDeltaPx(deltaY, deltaMode, window.innerHeight || 800);
     if (ctrlKey) {
+      trace('camera:zoom-pinch', { via: 'click', throttleMs: TRACE_GESTURE_MS });
       // Trackpad pinch: follow the fingers, settle when the events stop.
       if (!this.pinching) this.beginPinch();
       this.trackpadPinchAt = this.now();
@@ -130,6 +135,7 @@ export class CameraController {
     const { notches, notch } = wheelNotches(px, this.wheelNotch);
     this.wheelNotch = notch;
     if (notches === 0) return;
+    trace('camera:zoom-wheel', { via: 'click', throttleMs: TRACE_GESTURE_MS });
     this.pinching = false;
     this.settleArmed = true;
     this.lastWheelAt = this.now();
@@ -138,6 +144,7 @@ export class CameraController {
 
   /** Move `steps` resting levels (+ = in), around a screen point (default: the centre). */
   zoomStep(steps: number, sx?: number, sy?: number): void {
+    trace('camera:zoom-step');
     this.zoomTo(stepLevel(this.targetZoom, steps), sx, sy);
   }
 
@@ -264,6 +271,9 @@ export class CameraController {
       : (this.ctx.scene.input.keyboard?.addKeys('W,A,S,D', false) as PanKeys | undefined);
     const cam = this.camera;
     if (keys) {
+      if (keys.W.isDown || keys.A.isDown || keys.S.isDown || keys.D.isDown) {
+        trace('camera:pan-keys', { via: 'hotkey', throttleMs: TRACE_GESTURE_MS });
+      }
       if (keys.W.isDown) cam.scrollY -= PAN_SPEED;
       if (keys.S.isDown) cam.scrollY += PAN_SPEED;
       if (keys.A.isDown) cam.scrollX -= PAN_SPEED;

@@ -13,6 +13,7 @@ import type { GameScene } from '../../render/game-scene';
 import { TileType } from '../../sim/map-gen';
 import { h } from '../dom';
 import { getCameraTileQuad, getScene, issueMapOrder, panToTile, type TilePoint } from '../game-bridge';
+import { trace } from '../../render/trace/active-trace';
 
 /** Minimap colour per TileType (also used by the skirmish map previews). */
 export const TILE_RGB: Record<number, [number, number, number]> = {
@@ -76,14 +77,17 @@ export function buildMinimap(): HTMLElement {
   canvas.addEventListener('pointerdown', (ev) => {
     if (ev.button === 2) {
       ev.preventDefault();
+      trace('minimap:order');
       orderFromEvent(ev);
       return;
     }
     if (ev.button !== 0) return;
     if (attackKeyHeld) {
+      trace('minimap:order');
       orderFromEvent(ev);
       return;
     }
+    trace('camera:minimap');
     dragging = true;
     canvas!.setPointerCapture(ev.pointerId);
     panFromEvent(ev);

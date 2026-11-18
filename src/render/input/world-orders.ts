@@ -53,6 +53,7 @@ import type { GameAudio } from '../game-audio';
 import { entityKindName, resourceKindName } from '../hud/selection-info';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
+import { trace } from '../trace/active-trace';
 
 export type MapOrderKind = 'move' | 'attackMove';
 
@@ -261,6 +262,7 @@ export class WorldOrders {
     const eid = this.visibleEntityAt(wx, wy);
     clearSelection(world);
     if (eid !== null) {
+      trace('select:click');
       setSelected(world, eid, true);
       if (this.ctx.isOwnUnit(eid)) this.deps.audio.barkSelect(eid);
       setLastEvent(`selected ${entityKindName(world, eid)} eid=${eid}`);
@@ -313,6 +315,7 @@ export class WorldOrders {
    * unfinished one: every foundation of its type).
    */
   selectSameKindOnScreen(sourceEid: number): number {
+    trace('select:double-click');
     const world = this.ctx.world;
     if (hasComponent(world.ecs, Building, sourceEid)) return this.selectSameBuildingOnScreen(sourceEid);
     const playerId = this.ctx.perspectivePlayerId;
@@ -379,6 +382,7 @@ export class WorldOrders {
    * it covers. `additive` (Shift held) adds to the selection instead.
    */
   selectInWorldBox(x0: number, y0: number, x1: number, y1: number, additive = false): number {
+    trace('select:box');
     const world = this.ctx.world;
     const root = this.ctx.layers.root;
     const units: number[] = [];
@@ -444,6 +448,7 @@ export class WorldOrders {
 
   /** Own villagers (true) or own military (false); returns the count. */
   selectOwnUnits(villagers: boolean): number {
+    trace(villagers ? 'select:all-villagers' : 'select:all-military');
     const world = this.ctx.world;
     clearSelection(world);
     let n = 0;

@@ -24,6 +24,7 @@ Stack: **Phaser 4 beta** (rendering only) + **bitECS 0.3.40** (sim) + **TypeScri
 | `npx vite-node scripts/sim/matchups.ts` | Equal-cost unit fights, win and cost-efficiency matrix |
 | `node scripts/sim/batch.mjs <name> <procs> <script> ...` | Shard any of the above over processes |
 | `npx vite-node scripts/sim/replay-desync.ts -- a.json b.json` | Replay the desync reports players download on a desync; prints the checkpoint each client drifted at |
+| `npx vite-node scripts/sim/trace-report.ts -- ~/Downloads` | Report over player trace files (game-over button, Settings > Play traces bundle, or every match with that setting / `?trace` on): feature use, hotkey vs click, first use, never-used features, refused actions; copies of one match count once |
 | `MP_SOAK=2 npm test` | Adds the long lockstep soak to the test run |
 
 TypeScript strict flags on: `noUnusedLocals`, `noUnusedParameters`, `noUncheckedSideEffectImports`. Don't silence them.
@@ -95,6 +96,7 @@ src/
     effects/           particles, combat fx, ambient life (birds, smoke, wildlife)
     overlays/          fog of war (fog-renderer.ts), status overlay
     hud/ commands/ input/ placement/ camera/   HUD data, player commands, hotkeys + pointer, build ghost, camera
+    trace/             player trace: recorder, feature catalog, report (pure); one-line hooks in the input code
     audio/             AudioManager + sound-map (game-audio.ts routes sim events to cues)
     inspection/        `?inspect=<unit>` voxel sprite sheets
     voxel/             voxel models (dark-*, gunpowder-*, total-war-*, resources, wall) + bakeVoxelTexture
@@ -185,7 +187,7 @@ Test pattern: `const world = createSimWorld(seed); world.paused = false;` → pu
 
 ## Agent affordances
 
-In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `research`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
+In dev, `window.__GAME__` (`src/debug/window-api.ts`) exposes: `getState`, `queueInput`, `tickN`, `selected`, `selectAll`, `moveTo`, `inspect`, `placeBuilding`, `research`, `trainVillager`, `trainUnit`, `pop`, `bank`, `debugDump`, `raw`. `window.__RENDER__` (`src/debug/render-api.ts`): `snapshot`, `spawnEffect`, `shake`, `tileToClient`, `startSkirmish`, `startCampaign`, `loadLateGame`, `setZoom`, `panToTile`, `fps`, `scene`. Both installed by `GameScene`. `window.__TRACE__` (`src/ui/trace/match-trace.ts`): `current`, `last`, `saved`, `download` for the player traces (every skirmish / multiplayer match records one; the last 3 stay in localStorage, `src/ui/trace/trace-store.ts`; nothing downloads by itself unless Settings > Play traces or `?trace` turns it on). Use for headless QA, debugging and perf (`loadLateGame()` is the stress fixture).
 
 ## Conventions & rules
 

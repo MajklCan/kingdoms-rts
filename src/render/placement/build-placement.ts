@@ -39,6 +39,7 @@ import type { SceneContext } from '../scene-context';
 import type { SpriteRef, SpriteSource } from '../sprites/sprite-source';
 import { addLayerGraphics } from '../world-layers';
 import { buildingAnchorTileForDef, isInsideMap, spriteAnchorPoint } from '../world-projection';
+import { trace } from '../trace/active-trace';
 import { PlacementChain } from './placement-chain';
 import { hasNearbyResource, isBuildFootprintBlocked } from './placement-rules';
 
@@ -145,11 +146,13 @@ export class BuildPlacement {
   }
 
   awaitBuildKind(): void {
+    trace('build-menu:open');
     this.awaitingBuildKind = true;
     this.mode = 'none';
   }
 
   startBuildMode(mode: Exclude<BuildMode, 'none'>, message: string): void {
+    trace(`build-arm:${mode}`);
     const defId = BUILD_MODE_TO_DEF[mode];
     const def = BUILDING_TABLE[defId];
     this.awaitingBuildKind = false;
@@ -182,6 +185,7 @@ export class BuildPlacement {
   }
 
   startArmyRallyMode(): void {
+    trace('rally-arm:army');
     if (countOwnedArmyProducers(this.ctx.world, this.ctx.perspectivePlayerId) === 0) {
       setLastEvent('army rally needs an army building');
       return;
@@ -195,6 +199,7 @@ export class BuildPlacement {
 
   /** Town center selected: the next click or tap sets where its new villagers go. */
   startVillagerRallyMode(): void {
+    trace('rally-arm:villager');
     if (this.commands.selectedTownCenters().length === 0) {
       this.commands.fail({ reason: 'unavailable', text: 'Select your town center first' });
       return;
