@@ -234,6 +234,52 @@ describe('villager builders', () => {
     expect(world.orderQueues.has(villager)).toBe(false);
   });
 
+  it('a Shift-placed building waits behind the site its builders are working on', () => {
+    const world = quietWorld();
+    const first = houseSpot(world);
+    const siteA = spawnFoundation(world, BuildingDefId.HOUSE, first.x, first.y, P1);
+    const [builder] = buildersAt(world, siteA, 1);
+    // The first Shift+click of a new row: no earlier building in the row.
+    const spot = houseSpot(world);
+    world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: spot.x, y: spot.y, playerId: P1, eids: [builder], queue: true });
+    step(world);
+    const siteB = buildingQuery(world.ecs).find(
+      (eid) => hasComponent(world.ecs, ConstructionSite, eid) && Owner.player[eid] === P1 && eid !== siteA
+    )!;
+    expect(siteB).toBeDefined();
+    // He stays on the house he was building; the new one is next.
+    expect(BuildOrder.targetEid[builder]).toBe(siteA);
+    expect(world.orderQueues.get(builder)).toEqual([{ kind: 'build', targetEid: siteB }]);
+    ticksToComplete(world, siteA, HOUSE.buildTimeTicks + 200);
+    step(world);
+    expect(BuildOrder.targetEid[builder]).toBe(siteB);
+    expect(world.orderQueues.has(builder)).toBe(false);
+  });
+
+  it('a Shift-placed building takes an idle or gathering villager at once', () => {
+    const world = quietWorld();
+    const tc = tcOf(world, P1);
+    const start = findSpawnSpot(world, Position.x[tc] - 3, Position.y[tc] + 2, 5)!;
+    const idle = spawnVillager(world, start.x, start.y, P1, 0);
+    const gatherer = spawnVillager(world, start.x, start.y, P1, 0);
+    const tree = resourceQuery(world.ecs)
+      .map((eid) => ({ eid, d: Math.hypot(Position.x[eid] - start.x, Position.y[eid] - start.y) }))
+      .sort((a, b) => a.d - b.d)[0]!.eid;
+    world.inputs.push({ type: 'cmdGather', playerId: P1, eids: [gatherer], targetEid: tree });
+    stepN(world, 5);
+    expect(Gatherer.state[gatherer]).not.toBe(GathererStateId.IDLE);
+
+    const spot = houseSpot(world);
+    world.inputs.push({ type: 'placeBuilding', defId: BuildingDefId.HOUSE, x: spot.x, y: spot.y, playerId: P1, eids: [idle, gatherer], queue: true });
+    step(world);
+    const site = buildingQuery(world.ecs).find((eid) => hasComponent(world.ecs, ConstructionSite, eid) && Owner.player[eid] === P1)!;
+    stepN(world, 2);
+    // Gathering never ends, so there is nothing to wait for: both go now.
+    expect(BuildOrder.targetEid[idle]).toBe(site);
+    expect(BuildOrder.targetEid[gatherer]).toBe(site);
+    expect(world.orderQueues.has(gatherer)).toBe(false);
+  });
+
   it('Shift on a foundation queues the build; a site finished meanwhile is skipped', () => {
     const world = quietWorld();
     const first = houseSpot(world);

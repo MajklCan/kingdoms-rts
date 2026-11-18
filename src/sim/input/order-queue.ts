@@ -41,7 +41,7 @@ import {
   playerFormationMode,
 } from './formation';
 import { canBuild, isOpenFoundation } from '../systems/builders';
-import { canTakeAttackOrder, isAttackOrderTarget, isGatherOrderTarget } from './unit-orders';
+import { canTakeAttackOrder, isAttackOrderTarget, isGatherOrderTarget, startBuildOrder } from './unit-orders';
 
 /** Why a unit takes no further queued order. */
 export type OrderQueueRefusal = 'gathering' | 'full';
@@ -184,7 +184,12 @@ export function queueGatherOrders(
 
 /**
  * Queue building own foundation `siteEid` behind the villagers' current
- * orders (a Shift-placed row, or Shift + click on a foundation).
+ * orders (a Shift-placed building, or Shift + click on a foundation): a
+ * villager who is building finishes that first.
+ *
+ * Gathering never ends, so it has no "after". A villager who is gathering
+ * leaves it for the build at once, as on a plain placement; one whose queue
+ * ends in a gather order gets the build just before it.
  */
 export function queueBuildOrders(
   world: SimWorld,
@@ -193,9 +198,20 @@ export function queueBuildOrders(
   siteEid: number
 ): void {
   if (!isOpenFoundation(world, siteEid, playerId)) return;
+  const order: QueuedOrder = { kind: 'build', targetEid: siteEid };
   for (const eid of ownedCommandableEids(world, playerId, eids)) {
     if (!canBuild(world, eid)) continue;
-    if (orderQueueRefusal(world, eid) !== null) continue;
-    appendOrder(world, eid, { kind: 'build', targetEid: siteEid });
+    const refusal = orderQueueRefusal(world, eid);
+    if (refusal === null) {
+      appendOrder(world, eid, order);
+      continue;
+    }
+    if (refusal !== 'gathering') continue;
+    const queue = world.orderQueues.get(eid);
+    if (!queue) {
+      startBuildOrder(world, eid, siteEid);
+    } else if (queue.length < ORDER_QUEUE_MAX && queue[queue.length - 1]?.kind === 'gather') {
+      queue.splice(queue.length - 1, 0, { ...order });
+    }
   }
 }

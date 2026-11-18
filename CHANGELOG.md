@@ -6,6 +6,11 @@ Live build: **kingdoms.macaly.app** runs `0.0.108` (deployed 2026-11-18).
 
 Add a line under the matching section (or open a new one) with every change that lands on `main`.
 
+## 0.0.110 (2026-11-18), Michal
+
+### Fixed
+- A Shift-placed building now waits behind the site its builders are working on. The first Shift+click of a row used to pull them off it at once. Idle and gathering villagers still start on it right away.
+
 ## 0.0.109 (2026-11-18), Dominik
 
 - Docs: this changelog.

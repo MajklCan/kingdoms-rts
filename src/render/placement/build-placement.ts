@@ -10,8 +10,9 @@
  * Mouse: the ghost follows the cursor and a click places. A Shift+click
  * places and keeps the same ghost armed for the next one (houses in a row)
  * until one more cannot be started; walls have their own line placement.
- * The selected villagers build the first of a row at once and the rest
- * from their order queue, one after another.
+ * A Shift-placed building goes to the selected villagers' order queue:
+ * they finish what they are building first, then take the new ones one
+ * after another. Idle and gathering villagers start on it at once.
  * Touch (the "confirm" flow): the ghost starts at the view centre, follows the finger
  * while it drags, stays where it is released and only an on-screen Confirm
  * places it; a wall line is dragged from its start tile to its end tile.
@@ -385,9 +386,10 @@ export class BuildPlacement {
       this.reset();
       return;
     }
-    // Later buildings of a Shift-placed row wait in the builders' order
-    // queue: they finish one and walk on to the next.
-    const queue = this.chain.placed > 0 ? { queue: true } : {};
+    // A Shift-placed building waits in the builders' order queue: they
+    // finish what they are building (the one before it in the row, or a
+    // site from earlier) and walk on to it. A plain click sends them now.
+    const queue = keep || this.chain.placed > 0 ? { queue: true } : {};
     this.commands.dispatch({ type: 'placeBuilding', defId, x: tx, y: ty, playerId, eids, ...queue });
     this.audio.playUi(PLACE_BUILDING);
     setLastEvent(`place ${this.mode} → (${tx},${ty})`);
