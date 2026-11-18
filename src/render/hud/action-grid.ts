@@ -75,20 +75,23 @@ export interface ActionGridAction {
   researchGoal?: TechIdValue;
 }
 
-/** Build buttons in grid order: [action id, mode, hotkey, glyph, HUD icon]. */
+/**
+ * Build buttons in grid order: [action id, mode, hotkey, glyph, HUD icon].
+ * Five per row: the economy in resource-bar order (food, wood, gold, stone),
+ * then the army and defences, then the house.
+ */
 const BUILD_BUTTONS: Array<[string, Exclude<BuildMode, 'none'>, string, string, string]> = [
-  ['build-lumber-camp', 'LUMBER_CAMP', 'L', '▥', 'lumberCamp'],
-  ['build-stone-quarry', 'STONE_QUARRY', 'C', '▣', 'stoneQuarry'],
-  ['build-house', 'HOUSE', 'H', '⌂', 'house'],
-  ['build-barracks', 'BARRACKS', 'R', '⚒', 'barracks'],
-  ['build-archery-range', 'ARCHERY_RANGE', 'N', '🏹', 'archeryRange'],
-  ['build-gold-mine', 'GOLD_MINE', 'G', '⛏', 'goldMine'],
-  ['build-stable', 'STABLE', 'T', '♞', 'stable'],
   ['build-farm', 'FARM', 'M', '🌾', 'farm'],
   ['build-mill', 'MILL', 'I', '◈', 'mill'],
+  ['build-lumber-camp', 'LUMBER_CAMP', 'L', '▥', 'lumberCamp'],
+  ['build-gold-mine', 'GOLD_MINE', 'G', '⛏', 'goldMine'],
+  ['build-stone-quarry', 'STONE_QUARRY', 'C', '▣', 'stoneQuarry'],
+  ['build-barracks', 'BARRACKS', 'R', '⚒', 'barracks'],
+  ['build-stable', 'STABLE', 'T', '♞', 'stable'],
   ['build-foundry', 'FOUNDRY', 'F', '●', 'foundry'],
   ['build-defensive-tower', 'DEFENSIVE_TOWER', 'Y', '♜', 'defensiveTower'],
   ['build-wall', 'WALL', 'Z', '▬', 'wall'],
+  ['build-house', 'HOUSE', 'H', '⌂', 'house'],
 ];
 
 /** Placement prompt shown when a build button is clicked. */
@@ -100,7 +103,6 @@ const BUILD_BUTTON_MESSAGE: Record<string, [Exclude<BuildMode, 'none'>, string]>
   'build-gold-mine': ['GOLD_MINE', 'build GOLD MINE - click near gold'],
   'build-stone-quarry': ['STONE_QUARRY', 'build STONE QUARRY - click near stone'],
   'build-barracks': ['BARRACKS', 'build BARRACKS - click to place'],
-  'build-archery-range': ['ARCHERY_RANGE', 'build ARCHERY RANGE - click to place'],
   'build-stable': ['STABLE', 'build STABLE - click to place'],
   'build-foundry': ['FOUNDRY', 'build FOUNDRY - click to place'],
   'build-defensive-tower': ['DEFENSIVE_TOWER', 'build DEFENSIVE TOWER - click to place'],

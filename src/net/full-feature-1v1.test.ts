@@ -25,8 +25,8 @@
  * shifts) that are NOT real desyncs. The session / transport / lockstep wiring is
  * covered separately by mp-smoke.test.ts.
  *
- * ARCHERY_RANGE is gated `false` in isBuildingUnlocked and intentionally NOT
- * placeable via the command path - asserted as such. Walls are placed both as a
+ * ARCHERY_RANGE is retired (isBuildingUnlocked is always false), so it is not
+ * exercised here. Walls are placed both as a
  * single tile and as a line through the wire validator.
  */
 import { describe, expect, it } from 'vitest';
@@ -499,11 +499,6 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('build:defensive_tower', placeAndConfirm(d, pid, BuildingDefId.DEFENSIVE_TOWER, 1) !== null);
     }
 
-    // ── Archery range: unlocked by the Archers tech researched above ───────────
-    for (const pid of PLAYERS) {
-      mark('build:archery_range', placeAndConfirm(d, pid, BuildingDefId.ARCHERY_RANGE, 2) !== null);
-    }
-
     // ── Walls: one tile via placeBuilding, a line via the wire placeWallLine ───
     for (const pid of PLAYERS) {
       mark('build:wall', placeAndConfirm(d, pid, BuildingDefId.WALL, 1) !== null);
@@ -521,7 +516,8 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       mark('train:villager_tc', trainAndConfirm(d, pid, BuildingDefId.TOWN_CENTER, UnitKindId.VILLAGER));
       mark('train:spearman', trainAndConfirm(d, pid, BuildingDefId.BARRACKS, UnitKindId.SPEARMAN));
       mark('train:archer', trainAndConfirm(d, pid, BuildingDefId.BARRACKS, UnitKindId.ARCHER));
-      mark('train:archer_range', trainAndConfirm(d, pid, BuildingDefId.ARCHERY_RANGE, UnitKindId.ARCHER));
+      // Second archer: the army keeps the size it had when a range trained one.
+      trainAndConfirm(d, pid, BuildingDefId.BARRACKS, UnitKindId.ARCHER);
     }
     d.refill();
     d.liftPop();
@@ -609,8 +605,12 @@ describe('full-feature 1v1 - exhaustive deterministic playthrough', () => {
       if (army.length && target !== undefined)
         d.push({ type: 'cmdAttack', playerId: pid, eids: army, targetEid: target });
     }
-    d.step(220); // ranged projectiles fly + impact + deaths
-    mark('combat:damage_dealt', teamHpSum(w, 1) < hp1Before || teamHpSum(w, 2) < hp2Before);
+    // Ranged projectiles fly + impact + deaths. How far apart the armies start
+    // depends on where every earlier building went, so march until they meet.
+    const damaged = () => teamHpSum(w, 1) < hp1Before || teamHpSum(w, 2) < hp2Before;
+    d.step(220);
+    for (let i = 0; i < 6 && !damaged(); i++) d.step(120);
+    mark('combat:damage_dealt', damaged());
 
     // ── Phase 8: teardown - stop, toggle stance, remove building, cancel prod ───
     for (const pid of PLAYERS) {

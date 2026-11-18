@@ -76,8 +76,8 @@ export const TECH_TREE: readonly TechDef[] = [
   },
   {
     id: TechId.ARCHERS, name: 'Archers', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(300, 200),
-    description: 'Bowmakers for ranged infantry, trained at the barracks and the archery range.',
-    unlocks: ['Archer', 'Archery Range'],
+    description: 'Bowmakers for ranged infantry, trained at the barracks.',
+    unlocks: ['Archer'],
   },
   {
     id: TechId.COMMANDER, name: 'Commander', path: 'arms', ring: 1, parents: [TechId.BARRACKS_PIKEMEN], cost: cost(200, 150),
@@ -298,10 +298,13 @@ export function techLockedReason(world: TechStateWorld, playerId: number, techId
 
 // ── What each research unlocks ─────────────────────────────────────────────
 
-/** The research that unlocks each building; absent = part of the settlement. */
+/**
+ * The research that unlocks each building; absent and not part of the
+ * settlement = never buildable. The archery range is retired (archers come
+ * from the barracks); ranges in old saves still stand and train archers.
+ */
 export const BUILDING_UNLOCK_TECH: Readonly<Partial<Record<number, TechIdValue>>> = {
   [BuildingDefId.BARRACKS]: TechId.BARRACKS_PIKEMEN,
-  [BuildingDefId.ARCHERY_RANGE]: TechId.ARCHERS,
   [BuildingDefId.STABLE]: TechId.KNIGHTS,
   [BuildingDefId.GOLD_MINE]: TechId.GOLD_MINES,
   [BuildingDefId.FOUNDRY]: TechId.FOUNDRY,

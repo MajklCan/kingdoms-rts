@@ -80,7 +80,7 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['H', 'Build a house (nothing or a villager selected; B then H with anything)'],
       ['M / I', 'Build a farm / mill'],
       ['L / C / G', 'Lumber hut / stone quarry / gold mine'],
-      ['R / N / T / F / Y / Z', 'Barracks / archery range / stable / foundry / tower / wall'],
+      ['R / T / F / Y / Z', 'Barracks / stable / foundry / tower / wall'],
       ['Q / E', 'Train first / second unit'],
       ['G', 'Town center villager rally point'],
       ['Shift+click', 'On a train button: queue five units'],

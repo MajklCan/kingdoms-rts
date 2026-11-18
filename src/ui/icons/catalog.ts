@@ -24,7 +24,6 @@ export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-stone-quarry': { icon: 'b-stone-quarry', description: 'Worksite placed near stone. Quarrymen cut stone for keeps and towers.', keyHint: BUILD_HINT('C') },
   'build-gold-mine': { icon: 'b-gold-mine', description: 'Worksite placed on a gold vein. Miners bring in gold for the army.', keyHint: BUILD_HINT('G') },
   'build-barracks': { icon: 'b-barracks', description: 'Trains pikemen and archers, the backbone of a medieval host.', keyHint: BUILD_HINT('R') },
-  'build-archery-range': { icon: 'b-archery-range', description: 'Trains archers alongside the barracks, so ranged troops come out faster.', keyHint: BUILD_HINT('N') },
   'build-stable': { icon: 'b-stable', description: 'Trains fast scout cavalry for raids and reconnaissance.', keyHint: BUILD_HINT('T') },
   'build-foundry': { icon: 'b-foundry', description: 'Casts gunpowder weapons: gunmen, field cannon and later artillery.', keyHint: BUILD_HINT('F') },
   'build-defensive-tower': { icon: 'b-defensive-tower', description: 'Stone tower that shoots at enemies in range.', keyHint: BUILD_HINT('Y') },
