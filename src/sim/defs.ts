@@ -81,10 +81,20 @@ export const BuildingDefId = {
   FOUNDRY: 10,
   WALL: 11,
   MILL: 12,
+  MINT: 13,
+  BRICKWORKS: 14,
+  FORESTER: 15,
 } as const;
 
 export type BuildingDefIdValue =
   (typeof BuildingDefId)[keyof typeof BuildingDefId];
+
+/**
+ * Ticks of crew work per resource at an endless worksite (mint, brickworks,
+ * forester's lodge): 3 s per worker, 20 a minute, 60 with a full crew of
+ * three. A crewed gold mine digs about 190 a minute, a quarry about 160.
+ */
+export const ENDLESS_WORKSITE_RATE_TICKS = SIM.TICK_HZ * 3;
 
 /** The defensive tower's arrow fire. */
 const TOWER_COMBAT = {
@@ -309,6 +319,67 @@ export const BUILDING_TABLE: BuildingDef[] = [
     dropOffMask: 0b0001,
     trains: [],
   },
+  // Endless worksites: the crew makes the resource from nothing, at a third of
+  // what a crewed mine digs, so the late game slows down once the deposits are
+  // gone instead of freezing. None costs its own resource, so a realm that ran
+  // dry of it can still raise one.
+  {
+    id: 'MINT',
+    name: 'Mint',
+    hp: 800,
+    cost: { food: 100, wood: 200, gold: 0, stone: 75 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 25),
+    popProvided: 0,
+    footprint: { w: 2, h: 2 },
+    visualScale: 1.05,
+    color: 0xd4a72c,
+    isDropOff: false,
+    dropOffMask: 0,
+    trains: [],
+    harvestKind: 2,
+    requiresNearbyResource: false,
+    workerSlots: 3,
+    harvestRadius: 0,
+    harvestRateTicks: ENDLESS_WORKSITE_RATE_TICKS,
+  },
+  {
+    id: 'BRICKWORKS',
+    name: 'Brickworks',
+    hp: 800,
+    cost: { food: 100, wood: 200, gold: 0, stone: 0 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 25),
+    popProvided: 0,
+    footprint: { w: 2, h: 2 },
+    visualScale: 1.05,
+    color: 0xa5583a,
+    isDropOff: false,
+    dropOffMask: 0,
+    trains: [],
+    harvestKind: 3,
+    requiresNearbyResource: false,
+    workerSlots: 3,
+    harvestRadius: 0,
+    harvestRateTicks: ENDLESS_WORKSITE_RATE_TICKS,
+  },
+  {
+    id: 'FORESTER',
+    name: "Forester's Lodge",
+    hp: 600,
+    cost: { food: 225, wood: 0, gold: 0, stone: 0 },
+    buildTimeTicks: Math.round(SIM.TICK_HZ * 20),
+    popProvided: 0,
+    footprint: { w: 1, h: 1 },
+    visualScale: 0.95,
+    color: 0x4f6b2c,
+    isDropOff: false,
+    dropOffMask: 0,
+    trains: [],
+    harvestKind: 1,
+    requiresNearbyResource: false,
+    workerSlots: 3,
+    harvestRadius: 0,
+    harvestRateTicks: ENDLESS_WORKSITE_RATE_TICKS,
+  },
 ];
 
 /** Unit defIds - index into UNIT_TABLE. */
@@ -502,6 +573,14 @@ export function getBuildingDef(defId: number): BuildingDef | null {
 }
 
 /** Look up a unit def by its numeric id (the index). */
+/**
+ * Mint, brickworks, forester's lodge: wood, gold or stone made on the spot
+ * by the crew, with no node to dig (the farm is the food counterpart).
+ */
+export function isEndlessWorksite(def: BuildingDef): boolean {
+  return def.requiresNearbyResource === false && def.harvestKind !== undefined && def.harvestKind !== 0;
+}
+
 export function getUnitDef(defId: number): UnitDef | null {
   return UNIT_TABLE[defId] ?? null;
 }

@@ -3,7 +3,8 @@
  * land) in three rings. Ring I is always open; ring N+1 opens when two paths
  * are "maxed" in ring N (every research of that path lying in ring N is done).
  * Research is instant. Every unit and building past the settlement is
- * unlocked by exactly one research (BUILDING_UNLOCK_TECH / UNIT_UNLOCK_TECH).
+ * unlocked by exactly one research (BUILDING_UNLOCK_TECH / UNIT_UNLOCK_TECH),
+ * except the endless worksites, which come with ring II itself.
  *
  * The highest open ring is also the era the realm's buildings are drawn in:
  * ring I = Dark Age, II = Castle Age, III = Gunpowder Age. The sim writes it
@@ -310,6 +311,18 @@ export const BUILDING_UNLOCK_TECH: Readonly<Partial<Record<number, TechIdValue>>
   [BuildingDefId.MILL]: TechId.MILLS,
 };
 
+/**
+ * Mint, brickworks, forester's lodge: open with ring II (Castle Age), not a
+ * research. Every research costs wood and stone, so a realm whose deposits
+ * ran dry could never pay for the one that would save it.
+ */
+const ENDLESS_WORKSITE_BUILDINGS: ReadonlySet<number> = new Set([
+  BuildingDefId.MINT,
+  BuildingDefId.BRICKWORKS,
+  BuildingDefId.FORESTER,
+]);
+export const ENDLESS_WORKSITE_RING: TechRing = 2;
+
 const SETTLEMENT_BUILDINGS: ReadonlySet<number> = new Set([
   BuildingDefId.TOWN_CENTER,
   BuildingDefId.HOUSE,
@@ -330,6 +343,7 @@ export const UNIT_UNLOCK_TECH: Readonly<Partial<Record<number, TechIdValue>>> = 
 
 export function isBuildingUnlocked(world: TechStateWorld, playerId: number, defId: number): boolean {
   if (SETTLEMENT_BUILDINGS.has(defId)) return true;
+  if (ENDLESS_WORKSITE_BUILDINGS.has(defId)) return isRingOpen(world, playerId, ENDLESS_WORKSITE_RING);
   const techId = BUILDING_UNLOCK_TECH[defId];
   return techId !== undefined && hasTech(world, playerId, techId);
 }

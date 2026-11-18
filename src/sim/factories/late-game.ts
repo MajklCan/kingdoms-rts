@@ -88,6 +88,9 @@ function buildLateGameBase(world: SimWorld, playerId: number): void {
     placePresetBuilding(world, BuildingDefId.FARM, spawn.x + side * 3, spawn.y + side * 4, playerId),
     placePresetBuilding(world, BuildingDefId.GOLD_MINE, spawn.x - side * 5, spawn.y - side * 2, playerId),
     placePresetBuilding(world, BuildingDefId.STONE_QUARRY, spawn.x - side * 6, spawn.y + side * 3, playerId),
+    placePresetBuilding(world, BuildingDefId.MINT, spawn.x - side * 9, spawn.y - side * 5, playerId),
+    placePresetBuilding(world, BuildingDefId.BRICKWORKS, spawn.x - side * 10, spawn.y + side * 1, playerId),
+    placePresetBuilding(world, BuildingDefId.FORESTER, spawn.x - side * 3, spawn.y - side * 7, playerId),
   ];
   placePresetBuilding(world, BuildingDefId.MILL, spawn.x + side * 6, spawn.y + side * 5, playerId);
 

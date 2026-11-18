@@ -23,7 +23,7 @@ import {
   VillagerTag,
   WorksiteWorker,
 } from '../components';
-import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef } from '../defs';
+import { type BuildingDef, BuildingDefId, UnitDefId, getBuildingDef, isEndlessWorksite } from '../defs';
 import { TechId, hasTech, worksiteWorkerSlotsForKind } from '../tech-tree';
 import { aiResourceWorksiteCanStillProduce } from '../ai/snapshot';
 import {
@@ -364,6 +364,9 @@ export function getWorksiteWorkerSlots(world: SimWorld, siteEid: number): number
   if (!hasComponent(world.ecs, ResourceWorksite, siteEid)) return 0;
   const def = getBuildingDef(Building.defId[siteEid]);
   const baseSlots = def?.workerSlots ?? 1;
+  // Crews research adds hands at a vein or a forest; the endless sites
+  // (mint, brickworks, forester's lodge) dig nothing and take a full crew.
+  if (def && isEndlessWorksite(def)) return baseSlots;
   return Math.min(
     baseSlots,
     worksiteWorkerSlotsForKind(

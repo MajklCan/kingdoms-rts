@@ -31,6 +31,7 @@ import {
 } from '../systems/worksites';
 import { aiRequiredWaveSize } from './attack';
 import { aiDifficultyOf, aiElapsedMinutes, aiSettings } from './difficulty';
+import { aiEndlessSiteTargets } from './endless-economy';
 import { aiPlaceBuilding, aiQueueUnit } from './placement';
 import {
   type AiSnapshot,
@@ -415,6 +416,7 @@ export function aiMaintainEconomy(world: SimWorld, playerId: number, snapshot: A
     { defId: BuildingDefId.STONE_QUARRY, target: desiredStone, enabled: hasBarracks },
     { defId: BuildingDefId.GOLD_MINE, target: desiredGold, enabled: hasBarracks },
     { defId: BuildingDefId.MILL, target: aiDesiredMillCount(world, playerId, snapshot), enabled: hasBarracks },
+    ...aiEndlessSiteTargets(world, playerId, snapshot),
   ];
   const currentCounts = new Map<number, number>();
   for (const item of economyPlan) {
@@ -480,6 +482,7 @@ function aiMaintainAdaptiveEconomy(world: SimWorld, playerId: number, snapshot: 
     { defId: BuildingDefId.STONE_QUARRY, target: targets.stone, enabled: hasBarracksTech || hasBarracks },
     { defId: BuildingDefId.GOLD_MINE, target: targets.gold, enabled: hasBarracksTech || hasBarracks },
     { defId: BuildingDefId.MILL, target: targets.mills, enabled: hasBarracksTech || hasBarracks },
+    ...aiEndlessSiteTargets(world, playerId, snapshot),
   ];
   const currentCounts = new Map<number, number>();
   for (const item of adaptiveEconomyPlan) {

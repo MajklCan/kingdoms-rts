@@ -23,6 +23,9 @@ export const ACTION_COPY: Record<string, ActionCopy> = {
   'build-lumber-camp': { icon: 'b-lumber-camp', description: 'Worksite placed near trees. Spawns woodcutters that harvest automatically.', keyHint: BUILD_HINT('L') },
   'build-stone-quarry': { icon: 'b-stone-quarry', description: 'Worksite placed near stone. Quarrymen cut stone for keeps and towers.', keyHint: BUILD_HINT('C') },
   'build-gold-mine': { icon: 'b-gold-mine', description: 'Worksite placed on a gold vein. Miners bring in gold for the army.', keyHint: BUILD_HINT('G') },
+  'build-mint': { icon: 'r-gold', description: 'Endless gold worksite: three villagers strike coin without a gold vein, slower than a mine but it never runs dry.', keyHint: BUILD_HINT('J') },
+  'build-brickworks': { icon: 'tech-brick', description: 'Endless stone worksite: three villagers fire bricks without a quarry, slower than cutting stone but it never runs dry.', keyHint: BUILD_HINT('U') },
+  'build-forester': { icon: 'tech-lumber', description: 'Endless wood worksite: three villagers plant and fell their own trees, slower than a lumber camp but it never runs dry.', keyHint: BUILD_HINT('V') },
   'build-barracks': { icon: 'b-barracks', description: 'Trains pikemen and archers, the backbone of a medieval host.', keyHint: BUILD_HINT('R') },
   'build-archery-range': { icon: 'b-archery-range', description: 'Trains archers alongside the barracks, so ranged troops come out faster.', keyHint: BUILD_HINT('N') },
   'build-stable': { icon: 'b-stable', description: 'Trains fast scout cavalry for raids and reconnaissance.', keyHint: BUILD_HINT('T') },
@@ -84,6 +87,11 @@ export const BUILDING_ICON_BY_DEF: Record<number, IconName> = {
   10: 'b-foundry',
   11: 'b-wall',
   12: 'b-mill',
+  // Endless worksites wear the symbol of what they make until the building
+  // sheet gets their own.
+  13: 'r-gold',
+  14: 'tech-brick',
+  15: 'tech-lumber',
 };
 
 /** Selection kinds as reported by GameScene.getSelectionInfo(). */
@@ -109,6 +117,9 @@ export const SELECTION_ICON: Record<string, IconName> = {
   stable: 'b-stable',
   foundry: 'b-foundry',
   defensiveTower: 'b-defensive-tower',
+  mint: 'r-gold',
+  brickworks: 'tech-brick',
+  forester: 'tech-lumber',
   foundation: 'b-foundation',
   mixed: 'banners',
   none: 'shield',

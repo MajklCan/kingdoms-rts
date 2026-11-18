@@ -64,6 +64,9 @@ export type SelectionKind =
   | 'stable'
   | 'foundry'
   | 'defensiveTower'
+  | 'mint'
+  | 'brickworks'
+  | 'forester'
   | 'foundation'
   | 'mixed'
   | 'none';
@@ -101,6 +104,9 @@ const NAME_BY_KIND: Record<string, string> = {
   stable: 'Stable',
   foundry: 'Foundry',
   defensiveTower: 'Defensive Tower',
+  mint: 'Mint',
+  brickworks: 'Brickworks',
+  forester: "Forester's Lodge",
   foundation: 'Foundation',
   mixed: 'Mixed Selection',
 };
@@ -127,6 +133,9 @@ const GLYPH_BY_KIND: Record<string, string> = {
   stable: '♞',
   foundry: '●',
   defensiveTower: '♜',
+  mint: '¤',
+  brickworks: '▤',
+  forester: '♣',
   foundation: '🪜',
   mixed: '⊞',
 };
@@ -143,6 +152,9 @@ const BUILDING_KIND_BY_DEF: Partial<Record<number, SelectionKind>> = {
   [BuildingDefId.STABLE]: 'stable',
   [BuildingDefId.FOUNDRY]: 'foundry',
   [BuildingDefId.DEFENSIVE_TOWER]: 'defensiveTower',
+  [BuildingDefId.MINT]: 'mint',
+  [BuildingDefId.BRICKWORKS]: 'brickworks',
+  [BuildingDefId.FORESTER]: 'forester',
 };
 
 const UNIT_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
@@ -151,7 +163,7 @@ const UNIT_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
 
 const BUILDING_KINDS: ReadonlySet<SelectionKind> = new Set<SelectionKind>([
   'tc', 'house', 'farm', 'mill', 'lumberCamp', 'goldMine', 'stoneQuarry', 'barracks',
-  'archeryRange', 'stable', 'foundry', 'defensiveTower',
+  'archeryRange', 'stable', 'foundry', 'defensiveTower', 'mint', 'brickworks', 'forester',
 ]);
 
 const GATHERER_STATE_NAMES = [
