@@ -50,8 +50,9 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
   {
     group: 'Selection',
     rows: [
-      ['Click / drag', 'Select units or buildings'],
-      ['Double-click', 'Select every unit of that type on screen'],
+      ['Click / drag', 'Select units (a box with no units takes buildings)'],
+      ['Double-click', 'Select every unit or building of that type on screen'],
+      ['Shift+click / drag', 'Add to the selection, or take out what is already in'],
       ['F1', 'Select all villagers'],
       ['F2', 'Select all military'],
       ['.', 'Next idle villager'],
@@ -81,7 +82,7 @@ const HOTKEYS: Array<{ group: string; rows: Array<[string, string]> }> = [
       ['M / I', 'Build a farm / mill'],
       ['L / C / G', 'Lumber hut / stone quarry / gold mine'],
       ['R / T / F / Y / Z', 'Barracks / stable / foundry / tower / wall'],
-      ['Q / E', 'Train first / second unit'],
+      ['Q / E', 'Train first / second unit (several buildings selected: the least busy one)'],
       ['G', 'Town center villager rally point'],
       ['Shift+click', 'On a train button: queue five units'],
       ['Shift+click', 'While placing a building: place it and keep placing the same one'],
@@ -249,7 +250,7 @@ function segField<T extends string>(
 
 const TOUCH_GESTURES: Array<[string, string]> = [
   ['Tap', 'Select, or order the selection there (move, gather, attack, repair)'],
-  ['Double-tap a unit', 'Select every unit of that type on screen'],
+  ['Double-tap', 'Select every unit or building of that type on screen'],
   ['Drag', 'Pan the camera'],
   ['Hold, then drag', 'Box-select'],
   ['Pinch / two fingers', 'Zoom and pan'],
