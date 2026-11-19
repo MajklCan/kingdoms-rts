@@ -7,8 +7,9 @@
  *   command     context order (right click, tap with a selection):
  *               visible enemy -> attack; own foundation + villagers ->
  *               build; own worksite + villagers -> help there; only army
- *               buildings -> rally; explored resource or game -> gather /
- *               hunt / hint; else move.
+ *               buildings -> rally; explored resource or game with
+ *               villagers selected -> gather / hunt; else move (soldiers
+ *               sent onto a tree or a deer simply walk there).
  *               With Shift held (mouse only) the order is queued behind
  *               what the units are doing instead of replacing it (helping
  *               at a worksite never ends, so it is always a plain order)
@@ -27,7 +28,6 @@ import {
   Owner,
   Position,
   Resource,
-  ResourceKindId,
   UnitKind,
   WorksiteWorker,
 } from '@sim/components';
@@ -50,7 +50,7 @@ import { isArmyProducerDefId } from '../commands/economy';
 import type { CommandFeedback } from '../commands/feedback';
 import type { PlayerCommands } from '../commands/player-commands';
 import type { GameAudio } from '../game-audio';
-import { entityKindName, resourceKindName } from '../hud/selection-info';
+import { entityKindName } from '../hud/selection-info';
 import type { SceneContext } from '../scene-context';
 import { isInsideMap } from '../world-projection';
 import { trace } from '../trace/active-trace';
@@ -183,33 +183,26 @@ export class WorldOrders {
       return;
     }
     const resourceEid = findResourceAt(world, tileX, tileY, 0.7);
-    if (resourceEid !== null && this.ctx.isResourceExplored(resourceEid)) {
+    if (
+      resourceEid !== null &&
+      this.ctx.isResourceExplored(resourceEid) &&
+      Resource.amount[resourceEid] > 0 &&
+      commands.selectedGathererCount() > 0
+    ) {
+      // Free villagers (town center trained) gather by hand and carry to a
+      // drop-off; on game they hunt it first.
       const game = isGameAnimal(world, resourceEid);
-      if (commands.selectedGathererCount() > 0 && Resource.amount[resourceEid] > 0) {
-        // Free villagers (town center trained) gather by hand and carry to a
-        // drop-off; on game they hunt it first.
-        if (queue && this.refuseQueued(true)) return;
-        commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid, ...queueFlag(queue) });
-        if (game) audio.barkAttack();
-        else audio.barkMove();
-        this.feedback?.orderMarker(game ? 'attack' : 'move', Position.x[resourceEid], Position.y[resourceEid]);
-        setLastEvent(`${queue ? 'queue ' : ''}${game ? 'hunt' : 'gather'} eid=${resourceEid}`);
-        return;
-      }
-      if (game) {
-        commands.fail({ reason: 'unavailable', text: 'Only villagers can hunt. Select a villager' });
-        return;
-      }
-      const kind = Resource.kind[resourceEid];
-      commands.fail({
-        reason: 'unavailable',
-        text:
-          kind === ResourceKindId.FOOD
-            ? 'Food comes from farms'
-            : `${capitalize(resourceKindName(kind))} is harvested by a nearby worksite`,
-      });
+      if (queue && this.refuseQueued(true)) return;
+      commands.dispatch({ type: 'gatherSelected', targetEid: resourceEid, ...queueFlag(queue) });
+      if (game) audio.barkAttack();
+      else audio.barkMove();
+      this.feedback?.orderMarker(game ? 'attack' : 'move', Position.x[resourceEid], Position.y[resourceEid]);
+      setLastEvent(`${queue ? 'queue ' : ''}${game ? 'hunt' : 'gather'} eid=${resourceEid}`);
       return;
     }
+    // A resource or an animal nobody selected can work (soldiers, or a spent
+    // node): the click means "go there". Refusing it used to swallow move
+    // orders whenever a deer or a tree happened to be under the cursor.
     this.issueMapOrder('move', tx, ty, queue);
   }
 
@@ -531,8 +524,4 @@ function isAliveUnit(ecs: Parameters<typeof hasComponent>[0], eid: number): bool
 /** The Shift-queue flag of an order input: present only when set. */
 function queueFlag(queue: boolean): { queue?: true } {
   return queue ? { queue: true } : {};
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

@@ -6,6 +6,11 @@ Live build: **kingdoms.macaly.app** runs `0.0.108` (deployed 2026-11-18).
 
 Add a line under the matching section (or open a new one) with every change that lands on `main`.
 
+## 0.0.111 (2026-11-19), Michal
+
+### Fixed
+- Right-clicking a tree, a rock or an animal with soldiers selected moves them there. It used to refuse the click with "Only villagers can hunt" or "harvested by a nearby worksite", which swallowed move orders. Villagers still gather or hunt; on a spent node they walk there.
+
 ## 0.0.110 (2026-11-18), Michal
 
 ### Fixed
